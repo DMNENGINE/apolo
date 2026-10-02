@@ -69,8 +69,20 @@ function iniciar(opciones = {}) {
         if (M === 'GET') return json(res, 200, admin.configPublica(n.cfg));
         if (M === 'PATCH') { const c = admin.guardarConfig(n.cfg, await leer(req)); n.proveedores.reset(); return json(res, 200, c); }
       }
+      if (p[1] === 'chatgpt') {                                // ChatGPT vía Codex CLI (plan de ChatGPT, sin API key)
+        const cx = require('./proveedores/codex-cli');
+        if (M === 'GET') {
+          const e = await cx.estadoAsync();
+          if (e.sesion) await n.proveedores.comprobar().catch(() => { });
+          return json(res, 200, e);
+        }
+        if (M === 'POST' && p[2] === 'conectar') { try { return json(res, 200, { ok: true, ...(await cx.conectar()) }); } catch (e) { return json(res, 200, { ok: false, error: e.message }); } }
+        if (M === 'POST' && p[2] === 'usar') {                  // ponerlo como modelo por defecto
+          const c = admin.guardarConfig(n.cfg, { modeloPorDefecto: 'chatgpt/default' }); n.proveedores.reset(); return json(res, 200, c);
+        }
+      }
       if (p[1] === 'proveedores' && p[2] && p[3] === 'modelos' && M === 'GET') {
-        try { const { api } = n.proveedores.resolver(`${p[2]}/x`); return json(res, 200, { ok: true, modelos: await api.modelos() }); }
+        try { const { api } = n.proveedores.resolver(`${p[2]}/x`, { sinRespaldo: true }); return json(res, 200, { ok: true, modelos: await api.modelos() }); }
         catch (e) { return json(res, 200, { ok: false, error: e.message }); }
       }
       if (p[1] === 'externo' && M === 'POST') {

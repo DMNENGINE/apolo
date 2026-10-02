@@ -36,7 +36,7 @@ function guardarConfig(cfg, cambios) {
     for (const [k, v] of Object.entries(cambios.proveedores)) {
       if (!/^[\w-]{1,30}$/.test(k) || !v || typeof v !== 'object') continue;
       if (v === null || v.borrar) { delete cfg.proveedores[k]; delete disco.proveedores[k]; continue; }
-      const p = cfg.proveedores[k] || (cfg.proveedores[k] = { tipo: ['openai', 'anthropic', 'gemini', 'claude-cli'].includes(v.tipo) ? v.tipo : 'openai' });
+      const p = cfg.proveedores[k] || (cfg.proveedores[k] = { tipo: ['openai', 'anthropic', 'gemini', 'claude-cli', 'codex-cli'].includes(v.tipo) ? v.tipo : 'openai' });
       const d = disco.proveedores[k] || (disco.proveedores[k] = {});
       if (!d.tipo) d.tipo = p.tipo;
       if (typeof v.baseUrl === 'string' && /^https?:\/\//.test(v.baseUrl)) p.baseUrl = d.baseUrl = v.baseUrl.trim().replace(/\/+$/, '');

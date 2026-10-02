@@ -479,10 +479,19 @@ function permToDiscord(ev) {
 }
 
 // panel web del núcleo: el token va en el #hash (no viaja al servidor) y el panel lo guarda y lo borra de la URL
-function abrirPanel() {
+function abrirPanel(ruta = '') {
   if (!nucleo) return;
   let tok = ''; try { tok = fs.readFileSync(path.join(nucleo.cfg.dir, 'token'), 'utf8').trim(); } catch { }
-  shell.openExternal(`http://127.0.0.1:${nucleo.cfg.puerto}/#token=${tok}`);
+  shell.openExternal(`http://127.0.0.1:${nucleo.cfg.puerto}/#${ruta ? ruta + '&' : ''}token=${tok}`);
+}
+// sin ningún modelo disponible en este PC (sin Ollama, sin keys, sin Claude/ChatGPT): explicar cómo conectar uno
+function revisarModelos() {
+  if (!nucleo || !win || win.isDestroyed()) return;
+  const l = nucleo.proveedores.listos();
+  if (!Object.keys(l).length || Object.values(l).some(Boolean)) return;
+  win.webContents.send('answer', { titulo: 'Conecta un modelo para hablar conmigo',
+    texto: 'Ahora mismo no tengo ningún modelo de IA disponible. Lo más fácil:\n• **¿Pagas ChatGPT?** Bandeja → **Conectar ChatGPT**.\n• **¿Tienes Claude?** Instala Claude Code y ya está.\n• **Gratis:** una key de Gemini (aistudio.google.com) en Panel → Modelos.',
+    voz: 'Para hablar conmigo necesito un modelo. Si pagas ChatGPT, pulsa Conectar ChatGPT en la bandeja.' });
 }
 
 // ---------- núcleo multi-modelo (core/): API en 127.0.0.1:47900 + puente con la isla ----------
@@ -641,7 +650,8 @@ function buildTray() {
     { label: 'Iniciar con Windows', type: 'checkbox', checked: autoStart(), click: i => setAutoStart(i.checked) },
     { type: 'separator' },
     { label: `🤖 Núcleo: isla → ${(puente && puente.destino('isla')) || 'Claude Code'} · Discord → ${(puente && puente.destino('discord')) || 'Claude Code'}`, enabled: false },
-    { label: '🖥️ Abrir panel de control', click: abrirPanel },
+    { label: '🖥️ Abrir panel de control', click: () => abrirPanel() },
+    { label: '💬 Conectar ChatGPT (tu plan, sin API key)', click: () => abrirPanel('/ajustes/modelos') },
     { label: '🧩 Copiar token para la extensión del navegador', click: () => { try { clipboard.writeText(fs.readFileSync(path.join(nucleo.cfg.dir, 'token'), 'utf8').trim()); } catch { } } },
     { label: '🧩 Abrir carpeta de la extensión', click: () => shell.openPath(path.join(__dirname, 'extension')) },
     { label: 'Configurar modelos (abrir config del núcleo)…', click: () => nucleo && shell.openPath(path.join(nucleo.cfg.dir, 'config.json')) },
@@ -757,6 +767,7 @@ app.whenReady().then(() => {
   actualizador = crearActualizador({ dirApp: __dirname, dirDatos: app.getPath('userData'),
     avisar: info => { if (win && !win.isDestroyed()) win.webContents.send('actualizacion', info); } });
   actualizador.iniciar();
+  setTimeout(() => revisarModelos(), 25_000);                 // da tiempo a que el núcleo compruebe qué hay instalado
   nucleo = crearNucleo();                                    // antes que el cerebro: el cerebro usa sus modelos
   cerebro = createCerebro({
     nucleo,

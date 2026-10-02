@@ -21,11 +21,13 @@ const POR_DEFECTO = {
     openrouter: { tipo: 'openai', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '', env: 'OPENROUTER_API_KEY' },
     ollama: { tipo: 'openai', baseUrl: 'http://localhost:11434/v1', apiKey: 'ollama', local: true },
     claudecode: { tipo: 'claude-cli' },   // usa la CLI `claude` que el usuario ya tenga instalada
+    chatgpt: { tipo: 'codex-cli' },       // Codex CLI con la cuenta de ChatGPT (Plus/Pro): sin API key
   },
   // atajos: "qwen: haz X" desde la isla, Discord o voz
   alias: {
     qwen: 'ollama/qwen3.6', gemma: 'ollama/gemma4:31b-cloud', haiku: 'claudecode/haiku', sonnet: 'claudecode/sonnet',
     gpt: 'openai/gpt-4.1-mini', gemini: 'gemini/gemini-3.8-flash', google: 'gemini/gemini-3.8-flash',
+    chatgpt: 'chatgpt/default', codex: 'chatgpt/default',
     flash: 'gemini/gemini-3.8-flash', flashlite: 'gemini/gemini-3.1-flash-lite',
   },
   permisos: { modo: 'preguntar' },        // preguntar | auto | solo-lectura

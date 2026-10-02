@@ -143,6 +143,8 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
         const r = await enrutar(t, c);
         st.ultimo = { ...(st.ultimo || {}), [c]: { ruta: r.ruta, texto: t.slice(0, 300), t: Date.now() } }; guardar();
         modelo = rutas()[r.ruta]; nota = ` · ${r.ruta}`;
+        // sin Claude Code en este PC (p. ej. solo ChatGPT): programar también lo hace el núcleo
+        if (modelo === CC && nucleo.proveedores.listos?.().claudecode === false) modelo = nucleo.cfg.modeloPorDefecto;
         nucleo.registro?.add?.('info', 'enrutador', `${r.ruta} (${r.por}) → ${modelo}: ${t.slice(0, 80)}`);
       } else modelo = d;
     }

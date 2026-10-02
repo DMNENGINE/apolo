@@ -92,7 +92,7 @@ const casco = (cls = '') => `<svg class="casco ${cls}" viewBox="0 0 64 64" aria-
   <path d="M22 50h20" stroke="#11151a" stroke-width="2" stroke-linecap="round"/></svg>`;
 
 // proveedor → color y siglas para avatares
-const PROV = { ollama: ['#f2f2f2', '#111', 'OL'], claudecode: ['#d97757', '#fff', 'CC'], anthropic: ['#d97757', '#fff', 'AN'], openai: ['#10a37f', '#fff', 'AI'], gemini: ['#4b7bff', '#fff', 'GE'], openrouter: ['#6467f2', '#fff', 'OR'] };
+const PROV = { chatgpt: ['#10a37f', '#fff', 'GP'], ollama: ['#f2f2f2', '#111', 'OL'], claudecode: ['#d97757', '#fff', 'CC'], anthropic: ['#d97757', '#fff', 'AN'], openai: ['#10a37f', '#fff', 'AI'], gemini: ['#4b7bff', '#fff', 'GE'], openrouter: ['#6467f2', '#fff', 'OR'] };
 const avatar = (modelo = '') => {
   const p = modelo.split('/')[0], [bg, fg, s] = PROV[p] || ['#59636f', '#fff', p.slice(0, 2).toUpperCase() || '?'];
   return `<span class="av" style="background:${bg};color:${fg}" title="${esc(modelo)}">${esc(s)}</span>`;

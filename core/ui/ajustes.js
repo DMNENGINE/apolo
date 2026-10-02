@@ -121,6 +121,8 @@ VISTAS['ajustes/modelos'] = {
   async pintar(v) {
     const c = E.config = await api('GET', '/config');
     v.innerHTML = `<div class="pagina estrecha">${cabecera('Modelos', 'Conecta cualquier proveedor. Las claves se guardan en este equipo y nunca se muestran.', `<button class="btn" id="anadir">${ic('mas')}Añadir proveedor</button>`)}
+      <div class="seccion">ChatGPT</div><p class="seccion-ayuda">¿Pagas ChatGPT Plus o Pro? Úsalo aquí sin API key: se conecta con tu cuenta a través de Codex CLI (de OpenAI).</p>
+      <div class="caja" id="cgpt">${fila('Cuenta de ChatGPT', '<span id="cgEst" class="tenue">Comprobando…</span>', '<button class="btn pri" id="cgCon">Conectar ChatGPT</button><button class="btn" id="cgUsar" style="display:none">Usar por defecto</button>')}</div>
       <div class="seccion">Por defecto</div>
       <div class="caja">${fila('Modelo por defecto', 'Se usa en conversaciones nuevas, tareas y canales sin modelo elegido. Formato <code>proveedor/modelo</code>.', `<input id="defM" class="mono" list="dlM" value="${esc(c.modeloPorDefecto)}"><datalist id="dlM">${modelosConocidos().map(m => `<option value="${esc(m)}">`).join('')}</datalist><button class="btn pri" id="gDef">Guardar</button>`)}</div>
       <div class="seccion">Atajos <span class="n">${Object.keys(c.alias).length}</span></div><p class="seccion-ayuda">Escribe <code>atajo: mensaje</code> en la isla, Discord o voz para hablar con ese modelo.</p>
@@ -128,12 +130,33 @@ VISTAS['ajustes/modelos'] = {
       <div class="flex" style="margin-top:8px"><button class="btn" id="masAlias">${ic('mas')}Atajo</button><button class="btn pri" id="gAlias">Guardar atajos</button></div>
       <div class="seccion">Proveedores <span class="n">${Object.keys(c.proveedores).length}</span></div>
       <div class="caja">${Object.entries(c.proveedores).map(([k, p]) => {
-        const listo = p.tipo === 'claude-cli' || p.local || p.tieneKey;
-        return `<div class="fila-a" data-p="${esc(k)}">${avatar(k + '/')}<div class="t"><b>${esc(k)}</b><small>${p.tipo === 'claude-cli' ? 'CLI de Claude Code instalada en este equipo' : `${esc(p.tipo)} · ${esc(p.baseUrl || '')}`}</small><div class="lista tenue" style="font-size:11.5px;margin-top:4px"></div></div>
-          <div class="c"><span class="chip ${listo ? 'ok' : ''}">${p.tipo === 'claude-cli' ? 'CLI' : p.local ? 'local' : p.tieneKey ? (p.keyDeEntorno ? 'key (entorno)' : 'key guardada') : 'sin key'}</span>
-          <button class="btn mini" data-x="probar">Probar</button>${p.tipo !== 'claude-cli' ? `<button class="btn mini" data-x="editar">${ic('editar')}</button>` : ''}</div></div>`;
+        const listo = p.tipo === 'claude-cli' || p.tipo === 'codex-cli' || p.local || p.tieneKey;
+        return `<div class="fila-a" data-p="${esc(k)}">${avatar(k + '/')}<div class="t"><b>${esc(k)}</b><small>${p.tipo === 'codex-cli' ? 'Tu cuenta de ChatGPT vía Codex CLI (arriba: Conectar ChatGPT)' : p.tipo === 'claude-cli' ? 'CLI de Claude Code instalada en este equipo' : `${esc(p.tipo)} · ${esc(p.baseUrl || '')}`}</small><div class="lista tenue" style="font-size:11.5px;margin-top:4px"></div></div>
+          <div class="c"><span class="chip ${listo ? 'ok' : ''}">${p.tipo === 'codex-cli' ? 'ChatGPT' : p.tipo === 'claude-cli' ? 'CLI' : p.local ? 'local' : p.tieneKey ? (p.keyDeEntorno ? 'key (entorno)' : 'key guardada') : 'sin key'}</span>
+          <button class="btn mini" data-x="probar">Probar</button>${!['claude-cli', 'codex-cli'].includes(p.tipo) ? `<button class="btn mini" data-x="editar">${ic('editar')}</button>` : ''}</div></div>`;
       }).join('')}</div></div>`;
     $('#gDef').onclick = () => guardarConfig({ modeloPorDefecto: $('#defM').value.trim() });
+    const cgPintar = async () => {
+      const e = await api('GET', '/chatgpt').catch(() => null); if (!e || !$('#cgEst')) return e;
+      $('#cgEst').innerHTML = e.sesion ? '<span class="ok-txt">✓ Conectado</span>' + (c.modeloPorDefecto.startsWith('chatgpt/') ? ' · es tu modelo por defecto' : '') : e.instalado ? 'Codex instalado · falta iniciar sesión' : 'No conectado';
+      $('#cgCon').textContent = e.sesion ? 'Reconectar' : 'Conectar ChatGPT';
+      $('#cgUsar').style.display = e.sesion && !c.modeloPorDefecto.startsWith('chatgpt/') ? '' : 'none';
+      return e;
+    };
+    cgPintar();
+    $('#cgCon').onclick = async () => {
+      const b = $('#cgCon'); b.disabled = true; b.textContent = 'Preparando…'; $('#cgEst').textContent = 'Instalando Codex si hace falta (puede tardar un minuto)…';
+      const r = await api('POST', '/chatgpt/conectar').catch(er => ({ ok: false, error: er.message }));
+      b.disabled = false;
+      if (!r.ok) { $('#cgEst').innerHTML = '<span class="mal-txt">✗ ' + esc(r.error) + '</span>'; b.textContent = 'Reintentar'; return; }
+      $('#cgEst').textContent = r.mensaje; b.textContent = 'Esperando…';
+      for (let i = 0; i < 100; i++) {                          // ~5 min esperando a que inicie sesión
+        await new Promise(ok => setTimeout(ok, 3000));
+        const e = await cgPintar(); if (!e || !document.body.contains(b)) return;
+        if (e.sesion) { if (!c.modeloPorDefecto.startsWith('chatgpt/')) { await api('POST', '/chatgpt/usar'); c.modeloPorDefecto = 'chatgpt/default'; await cgPintar(); } return; }
+      }
+    };
+    $('#cgUsar').onclick = async () => { await api('POST', '/chatgpt/usar'); c.modeloPorDefecto = 'chatgpt/default'; if ($('#defM')) $('#defM').value = 'chatgpt/default'; cgPintar(); };
     $('#masAlias').onclick = () => $('#alias').insertAdjacentHTML('beforeend', this.filaAlias('', ''));
     $('#gAlias').onclick = () => {
       const alias = {}; $$('#alias .fila-a').forEach(f => { const a = $('.a', f).value.trim(), m = $('.m', f).value.trim(); if (a && m) alias[a] = m; });
@@ -249,7 +272,7 @@ VISTAS['ajustes/claves'] = {
   claves: 'api key secreto token openai anthropic gemini',
   async pintar(v) {
     const c = E.config = await api('GET', '/config');
-    const conKey = Object.entries(c.proveedores).filter(([, p]) => !p.local && p.tipo !== 'claude-cli');
+    const conKey = Object.entries(c.proveedores).filter(([, p]) => !p.local && !['claude-cli', 'codex-cli'].includes(p.tipo));
     v.innerHTML = `<div class="pagina">${cabecera('Claves de API', 'Se guardan solo en este equipo (config del núcleo) y nunca se envían al navegador. También puedes usar variables de entorno.')}
       <div class="caja tabla-env"><table class="tabla"><tr><th>Proveedor</th><th>Estado</th><th>Origen</th><th>Variable de entorno</th><th></th></tr>
         ${conKey.map(([k, p]) => `<tr data-k="${esc(k)}"><td><span class="flex">${avatar(k + '/')}<b>${esc(k)}</b></span></td>
