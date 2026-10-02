@@ -4,6 +4,7 @@
 //            { cadaMin: N }               cada N minutos
 //   accion:  { tipo: 'aviso', texto }     solo te lo recuerda
 //            { tipo: 'agente', texto, modelo?, cwd?, soloSiHayAlgo? }   un agente lo hace y te dice el resultado
+//            { tipo: 'interna', nombre }   función del núcleo (registrarInterna), p. ej. 'mejorar-skills'; si devuelve texto, se avisa
 //                                         soloSiHayAlgo: si responde NADA no te molesta (heartbeat)
 // Eventos en el bus: 'tarea' { tarea, texto, tipo: 'aviso'|'resultado'|'error' }
 const fs = require('fs');
@@ -73,14 +74,15 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
   const guardar = () => { fs.writeFileSync(f, JSON.stringify(lista, null, 2)); try { mtime = fs.statSync(f).mtimeMs; } catch { } };
   sync();
   const corriendo = new Set();
+  const internas = new Map();                 // nombre → async () => texto | ''
   const RECUPERAR_MS = 2 * 3600_000;          // si el PC estaba apagado: se recupera si se atrasó menos de 2 h
 
   function crear({ nombre, cuando, accion, canal = 'isla' }) {
-    if (!accion || !['aviso', 'agente'].includes(accion.tipo) || !accion.texto) throw new Error('accion: { tipo: aviso|agente, texto }');
+    if (!accion || !['aviso', 'agente', 'interna'].includes(accion.tipo) || !(accion.tipo === 'interna' ? accion.nombre : accion.texto)) throw new Error('accion: { tipo: aviso|agente, texto } o { tipo: interna, nombre }');
     sync();
     const proxima = siguiente(cuando);
     if (!proxima) throw new Error('esa fecha ya pasó');
-    const t = { id: crypto.randomUUID().slice(0, 6), nombre: String(nombre || accion.texto).slice(0, 80), cuando, accion, canal, activa: true, creada: Date.now(), proxima, ultima: null, ultimoResultado: null };
+    const t = { id: crypto.randomUUID().slice(0, 6), nombre: String(nombre || accion.texto || accion.nombre).slice(0, 80), cuando, accion, canal, activa: true, creada: Date.now(), proxima, ultima: null, ultimoResultado: null };
     lista.push(t); guardar();
     return t;
   }
@@ -95,6 +97,12 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
       if (t.accion.tipo === 'aviso') {
         t.ultimoResultado = 'avisado';
         bus.emit('tarea', { tarea: t, tipo: 'aviso', texto: t.accion.texto });
+      } else if (t.accion.tipo === 'interna') {
+        const fn = internas.get(t.accion.nombre);
+        if (!fn) throw new Error(`tarea interna desconocida: ${t.accion.nombre}`);
+        const r = String(await fn() || '');
+        t.ultimoResultado = r ? r.slice(0, 500) : 'nada que hacer';
+        if (r) bus.emit('tarea', { tarea: t, tipo: 'resultado', texto: r });
       } else {
         let prompt = t.accion.texto;
         if (t.accion.soloSiHayAlgo) prompt += '\n\n(Tarea automática. Si NO hay nada importante que contar al usuario, responde exactamente: NADA)';
@@ -126,6 +134,7 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
   let timer = null;
   return {
     crear, borrar, pausar, ejecutar, tick, describir,
+    registrarInterna: (nombre, fn) => internas.set(nombre, fn),
     lista: () => { sync(); return lista; },
     obtener: id => { sync(); return lista.find(t => t.id === id); },
     iniciar() { if (!timer) { tick(); timer = setInterval(tick, 20_000); timer.unref?.(); } },

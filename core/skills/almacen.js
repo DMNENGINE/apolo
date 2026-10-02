@@ -82,7 +82,8 @@ function crearAlmacen({ cfg, bus }) {
     return { slug, nombre: s.nombre, descripcion: s.descripcion, activa: !!inst.activa, origen: inst.origen || { tipo: 'local' }, externa,
       version: inst.version || s.apolo.version || '', escaneo: inst.escaneo || null, usos: inst.usos || 0, ultimoUso: inst.ultimoUso || null,
       permisos: s.apolo.permisos, archivos: s.archivos, dir: d, sha: inst.sha || null, fecha: inst.fecha || null, clave: inst.clave,
-      disparadores: s.apolo.disparadores, modelos: s.apolo.modelos, canales: s.apolo.canales, allowedTools: s.allowedTools, licencia: s.licencia, autor: s.apolo.autor };
+      disparadores: s.apolo.disparadores, modelos: s.apolo.modelos, canales: s.apolo.canales, allowedTools: s.allowedTools, licencia: s.licencia, autor: s.apolo.autor,
+      borrador: !!inst.borrador, evals: inst.evals || null, mejorada: inst.mejorada || null };
   }
   function lista() {
     if (!cache || Date.now() - cacheT > 3000) { cache = escanearTodo(); cacheT = Date.now(); }

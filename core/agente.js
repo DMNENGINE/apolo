@@ -3,6 +3,14 @@ const os = require('os');
 const fs = require('fs');
 const { HERRAMIENTAS, porNombre } = require('./herramientas');
 const { vista } = require('./compactar');
+const { esCorreccion } = require('./skills/taller');
+
+// cfg.idioma ('es'|'en'|…): idioma por defecto de las respuestas
+const IDIOMAS = { es: 'español', en: 'inglés (English)', pt: 'portugués', fr: 'francés', it: 'italiano', de: 'alemán', ca: 'catalán', gl: 'gallego', eu: 'euskera', nl: 'neerlandés', ru: 'ruso', zh: 'chino', ja: 'japonés', ko: 'coreano', ar: 'árabe' };
+const lineaIdioma = cfg => {
+  const c = String(cfg?.idioma || '').trim(), n = IDIOMAS[c.toLowerCase().slice(0, 2)] || c;
+  return n ? `Responde por defecto en ${n}, claro y breve, salvo que el usuario te escriba en otro idioma (entonces usa el suyo).` : 'Responde en el idioma del usuario, claro y breve.';
+};
 
 function ahoraLocal() {
   const d = new Date(), p = n => String(n).padStart(2, '0'), off = -d.getTimezoneOffset();
@@ -20,7 +28,7 @@ function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '') {
   const guardados = agentesGuardados(s, cfg);
   return [
     'Eres Robot Companion, un asistente personal que trabaja en el ordenador del usuario usando herramientas.',
-    'Responde en el idioma del usuario, claro y breve. Usa herramientas cuando hagan falta; no inventes resultados.',
+    `${lineaIdioma(cfg)} Usa herramientas cuando hagan falta; no inventes resultados.`,
     'Si una herramienta es denegada, no la repitas igual: explica o busca otra vía.',
     'NUNCA digas que algo está hecho (aprobado, enviado, subido, generado, en cola…) si no lo has VISTO en el resultado de una herramienta. ' +
     'En el navegador, tras cada clic lee la COMPROBACIÓN: si dice que nada cambió, no funcionó. Ve paso a paso y no te adelantes.',
@@ -69,6 +77,14 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
     if (enCurso.has(s.id)) throw new Error('la sesión ya está trabajando');
     const ctl = new AbortController(); enCurso.set(s.id, ctl);
     const ev = (tipo, datos) => emitir({ tipo, sesion: s.id, ...datos });
+    const turno = { herramientas: 0, errores: 0, nombres: new Set(), skills: new Set() };   // para el taller (sugerir skill / registrar fallos)
+    const taller = skills?.taller;
+    // ¿el usuario corrige justo después de un turno que usó una skill? → se apunta como fallo de esa skill
+    if (taller && s.ultimaSkill) {
+      const u = s.ultimaSkill; delete s.ultimaSkill;
+      if (Date.now() - u.t < 30 * 60_000 && esCorreccion(texto))
+        for (const slug of u.slugs) try { taller.registrarFallo(slug, { problema: `el usuario corrigió: ${String(texto).slice(0, 300)}`, contexto: `pidió: ${u.pregunta} | respondí: ${u.respuesta}`, sesion: s.id }); } catch { }
+    }
     try {
       const { api, model } = proveedores.resolver(s.modelo);
       sesiones.agregar(s, { role: 'user', content: texto, t: Date.now() });
@@ -121,6 +137,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         const correr = async c => {
           const h = disponibles.has(c.name) ? porNombre[c.name] : null;
           if (!h) return `error: herramienta "${c.name}" no existe`;
+          if (s.canal === 'eval' && (typeof h.riesgo === 'function' ? h.riesgo(c.args || {}, s) : h.riesgo) !== 'lectura') return 'DENEGADO: en una evaluación solo se permiten herramientas de lectura';
           ev('herramienta', { id: c.id, nombre: c.name, args: c.args || {}, resumen: h.resumen(c.args || {}) });
           const p = await permisos.pedir({ h, args: c.args || {}, sesion: s, ctx: { skills } });
           if (!p.ok) return `DENEGADO: ${p.motivo}`;
@@ -135,16 +152,32 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           if (ctl.signal.aborted) { await Promise.allSettled(enParalelo.values()); throw new Error('cancelado'); }
           const res = enParalelo.has(c.id) ? await enParalelo.get(c.id) : await correr(c);
           const resultado = typeof res === 'string' ? res : res.texto;
+          const fallo = /^(error|DENEGADO)\b/.test(resultado);
+          turno.herramientas++; turno.nombres.add(c.name); if (fallo) turno.errores++;
+          if (c.name === 'usar_skill' && !fallo) { const sl = skills?.almacen?.obtener(String(c.args?.nombre || ''))?.slug; if (sl) turno.skills.add(sl); }
           const imagenes = typeof res === 'string' || !res.imagenes.length ? undefined : res.imagenes.map(i => ({ mime: i.mime, ruta: i.ruta }));
           sesiones.agregar(s, { role: 'tool', toolCallId: c.id, name: c.name, content: resultado, imagenes, t: Date.now() });
           ev('resultado', { id: c.id, nombre: c.name, resultado: resultado.slice(0, 2000), imagenes: imagenes?.length || undefined });
         }
-        if (paso === cfg.maxPasos - 1) final += `\n[detenido: límite de ${cfg.maxPasos} pasos]`;
+        if (paso === cfg.maxPasos - 1) { final += `\n[detenido: límite de ${cfg.maxPasos} pasos]`; turno.detenido = true; }
+      }
+      if (turno.skills.size) s.ultimaSkill = { slugs: [...turno.skills], t: Date.now(), pregunta: String(texto).slice(0, 200), respuesta: final.slice(0, 200) };
+      if (taller && turno.detenido) for (const slug of turno.skills) try { taller.registrarFallo(slug, { problema: `no terminó: llegó al límite de ${cfg.maxPasos} pasos`, contexto: `pidió: ${String(texto).slice(0, 200)}`, sesion: s.id }); } catch { }
+      // turno largo y bien hecho → sugerir convertirlo en skill (heurística, sin llamar al modelo; 1 vez por sesión)
+      if (taller && cfg.skills?.sugerir !== false && !s.padre && !s.tarea && s.canal !== 'eval' && !s.skillSugerida && !turno.detenido && !turno.skills.size &&
+        !turno.nombres.has('crear_skill') && turno.herramientas >= (cfg.skills?.umbralSugerir || 6) && turno.errores * 3 <= turno.herramientas) {
+        s.skillSugerida = Date.now();
+        const resumen = `${String(texto).slice(0, 160)} — ${turno.herramientas} herramientas (${[...turno.nombres].join(', ')})`;
+        ev('skill-sugerida', { resumen });
+        final += /^en/i.test(cfg.idioma || '') ? '\n\n(Tip: I could save what we just did as a reusable skill. Say "make a skill out of this" and I\'ll draft it.)'
+          : '\n\n(Sugerencia: lo que acabamos de hacer se puede guardar como skill reutilizable. Dime «crea una skill con esto» y la redacto.)';
       }
       sesiones.guardarMeta(s);
       ev('fin', { texto: final, uso: s.uso });
       return final;
     } catch (e) {
+      if (taller && turno.skills.size && !ctl.signal.aborted)        // turno con skill que acabó en error → aprendizaje de la skill
+        for (const slug of turno.skills) try { taller.registrarFallo(slug, { problema: `el turno terminó en error: ${e.message}`, contexto: `pidió: ${String(texto).slice(0, 200)}`, sesion: s.id }); } catch { }
       sesiones.guardarMeta(s);
       ev('error', { error: e.message });
       throw e;

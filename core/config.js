@@ -61,7 +61,8 @@ const POR_DEFECTO = {
   red: { permitidos: [] },
   // skills (core/skills): rutasExtra = más carpetas de skills externas (solo lectura); externasActivas = las de ~/.claude/skills,
   // ~/.codex/skills… entran activas; autoInyectar = a modelos locales pequeños se les mete la skill si la confianza ≥ umbralInyectar
-  skills: { rutasExtra: [], externasActivas: false, autoInyectar: true, umbralInyectar: 0.85, presupuestoLocal: 1500, presupuestoNube: 5000, usarTokenGithub: true },
+  skills: { rutasExtra: [], externasActivas: false, autoInyectar: true, umbralInyectar: 0.85, presupuestoLocal: 1500, presupuestoNube: 5000, usarTokenGithub: true,
+    sugerir: true, umbralSugerir: 6, mejoraSemanal: false },   // taller: sugerir skill tras turnos largos; propuesta de mejora semanal (lunes 10:00)
 };
 
 function cargarConfig(dir = carpetaDatos()) {

@@ -22,7 +22,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 | Panel web (Control UI) | ✅ |
 | Importar desde OpenClaw | ✅ |
 | Instalador + autoupdate | 🟡 one-liner PowerShell, sin .exe firmado |
-| **Skills** | ⬜ solo se guardan, no se ejecutan |
+| **Skills** | ✅ motor + antivirus + taller |
 | Plugins / SDK | ⬜ |
 | macOS / Linux | ⬜ (solo Windows) |
 | Inglés | ⬜ (UI y prompts en español) |
@@ -30,7 +30,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 ---
 
-## FASE 1 — Motor de skills universal 🔥 *(siguiente)*
+## FASE 1 — Motor de skills universal 🔥 ✅ (falta firma ed25519 y marketplace en panel)
 
 **Gancho:** "Instala cualquier skill de Claude, Codex o Cursor… y úsala con Llama, Gemini o GPT gratis."
 
@@ -59,7 +59,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 - Funciona con modelos pequeños: si el modelo no llama herramientas bien, el enrutador inyecta la skill directamente cuando la confianza es alta.
 - Presupuesto de contexto por modelo (los locales cargan menos).
 
-### 1.5 Taller de skills 🔥 "APOLO aprende oficios"
+### 1.5 Taller de skills 🔥 "APOLO aprende oficios" ✅
 - "Enséñame a hacer X": APOLO observa lo que hacéis juntos y propone convertirlo en skill (borrador → pruebas → guardar).
 - **Auto-mejora**: tras usar una skill, guarda qué falló; cada semana propone un diff de mejora (el usuario aprueba).
 - Evals por skill: casos de prueba en `tests/` y comparativa entre modelos ("esta skill va bien con gemma, mal con qwen").

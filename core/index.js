@@ -34,7 +34,11 @@ function crearNucleo(opciones = {}) {
   let tareas = null, subagentes = null, control = null, navegador = null, nucleo = null;
   const modeloCerebro = () => { const m = nucleo?.cerebro?.leer?.()?.modelo; return m && m.includes('/') ? m : cfg.modeloPorDefecto; };
   const skills = crearSkills({ cfg, bus, generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), embedder, modelo: modeloCerebro, escaner: opciones.escaner,
-    tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github') });
+    tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github'),
+    ejecutarEval: async ({ modelo, texto }) => {                 // evals del taller: sesión efímera (canal 'eval', solo lectura) que se borra al acabar
+      const s = sesiones.crear({ modelo, canal: 'eval', titulo: 'eval de skill' });
+      try { return await agente.enviar(s, texto); } finally { sesiones.borrar(s.id); }
+    } });
   const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador });
   // atajo: enviar y emitir los eventos también al bus global
   const enviar = (s, texto, emitir) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); });
@@ -45,6 +49,13 @@ function crearNucleo(opciones = {}) {
     cfg, bus,
     ejecutarAgente: ({ texto, modelo, cwd, canal, titulo }) => enviar(sesiones.crear({ modelo, cwd, canal, titulo, tarea: true }), texto),
   });
+  // mejora semanal de skills (cfg.skills.mejoraSemanal): propone diffs, nunca aplica
+  tareas.registrarInterna('mejorar-skills', () => skills.taller.mejoraSemanal());
+  try {
+    const ya = tareas.lista().find(t => t.accion?.tipo === 'interna' && t.accion.nombre === 'mejorar-skills');
+    if (cfg.skills?.mejoraSemanal && !ya) tareas.crear({ nombre: 'Mejora semanal de skills', cuando: { cron: '0 10 * * 1' }, accion: { tipo: 'interna', nombre: 'mejorar-skills' }, canal: 'isla' });
+    else if (!cfg.skills?.mejoraSemanal && ya) tareas.borrar(ya.id);
+  } catch { }
   nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;

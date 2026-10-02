@@ -3,12 +3,14 @@
 //     modelo: () => 'proveedor/modelo' para las explicaciones del escáner
 //     escaner: opcional (tests); si no, require('./escaner') perezoso
 //     tokenGithub: () => token del conector de GitHub (opcional; nunca se imprime)
+//     ejecutarEval: async ({modelo, texto, signal}) => respuesta (taller: evals en sesiones efímeras)
 const path = require('path');
 const { crearAlmacen } = require('./almacen');
 const { crearInstalador } = require('./instalar');
 const { crearIndice } = require('./indice');
+const { crearTaller } = require('./taller');
 
-function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, tokenGithub }) {
+function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, tokenGithub, ejecutarEval }) {
   const almacen = crearAlmacen({ cfg, bus });
   const elEscaner = () => {
     if (escaner) return escaner;
@@ -17,11 +19,12 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
   };
   const instalador = crearInstalador({ almacen, cfg, escaner: elEscaner, tokenGithub });
   const indice = crearIndice({ cfg, almacen, embedder });
+  const taller = crearTaller({ cfg, bus, almacen, instalador, generarJSON, modelo, ejecutar: ejecutarEval });
 
   // vista pública (API / panel)
   const publica = s => s && ({ slug: s.slug, nombre: s.nombre, descripcion: s.descripcion, activa: s.activa, origen: s.origen, externa: s.externa,
     version: s.version, escaneo: s.escaneo, usos: s.usos, ultimoUso: s.ultimoUso, permisos: s.permisos, archivos: s.archivos,
-    disparadores: s.disparadores, modelos: s.modelos, canales: s.canales, licencia: s.licencia, autor: s.autor, sha: s.sha, fecha: s.fecha });
+    disparadores: s.disparadores, modelos: s.modelos, canales: s.canales, licencia: s.licencia, autor: s.autor, sha: s.sha, fecha: s.fecha, borrador: s.borrador, evals: s.evals, mejorada: s.mejorada });
 
   // para las herramientas: la skill debe existir y estar activa
   function activa(nombre) {
@@ -47,7 +50,7 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
   }
 
   return {
-    almacen, instalador, indice, activa, rutaDentro, motivoPreguntar, publica,
+    almacen, instalador, indice, taller, activa, rutaDentro, motivoPreguntar, publica,
     lista: () => almacen.lista().map(publica),
     obtener: slug => { const s = almacen.obtener(slug); if (!s) return null; const c = almacen.contenido(s.slug); return { ...publica(s), contenido: c?.contenido || '' }; },
     instalar: (fuente, o) => instalador.instalar(fuente, o).then(r => (r.skill ? { skill: publica(r.skill) } : r)),

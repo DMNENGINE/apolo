@@ -352,6 +352,45 @@ const HERRAMIENTAS = [
     resumen: () => '',
     ejecutar: async (a, ctx) => (ctx.skills ? ctx.skills.lista().map(s => `${s.activa ? '●' : '○'} ${s.slug}${s.externa ? ' [externa]' : ''} · escaneo ${s.escaneo?.nivel || 'pendiente'} · ${s.usos} usos · ${s.descripcion.slice(0, 160)}`).join('\n') || '(no hay skills instaladas)' : 'error: las skills no están disponibles aquí'),
   },
+  // ---------- taller de skills (core/skills/taller.js) ----------
+  {
+    nombre: 'crear_skill', riesgo: 'escritura',
+    descripcion: 'Convierte lo que habéis hecho en esta conversación en una skill reutilizable (borrador DESACTIVADO que el usuario revisa y activa). ' +
+      'Redacta tú las instrucciones a partir de los pasos que FUNCIONARON: cuándo usarla, pasos concretos, comprobaciones y errores a evitar. Úsala cuando el usuario lo pida ("crea/guarda una skill con esto", "enséñate a hacer X").',
+    parametros: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string', description: 'nombre corto en minúsculas con guiones, ej. "renombrar-fotos"' },
+        descripcion: { type: 'string', description: 'qué hace y CUÁNDO usarla (1-2 frases; es lo que decide si se elige)' },
+        instrucciones: { type: 'string', description: 'cuerpo del SKILL.md en Markdown: pasos numerados, comandos/herramientas usados, comprobaciones' },
+        scripts: { type: 'array', description: 'opcional: archivos de apoyo', items: { type: 'object', properties: { ruta: { type: 'string', description: 'ej. scripts/limpiar.py o references/notas.md' }, contenido: { type: 'string' } }, required: ['ruta', 'contenido'] } },
+        disparadores: { type: 'array', items: { type: 'string' }, description: 'opcional: palabras o /regex/ que la activan' },
+        pruebas: { type: 'array', description: 'opcional: casos de prueba para evals', items: { type: 'object', properties: { pregunta: { type: 'string' }, debeContener: { type: 'array', items: { type: 'string' } }, criterio: { type: 'string' } }, required: ['pregunta'] } },
+      },
+      required: ['nombre', 'descripcion', 'instrucciones'],
+    },
+    resumen: a => `${a.nombre}: ${String(a.descripcion || '').slice(0, 120)}${a.scripts?.length ? ` (+${a.scripts.length} archivos)` : ''}`,
+    ejecutar: async (a, ctx) => {
+      if (!ctx.skills?.taller) return 'error: el taller de skills no está disponible aquí';
+      const s = await ctx.skills.taller.crear({ ...a, sesion: ctx.sesion?.id }), e = s.escaneo || {};
+      return `Skill "${s.slug}" creada como BORRADOR (desactivada) en ${s.dir}. Escaneo: ${e.nivel || 'pendiente'} — ${e.resumen || ''}\n` +
+        `${(e.hallazgos || []).slice(0, 6).map(h => `· [${h.gravedad}] ${h.archivo}:${h.linea} ${h.regla}`).join('\n')}\nEl usuario puede revisarla y activarla en el panel (Skills) o con /skill on ${s.slug}.`;
+    },
+  },
+  {
+    nombre: 'mejorar_skill', riesgo: 'escritura',
+    descripcion: 'Propone una versión mejorada del SKILL.md de una skill a partir de los fallos registrados al usarla (devuelve el diff). Con aplicar=true la aplica (guarda la versión anterior y la re-escanea); aplica solo si el usuario lo aprueba.',
+    parametros: { type: 'object', properties: { nombre: { type: 'string' }, aplicar: { type: 'boolean', description: 'true = aplicar la propuesta (solo con permiso del usuario)' } }, required: ['nombre'] },
+    resumen: a => `${a.nombre}${a.aplicar ? ' (aplicar)' : ' (propuesta)'}`,
+    ejecutar: async (a, ctx) => {
+      if (!ctx.skills?.taller) return 'error: el taller de skills no está disponible aquí';
+      const r = await ctx.skills.taller.mejorar(String(a.nombre || ''), { aplicar: !!a.aplicar, signal: ctx.signal });
+      if (!r.propuesta) return r.motivo || 'sin propuesta';
+      if (!r.diff) return 'La propuesta es idéntica a la versión actual: nada que cambiar.';
+      return `${r.aplicado ? `APLICADA (versión anterior guardada: ${r.versionAnterior}; escaneo ${r.escaneo?.nivel})` : 'PROPUESTA (sin aplicar)'} para "${r.slug}":\n` +
+        `${r.cambios.map(c => `- ${c}`).join('\n')}\n\nDiff:\n${recortar(r.diff).slice(0, 8000)}`;
+    },
+  },
   {
     nombre: 'delegar', riesgo: 'lectura',            // lo que haga el subagente pasa por permisos igual que lo tuyo
     descripcion: 'Encarga una subtarea a un SUBAGENTE independiente (contexto limpio, mismas herramientas y permisos) y devuelve su informe final. ' +

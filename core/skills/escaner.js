@@ -3,6 +3,7 @@
 // y al modelo solo le llegan los hallazgos como datos delimitados.
 const fs = require('fs');
 const path = require('path');
+const { PRIVADOS } = require('./formato');
 
 const MAX_ARCHIVOS = 400, MAX_BYTES = 512 * 1024, ENORME = 20 * 1024 * 1024, MAX_PROF = 8;
 const DOC = /\.(md|markdown|txt|rst)$/i;
@@ -98,7 +99,7 @@ function listar(dir) {
     let ents; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const e of ents) {
       if (salida.length >= MAX_ARCHIVOS) { salida.limite = true; return; }
-      if (e.name === 'node_modules' || e.name === '.git') continue;
+      if (e.name === 'node_modules' || e.name === '.git' || (d === raiz && PRIVADOS.has(e.name))) continue;
       const p = path.join(d, e.name);
       if (e.isSymbolicLink()) { // solo se sigue si el destino queda dentro de la skill
         let real; try { real = fs.realpathSync(p); } catch { continue; }

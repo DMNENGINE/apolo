@@ -127,13 +127,15 @@ const componerSkillMd = (datos, cuerpo) => `---\n${aYAML(datos)}\n---\n\n${Strin
 const slugDe = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
 const lista = v => (Array.isArray(v) ? v : v == null || v === '' ? [] : String(v).split(/\s*,\s*|\s+(?=\S)/).filter(Boolean)).map(String);
 
+// datos propios de APOLO dentro de la carpeta (estado, fallos registrados, versiones del taller): no son parte de la skill
+const PRIVADOS = new Set(['instalado.json', 'aprendizaje.jsonl', '_versiones']);
 // archivos de la skill (rutas relativas con /), sin entrar en .git ni node_modules
 function listarArchivos(dir, max = 500) {
   const out = [];
   const rec = (d, rel) => {
     let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const e of es.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (out.length >= max || e.name === '.git' || e.name === 'node_modules' || e.name === 'instalado.json' || e.isSymbolicLink()) continue;
+      if (out.length >= max || e.name === '.git' || e.name === 'node_modules' || (!rel && PRIVADOS.has(e.name)) || e.isSymbolicLink()) continue;
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) rec(path.join(d, e.name), r); else out.push(r);
     }
@@ -182,4 +184,4 @@ function buscarSkills(raiz, prof = 5) {
   return out.sort();
 }
 
-module.exports = { parsearYAML, parsearSkillMd, aYAML, componerSkillMd, leerSkill, listarArchivos, buscarSkills, slugDe };
+module.exports = { PRIVADOS, parsearYAML, parsearSkillMd, aYAML, componerSkillMd, leerSkill, listarArchivos, buscarSkills, slugDe };
