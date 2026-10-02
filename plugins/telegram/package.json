@@ -1,0 +1,8 @@
+{
+  "name": "apolo-plugin-telegram",
+  "version": "1.0.0",
+  "description": "Plugin de APOLO: canal de Telegram (bot propio ligado a tu chat)",
+  "main": "index.js",
+  "keywords": ["apolo-plugin"],
+  "license": "MIT"
+}

@@ -51,9 +51,22 @@ module.exports = definirPlugin({
 | `tareas.programar / ver / borrar` | Necesita el permiso `tareas`. `programar` acepta `{ aviso }` o `{ ejecutar }`. |
 | `bus.on / emitir` | Eventos `plugins`, `skills`, `tarea` y `plugin:<x>:<evento>`. `turno` y `aviso` necesitan el permiso `conversaciones`. |
 | `permisos.pedir(p)`, `archivos.leer / escribir`, `shell(cmd)` | Si no está declarado, se pregunta al usuario. |
+| `secretos.leer / guardar(nombre)` | Solo los nombres declarados en `"secretos": ["tg:token"]` del manifest. Los da la app desde su almacén cifrado. Los de tu espacio (`<tu-nombre>:…`) se dan sin preguntar; los demás los aprueba el usuario una vez (o la app, si es suyo). |
 | `log(...)` | Va al registro del panel. |
 
 Los tipos completos están en `core/sdk/index.d.ts`.
+
+### Canales remotos (Telegram, WhatsApp…)
+
+`registrarCanal({ id, nombre, enviar, permiso, permisoResuelto, tarjeta, acciones })` devuelve `{ recibir, estado, decidir, tarjeta, transcribir }`.
+
+- **Permisos**: el canal tiene que declarar `"permisos": true` en `aporta.canales` y tener `permiso(p)`. Así recibe los permisos pendientes, con botones si quiere. Con `decidir(id, 'allow'|'always'|'deny')` **solo** puede resolver los que se le mostraron a él; cualquier otro se rechaza. `always` en uno peligroso baja a `allow`.
+- **Tarjetas** (`tarjeta(t)`) necesitan el permiso `conversaciones`.
+- **Notas de voz**: guárdalas en tu almacén y llama a `transcribir(ruta)`, que usa el Whisper de la app.
+- **`acciones`**: funciones que la app llama desde el panel (estado, conectar…).
+- En la app de escritorio, `main.js` media con `plugins.mediar({ resolverPermiso, accionTarjeta, recibir, transcribir })`. Sin app (daemon/CLI), el gestor reenvía él mismo los permisos del núcleo.
+
+Ejemplo real: `plugins/telegram` (se activa con `"plugins": { "telegramComoPlugin": true }` en config.json; si no arranca, la app vuelve a `telegram.js`).
 
 ## Seguridad
 

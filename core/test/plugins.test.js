@@ -22,9 +22,9 @@ function nucleo(extra = {}) {
   const { crearNucleo } = require('../index');
   return { dir, n: crearNucleo({ dir, escaner: escanerFalso, embedder: null }) };
 }
-function plugin(raiz, nombre, { permisos = [], herramientas = [], comandos = [], canales = [], codigo, apoloSdk = '^1.0.0' }) {
+function plugin(raiz, nombre, { permisos = [], herramientas = [], comandos = [], canales = [], secretos, codigo, apoloSdk = '^1.0.0' }) {
   const d = path.join(raiz, nombre); fs.mkdirSync(d, { recursive: true });
-  fs.writeFileSync(path.join(d, 'apolo-plugin.json'), JSON.stringify({ nombre, version: '1.0.0', descripcion: `prueba ${nombre}`, entrada: 'index.js', apoloSdk, permisos, aporta: { herramientas, comandos, canales } }));
+  fs.writeFileSync(path.join(d, 'apolo-plugin.json'), JSON.stringify({ nombre, version: '1.0.0', descripcion: `prueba ${nombre}`, entrada: 'index.js', apoloSdk, permisos, ...(secretos ? { secretos } : {}), aporta: { herramientas, comandos, canales } }));
   fs.writeFileSync(path.join(d, 'index.js'), codigo);
   return d;
 }
@@ -239,4 +239,98 @@ test('API del daemon: /v1/plugins (listar, instalar, activar, recargar, comando,
   assert.strictEqual(r.j.ok, true);
   assert.strictEqual((await api('GET', '/plugins')).j.plugins.length, 0);
   servidor.close(); await n.plugins.cerrar();
+});
+
+// canal con permisos: guarda lo que le llega y expone comandos para decidir / ver
+const CODIGO_CANAL = (id, nombreCanal) => `let canal; const vistos = [], resueltos = [];
+module.exports = require('@apolo/sdk').definirPlugin({ activar(apolo) {
+  canal = apolo.registrarCanal({ id: '${id}', nombre: '${nombreCanal}',
+    permiso: p => { vistos.push(p); return true; }, permisoResuelto: (id, d, via) => { resueltos.push([id, d, via]); },
+    tarjeta: t => { vistos.push({ tarjeta: t.id }); return true; } });
+  const cmd = (nombre, f) => apolo.registrarComando({ nombre, ejecutar: async t => { try { return String(await f(...t.split(' '))); } catch (e) { return 'ERROR ' + e.message; } } });
+  cmd('${id}_vistos', () => JSON.stringify({ vistos, resueltos }));
+  cmd('${id}_decidir', (id, d) => canal.decidir(id, d));
+  cmd('${id}_tarjeta', (id, a) => canal.tarjeta(id, a));
+} });`;
+const hasta = async (f, ms = 5000) => { const t0 = Date.now(); for (; ;) { const v = await f(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('tiempo agotado'); await new Promise(ok => setTimeout(ok, 30)); } };
+
+test('canales: el permiso pendiente llega al canal y solo puede resolver lo que se le mostró', async () => {
+  const { n } = nucleo();
+  const raiz = tmp('pl-');
+  plugin(raiz, 'canalito', { permisos: ['conversaciones'], canales: [{ nombre: 'remoto', permisos: true }], comandos: ['remoto_vistos', 'remoto_decidir', 'remoto_tarjeta'], codigo: CODIGO_CANAL('remoto', 'Canalito') });
+  plugin(raiz, 'intruso', { canales: [{ nombre: 'otro' }], comandos: ['otro_vistos', 'otro_decidir', 'otro_tarjeta'], codigo: CODIGO_CANAL('otro', 'Intruso') });
+  for (const p of ['canalito', 'intruso']) { await n.plugins.instalar(path.join(raiz, p)); await n.plugins.activar(p, true); }
+  const vistos = async id => JSON.parse(await n.plugins.comando(`${id}_vistos`));
+  // 1) sin app que medie: un permiso del núcleo va solo al canal que lo declaró (permisos: true)
+  const espera = n.permisos.pedirExterno({ resumen: 'borrar la carpeta temporal', origen: 'prueba' });
+  const pid = n.permisos.pendientes()[0].id;
+  await hasta(async () => (await vistos('remoto')).vistos.length);
+  assert.strictEqual((await vistos('remoto')).vistos[0].id, pid);
+  assert.strictEqual((await vistos('otro')).vistos.length, 0);
+  assert.match(await n.plugins.comando('otro_decidir', `${pid} allow`), /ERROR .*no se mostró/);   // el otro canal no puede
+  assert.match(await n.plugins.comando('remoto_decidir', 'p-inventado allow'), /ERROR .*no se mostró/);
+  assert.strictEqual(n.permisos.pendientes().length, 1);
+  assert.strictEqual(await n.plugins.comando('remoto_decidir', `${pid} allow`), 'true');
+  assert.strictEqual((await espera).ok, true);
+  await hasta(async () => (await vistos('remoto')).resueltos.length);
+  assert.deepStrictEqual((await vistos('remoto')).resueltos[0].slice(0, 2), [pid, 'allow']);
+  assert.match(await n.plugins.comando('remoto_decidir', `${pid} deny`), /ERROR/);              // ya no está: no se resuelve dos veces
+  // 2) con la app mediando (main.js): ids propios, "siempre" en un peligroso baja a "permitir", y resolvePerm avisa al canal
+  const decididos = [];
+  n.plugins.mediar({ resolverPermiso: (id, d, via) => { decididos.push([id, d, via]); return true; }, accionTarjeta: (id, a) => `hecho ${id} ${a}` });
+  assert.strictEqual(await n.plugins.mostrarPermiso({ id: 7, tool: 'Bash', detail: 'rm -rf build', peligro: 'borra en masa', session: 'proyecto' }), 1);
+  assert.match(await n.plugins.comando('remoto_decidir', '7 always'), /true/);
+  assert.deepStrictEqual(decididos, [[7, 'allow', 'Canalito']]);
+  n.plugins.permisoResuelto(7, 'allow', 'Canalito');
+  await hasta(async () => (await vistos('remoto')).resueltos.length === 2);
+  assert.match(await n.plugins.comando('remoto_decidir', '7 allow'), /ERROR/);
+  // un permiso del núcleo ya NO se reenvía solo (lo hace la app)
+  const otra = n.permisos.pedirExterno({ resumen: 'otra cosa', origen: 'prueba', esperaMs: 300 });
+  assert.strictEqual((await otra).ok, false);
+  assert.strictEqual((await vistos('remoto')).vistos.length, 2);
+  // 3) tarjetas: solo con "conversaciones"; solo las mostradas
+  assert.strictEqual(await n.plugins.mostrarTarjeta({ id: 3, kind: 'mail', author: 'Ana', resumen: 'factura', respuesta: 'ok', canSend: true }), 1);
+  assert.strictEqual(await n.plugins.comando('remoto_tarjeta', '3 enviar'), 'hecho 3 enviar');
+  assert.match(await n.plugins.comando('remoto_tarjeta', '3 enviar'), /ERROR/);
+  assert.match(await n.plugins.comando('otro_tarjeta', '3 descartar'), /ERROR/);
+  await n.plugins.cerrar();
+});
+
+test('secretos: solo los declarados; fuera de su espacio el usuario lo aprueba una vez; nunca en el registro', async () => {
+  const { n } = nucleo();
+  const leidos = [], guardados = {};
+  n.plugins.ponerSecretos({ leer: s => { leidos.push(s); return 'VALOR-SUPERSECRETO-' + s; }, guardar: (s, v) => { guardados[s] = v; }, permitir: ({ plugin, nombre }) => plugin === 'secretero' && nombre === 'app:permitido' });
+  const raiz = tmp('pl-');
+  plugin(raiz, 'secretero', { secretos: ['secretero:clave', 'tg:token', 'app:permitido'], comandos: ['sec'], codigo: `module.exports = require('@apolo/sdk').definirPlugin({ activar(apolo) {
+  apolo.registrarComando({ nombre: 'sec', ejecutar: async t => { const [op, s, v] = t.split(' ');
+    try { return op === 'g' ? String(await apolo.secretos.guardar(s, v)) : await apolo.secretos.leer(s); } catch (e) { return 'ERROR ' + e.message; } } });
+} });` });
+  assert.throws(() => M.validar({ nombre: 'x', version: '1.0.0', apoloSdk: '^1.0.0', secretos: ['sin-espacio'] }), /secreto no válido/);
+  await n.plugins.instalar(path.join(raiz, 'secretero'));
+  await n.plugins.activar('secretero', true);
+  const pedidos = [], aprobar = req => { pedidos.push(req); n.permisos.resolver(req.id, 'allow'); };
+  n.bus.on('permiso', aprobar);
+  assert.strictEqual(await n.plugins.comando('sec', 'l secretero:clave'), 'VALOR-SUPERSECRETO-secretero:clave');   // su espacio: sin preguntar
+  assert.strictEqual(await n.plugins.comando('sec', 'l app:permitido'), 'VALOR-SUPERSECRETO-app:permitido');       // la app lo permite
+  assert.strictEqual(pedidos.length, 0);
+  assert.match(await n.plugins.comando('sec', 'l srv:github'), /ERROR .*no está declarado/);                         // no declarado: NO
+  assert.ok(!leidos.includes('srv:github'));
+  assert.strictEqual(await n.plugins.comando('sec', 'l tg:token'), 'VALOR-SUPERSECRETO-tg:token');                  // declarado ajeno: pregunta…
+  assert.strictEqual(pedidos.length, 1); assert.match(pedidos[0].resumen, /tg:token/); assert.ok(!/VALOR/.test(pedidos[0].resumen));
+  await n.plugins.comando('sec', 'l tg:token');
+  assert.strictEqual(pedidos.length, 1);                                                                             // …solo la primera vez
+  assert.strictEqual(await n.plugins.comando('sec', 'g tg:token 123:nuevo'), 'true');
+  assert.strictEqual(guardados['tg:token'], '123:nuevo');
+  assert.match(await n.plugins.comando('sec', 'g srv:github robado'), /ERROR .*no está declarado/);
+  assert.ok(!('srv:github' in guardados));
+  assert.ok(!n.plugins.obtener('secretero').logs.some(l => /SUPERSECRETO|123:nuevo/.test(l.texto)));
+  // denegado por el usuario → error; sin proveedor → error claro
+  n.bus.off('permiso', aprobar);
+  plugin(raiz, 'secretero2', { secretos: ['otra:cosa'], comandos: ['sec2'], codigo: `module.exports = { activar(apolo) { apolo.registrarComando({ nombre: 'sec2', ejecutar: async () => { try { return await apolo.secretos.leer('otra:cosa'); } catch (e) { return 'ERROR ' + e.message; } } }); } };` });
+  await n.plugins.instalar(path.join(raiz, 'secretero2')); await n.plugins.activar('secretero2', true);
+  n.bus.on('permiso', req => n.permisos.resolver(req.id, 'deny'));
+  assert.match(await n.plugins.comando('sec2', ''), /ERROR DENEGADO/);
+  n.plugins.ponerSecretos(null);
+  assert.match(await n.plugins.comando('sec', 'l secretero:clave'), /ERROR .*no hay almacén/);
+  await n.plugins.cerrar();
 });

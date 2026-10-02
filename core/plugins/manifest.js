@@ -1,6 +1,7 @@
 // Manifest de plugins (apolo-plugin.json): lectura, validación y semver mínimo (sin dependencias).
 //   { nombre, version, descripcion, autor, licencia, entrada, apoloSdk: "^1.0.0",
 //     permisos: ["red:api.ejemplo.com", "archivos:C:/ruta", "shell", "pantalla", "memoria", "tareas", "conversaciones"],
+//     secretos: ["tg:token"],   // secretos del almacén cifrado de la app que el plugin puede pedir (apolo.secretos.leer)
 //     aporta: { herramientas: ["x" | {nombre, riesgo, descripcion}], canales, proveedores, comandos, vistas: [{nombre, archivo}], gestos, voces } }
 const fs = require('fs');
 const path = require('path');
@@ -11,6 +12,7 @@ const APORTES = ['herramientas', 'canales', 'proveedores', 'comandos', 'vistas',
 const PERMISO = /^(red(:[\w*.-]+)?|archivos:.+|shell|pantalla|memoria|tareas|conversaciones|notificaciones)$/;
 const NOMBRE = /^[a-z0-9][a-z0-9-]{0,40}$/;
 const ID = /^[a-z][a-z0-9_-]{0,50}$/i;
+const SECRETO = /^[a-z0-9][\w.-]{0,40}:[\w.-]{1,60}$/i;      // "espacio:nombre" (tg:token, mi-plugin:clave)
 
 // ---------- semver ----------
 const parsear = v => { const m = String(v || '').trim().replace(/^v/, '').match(/^(\d+)(?:\.(\d+|x|\*))?(?:\.(\d+|x|\*))?/i); return m ? [m[1], m[2], m[3]].map(x => (x === undefined || /x|\*/i.test(x) ? null : +x)) : null; };
@@ -71,6 +73,10 @@ function validar(m, dir, versionSdk) {
     for (const x of aporta[k]) if (!ID.test(x.nombre)) err(`aporta.${k}: nombre no válido "${x.nombre}"`);
   }
   for (const h of aporta.herramientas) if (h.riesgo !== undefined && !RIESGOS.includes(h.riesgo)) err(`aporta.herramientas ${h.nombre}: riesgo debe ser ${RIESGOS.join('|')}`);
+  for (const c of aporta.canales) if (c.permisos !== undefined && typeof c.permisos !== 'boolean') err(`aporta.canales ${c.nombre}: "permisos" debe ser true/false`);
+  const secretos = m.secretos || [];
+  if (!Array.isArray(secretos)) err('"secretos" debe ser una lista');
+  for (const x of secretos) if (!SECRETO.test(String(x))) err(`secreto no válido "${x}" (espacio:nombre, ej. tg:token)`);
   for (const v of aporta.vistas) {
     const a = String(v.archivo || '').replace(/\\/g, '/');
     if (!a || path.isAbsolute(a) || a.split('/').includes('..')) err(`aporta.vistas ${v.nombre}: "archivo" relativo obligatorio`);
@@ -78,7 +84,7 @@ function validar(m, dir, versionSdk) {
   }
   return {
     nombre: m.nombre, version: String(m.version), descripcion: String(m.descripcion || '').slice(0, 1000), autor: String(m.autor || ''), licencia: String(m.licencia || ''),
-    entrada, apoloSdk: String(m.apoloSdk), permisos: permisos.map(String), aporta,
+    entrada, apoloSdk: String(m.apoloSdk), permisos: permisos.map(String), secretos: [...new Set(secretos.map(String))], aporta,
   };
 }
 

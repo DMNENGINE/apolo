@@ -52,7 +52,8 @@ const DISCORD_GRACE_MS = 20_000;      // si estás, solo va a Discord si no cont
 let lastMove = Date.now();
 const isAway = () => Date.now() - lastMove > AWAY_MS;
 let discord = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, replyTo() { return false; }, stop() { } };
-let telegram = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, iniciar() { }, detener() { } };
+let telegram = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, iniciar() { }, detener() { },
+  estado: () => ({ configurado: false, estado: 'arrancando', bot: null, enlazado: false, usuario: '', enlace: null }) };
 let whatsapp = { enabled: false, status: 'sin vincular', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { } };
 // al móvil: Discord, Telegram y WhatsApp a la vez (cada uno ignora lo suyo si no está configurado)
 const movil = {
@@ -150,7 +151,9 @@ async function ttsFish(cfg, text, f) {
     return true;
   } catch (e) { console.error('[voz] Fish Audio falló:', e.message); fishCaidoHasta = Date.now() + 300_000; return false; }
 }
-ipcMain.handle('tts', async (_e, text) => {
+// lo que dice la isla también sale por el altavoz del ojo si la petición vino del ojo (o cfg.nodos.vozSiempre)
+ipcMain.handle('tts', async (_e, text) => { const f = await generarTts(text); vozAlOjo(f); return f; });
+async function generarTts(text) {
   text = String(text || '').slice(0, 600); if (!text.trim()) return null;
   const dir = path.join(os.tmpdir(), 'robot-tts'); try { fs.mkdirSync(dir, { recursive: true }); } catch { }
   const vc = VOZ_CFG();
@@ -162,7 +165,7 @@ ipcMain.handle('tts', async (_e, text) => {
   const fe = path.join(dir, crypto.createHash('sha1').update(VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch + text).digest('hex').slice(0, 16) + '.mp3');
   if (fs.existsSync(fe)) return fe;
   return edgeTts(text, fe, VOZ_TTS);
-});
+}
 const edgeTts = (text, f, VOZ_TTS = VOZ_TTS_IDIOMA.es) => new Promise(ok => {
   const p =require('child_process').spawn('python', ['-m', 'edge_tts', '--voice', VOZ_TTS.voz, '--rate=' + VOZ_TTS.rate, '--pitch=' + VOZ_TTS.pitch, '--text', text, '--write-media', f], { windowsHide: true });
   const t = setTimeout(() => { try { p.kill(); } catch { } ok(null); }, 12_000);
@@ -243,6 +246,7 @@ function decide(id, behavior, via = '?') {
   const p = pending.get(id);
   if (!p) return false;
   clearTimeout(p.timer); pending.delete(id);
+  ojoRefrescar();
   if (p.nucleoId) {                                            // permiso del núcleo multi-modelo (sus reglas las guarda él)
     nucleo.permisos.resolver(p.nucleoId, behavior);
     if (win && !win.isDestroyed()) win.webContents.send('decided', id, behavior);
@@ -510,6 +514,7 @@ function startServer() {
       if (u) ev._usage = u;
       if (ev._ppid && ev.session_id) resolveTerminal(ev.session_id, ev._ppid);
       if (talk) talk.onEvent(ev);
+      ojoHook(ev);                                                    // las terminales de Claude Code también mueven el ojo
       if (!win || win.isDestroyed()) return res.end();
       if (ev.hook_event_name === 'PermissionRequest') {
         ev._peligro = esPeligroso(ev.tool_name, ev.tool_input);
@@ -523,11 +528,12 @@ function startServer() {
         win.webContents.send('event', ev);
         res.writeHead(200, { 'content-type': 'application/json' });
         // sin respuesta en 105 s -> vacío: Claude Code pregunta en la terminal
-        const timer = setTimeout(() => { pending.delete(ev._id); res.end(); win && win.webContents.send('expired', ev._id); movil.resolvePerm(ev._id, 'expired', 'tiempo'); }, 105_000);
+        const timer = setTimeout(() => { pending.delete(ev._id); res.end(); win && win.webContents.send('expired', ev._id); movil.resolvePerm(ev._id, 'expired', 'tiempo'); ojoRefrescar(); }, 105_000);
         pending.set(ev._id, { res, timer, ev });
+        ojoPermiso(ev);                                               // el ojo lo enseña y su botón lo puede resolver (peligrosos NO)
         // al móvil: ya si no estás en la PC, o si nadie contesta en 20 s
         permToDiscord(ev);
-        res.on('close', () => { if (pending.has(ev._id)) { clearTimeout(timer); pending.delete(ev._id); win && win.webContents.send('expired', ev._id); } });
+        res.on('close', () => { if (pending.has(ev._id)) { clearTimeout(timer); pending.delete(ev._id); win && win.webContents.send('expired', ev._id); ojoRefrescar(); } });
       } else {
         win.webContents.send('event', ev);
         res.end();
@@ -546,6 +552,104 @@ function permToDiscord(ev) {
     detail: String(ev.tool_input?.command || ev.tool_input?.file_path || ev.tool_input?.url || JSON.stringify(ev.tool_input || {})),
   });
   if (isAway() || ev._forceDiscord) toDiscord(); else setTimeout(toDiscord, DISCORD_GRACE_MS);   // _forceDiscord: pruebas
+}
+
+// ---------- ojo de escritorio (core/nodos, ESP32): voz, TTS, estados y permisos de Claude Code ----------
+// voz del ojo → Whisper → el mismo enrutado que la voz de la isla; la respuesta que dice la isla también sale por el ojo
+let ojoHabloEn = 0;
+const OJO_VOZ_MS = () => (+(nucleo && nucleo.cfg.nodos && nucleo.cfg.nodos.vozVentanaSeg) || 300) * 1000;
+const ojoBus = (tipo, datos) => { try { if (nucleo && nucleo.nodos) nucleo.bus.emit(tipo, datos); } catch { } };
+const ojoRefrescar = () => ojoBus('nodo-refrescar', {});
+const detallePerm = ev => String(ev.tool_input?.command || ev.tool_input?.file_path || ev.tool_input?.url || JSON.stringify(ev.tool_input || {}));
+function conectarOjo() {
+  const nodos = nucleo && nucleo.nodos; if (!nodos) return;
+  nodos.transcriptor = async ruta => { const r = await transcribirArchivo(ruta); return (r && r.text) || ''; };
+  // permisos de los hooks (no los del núcleo, que el ojo ya ve): el botón corto permite, el largo deniega, los peligrosos NO
+  nodos.permisosExternos = {
+    pendientes: () => [...pending.entries()].filter(([, p]) => !p.nucleoId && p.res).map(([id, p]) => ({ id, resumen: `${p.ev.tool_name}: ${detallePerm(p.ev)}`, peligro: p.ev._peligro || '', creado: p.ev._t })),
+    resolver: (id, b, via) => decide(id, b === 'deny' ? 'deny' : 'allow', via || 'ojo'),
+  };
+  nucleo.bus.on('nodo-texto', ({ texto }) => {
+    texto = String(texto || '').trim(); if (!texto) return;
+    ojoHabloEn = Date.now();
+    if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: '🎙 Ojo', texto });
+    Promise.resolve(talk ? handleText(texto, 'voz') : null).catch(e => console.error('[ojo] voz:', e.message));
+  });
+}
+function vozAlOjo(f) {
+  if (!f || !nucleo || !nucleo.nodos || !nucleo.nodos.conectados().length) return;
+  if (!(nucleo.cfg.nodos && nucleo.cfg.nodos.vozSiempre) && Date.now() - ojoHabloEn > OJO_VOZ_MS()) return;
+  nucleo.nodos.reproducirArchivo(f).catch(e => console.error('[ojo] audio:', e.message));
+}
+// hooks de Claude Code → 'nodo-estado' (trabajando / listo / error / reposo)
+function ojoHook(ev) {
+  if (!nucleo || !nucleo.nodos) return;
+  const h = ev.hook_event_name, sitio = path.basename(ev.cwd || '') || 'Claude Code';
+  if (h === 'PreToolUse') ojoBus('nodo-estado', { estado: 'trabajando', msg: String(ev.tool_name || ''), segundos: 120 });
+  else if (h === 'UserPromptSubmit') ojoBus('nodo-estado', { estado: 'trabajando', msg: sitio, segundos: 120 });
+  else if (h === 'Stop') ojoBus('nodo-estado', { estado: 'listo', msg: 'LISTO', flash: true, segundos: 3 });
+  else if (h === 'StopFailure') ojoBus('nodo-estado', { estado: 'error', msg: 'ERROR', flash: true, segundos: 4 });
+  else if (h === 'SessionEnd') ojoBus('nodo-estado', { estado: 'reposo', msg: '', segundos: 1 });
+}
+function ojoPermiso(ev) { ojoBus('nodo-permiso', { id: ev._id, resumen: `${ev.tool_name}: ${detallePerm(ev)}`, peligro: ev._peligro || '' }); }
+
+// ---------- Telegram: telegram.js (por defecto) o el plugin del SDK plugins/telegram (cfg.plugins.telegramComoPlugin = true) ----------
+// El plugin corre en su proceso (solo api.telegram.org); el token sale del almacén cifrado (conectores) por el proveedor de secretos;
+// los permisos que resuelve son SOLO los que se le mostraron. Si no arranca o se rompe → vuelta a telegram.js.
+const DIR_PLUGIN_TG = path.join(__dirname, 'plugins', 'telegram');
+const esNuestroTg = o => !!o && o.tipo === 'local' && path.resolve(String(o.fuente || '')).toLowerCase() === path.resolve(DIR_PLUGIN_TG).toLowerCase();
+function usarTelegramJs() {
+  try { telegram.detener && telegram.detener(); } catch { }
+  telegram = crearTelegram({ almacen: conectores.almacen, decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
+    onTalk: t => handleText(t, 'telegram'), transcribir: transcribirArchivo, onEstado: e => console.log('[telegram]', e) });
+  telegram.iniciar();
+}
+const esperarPlugin = async (P, n) => { for (let i = 0; i < 150 && ['arrancando', 'reiniciando'].includes(P.estadoDe(n)); i++) await new Promise(ok => setTimeout(ok, 200)); };
+// misma interfaz que telegram.js (movil, responderA, panel /v1/telegram)
+function adaptadorTelegramPlugin() {
+  const P = nucleo.plugins, acc = (a, d) => P.accionCanal('telegram', 'telegram', a, d), err = e => console.error('[telegram] plugin:', e.message);
+  let estado = 'conectando';
+  nucleo.bus.on('evento', e => { if (e && e.tipo === 'plugins' && e.nombre === 'telegram' && e.accion === 'canal') { estado = e.detalle || e.estado; console.log('[telegram]', estado); } });
+  return {
+    plugin: true,
+    get enabled() { return P.activo('telegram') && estado === 'conectado'; }, get status() { return P.activo('telegram') ? estado : 'plugin parado'; },
+    iniciar() { }, detener() { },
+    estado: () => acc('estado'), conectar: token => acc('conectar', { token }), nuevoEnlace: () => acc('enlace'), desconectar: () => acc('desconectar'),
+    sendPerm: p => { P.mostrarPermiso(p, { plugin: 'telegram' }).catch(err); },
+    resolvePerm: (id, b, via) => P.permisoResuelto(id, b, via),
+    sendCard: c => { P.mostrarTarjeta(c, { plugin: 'telegram' }).catch(err); },
+    sendAviso: t => P.enviarCanal('telegram', 'telegram', t).catch(err),
+    reply: md => P.enviarCanal('telegram', 'telegram', md).catch(err),
+  };
+}
+async function telegramComoPlugin() {
+  const P = nucleo.plugins, alm = conectores.almacen;
+  P.ponerSecretos({ leer: n => alm.secreto(n) || '', guardar: (n, v) => alm.guardarSecreto(n, v),
+    permitir: ({ plugin, nombre, origen }) => plugin === 'telegram' && nombre === 'tg:token' && esNuestroTg(origen) });   // el de la app, sin preguntar
+  P.mediar({ resolverPermiso: (id, b, via) => decide(id, b, via), accionTarjeta: (id, a) => cardAction(id, a), transcribir: ruta => transcribirArchivo(ruta),
+    recibir: ({ plugin, texto }) => (plugin === 'telegram' ? handleText(texto, 'telegram') : undefined) });
+  // el enlace de telegram.js (chat, bot) pasa al plugin la 1.ª vez por su config (solo en memoria)
+  const viejo = alm.config().telegram || {};
+  nucleo.cfg.plugins = nucleo.cfg.plugins || {};
+  if (!nucleo.cfg.plugins.telegram) nucleo.cfg.plugins.telegram = { chatId: viejo.chatId || null, bot: viejo.bot || null, usuario: viejo.usuario || '', codigo: viejo.codigo || null };
+  await esperarPlugin(P, 'telegram');                                // que acabe el arranque automático de plugins
+  const version = JSON.parse(fs.readFileSync(path.join(DIR_PLUGIN_TG, 'apolo-plugin.json'), 'utf8')).version;
+  const ya = P.lista().find(x => x.nombre === 'telegram');
+  if (!ya || (esNuestroTg(ya.origen) && ya.version !== version)) await P.instalar(DIR_PLUGIN_TG, { reemplazar: true });
+  if (P.activo('telegram')) await P.recargar('telegram'); else await P.activar('telegram', true);   // recarga: ya con secretos y mediador
+  if (!P.activo('telegram')) throw new Error('no arrancó');
+  telegram = adaptadorTelegramPlugin();
+  console.log('[telegram] usando el plugin del SDK (plugins/telegram)');
+  nucleo.bus.on('evento', e => {
+    if (!e || e.tipo !== 'plugins' || e.nombre !== 'telegram' || !['roto', 'desactivado', 'borrado'].includes(e.accion) || !telegram.plugin) return;
+    console.error(`[telegram] el plugin quedó ${e.accion} → vuelvo a telegram.js`); usarTelegramJs();
+  });
+}
+// con el flag apagado, un plugin "telegram" activo competiría con telegram.js por el mismo bot (409): se desactiva
+async function apagarPluginTelegram() {
+  const P = nucleo.plugins; await esperarPlugin(P, 'telegram');
+  const ya = P.lista().find(x => x.nombre === 'telegram');
+  if (ya && ya.activo) { console.log('[telegram] desactivo el plugin telegram (cfg.plugins.telegramComoPlugin está apagado)'); await P.activar('telegram', false); }
 }
 
 // panel web del núcleo: el token va en el #hash (no viaja al servidor) y el panel lo guarda y lo borra de la URL
@@ -571,6 +675,7 @@ async function startNucleo() {
   nucleo.cerebro = { leer: () => cerebro.config(), guardar: c => cerebro.setConfig(c) };
   try { const d = await iniciarDaemon({ nucleo }); console.log(`[núcleo] API en :${d.puerto}${(nucleo.cfg.red?.permitidos || []).length ? ` (LAN solo: ${nucleo.cfg.red.permitidos.join(", ")})` : " (solo este equipo)"} · modelo por defecto ${nucleo.cfg.modeloPorDefecto}`); }
   catch (e) { console.error('[núcleo] sin API HTTP:', e.message); }
+  try { conectarOjo(); } catch (e) { console.error('[ojo]', e.message); }   // nucleo.nodos lo crea iniciarDaemon
   const toIsland = ev => { ev._id = nextId++; ev._t = Date.now(); if (win && !win.isDestroyed()) win.webContents.send('event', ev); };
   puente = createPuente({
     nucleo, dataDir: app.getPath('userData'), toIsland,
@@ -878,8 +983,6 @@ app.whenReady().then(() => {
       },
     });
     nucleo.extensiones.conectores = conectores;
-    telegram = crearTelegram({ almacen: conectores.almacen, decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
-      onTalk: t => handleText(t, 'telegram'), transcribir: transcribirArchivo, onEstado: e => console.log('[telegram]', e) });
     nucleo.extensiones.telegram = { http: async (M, p, b) => {
       if (M === 'GET') return telegram.estado();
       if (M === 'PUT') return telegram.conectar(b.token);
@@ -888,7 +991,8 @@ app.whenReady().then(() => {
       if (M === 'DELETE') return telegram.desconectar();
       const e = new Error('ruta'); e.status = 404; throw e;
     } };
-    telegram.iniciar();
+    if (nucleo.cfg.plugins && nucleo.cfg.plugins.telegramComoPlugin) telegramComoPlugin().catch(e => { console.error('[telegram] el plugin no arrancó:', e.message, '→ telegram.js'); usarTelegramJs(); });
+    else { usarTelegramJs(); apagarPluginTelegram().catch(e => console.error('[telegram]', e.message)); }
     whatsapp = crearWhatsapp({ dir: path.join(app.getPath('userData'), 'whatsapp-auth'), decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
       onTalk: t => handleText(t, 'whatsapp'), transcribir: transcribirArchivo, onAjeno: a => mensajeWhatsapp(a).catch(e => console.error('[whatsapp]', e.message)), onEstado: e => console.log('[whatsapp]', e) });
     nucleo.extensiones.whatsapp = { http: async (M, p, b) => {

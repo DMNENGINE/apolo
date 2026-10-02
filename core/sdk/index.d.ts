@@ -90,12 +90,28 @@ export interface Canal {
   nombre?: string;
   descripcion?: string;
   /** el núcleo te pide enviar algo por tu canal (avisos proactivos) */
-  enviar?(texto: string, o: { a?: string }): void | Promise<void>;
+  enviar?(texto: string, o: { a?: any }): void | Promise<void>;
+  /** permiso pendiente (solo si aporta.canales[].permisos = true). Devuelve false si no lo mostraste. */
+  permiso?(p: PermisoCanal): boolean | void | Promise<boolean | void>;
+  /** ese permiso se resolvió (aquí o por otra vía: isla, Stream Deck, tiempo agotado) */
+  permisoResuelto?(id: string, decision: 'allow' | 'always' | 'deny' | 'expired' | string, via: string): void | Promise<void>;
+  /** tarjeta del cerebro (correo/mensaje importante); requiere el permiso "conversaciones" */
+  tarjeta?(t: TarjetaCanal): boolean | void | Promise<boolean | void>;
+  /** acciones de configuración que la app llama desde el panel (estado, conectar…) */
+  acciones?: Record<string, (datos: any) => any>;
 }
+export interface PermisoCanal { id: string; tool: string; detail: string; peligro: string; session: string }
+export interface TarjetaCanal { id: string; kind: string; author: string; guild: string; resumen: string; respuesta: string; prioridad: string; canSend: boolean }
 export interface CanalRegistrado {
   /** un mensaje entrante del usuario: el agente responde y te devuelve el texto final */
   recibir(texto: string, o?: { de?: string }): Promise<string>;
   estado(estado: 'activo' | 'inactivo' | 'error' | string, detalle?: string): Promise<boolean>;
+  /** resolver un permiso que se mostró en ESTE canal (cualquier otro se rechaza) */
+  decidir(permiso: string, decision: 'allow' | 'always' | 'deny'): Promise<boolean>;
+  /** acción sobre una tarjeta mostrada en este canal: enviar | descartar | ruido | urgente | normal */
+  tarjeta(tarjeta: string, accion: string): Promise<string>;
+  /** audio guardado dentro de apolo.almacen.ruta → texto (Whisper de la app) */
+  transcribir(ruta: string): Promise<{ texto: string; error: string }>;
 }
 
 export type EventoBus = 'plugins' | 'skills' | 'tarea' | 'turno' | 'aviso' | `plugin:${string}:${string}`;
@@ -119,6 +135,11 @@ export interface Apolo {
     off(tipo: EventoBus, fn: (datos: any) => void): void;
     /** llega a los demás como plugin:<tu-nombre>:<tipo> */
     emitir(tipo: string, datos?: any): Promise<boolean>;
+  };
+  /** solo nombres declarados en "secretos" del manifest (ej. "tg:token"); fuera de "<tu-nombre>:" el usuario lo aprueba una vez */
+  secretos: {
+    leer(nombre: string): Promise<string>;
+    guardar(nombre: string, valor: string): Promise<boolean>;
   };
   /** requiere "memoria" (si no, se pregunta cada vez) */
   memoria: {

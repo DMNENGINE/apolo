@@ -98,16 +98,27 @@ function crearApi(a) {
       const id = c && (c.id || c.nombre);
       exigir(id, 'registrarCanal: id obligatorio');
       reg.canales.set(id, c);
-      registrar('canal', { id, nombre: String(c.nombre || id), descripcion: String(c.descripcion || ''), puedeEnviar: typeof c.enviar === 'function' });
+      registrar('canal', { id, nombre: String(c.nombre || id), descripcion: String(c.descripcion || ''), puedeEnviar: typeof c.enviar === 'function',
+        permisos: typeof c.permiso === 'function', tarjetas: typeof c.tarjeta === 'function' });
       return Object.freeze({
         recibir: (txt, o = {}) => llamar('canal.recibir', { id, texto: String(txt), de: o.de ? String(o.de) : '' }, 0),
         estado: (estado, detalle = '') => llamar('canal.estado', { id, estado: String(estado), detalle: String(detalle) }),
+        // solo permisos/tarjetas que el núcleo mostró en ESTE canal (permiso(p) / tarjeta(t)); lo demás se rechaza
+        decidir: (permiso, decision) => llamar('canal.decidir', { id, permiso: String(permiso), decision: String(decision) }),
+        tarjeta: (tarjeta, accion) => llamar('canal.tarjeta', { id, tarjeta: String(tarjeta), accion: String(accion) }, 120_000),
+        // audio guardado en tu almacén (apolo.almacen.ruta) → { texto, error }
+        transcribir: ruta => llamar('canal.transcribir', { id, ruta: String(ruta) }, 300_000),
       });
     },
     bus: Object.freeze({
       on(tipo, fn) { exigir(typeof fn === 'function', 'bus.on: falta la función'); const l = reg.bus.get(tipo) || []; l.push(fn); reg.bus.set(tipo, l); return l.length === 1 ? llamar('bus.on', { tipo }, 0) : Promise.resolve(true); },
       off(tipo, fn) { const l = (reg.bus.get(tipo) || []).filter(x => x !== fn); reg.bus.set(tipo, l); },
       emitir: (tipo, datos) => llamar('bus.emitir', { tipo: String(tipo), datos }),
+    }),
+    // solo los nombres declarados en "secretos" del manifest; los da la app desde su almacén cifrado. No los registres en el log.
+    secretos: Object.freeze({
+      leer: nombre => llamar('secreto.leer', { nombre: String(nombre) }, 0),
+      guardar: (nombre, valor) => llamar('secreto.guardar', { nombre: String(nombre), valor: String(valor ?? '') }, 0),
     }),
     memoria: Object.freeze({
       buscar: (consulta, o = {}) => llamar('memoria.buscar', { consulta: String(consulta), limite: o.limite }, 0),
@@ -146,6 +157,8 @@ const enCurso = new Map();                                  // id de la llamada 
 async function conSenal(id, fn) { const c = new AbortController(); enCurso.set(id, c); try { return await fn(c.signal); } finally { enCurso.delete(id); } }
 const resultado = r => (typeof r === 'string' ? r : r && typeof r === 'object' && 'texto' in r ? { texto: String(r.texto) } : r === undefined || r === null ? '' : texto(r));
 
+const resultadoCrudo = r => { try { return JSON.parse(JSON.stringify(r ?? null)); } catch { return String(r); } };
+
 const MANEJADORES = {
   async iniciar(a) {
     vigilarRed(a.permisos || []);
@@ -176,6 +189,14 @@ const MANEJADORES = {
     });
   },
   async canal({ id, texto: t, a }) { const c = reg.canales.get(id); if (!c?.enviar) throw new Error(`el canal "${id}" no envía`); await c.enviar(String(t), { a }); return true; },
+  async 'canal.permiso'({ id, permiso }) { const c = reg.canales.get(id); if (!c?.permiso) return false; return (await c.permiso(permiso)) !== false; },
+  async 'canal.permisoResuelto'({ id, permiso, decision, via }) { const c = reg.canales.get(id); if (c?.permisoResuelto) await c.permisoResuelto(permiso, decision, via); return true; },
+  async 'canal.tarjeta'({ id, tarjeta }) { const c = reg.canales.get(id); if (!c?.tarjeta) return false; return (await c.tarjeta(tarjeta)) !== false; },
+  async 'canal.accion'({ id, accion, datos }) {
+    const c = reg.canales.get(id), f = c?.acciones?.[accion];
+    if (typeof f !== 'function' || !Object.prototype.hasOwnProperty.call(c.acciones, accion)) throw new Error(`el canal "${id}" no tiene la acción "${accion}"`);
+    return resultadoCrudo(await f(datos || {}));
+  },
   async tarea({ clave }) { const f = reg.tareas.get(clave); if (!f) throw new Error(`tarea "${clave}" sin función`); return resultado(await f()); },
   cancelar({ id }) { enCurso.get(id)?.abort(new Error('cancelado')); return true; },
 };

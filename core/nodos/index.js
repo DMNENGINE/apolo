@@ -19,7 +19,7 @@
 //   'nodo-reproducir' {pcm: Buffer | ruta, nodo?}
 // Bus (salida): 'nodo' {tipo: conectado|desconectado|emparejando|emparejado|borrado, id, nombre}, 'nodo-audio' {nodo, nombre, ruta, ms},
 //   'nodo-texto' {nodo, texto} (si hay transcriptor), 'panico' {origen}
-// PENDIENTE en main.js (no se toca desde aquí): nucleo.nodos.transcriptor = ruta => transcribirArchivo(ruta)  y enrutar 'nodo-texto'
+// main.js (conectarOjo): nucleo.nodos.transcriptor = ruta → texto, enruta 'nodo-texto'
 //   como si fuera voz de la isla; y tras generar el TTS: nucleo.nodos.reproducirArchivo(mp3).
 const http = require('http');
 const fs = require('fs');
@@ -93,9 +93,11 @@ function crearNodos({ nucleo }) {
   const trabajando = new Map();        // sesión → herramienta actual
   let externo = null;                  // {estado, msg, hasta}: de main.js (sesiones de Claude Code)
   let ultimaActividad = Date.now(), dormido = false;
+  // permisos que NO son del núcleo (hooks de Claude Code en main.js): api.permisosExternos = { pendientes(), resolver(id, decision, via) }
+  function externos() { try { return (api.permisosExternos?.pendientes?.() || []).map(p => ({ ...p, externo: true })); } catch { return []; } }
   function estadoActual() {
     const pend = permisos.pendientes();
-    if (pend.length) return { estado: 'permiso', msg: 'PERMISO?' };
+    if (pend.length || externos().length) return { estado: 'permiso', msg: 'PERMISO?' };
     if (externo && Date.now() < externo.hasta && externo.estado === 'permiso') return { estado: 'permiso', msg: textoPantalla(externo.msg || 'PERMISO?') };
     if (trabajando.size) { const h = [...trabajando.values()].filter(Boolean).pop(); return { estado: 'trabajando', msg: textoPantalla(h || '') }; }
     if (externo && Date.now() < externo.hasta && ESTADOS.includes(externo.estado)) return { estado: externo.estado, msg: textoPantalla(externo.msg) };
@@ -116,8 +118,13 @@ function crearNodos({ nucleo }) {
     if (dormido) { dormido = false; difundir({ tipo: 'gesto', gesto: 'bostezo', segundos: 2.5 }); }   // se despierta bostezando
   }
   function primerPermiso() {
-    const pend = permisos.pendientes().slice().sort((a, b) => a.creado - b.creado);
+    const pend = [...permisos.pendientes(), ...externos()].sort((a, b) => (a.creado || 0) - (b.creado || 0));
     return pend[0] || null;
+  }
+  // resolver uno del núcleo o uno externo (Claude Code); "via" = nombre del nodo
+  function resolverP(p, decision, via) {
+    if (!p.externo) return permisos.resolver(p.id, decision, decision === 'deny' ? `denegado desde ${via}` : undefined);
+    try { return !!api.permisosExternos?.resolver?.(p.id, decision, via); } catch { return false; } finally { refrescar(); }
   }
 
   const oyentes = {
@@ -142,10 +149,15 @@ function crearNodos({ nucleo }) {
       refrescar();
     },
     'permiso-resuelto': () => refrescar(),
+    // permisos externos (hooks de Claude Code): main.js avisa al aparecer ('nodo-permiso') y al resolverse/caducar ('nodo-refrescar')
+    'nodo-permiso': p => { if (p && p.id !== undefined) oyentes.permiso(p); },
+    'nodo-refrescar': () => refrescar(),
     'aviso-externo': () => { actividad(); difundir({ tipo: 'gesto', gesto: 'sorpresa', segundos: 1.5 }); refrescar(); },
     'nodo-estado': e => {
       if (!e || !ESTADOS.includes(e.estado)) return;
-      actividad(); externo = { estado: e.estado, msg: e.msg || '', hasta: Date.now() + (e.segundos || 600) * 1000 };
+      actividad();
+      if (e.flash) { externo = null; difundir({ tipo: 'flash', estado: e.estado, msg: textoPantalla(e.msg || ''), segundos: Math.min(10, +e.segundos || 3) }); return refrescar(); }
+      externo ={ estado: e.estado, msg: e.msg || '', hasta: Date.now() + (e.segundos || 600) * 1000 };
       refrescar();
     },
     'nodo-gesto': e => { if (e && GESTOS.includes(e.gesto)) difundir({ tipo: 'gesto', gesto: e.gesto, segundos: Math.min(10, +e.segundos || 3), ...(e.msg !== undefined ? { msg: textoPantalla(e.msg) } : {}) }); },
@@ -164,18 +176,18 @@ function crearNodos({ nucleo }) {
     if (pulsacion === 'doble') return panico(`nodo:${c.nodo.id}`);
     if (pulsacion === 'corta') {
       if (!p) { c.ws.enviarJSON({ tipo: 'gesto', gesto: 'feliz', segundos: 1.5, msg: textoPantalla(nucleo.personalidad?.nombre?.() || 'HOLA') }); actividad(); return refrescar(); }
-      if (p.peligro && !opc().permitirPeligrosos) {
+      if (p.peligro && (p.externo || !opc().permitirPeligrosos)) {      // los de Claude Code peligrosos: NUNCA desde el ojo
         c.ws.enviarJSON({ tipo: 'flash', estado: 'permiso', msg: 'PELIGROSO: EN EL PC', segundos: 3 });
         c.ws.enviarJSON({ tipo: 'gesto', gesto: 'duda', segundos: 3 });
         return;
       }
-      permisos.resolver(p.id, 'allow');
+      resolverP(p, 'allow', nombre);
       reg('info', `permiso ${p.id}`, `permitido desde ${nombre}`);
       difundir({ tipo: 'flash', estado: 'listo', msg: 'PERMITIDO', segundos: 1.5 });
       return;
     }
     if (pulsacion === 'larga' && p) {
-      permisos.resolver(p.id, 'deny', `denegado desde ${nombre}`);
+      resolverP(p, 'deny', nombre);
       reg('info', `permiso ${p.id}`, `denegado desde ${nombre}`);
       difundir({ tipo: 'flash', estado: 'error', msg: 'DENEGADO', segundos: 1.5 });
     }
@@ -183,6 +195,7 @@ function crearNodos({ nucleo }) {
   // pánico (doble pulsación): deniega todo lo pendiente, suelta el control del PC y cancela los turnos en marcha
   function panico(origen) {
     for (const p of permisos.pendientes()) permisos.resolver(p.id, 'deny', 'pánico');
+    for (const p of externos()) resolverP(p, 'deny', 'pánico');
     try { nucleo.control?.soltarTodo?.('pánico desde el ojo'); } catch { }
     for (const id of [...trabajando.keys()]) { try { nucleo.agente?.cancelar?.(id); } catch { } }
     bus.emit('panico', { origen });
@@ -422,7 +435,8 @@ function crearNodos({ nucleo }) {
     lista: () => datos.nodos.map(publico), conectados: () => [...conexiones.keys()],
     enviar: (id, msg) => { const c = conexiones.get(id); return c ? c.ws.enviarJSON(msg) : false; },
     puerto: () => puertoReal,
-    transcriptor: null,          // PENDIENTE main.js: nucleo.nodos.transcriptor = transcribirArchivo
+    transcriptor: null,          // main.js: ruta → texto (whisper_srv vía transcribirArchivo)
+    permisosExternos: null,      // main.js: { pendientes: () => [{id, resumen, peligro, creado}], resolver: (id, decision, via) => bool } (hooks de Claude Code)
   };
   return api;
 }

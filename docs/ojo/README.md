@@ -131,19 +131,11 @@ Borrar WiFi y emparejamiento: mantén el botón **al encender** 3 segundos.
 - **Cámara**: solo cuando el PC la pide (`POST /v1/nodos/:id/foto`), **siempre con tu permiso** (`pedirExterno`),
   y el ojo enciende el LED + aro rojo 0,8 s antes de disparar. JPEG en `nucleo/capturas/`.
 
-## Pendiente (conexión con la app de escritorio, main.js)
+## Conexión con la app de escritorio (main.js → `conectarOjo()`)
 
-El núcleo ya emite y escucha todo; falta enchufarlo en `main.js` (no se tocó en esta fase):
-
-```js
-// voz del ojo → whisper_srv → el mismo enrutado que la voz de la isla
-nucleo.nodos.transcriptor = ruta => transcribirArchivo(ruta);
-nucleo.bus.on('nodo-texto', ({ texto }) => handleText(texto, { origen: 'voz' }));   // adaptar a la firma real de handleText
-// el ojo también habla: tras generar el mp3 del TTS
-nucleo.nodos.reproducirArchivo(rutaMp3);            // ffmpeg → PCM 16 kHz → altavoz del ojo
-// las sesiones de Claude Code (hooks) también mueven los ojos
-nucleo.bus.emit('nodo-estado', { estado: 'trabajando', msg: 'Claude Code' });   // permiso | listo | error | reposo
-nucleo.bus.emit('nodo-gesto', { gesto: 'feliz' });
-```
+- **Voz**: `nucleo.nodos.transcriptor` → `transcribirArchivo` (whisper_srv). El texto (`nodo-texto`) va por `handleText(texto, 'voz')`, igual que la voz de la isla, y aparece en la isla como «🎙 Ojo».
+- **El ojo habla**: lo que la isla dice con TTS (IPC `tts`) también sale por el altavoz del ojo (`reproducirArchivo(mp3)`) durante 5 min desde la última vez que le hablaste (`cfg.nodos.vozVentanaSeg`), o siempre con `cfg.nodos.vozSiempre: true`. Necesita la voz de la isla encendida.
+- **Terminales de Claude Code** (hooks `/event`): `PreToolUse` → trabajando + herramienta, `UserPromptSubmit` → trabajando, `Stop` → destello LISTO, `StopFailure` → destello ERROR, `SessionEnd` → reposo (`nodo-estado`, con `flash: true` para los destellos).
+- **Permisos de Claude Code**: `nucleo.nodos.permisosExternos = { pendientes, resolver }` + eventos `nodo-permiso` / `nodo-refrescar`. El botón corto permite, el largo deniega y el doble (pánico) deniega todo. Los **peligrosos de Claude Code nunca** se aprueban desde el ojo, aunque actives `permitirPeligrosos`.
 
 Más adelante: "mira hacia quien habla" (dirección con dos micros o con la cámara) y despertar por su nombre (wake word).

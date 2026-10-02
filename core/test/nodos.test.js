@@ -189,6 +189,43 @@ test('nodos: botón del ojo → permisos (corta permite, larga deniega, peligros
   await n.nodos.cerrar(); n.nodos.apagarOyentes();
 });
 
+test('nodos: permisos externos (hooks de Claude Code): el botón los resuelve, los peligrosos NO; estado y flash desde main', async () => {
+  const n = nucleo(); n.nodos = crearNodos({ nucleo: n });
+  const pend = new Map(), resueltos = [];
+  n.nodos.permisosExternos = { pendientes: () => [...pend.values()], resolver: (id, d, via) => { resueltos.push([id, d, via]); return pend.delete(id); } };
+  const puerto = await n.nodos.iniciar(0);
+  const { c } = await emparejado(n, puerto);
+  pend.set(5, { id: 5, resumen: 'Bash: npm test', peligro: '', creado: Date.now() });
+  n.bus.emit('nodo-permiso', pend.get(5));
+  assert.strictEqual((await c.tipo('permiso')).id, 5);
+  assert.strictEqual((await c.esperar(m => m.tipo === 'estado' && m.estado === 'permiso')).msg, 'PERMISO?');
+  c.json({ tipo: 'boton', pulsacion: 'corta' });
+  await c.esperar(m => m.tipo === 'flash' && m.msg === 'PERMITIDO');
+  assert.deepStrictEqual(resueltos, [[5, 'allow', 'Ojo de prueba']]);
+  // peligroso de Claude Code: nunca desde el ojo (aunque cfg.nodos.permitirPeligrosos); larga sí deniega
+  n.cfg.nodos = { ...(n.cfg.nodos || {}), permitirPeligrosos: true };
+  pend.set(6, { id: 6, resumen: 'Bash: rm -rf /', peligro: 'borrado', creado: Date.now() });
+  n.bus.emit('nodo-permiso', pend.get(6)); await c.tipo('permiso');
+  c.json({ tipo: 'boton', pulsacion: 'corta' });
+  assert.match((await c.esperar(m => m.tipo === 'flash' && m.estado === 'permiso')).msg, /PELIGROSO/);
+  assert.strictEqual(resueltos.length, 1);
+  c.json({ tipo: 'boton', pulsacion: 'larga' });
+  await c.esperar(m => m.tipo === 'flash' && m.msg === 'DENEGADO');
+  assert.deepStrictEqual(resueltos[1], [6, 'deny', 'Ojo de prueba']);
+  // pánico también deniega los externos
+  pend.set(7, { id: 7, resumen: 'x', peligro: '', creado: Date.now() });
+  c.json({ tipo: 'boton', pulsacion: 'doble' });
+  await c.esperar(m => m.tipo === 'flash' && /PANICO/.test(m.msg));
+  assert.deepStrictEqual(resueltos[2], [7, 'deny', 'pánico']);
+  // estados de Claude Code: trabajando con la herramienta y "listo" como destello
+  n.bus.emit('nodo-estado', { estado: 'trabajando', msg: 'Edit', segundos: 60 });
+  assert.strictEqual((await c.esperar(m => m.tipo === 'estado' && m.estado === 'trabajando')).msg, 'EDIT');
+  n.bus.emit('nodo-estado', { estado: 'listo', msg: 'LISTO', flash: true, segundos: 3 });
+  await c.esperar(m => m.tipo === 'flash' && m.estado === 'listo');
+  assert.notStrictEqual((await c.esperar(m => m.tipo === 'estado')).estado, 'trabajando');
+  await n.nodos.cerrar(); n.nodos.apagarOyentes();
+});
+
 test('nodos: push-to-talk → WAV + evento nodo-audio + transcriptor; daemon expone /v1/nodos', async () => {
   const n = nucleo(); n.nodos = crearNodos({ nucleo: n });
   n.nodos.transcriptor = async ruta => { assert.ok(fs.existsSync(ruta)); return 'hola apolo'; };

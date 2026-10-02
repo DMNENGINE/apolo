@@ -61,7 +61,13 @@ function entornoHijo({ lectura, escritura, shell, node }) {
 const resumenArgs = a => { const v = Object.values(a || {}).find(x => typeof x === 'string' || typeof x === 'number'); return v === undefined ? '' : String(v).slice(0, 120); };
 const sinFunciones = o => JSON.parse(JSON.stringify(o ?? null));
 
-function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, herramientas, escaner, sesiones, enviar, tokenGithub }) {
+// Canales remotos (Telegram, WhatsApp… como plugin): la app (main.js) puede "mediar" con mediar({ resolverPermiso, accionTarjeta,
+//   recibir, transcribir }); si nadie media, el gestor reenvía él mismo los permisos del núcleo (bus 'permiso') a los canales
+//   con aporta.canales[].permisos = true. Un canal SOLO puede resolver los permisos (y tarjetas) que se le mostraron a él.
+// Secretos: el plugin pide por nombre lo declarado en "secretos" del manifest; los da el proveedor inyectado (secretos o
+//   ponerSecretos({ leer, guardar, permitir? })), p. ej. el almacén safeStorage de conectores. Fuera de su espacio "<nombre>:"
+//   hace falta que el proveedor lo permita o que el usuario lo apruebe una vez. Los valores nunca van al registro.
+function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, herramientas, escaner, sesiones, enviar, tokenGithub, secretos = null }) {
   const base = path.join(cfg.dir, 'plugins'), datos = path.join(cfg.dir, 'plugins-datos'), fEstado = path.join(base, '_estado.json');
   const op = () => ({ timeoutMs: 60_000, activarMs: 20_000, proveedorMs: 300_000, maxReinicios: 3, backoffMs: 1000, dev: false, ...(cfg.gestorPlugins || {}) });
   fs.mkdirSync(base, { recursive: true });
@@ -71,7 +77,8 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   const dirDe = nombre => estado[nombre]?.ruta || path.join(base, nombre);
   const nombres = () => Object.keys(estado).filter(n => fs.existsSync(path.join(dirDe(n), M.ARCHIVO)));
   const manifestDe = nombre => M.leer(dirDe(nombre), VERSION);
-  const vacio = () => ({ herramientas: new Map(), comandos: new Map(), proveedores: new Map(), canales: new Map(), bus: new Set() });
+  const vacio = () => ({ herramientas: new Map(), comandos: new Map(), proveedores: new Map(), canales: new Map(), bus: new Set(), permisosVistos: new Map(), tarjetasVistas: new Map() });
+  let anfitrion = {}, proveedorSecretos = secretos;
   const vivos = new Map();
   const rt = nombre => { let r = vivos.get(nombre); if (!r) vivos.set(nombre, r = { estado: 'parado', pend: new Map(), reg: vacio(), reinicios: 0, logs: [], n: 0, sesiones: new Map() }); return r; };
   function anotar(nombre, nivel, txt) {
@@ -120,6 +127,17 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
     return !!r?.ok;
   }
   const denegado = p => new Error(`DENEGADO: el usuario no permitió ${p}`);
+  // secretos fuera de su espacio "<nombre>:" (p. ej. tg:token): los permite la app (proveedor.permitir) o el usuario UNA vez
+  async function secretoPermitido(nombre, s) {
+    if (s.toLowerCase().startsWith(nombre.toLowerCase() + ':')) return true;
+    try { if (await proveedorSecretos.permitir?.({ plugin: nombre, nombre: s, origen: estado[nombre]?.origen || null, dev: !!estado[nombre]?.dev })) return true; } catch { }
+    if ((estado[nombre]?.secretosOk || []).includes(s)) return true;
+    if (cfg.permisos?.modo === 'solo-lectura') return false;
+    const r = await permisos.pedirExterno({ resumen: `El plugin "${nombre}" quiere usar tu secreto guardado "${s}" (lo declaró en su manifest)`, peligro: 'acceso a un secreto', origen: `plugin ${nombre}` });
+    if (!r?.ok) return false;
+    if (estado[nombre]) { estado[nombre].secretosOk = [...new Set([...(estado[nombre].secretosOk || []), s])]; guardar(); }
+    return true;
+  }
 
   // ---------- lo que el plugin pide al núcleo ----------
   async function atender(nombre, metodo, a) {
@@ -160,6 +178,10 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
       }
       case 'canal.recibir': {
         if (!r.reg.canales.has(a.id)) throw new Error(`canal "${a.id}" no registrado`);
+        if (typeof anfitrion.recibir === 'function') {                // la app enruta (destinos, Claude Code, cerebro…)
+          const v = await anfitrion.recibir({ plugin: nombre, canal: a.id, texto: String(a.texto || '').slice(0, 20_000), de: String(a.de || '') });
+          if (v !== undefined) return String((v && typeof v === 'object' ? v.msg : v) || '');
+        }
         const clave = `${a.id}\0${a.de || ''}`;
         let s = r.sesiones.get(clave) && sesiones.obtener(r.sesiones.get(clave));
         if (!s) { s = sesiones.crear({ canal: `plugin:${nombre}:${a.id}`, titulo: `${nombre}/${a.id}${a.de ? ' · ' + a.de : ''}` }); r.sesiones.set(clave, s.id); }
@@ -168,7 +190,46 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
       case 'canal.estado': {
         if (!r.reg.canales.has(a.id)) throw new Error(`canal "${a.id}" no registrado`);
         canales.registrar(`plugin:${nombre}:${a.id}`, { estado: String(a.estado || 'activo').slice(0, 30), detalle: String(a.detalle || '').slice(0, 300) });
+        avisar('canal', nombre, { canal: a.id, estado: String(a.estado || 'activo').slice(0, 30), detalle: String(a.detalle || '').slice(0, 300) });
         return true;
+      }
+      case 'canal.decidir': {                                         // botón Permitir/Denegar del canal: SOLO lo que se le mostró
+        const v = r.reg.permisosVistos.get(String(a.permiso));
+        if (!v || v.canal !== a.id) throw new Error('ese permiso no se mostró en este canal (o ya no está pendiente)');
+        let d = String(a.decision || '');
+        if (!['allow', 'always', 'deny'].includes(d)) throw new Error('decisión no válida (allow | always | deny)');
+        if (d === 'always' && v.peligro) d = 'allow';                 // lo peligroso nunca se convierte en regla
+        const via = String(r.reg.canales.get(a.id)?.nombre || a.id);
+        // la app/núcleo avisa después con permisoResuelto (y eso lo quita de "vistos" y edita el mensaje del canal)
+        const ok = typeof anfitrion.resolverPermiso === 'function' ? !!await anfitrion.resolverPermiso(v.id, d, via) : permisos.resolver(v.id, d, d === 'deny' ? `denegado desde ${via}` : via);
+        if (!ok) r.reg.permisosVistos.delete(String(a.permiso));
+        return ok;
+      }
+      case 'canal.tarjeta': {
+        const v = r.reg.tarjetasVistas.get(String(a.tarjeta));
+        if (!v || v.canal !== a.id) throw new Error('esa tarjeta no se mostró en este canal');
+        const acc = String(a.accion || '');
+        if (!['enviar', 'descartar', 'ruido', 'urgente', 'normal'].includes(acc)) throw new Error('acción de tarjeta no válida');
+        if (typeof anfitrion.accionTarjeta !== 'function') throw new Error('no hay tarjetas en este equipo');
+        if (['enviar', 'descartar', 'ruido'].includes(acc)) r.reg.tarjetasVistas.delete(String(a.tarjeta));
+        return String(await anfitrion.accionTarjeta(v.id, acc) || '');
+      }
+      case 'canal.transcribir': {                                     // nota de voz descargada en SU almacén → Whisper de la app
+        if (!r.reg.canales.has(a.id)) throw new Error(`canal "${a.id}" no registrado`);
+        if (typeof anfitrion.transcribir !== 'function') return { texto: '', error: 'la transcripción no está disponible en este equipo' };
+        const alm = path.resolve(datos, nombre), f = path.resolve(alm, String(a.ruta || ''));
+        if (!f.toLowerCase().startsWith(alm.toLowerCase() + path.sep) || !fs.existsSync(f)) throw new Error('solo se transcriben archivos de tu almacén');
+        const t = await anfitrion.transcribir(f) || {};
+        return { texto: String(t.text ?? t.texto ?? '').slice(0, 10_000), error: t.error ? String(t.error).slice(0, 300) : '' };
+      }
+      case 'secreto.leer': case 'secreto.guardar': {
+        const s = String(a.nombre || '');
+        if (!(r.man.secretos || []).includes(s)) throw new Error(`el secreto "${s}" no está declarado en "secretos" de ${M.ARCHIVO}`);
+        if (!proveedorSecretos) throw new Error('no hay almacén de secretos en este equipo');
+        if (!await secretoPermitido(nombre, s)) throw denegado(`el secreto ${s}`);
+        if (metodo === 'secreto.leer') return String(await proveedorSecretos.leer(s) || '');
+        if (typeof proveedorSecretos.guardar !== 'function') throw new Error('el almacén de secretos es de solo lectura');
+        await proveedorSecretos.guardar(s, String(a.valor ?? '').slice(0, 10_000)); return true;
       }
       case 'bus.on': {
         const tipo = String(a.tipo || '');
@@ -209,7 +270,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
 
   // ---------- registros (solo lo declarado en "aporta") ----------
   function registrar(nombre, tipo, d) {
-    const r = rt(nombre), id = String(d.nombre || d.id || '');
+    const r = rt(nombre), id = String((tipo === 'canal' ? d.id || d.nombre : d.nombre || d.id) || '');   // en un canal "nombre" es el visible
     const decl = (r.man.aporta[CLAVE_PLURAL[tipo]] || []).find(x => x.nombre === id);
     if (!CLAVE_PLURAL[tipo]) throw new Error(`tipo de registro desconocido "${tipo}"`);
     if (!decl) throw new Error(`${tipo} "${id}" no está declarado en aporta.${CLAVE_PLURAL[tipo]} de ${M.ARCHIVO}`);
@@ -237,7 +298,9 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
       r.reg.proveedores.set(id, { nombre: id, modelos: d.modelos || [] });
     } else {
       canales.registrar(`plugin:${nombre}:${id}`, { nombre: String(d.nombre || id), tipo: 'plugin', plugin: nombre, estado: 'activo', detalle: String(d.descripcion || decl.descripcion || '') });
-      r.reg.canales.set(id, { id, nombre: d.nombre || id, puedeEnviar: !!d.puedeEnviar });
+      r.reg.canales.set(id, { id, nombre: d.nombre || id, puedeEnviar: !!d.puedeEnviar,
+        permisos: decl.permisos === true && !!d.permisos,                                   // declarado en el manifest Y con manejador
+        tarjetas: !!d.tarjetas && M.declarado(r.man.permisos, 'conversaciones') });         // las tarjetas son contenido de conversaciones
     }
     return true;
   }
@@ -262,6 +325,56 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   });
   bus.on('tarea', e => reenviar('tarea', { id: e.tarea?.id, nombre: e.tarea?.nombre, tipo: e.tipo, texto: String(e.texto || '').slice(0, 2000) }));
   bus.on('aviso-externo', e => reenviar('aviso', e));
+  // sin app que medie (daemon/CLI solos): los permisos del núcleo van directos a los canales que los aceptan
+  bus.on('permiso', req => {
+    if (anfitrion.resolverPermiso || !req) return;
+    mostrarPermiso({ id: req.id, tool: req.herramienta === 'externo' ? req.origen || 'externo' : req.herramienta, detail: req.resumen, peligro: req.peligro || '', session: req.origen || 'APOLO' }).catch(() => { });
+  });
+  bus.on('permiso-resuelto', e => { if (!anfitrion.resolverPermiso && e) permisoResuelto(e.id, e.decision, String(e.motivo || 'APOLO').replace(/^denegado desde /, '')); });
+
+  // ---------- canales remotos: permisos y tarjetas ----------
+  const canalesCon = (prop, filtro = {}) => {
+    const out = [];
+    for (const [nombre, r] of vivos) {
+      if (r.estado !== 'activo' || (filtro.plugin && filtro.plugin !== nombre)) continue;
+      for (const c of r.reg.canales.values()) if (c[prop] && (!filtro.canal || filtro.canal === c.id)) out.push({ nombre, r, c });
+    }
+    return out;
+  };
+  // p = { id, tool, detail, peligro, session } (lo mismo que movil.sendPerm de main.js). Devuelve en cuántos canales se mostró.
+  async function mostrarPermiso(p, filtro = {}) {
+    if (!p || p.id === undefined || p.id === null) return 0;
+    const limpio = { id: String(p.id), tool: String(p.tool || '').slice(0, 200), detail: String(p.detail ?? '').slice(0, 2000), peligro: p.peligro ? String(p.peligro).slice(0, 200) : '', session: String(p.session || '').slice(0, 120) };
+    const rs = await Promise.all(canalesCon('permisos', filtro).map(async ({ nombre, r, c }) => {
+      r.reg.permisosVistos.set(limpio.id, { id: p.id, canal: c.id, peligro: !!limpio.peligro });     // antes de enviar: el botón puede llegar enseguida
+      try { if (await llamar(nombre, 'canal.permiso', { id: c.id, permiso: limpio })) return 1; } catch (e) { anotar(nombre, 'aviso', `permiso no mostrado: ${e.message}`); }
+      r.reg.permisosVistos.delete(limpio.id); return 0;
+    }));
+    return rs.reduce((a, b) => a + b, 0);
+  }
+  function permisoResuelto(id, decision, via = '') {
+    const k = String(id);
+    for (const [nombre, r] of vivos) {
+      const v = r.reg.permisosVistos.get(k); if (!v) continue;
+      r.reg.permisosVistos.delete(k);
+      if (r.estado === 'activo') llamar(nombre, 'canal.permisoResuelto', { id: v.canal, permiso: k, decision: String(decision || ''), via: String(via || '') }).catch(() => { });
+    }
+  }
+  // c = tarjeta del cerebro { id, kind, author, guild, resumen, respuesta, prioridad, canSend }
+  async function mostrarTarjeta(t, filtro = {}) {
+    if (!t || t.id === undefined) return 0;
+    const limpia = { id: String(t.id), kind: String(t.kind || ''), author: String(t.author || '').slice(0, 120), guild: String(t.guild || '').slice(0, 120), resumen: String(t.resumen || '').slice(0, 2000), respuesta: String(t.respuesta || '').slice(0, 2000), prioridad: String(t.prioridad || ''), canSend: !!t.canSend };
+    const rs = await Promise.all(canalesCon('tarjetas', filtro).map(async ({ nombre, r, c }) => {
+      r.reg.tarjetasVistas.set(limpia.id, { id: t.id, canal: c.id });
+      try { if (await llamar(nombre, 'canal.tarjeta', { id: c.id, tarjeta: limpia })) return 1; } catch (e) { anotar(nombre, 'aviso', `tarjeta no mostrada: ${e.message}`); }
+      r.reg.tarjetasVistas.delete(limpia.id); return 0;
+    }));
+    return rs.reduce((a, b) => a + b, 0);
+  }
+  // acciones de configuración del canal (panel: estado, conectar, enlace…) → canal.acciones[accion](datos) en el plugin
+  const accionCanal = (nombre, id, accion, datosA = {}) => llamar(nombre, 'canal.accion', { id: String(id), accion: String(accion), datos: sinFunciones(datosA) });
+  const mediar = (a = {}) => { anfitrion = { ...anfitrion, ...a }; };
+  const ponerSecretos = p => { proveedorSecretos = p || null; };
 
   // ---------- ciclo de vida del proceso ----------
   async function lanzar(nombre) {
@@ -477,6 +590,8 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   return {
     lista: () => nombres().map(publica), obtener: nombre => (estado[nombre] ? { ...publica(nombre), logs: rt(nombre).logs.slice(-50) } : null),
     instalar, activar, recargar, borrar, escanear, iniciar, cerrar, comandos, comando, enviarCanal, llamar,
+    mediar, ponerSecretos, mostrarPermiso, permisoResuelto, mostrarTarjeta, accionCanal,
+    activo: nombre => rt(nombre).estado === 'activo', estadoDe: nombre => rt(nombre).estado,
     dir: base, datos, version: VERSION,
   };
 }
