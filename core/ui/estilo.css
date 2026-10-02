@@ -799,3 +799,18 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
   .wp-grid { grid-template-columns: 1fr; } .wp-movil { position: static; display: flex; flex-direction: column; align-items: center; } .wp-marco { height: 74vh; }
   .sv-cuerpo { padding-left: 16px; } .sv-perfil { grid-template-columns: 1fr; } .mv-pest { padding: 0 12px; }
 }
+
+/* ---------- Dispositivos → Conectar móvil (moviles.js) ---------- */
+.mq { display: flex; gap: 22px; align-items: center; }
+.mq-qr { flex: none; width: 236px; height: 236px; padding: 12px; background: #fff; border-radius: 16px; box-shadow: 0 0 0 1px var(--borde), 0 0 40px color-mix(in srgb, var(--acento) 25%, transparent); }
+.mq-qr svg { width: 100%; height: 100%; display: block; }
+.mq-tx { flex: 1; min-width: 0; }
+.mq-pasos { margin: 0 0 12px; padding-left: 18px; color: var(--txt-2); line-height: 1.7; }
+.mq-pasos li::marker { color: var(--acento); font-weight: 700; }
+.mq-ips { margin-bottom: 10px; }
+.mq-url { font-size: 11.5px; color: var(--txt-3); background: var(--capa-2); border: 1px solid var(--borde); border-radius: var(--radio-s); padding: 6px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mq-pie { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--txt-2); font-size: 12.5px; }
+.mq-ok { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 10px; text-align: center; }
+.mq-ok svg { width: 46px; height: 46px; color: var(--acento); stroke-width: 2.2; }
+.mq-ok b { font-size: 17px; }
+@media (max-width: 640px) { .mq { flex-direction: column; } }

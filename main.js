@@ -672,7 +672,12 @@ function revisarModelos() {
 let overlayControl = null;
 async function startNucleo() {
   nucleo = nucleo || crearNucleo();
-  nucleo.cerebro = { leer: () => cerebro.config(), guardar: c => cerebro.setConfig(c) };
+  nucleo.cerebro = { leer: () => cerebro.config(), guardar: c => cerebro.setConfig(c),
+    tarjetas: () => (cerebro ? cerebro.tarjetas() : []), accion: (id, a, t) => cardAction(id, a, t) };   // tarjetas para la app móvil
+  // notas de voz de la app móvil (POST /v1/voz/transcribir) → Whisper
+  nucleo.bus.on('transcribir-audio', ({ ruta, responder }) => {
+    transcribirArchivo(ruta).then(r => responder(r && r.error && !r.text ? r.error : null, (r && r.text) || ''), e => responder(e));
+  });
   try { const d = await iniciarDaemon({ nucleo }); console.log(`[núcleo] API en :${d.puerto}${(nucleo.cfg.red?.permitidos || []).length ? ` (LAN solo: ${nucleo.cfg.red.permitidos.join(", ")})` : " (solo este equipo)"} · modelo por defecto ${nucleo.cfg.modeloPorDefecto}`); }
   catch (e) { console.error('[núcleo] sin API HTTP:', e.message); }
   try { conectarOjo(); } catch (e) { console.error('[ojo]', e.message); }   // nucleo.nodos lo crea iniciarDaemon

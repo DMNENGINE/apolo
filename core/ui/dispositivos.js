@@ -10,6 +10,8 @@ VISTAS['ajustes/dispositivos'] = {
     let d; try { d = await api('GET', '/nodos'); } catch (e) { v.innerHTML = `<div class="pagina estrecha">${cabecera('Dispositivos')}<p class="tenue">${esc(e.message)}</p></div>`; return; }
     const chip = n => n.conectado ? `<span class="chip ok"><span class="punto ok"></span>${tr('conectado')}</span>` : `<span class="chip">${tr('desconectado')}</span>`;
     v.innerHTML = `<div class="pagina estrecha">${cabecera('Dispositivos', 'El cuerpo físico del robot: el ojo de escritorio (ESP32 + pantalla redonda) y, más adelante, la Pi o el humanoide.')}
+      <div id="movilSec"></div>
+      <div class="seccion">${tr('Ojo de escritorio')}</div>
       <div class="caja">${fila('Aceptar dispositivos de la red', d.activo
         ? tr('Escuchando en el puerto {p} solo para la red local. Cada dispositivo necesita emparejarse una vez.', { p: d.puerto })
         : tr('Apagado: no se abre ningún puerto. Actívalo para conectar el ojo de escritorio.'),
@@ -26,6 +28,7 @@ VISTAS['ajustes/dispositivos'] = {
          <button class="btn fantasma mini" data-disp="olvidar" data-id="${esc(n.id)}">${tr('Olvidar')}</button>`)).join('')
         : `<p class="tenue" style="padding:12px 14px;margin:0">${tr('Ninguno todavía. Sin hardware puedes probar con el simulador: tools/simulador-ojo.html')}</p>`}</div>
       <p class="tenue" style="font-size:12px;margin-top:12px">${tr('Botón del ojo: corta = Permitir · mantener = Denegar (o hablar si no hay permiso) · doble = pánico. Los permisos peligrosos solo se aprueban en el PC.')}</p></div>`;
+    MOVIL_UI.pintar($('#movilSec'));
     $('#dispAct').onclick = async () => {
       try { await api('POST', '/nodos/activar', { activo: !d.activo }); } catch (e) { aviso(e.message, true); }
       this.pintar(v);

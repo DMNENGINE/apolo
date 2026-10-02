@@ -37,6 +37,11 @@
 //   GET /v1/wrapped?periodo=semana|mes|año&privado · POST /v1/wrapped/video · GET /v1/wrapped/video (mp4) · POST /v1/wrapped/png {carta?} (png o zip)
 //   GET  /v1/nodos · POST /v1/nodos/emparejar {codigo} · POST /v1/nodos/activar {activo} · PATCH|DEL /v1/nodos/:id
 //   POST /v1/nodos/:id/gesto {gesto|estado} · POST /v1/nodos/:id/foto → {ruta}   (ojo de escritorio ESP32: core/nodos)
+//   APP MÓVIL (core/movil.js, PWA en /m/): POST /v1/movil/canjear {codigo,pin,nombre} (sin token) → token de dispositivo (header x-dispositivo)
+//   escritorio: GET /v1/movil · POST /v1/movil/emparejar → {url, svg QR} · PATCH /v1/movil/config {activo, urlMovil} · PATCH|DEL /v1/movil/dispositivos/:id
+//   móvil: GET|PATCH|DEL /v1/movil/yo · GET /v1/movil/permisos · POST /v1/movil/permisos/:id {decision, prueba} · POST /v1/movil/reto · /v1/movil/passkey/*
+//          POST|DEL /v1/movil/push · GET /v1/movil/tarjetas · POST /v1/movil/tarjetas/:id {accion}   (+ lo que deja movil.alcance: chat, eventos, agentes…)
+//   POST /v1/voz/transcribir (audio binario) → {texto}   (bus 'transcribir-audio' → main.js → Whisper)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -46,10 +51,12 @@ const admin = require('./admin');
 
 // panel web (core/ui): archivos estáticos sin token; la API sí lo pide
 const UI = path.join(__dirname, 'ui');
-const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.glb': 'model/gltf-binary' };
+const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.glb': 'model/gltf-binary',
+  '.webmanifest': 'application/manifest+json', '.json': 'application/json; charset=utf-8' };
 function estatico(res, nombre) {
   const f = path.join(UI, nombre);
-  if (!f.startsWith(UI + path.sep) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
+  let es = false; try { es = f.startsWith(UI + path.sep) && fs.statSync(f).isFile(); } catch { }
+  if (!es) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'content-type': TIPOS[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-cache',
     'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob: data:", 'x-frame-options': nombre === 'wrapped.html' ? 'SAMEORIGIN' : 'DENY' });
   fs.createReadStream(f).pipe(res);
@@ -79,14 +86,59 @@ function iniciar(opciones = {}) {
   // eventos para clientes remotos: si no hay ninguno conectado se guardan (máx. 100, 15 min) y se entregan al conectar
   n.remotos = 0; n.motores = {}; const cola = [];
   n.bus.on('remoto', e => { if (!n.remotos) { cola.push({ t: Date.now(), e }); if (cola.length > 100) cola.shift(); } });
+  // app móvil: tokens de dispositivo con alcance limitado; cfg.red.moviles abre la LAN privada SOLO a /m/ y a esos tokens
+  const MV = require('./movil');
+  const movil = n.movil || (n.movil = MV.crearMovil({ nucleo: n }));
+  const ipCliente = opciones.ipCliente || ipDe;                 // las pruebas simulan IPs de la LAN
+  const leerBinario = (req, max) => new Promise((ok, mal) => {
+    const t = []; let l = 0;
+    req.on('data', d => { l += d.length; if (l > max) { mal(new Error('demasiado grande')); req.destroy(); } else t.push(d); });
+    req.on('end', () => ok(Buffer.concat(t))); req.on('error', mal);
+  });
 
-  const srv = http.createServer(async (req, res) => {
+  const manejar = async (req, res) => {
     try {
-      if (!local(req.socket.remoteAddress) && !permitidos.has(ipDe(req))) { res.writeHead(403); return res.end(); }
+      const ip = ipCliente(req);
+      const total = local(ip) || permitidos.has(ip);
+      const lanMovil = !total && movil.activo() && MV.ipPrivada(ip);   // móvil de la LAN: solo /m/ y token de dispositivo
+      if (!total && !lanMovil) { res.writeHead(403); return res.end(); }
       const u = new URL(req.url, 'http://x'); const p = u.pathname.split('/').filter(Boolean); const M = req.method;
-      if (M === 'GET' && p[0] !== 'v1') return estatico(res, p.length ? p.join('/') : 'index.html');
-      if (!iguales(String(req.headers['x-robot-token'] || ''), token)) return json(res, 401, { error: 'token' });
+      if (M === 'GET' && u.pathname === '/m') { res.writeHead(301, { location: '/m/' + u.search }); return res.end(); }
+      if (M === 'GET' && p[0] !== 'v1') {
+        const nombre = p.length ? p.join('/') + (u.pathname.endsWith('/') ? '/index.html' : '') : 'index.html';
+        if (lanMovil && !MV.estaticoMovil(nombre)) { res.writeHead(403); return res.end(); }
+        return estatico(res, nombre);
+      }
+      if (M === 'POST' && p[0] === 'v1' && p[1] === 'movil' && p[2] === 'canjear' && !p[3]) {   // el móvil aún no tiene token: canjea el código del QR
+        try { return json(res, 200, movil.canjear(await leer(req, 4096), { ip })); } catch (e) { return json(res, e.status || 400, { error: e.message }); }
+      }
+      const tok = String(req.headers['x-robot-token'] || '');
+      const maestro = !lanMovil && !!tok && iguales(tok, token);     // el token maestro no vale desde un móvil de la LAN
+      const disp = maestro ? null : movil.autenticar(String(req.headers['x-dispositivo'] || ''), { ip });
+      if (!maestro && !disp) return json(res, 401, { error: 'token' });
       if (p[0] !== 'v1') return json(res, 404, { error: 'ruta' });
+      if (disp && !MV.alcance(M, p)) return json(res, 403, { error: 'fuera del alcance del móvil' });
+
+      if (p[1] === 'movil') {
+        try { return json(res, 200, await movil.http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {}, { maestro, dispositivo: disp, origen: String(req.headers.origin || ''), ip, puerto: srv.address()?.port })); }
+        catch (e) { return json(res, e.status || 400, { error: e.message }); }
+      }
+      if (p[1] === 'voz' && p[2] === 'transcribir' && M === 'POST') {   // nota de voz (móvil / panel) → Whisper de la app de escritorio
+        if (!n.bus.listenerCount('transcribir-audio')) return json(res, 501, { error: 'la transcripción necesita la app de escritorio (Whisper)' });
+        const tipo = String(req.headers['content-type'] || '');
+        const ext = /ogg/.test(tipo) ? '.ogg' : /mp4|m4a|aac/.test(tipo) ? '.m4a' : /wav/.test(tipo) ? '.wav' : '.webm';
+        let audio; try { audio = await leerBinario(req, 15e6); } catch (e) { return json(res, 413, { error: e.message }); }
+        if (audio.length < 100) return json(res, 400, { error: 'audio vacío' });
+        const dv = path.join(n.cfg.dir, 'voz-movil'); fs.mkdirSync(dv, { recursive: true });
+        const fa = path.join(dv, crypto.randomBytes(8).toString('hex') + ext); fs.writeFileSync(fa, audio);
+        try {
+          const texto = await new Promise((ok, mal) => {
+            const t = setTimeout(() => mal(new Error('tiempo agotado')), 150_000);
+            n.bus.emit('transcribir-audio', { ruta: fa, origen: disp ? 'movil' : 'panel', responder: (e, txt) => { clearTimeout(t); if (e) mal(e instanceof Error ? e : new Error(String(e))); else ok(String(txt || '').trim()); } });
+          });
+          return json(res, 200, { texto });
+        } catch (e) { return json(res, 500, { error: e.message }); } finally { fs.rm(fa, () => { }); }
+      }
 
       if (M === 'GET' && p[1] === 'estado') return json(res, 200, { version, nombre: n.personalidad.nombre(), proveedores: n.proveedores.disponibles(), modeloPorDefecto: n.cfg.modeloPorDefecto, permisos: n.permisos.pendientes() });
       if (p[1] === 'config') {
@@ -95,7 +147,9 @@ function iniciar(opciones = {}) {
       }
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram
         try {
-          const r = await n.extensiones[p[1]].http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {}, Object.fromEntries(u.searchParams));
+          let cuerpo = ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {};
+          if (disp) cuerpo = { texto: cuerpo.texto };              // móvil (solo POST /v1/turno): el encargo, sin carpeta ni modelo
+          const r = await n.extensiones[p[1]].http(M, p, cuerpo, Object.fromEntries(u.searchParams));
           if (r?.__archivo) {                                  // la extensión devuelve un archivo (p. ej. el vídeo del turno de noche, el zip de la exportación)
             res.writeHead(200, { 'content-type': TIPOS[path.extname(r.__archivo)] || { '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.zip': 'application/zip' }[path.extname(r.__archivo)] || 'application/octet-stream', 'content-length': fs.statSync(r.__archivo).size,
               ...(r.nombre ? { 'content-disposition': `attachment; filename="${String(r.nombre).replace(/[^\w.-]/g, '_')}"` } : {}) });
@@ -202,8 +256,8 @@ function iniciar(opciones = {}) {
       if (p[1] === 'agentes' && M === 'GET') return json(res, 200, n.subagentes.lista());
       if (p[1] === 'eventos' && M === 'GET') {
         const enviar = sse(res);
-        const g = l => enviar({ tipo: 'registro', ...l }); n.bus.on('registro', g);
-        const cliente = String(req.headers['x-cliente'] || '');
+        const g = l => enviar({ tipo: 'registro', ...l }); if (!disp) n.bus.on('registro', g);   // los registros no van al móvil
+        const cliente = disp ? '' : String(req.headers['x-cliente'] || '');                  // un móvil no puede hacerse pasar por la Pi
         const esRemoto = cliente === 'pi';                       // solo el bot de la Pi recibe los envíos a Discord
         const esMotor = cliente && !esRemoto;                    // puentes de motores externos (Antigravity…)
         const mot = e => enviar({ tipo: 'motor', ...e });
@@ -219,8 +273,9 @@ function iniciar(opciones = {}) {
         }
         const a = e => enviar({ tipo: 'permiso', ...e }), b = e => enviar({ tipo: 'permiso-resuelto', ...e }), c = e => enviar(e), d = e => enviar({ ...e, tipo: 'tarea', subtipo: e.tipo }), ag = e => enviar({ tipo: 'agente', agente: e }), ctl = e => enviar({ ...e, tipo: 'control' });
         n.bus.on('permiso', a); n.bus.on('permiso-resuelto', b); n.bus.on('evento', c); n.bus.on('tarea', d); n.bus.on('agente', ag); n.bus.on('control', ctl);
+        const hk = () => enviar({ tipo: 'permisos-externos' }); n.bus.on('nodo-permiso', hk); n.bus.on('nodo-refrescar', hk);   // permisos de los hooks de Claude Code (main.js)
         const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
-        req.on('close', () => { clearInterval(ping); n.bus.off('permiso', a); n.bus.off('permiso-resuelto', b); n.bus.off('evento', c); n.bus.off('tarea', d); n.bus.off('agente', ag); n.bus.off('control', ctl); n.bus.off('registro', g);
+        req.on('close', () => { clearInterval(ping); n.bus.off('permiso', a); n.bus.off('permiso-resuelto', b); n.bus.off('evento', c); n.bus.off('tarea', d); n.bus.off('agente', ag); n.bus.off('control', ctl); n.bus.off('registro', g); n.bus.off('nodo-permiso', hk); n.bus.off('nodo-refrescar', hk);
           if (esRemoto) { n.bus.off('remoto', rem); n.remotos--; n.bus.emit('remoto-conexion', { conectados: n.remotos }); }
           if (esMotor) {
             n.bus.off('motor', mot); n.motores[cliente]--;
@@ -301,7 +356,11 @@ function iniciar(opciones = {}) {
       }
       if (p[1] === 'sesiones') {
         if (!p[2] && M === 'GET') return json(res, 200, n.sesiones.lista());
-        if (!p[2] && M === 'POST') { const s = n.sesiones.crear(await leer(req)); const { mensajes, ...m } = s; return json(res, 201, m); }
+        if (!p[2] && M === 'POST') {
+          const b = await leer(req);                                   // desde el móvil: sin carpeta propia, canal 'movil'
+          const s = n.sesiones.crear(disp ? { titulo: typeof b.titulo === 'string' ? b.titulo.slice(0, 80) : undefined, modelo: typeof b.modelo === 'string' && b.modelo.includes('/') ? b.modelo : undefined, canal: 'movil', cwd: n.cfg.carpeta || undefined } : b);
+          const { mensajes, ...m } = s; return json(res, 201, m);
+        }
         const s = n.sesiones.obtener(p[2]); if (!s) return json(res, 404, { error: 'sesión' });
         if (!p[3] && M === 'GET') return json(res, 200, s);
         if (!p[3] && M === 'DELETE') { n.agente.cancelar(s.id); return json(res, 200, { ok: n.sesiones.borrar(s.id) }); }
@@ -334,9 +393,23 @@ function iniciar(opciones = {}) {
       }
       json(res, 404, { error: 'ruta' });
     } catch (e) { if (!res.headersSent) json(res, 500, { error: e.message }); else res.end(); }
-  });
+  };
+  const srv = http.createServer(manejar);
   const puerto = opciones.puerto ?? n.cfg.puerto;
-  const host = permitidos.size ? '0.0.0.0' : '127.0.0.1';            // solo se abre a la LAN si hay IPs permitidas
+  const host = opciones.host || (permitidos.size || movil.activo() ? '0.0.0.0' : '127.0.0.1');   // solo se abre a la LAN si hay IPs permitidas o el modo móviles
+  // modo móviles activado en caliente con el servidor solo en 127.0.0.1: escucha además en las IPs de la LAN (mismo manejador)
+  const extras = [];
+  movil.alCambiarActivo = v => {
+    if (host === '0.0.0.0') return;
+    if (!v) { for (const s of extras.splice(0)) s.close(); return; }
+    if (extras.length || !srv.listening) return;
+    for (const { ip } of movil.ipsLan()) {
+      const s2 = http.createServer(manejar);
+      s2.on('error', e => console.log(`[móvil] no pude escuchar en ${ip}: ${e.message}`));
+      s2.listen(srv.address().port, ip); extras.push(s2);
+    }
+  };
+  srv.on('close', () => { for (const s of extras.splice(0)) s.close(); });
   return new Promise((ok, mal) => { srv.once('error', mal); srv.listen(puerto, host, () => (opciones.sinTareas || (n.tareas.iniciar(), n.turno?.iniciar(), n.sueno?.programar(), n.sueno?.iniciar()), 0) || ok({ nucleo: n, servidor: srv, puerto: srv.address().port, token })); });
 }
 

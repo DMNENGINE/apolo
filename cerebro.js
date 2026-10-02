@@ -199,7 +199,7 @@ function createCerebro({ dataDir, onCard, onAnswer, notifyUrgent, getSessions, n
 
   return {
     ingest, learn, command, briefing, briefingDue, record,
-    card: id => cards.get(id), dropCard: id => cards.delete(id),
+    card: id => cards.get(id), dropCard: id => cards.delete(id), tarjetas: () => [...cards.values()],
     setPaused: v => { paused = v; }, get paused() { return paused && usaPlan(cfg.modelo); },
     config: () => ({ modelo: cfg.modelo, modeloResumen: cfg.modeloResumen, resumenHora: cfg.resumenHora, gastaPlan: usaPlan(cfg.modelo) || usaPlan(cfg.modeloResumen) }),
     setConfig(c) {
