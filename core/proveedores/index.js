@@ -21,6 +21,7 @@ function crearProveedores(cfg) {
   const cache = {};
   const listos = {};                                       // nombre → true/false (undefined = aún sin comprobar)
   let avisado = '';
+  const externos = {};                                     // proveedores aportados por plugins: nombre → { api, plugin, modelos }
   async function comprobar() {
     for (const [nombre, p] of Object.entries(cfg.proveedores)) {
       try {
@@ -39,6 +40,7 @@ function crearProveedores(cfg) {
     const i = String(id || '').indexOf('/');
     if (i < 1) throw new Error(`modelo "${id}" no válido: usa proveedor/modelo`);
     let nombre = id.slice(0, i), model = id.slice(i + 1);
+    if (externos[nombre]) return { nombre, model, api: externos[nombre].api };
     if (!sinRespaldo && cfg.respaldoAuto !== false && listos[nombre] === false) {
       const alt = RESPALDO.find(([n]) => n !== nombre && listos[n] && cfg.proveedores[n]);
       if (alt) {
@@ -57,9 +59,13 @@ function crearProveedores(cfg) {
   function disponibles() {
     return Object.entries(cfg.proveedores).map(([nombre, p]) => ({
       nombre, tipo: p.tipo, listo: listos[nombre] ?? (p.tipo === 'claude-cli' || !!p.local || !!p.apiKey),
-    }));
+    })).concat(Object.entries(externos).map(([nombre, x]) => ({ nombre, tipo: 'plugin', plugin: x.plugin, modelos: x.modelos, listo: true })));
   }
-  return { resolver, disponibles, comprobar, listos: () => ({ ...listos }), reset: () => { for (const k of Object.keys(cache)) delete cache[k]; } };
+  function registrarExterno(nombre, api, extra = {}) {
+    if (cfg.proveedores[nombre] || (externos[nombre] && externos[nombre].plugin !== extra.plugin)) throw new Error(`ya existe un proveedor "${nombre}"`);
+    externos[nombre] = { api, ...extra };
+  }
+  return { resolver, disponibles, comprobar, registrarExterno, quitarExterno: nombre => delete externos[nombre], listos: () => ({ ...listos }), reset: () => { for (const k of Object.keys(cache)) delete cache[k]; } };
 }
 
 module.exports = { crearProveedores };

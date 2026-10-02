@@ -432,4 +432,8 @@ function registrar(lista) {
     porNombre[h.nombre] = h;
   }
 }
-module.exports = { HERRAMIENTAS, porNombre, registrar };
+// quitar herramientas de fuera (plugins que se paran)
+function quitar(nombres) {
+  for (const n of [].concat(nombres)) { const i = HERRAMIENTAS.findIndex(x => x.nombre === n); if (i >= 0) HERRAMIENTAS.splice(i, 1); delete porNombre[n]; }
+}
+module.exports = { HERRAMIENTAS, porNombre, registrar, quitar };

@@ -127,7 +127,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         sesiones.agregar(s, { role: 'assistant', content: r.texto, toolCalls: r.toolCalls.length ? r.toolCalls : undefined, t: Date.now() });
         if (r.texto) { final = r.texto; ev('texto', { texto: r.texto }); }
         if (!r.toolCalls.length) {
-          if (r.texto && PROMESA.test(r.texto) && empujones < 2 && paso < cfg.maxPasos - 1 && !ctl.signal.aborted) {
+          if (r.texto && !turno.herramientas && PROMESA.test(r.texto) && empujones < 2 && paso < cfg.maxPasos - 1 && !ctl.signal.aborted) {
             empujones++; empujon = true;
             ev('aviso', { texto: 'el modelo prometió hacerlo sin usar herramientas: le pido que lo haga de verdad' });
             continue;

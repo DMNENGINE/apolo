@@ -16,6 +16,7 @@ const { crearSubagentes } = require('./subagentes');
 const { crearControl } = require('./escritorio/control');
 const { crearImportador } = require('./importador');
 const { crearSkills } = require('./skills');
+const { crearPlugins } = require('./plugins');
 
 function crearNucleo(opciones = {}) {
   const cfg = cargarConfig(opciones.dir);
@@ -56,7 +57,12 @@ function crearNucleo(opciones = {}) {
     if (cfg.skills?.mejoraSemanal && !ya) tareas.crear({ nombre: 'Mejora semanal de skills', cuando: { cron: '0 10 * * 1' }, accion: { tipo: 'interna', nombre: 'mejorar-skills' }, canal: 'isla' });
     else if (!cfg.skills?.mejoraSemanal && ya) tareas.borrar(ya.id);
   } catch { }
-  nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills };
+  // plugins (core/plugins + core/sdk): cada uno en su proceso; el escáner es el mismo antivirus de las skills
+  const plugins = crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, sesiones, enviar, herramientas: require('./herramientas'),
+    escaner: () => opciones.escaner || require('./skills/escaner').crearEscaner({ generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), modelo: modeloCerebro() }),
+    tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github') });
+  if (!opciones.sinPlugins) plugins.iniciar().catch(e => console.log(`[plugins] ${e.message}`));
+  nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills, plugins };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }

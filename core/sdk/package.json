@@ -1,0 +1,11 @@
+{
+  "name": "@apolo/sdk",
+  "version": "1.0.0",
+  "description": "SDK de plugins de APOLO (Robot Companion): definirPlugin + tipos de la API que recibe cada plugin",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": { "create-apolo-plugin": "crear.js" },
+  "files": ["index.js", "index.d.ts", "crear.js"],
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}

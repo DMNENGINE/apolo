@@ -1,0 +1,18 @@
+{
+  "nombre": "clima",
+  "version": "1.0.0",
+  "descripcion": "El tiempo actual y la previsión de 3 días de cualquier ciudad (Open-Meteo, sin clave).",
+  "autor": "DMN / APOLO",
+  "licencia": "MIT",
+  "entrada": "index.js",
+  "apoloSdk": "^1.0.0",
+  "permisos": ["red:geocoding-api.open-meteo.com", "red:api.open-meteo.com"],
+  "aporta": {
+    "herramientas": [
+      { "nombre": "clima", "riesgo": "lectura", "descripcion": "Tiempo actual y previsión de 3 días de una ciudad. Úsala cuando pregunten qué tiempo hace, si va a llover, la temperatura, etc." }
+    ],
+    "comandos": [
+      { "nombre": "clima", "descripcion": "/clima <ciudad>: el tiempo de una ciudad" }
+    ]
+  }
+}

@@ -25,6 +25,9 @@
 //   POST /v1/skills/:slug/mejorar {aplicar?, propuesta?} → {diff, propuesta, cambios, aplicado} · GET /v1/skills/:slug/aprendizaje
 //   POST /v1/skills/:slug/evaluar {modelos[]} → {resultados:[{modelo,aciertos,total,detalles}]} · POST /v1/skills/:slug/exportar {destino?} → {ruta}
 //   GET  /v1/skills/:slug/versiones · POST /v1/skills/:slug/versiones/restaurar {version} (también /restaurar)
+//   GET  /v1/plugins · GET /v1/plugins/:nombre (con logs) · POST /v1/plugins/instalar {fuente, reemplazar?, dev?} → {plugin} | {opciones}
+//   PATCH /v1/plugins/:nombre {activo, forzar?} · POST /v1/plugins/:nombre/recargar|escanear · DEL /v1/plugins/:nombre
+//   POST /v1/plugins/comandos/:cmd {texto} → {texto}   (comandos /x que aportan los plugins)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -224,6 +227,29 @@ function iniciar(opciones = {}) {
         if (p[3] === 'exportar' && M === 'POST') { try { return json(res, 200, await tl.exportar(s.slug, { destino: (await leer(req)).destino })); } catch (e) { return err(e, 500); } }
         if (p[3] === 'versiones' && !p[4] && M === 'GET') return json(res, 200, { versiones: tl.versiones(s.slug) });
         if ((p[3] === 'restaurar' || (p[3] === 'versiones' && p[4] === 'restaurar')) && M === 'POST') { try { return json(res, 200, await tl.restaurar(s.slug, (await leer(req)).version)); } catch (e) { return err(e); } }
+      }
+      if (p[1] === 'plugins') {                                   // plugins (core/plugins): cada uno en su proceso
+        const pl = n.plugins, err = (e, c = 400) => json(res, e.status || c, { error: e.message });
+        if (!p[2] && M === 'GET') return json(res, 200, { plugins: pl.lista(), comandos: pl.comandos(), sdk: pl.version });
+        if (p[2] === 'instalar' && !p[3] && M === 'POST') {
+          const b = await leer(req);
+          if (!b.fuente) return json(res, 400, { error: 'fuente' });
+          try { return json(res, 200, await pl.instalar(String(b.fuente), { reemplazar: !!b.reemplazar, dev: !!b.dev })); } catch (e) { return err(e); }
+        }
+        if (p[2] === 'comandos' && p[3] && M === 'POST') {
+          try { const t = await pl.comando(decodeURIComponent(p[3]), String((await leer(req)).texto || '')); return t === null ? json(res, 404, { error: 'comando' }) : json(res, 200, { texto: t }); } catch (e) { return err(e, 500); }
+        }
+        const nom = p[2] && decodeURIComponent(p[2]);
+        if (!nom || !pl.obtener(nom)) return json(res, 404, { error: 'plugin' });
+        if (!p[3] && M === 'GET') return json(res, 200, pl.obtener(nom));
+        if (!p[3] && M === 'PATCH') {
+          const b = await leer(req);
+          if (typeof b.activo !== 'boolean') return json(res, 400, { error: 'activo' });
+          try { return json(res, 200, { plugin: await pl.activar(nom, b.activo, { forzar: !!b.forzar }) }); } catch (e) { return err(e); }
+        }
+        if (!p[3] && M === 'DELETE') { try { return json(res, 200, { ok: await pl.borrar(nom) }); } catch (e) { return err(e); } }
+        if (p[3] === 'recargar' && M === 'POST') { try { return json(res, 200, { plugin: await pl.recargar(nom) }); } catch (e) { return err(e, 500); } }
+        if (p[3] === 'escanear' && M === 'POST') { try { return json(res, 200, { escaneo: await pl.escanear(nom) }); } catch (e) { return err(e, 500); } }
       }
       if (p[1] === 'memoria') {
         if (!p[2] && M === 'GET') { const q = u.searchParams.get('q'); return json(res, 200, q ? await n.memoria.buscarH(q, { limite: 50 }) : n.memoria.lista()); }

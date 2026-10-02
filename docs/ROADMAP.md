@@ -23,7 +23,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 | Importar desde OpenClaw | ✅ |
 | Instalador + autoupdate | 🟡 one-liner PowerShell, sin .exe firmado |
 | **Skills** | ✅ motor + antivirus + taller |
-| Plugins / SDK | ⬜ |
+| Plugins / SDK | 🟡 SDK + gestor + aislamiento + clima; faltan canales migrados y panel |
 | macOS / Linux | ⬜ (solo Windows) |
 | Inglés | ⬜ (UI y prompts en español) |
 | App móvil / nodos | ⬜ |

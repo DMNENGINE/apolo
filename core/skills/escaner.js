@@ -120,15 +120,17 @@ function leerTrozo(p, n) {
   try { const b = Buffer.alloc(n); const leidos = fs.readSync(fd, b, 0, n, 0); return b.subarray(0, leidos); } finally { fs.closeSync(fd); }
 }
 
-function analizarEstatico(dir) {
-  const hallazgos = [], dominios = new Set();
+// o.marcador: archivo que debe estar en la raíz (SKILL.md; los plugins pasan apolo-plugin.json)
+// o.dominios: dominios declarados (plugins): un dominio usado en código y no declarado es hallazgo medio
+function analizarEstatico(dir, o = {}) {
+  const hallazgos = [], dominios = new Set(), enCodigo = new Set(), marcador = o.marcador || 'SKILL.md';
   const { raiz, archivos, limite } = listar(dir);
   const add = (archivo, linea, regla, gravedad, texto) => {
     if (hallazgos.some(h => h.archivo === archivo && h.regla === regla && h.linea === linea)) return;
     hallazgos.push({ archivo, linea, regla, gravedad, texto: String(texto || '').trim().slice(0, 160) });
   };
   if (limite) add('.', 0, 'demasiados archivos', 'media', `más de ${MAX_ARCHIVOS} archivos; solo se revisaron los primeros`);
-  if (!archivos.some(a => /^skill\.md$/i.test(path.basename(a.p)) && path.dirname(a.p) === raiz)) add('.', 0, 'sin SKILL.md', 'media', 'la carpeta no tiene SKILL.md en la raíz');
+  if (!archivos.some(a => path.basename(a.p).toLowerCase() === marcador.toLowerCase() && path.dirname(a.p) === raiz)) add('.', 0, `sin ${marcador}`, 'media', `la carpeta no tiene ${marcador} en la raíz`);
 
   for (const a of archivos) {
     const rel = path.relative(raiz, a.p).replace(/\\/g, '/');
@@ -180,7 +182,7 @@ function analizarEstatico(dir) {
         if (WEBHOOK.test(m[0])) add(rel, n, 'red: webhook de mensajería', esScript ? 'alta' : 'media', m[0]);
         else if (DOMINIO_MALO.test(host)) add(rel, n, 'red: pastebin/túnel/colector', esScript ? 'alta' : 'media', m[0]);
         else if (IP.test(host) && !IP_LOCAL.test(host)) add(rel, n, 'red: IP cruda', esScript ? 'alta' : 'media', m[0]);
-        dominios.add(host);
+        dominios.add(host); if (esScript) enCodigo.add(host);
       }
     });
     if (esScript) { // variable secreta enviada por red (multilínea)
@@ -194,6 +196,11 @@ function analizarEstatico(dir) {
     }
   }
   if (dominios.size) add('.', 0, 'red: dominios mencionados', 'baja', [...dominios].slice(0, 20).join(', '));
+  if (Array.isArray(o.dominios)) {
+    const ok = h => o.dominios.some(d => d === '*' || d === h || (d.startsWith('*.') && (h.endsWith(d.slice(1)) || h === d.slice(2))));
+    const fuera = [...enCodigo].filter(h => !ok(h) && h !== 'localhost' && !IP_LOCAL.test(h));
+    if (fuera.length) add('.', 0, 'red: dominio no declarado en el manifest', 'media', fuera.slice(0, 10).join(', '));
+  }
   hallazgos.sort((x, y) => ORDEN[y.gravedad] - ORDEN[x.gravedad] || x.archivo.localeCompare(y.archivo) || x.linea - y.linea);
   const nivel = nivelDe(hallazgos);
   const cuenta = g => hallazgos.filter(h => h.gravedad === g).length;
@@ -233,8 +240,8 @@ function combinarNivel(local, sugerido, hallazgos) {
 }
 
 function crearEscaner({ generarJSON, modelo } = {}) {
-  async function escanear(dir) {
-    const r = analizarEstatico(dir);
+  async function escanear(dir, o = {}) {
+    const r = analizarEstatico(dir, o);
     let explicacion = explicacionLocal(r), nivel = r.nivel;
     if (generarJSON) {
       try {
