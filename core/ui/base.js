@@ -93,8 +93,23 @@ const casco = (cls = '') => `<svg class="casco ${cls}" viewBox="0 0 64 64" aria-
 
 // proveedor → color y siglas para avatares
 const PROV = { chatgpt: ['#10a37f', '#fff', 'GP'], ollama: ['#f2f2f2', '#111', 'OL'], claudecode: ['#d97757', '#fff', 'CC'], anthropic: ['#d97757', '#fff', 'AN'], openai: ['#10a37f', '#fff', 'AI'], gemini: ['#4b7bff', '#fff', 'GE'], openrouter: ['#6467f2', '#fff', 'OR'] };
+// logos de cada proveedor (core/ui/logos, LobeHub Icons MIT): [archivo, fondo, color]; color = null → logo a color (img)
+const LOGO = {
+  chatgpt: ['openai', '#10a37f', '#fff'], openai: ['openai', '#fff', '#000'], claudecode: ['claude-color', '#f5f0e8', null], anthropic: ['anthropic', '#f0eee6', '#141413'],
+  gemini: ['gemini-color', '#fff', null], openrouter: ['openrouter-color', '#fff', null], ollama: ['ollama', '#fff', '#000'], deepseek: ['deepseek-color', '#fff', null],
+  xai: ['grok', '#000', '#fff'], groq: ['groq', '#f55036', '#fff'], mistral: ['mistral-color', '#fff', null], together: ['together-color', '#fff', null],
+  perplexity: ['perplexity-color', '#fff', null], cerebras: ['cerebras-color', '#fff', null], fireworks: ['fireworks-color', '#fff', null], moonshot: ['kimi-color', '#0d0d0d', null],
+  zai: ['zai', '#fff', '#000'], qwen: ['qwen-color', '#fff', null], nvidia: ['nvidia-color', '#fff', null], huggingface: ['huggingface-color', '#fff', null],
+  cohere: ['cohere-color', '#fff', null], lmstudio: ['lmstudio', '#1d1d1f', '#fff'],
+};
 const avatar = (modelo = '') => {
-  const p = modelo.split('/')[0], [bg, fg, s] = PROV[p] || ['#59636f', '#fff', p.slice(0, 2).toUpperCase() || '?'];
+  const p = modelo.split('/')[0], l = LOGO[p];
+  if (l) {
+    const [f, bg, fg] = l, url = `logos/${f}.svg`;
+    return fg ? `<span class="av av-logo" style="background:${bg}" title="${esc(modelo)}"><i style="background:${fg};-webkit-mask:url(${url}) center/contain no-repeat;mask:url(${url}) center/contain no-repeat"></i></span>`
+      : `<span class="av av-logo" style="background:${bg}" title="${esc(modelo)}"><img src="${url}" alt=""></span>`;
+  }
+  const [bg, fg, s] = PROV[p] || ['#59636f', '#fff', p.slice(0, 2).toUpperCase() || '?'];
   return `<span class="av" style="background:${bg};color:${fg}" title="${esc(modelo)}">${esc(s)}</span>`;
 };
 const nombreModelo = m => String(m || '').split('/').slice(1).join('/') || m;
