@@ -36,6 +36,8 @@ const HOOK_JS = path.join(__dirname, 'hook', 'hook.js').replace(/\\/g, '/');
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const SETTINGS = path.join(CLAUDE_DIR, 'settings.json');
 const TOKEN_FILE = path.join(CLAUDE_DIR, 'robot-companion.token');
+const { crearActualizador } = require('./actualizador');
+let actualizador = null;
 const RULES_FILE = () => path.join(app.getPath('userData'), 'reglas.json');
 const DISCORD_CFG = () => path.join(app.getPath('userData'), 'discord.json');
 const AWAY_MS = 60_000;               // sin mover el ratón 1 min = no estás en la PC
@@ -123,6 +125,15 @@ ipcMain.handle('tts', (_e, text) => new Promise(ok => {
   p.on('error', () => { clearTimeout(t); ok(null); });
   p.on('exit', c => { clearTimeout(t); ok(c === 0 && fs.existsSync(f) ? f : null); });
 }));
+
+ipcMain.on('upd-ahora', () => { if (!actualizador) return; actualizador.actualizar(); });
+ipcMain.on('upd-luego', () => { if (actualizador) actualizador.posponer(24); });
+async function buscarActualizacion() {
+  const r = await actualizador.comprobar(true);
+  const txt = { 'al-dia': 'Tienes la última versión.', desarrollo: 'Esta es una copia de desarrollo (git): actualízala con git pull.',
+    desconocido: 'No sé qué versión tienes: reinstala con el comando de una línea para recibir avisos.', error: 'No pude consultar GitHub: ' + (r.error || '') }[r.estado];
+  if (txt && win && !win.isDestroyed()) win.webContents.send('answer', { titulo: 'Actualizaciones', texto: txt });
+}
 
 ipcMain.on('interactive', (_e, on) => { if (win) win.setIgnoreMouseEvents(!on, { forward: true }); });
 
@@ -626,6 +637,7 @@ function buildTray() {
     { label: geminiHooksInstalled() ? '✓ Hooks de Gemini CLI instalados' : `Gemini CLI: hooks no instalados${cliInstalado.gemini ? '' : ' (CLI no encontrado)'}`, enabled: false },
     { label: geminiHooksInstalled() ? 'Quitar hooks de Gemini CLI' : 'Instalar hooks de Gemini CLI', click: () => geminiHooks(!geminiHooksInstalled()) },
     { type: 'separator' },
+    { label: '⬆ Buscar actualizaciones', click: () => buscarActualizacion() },
     { label: 'Iniciar con Windows', type: 'checkbox', checked: autoStart(), click: i => setAutoStart(i.checked) },
     { type: 'separator' },
     { label: `🤖 Núcleo: isla → ${(puente && puente.destino('isla')) || 'Claude Code'} · Discord → ${(puente && puente.destino('discord')) || 'Claude Code'}`, enabled: false },
@@ -742,6 +754,9 @@ app.whenReady().then(() => {
   // primera vez que arranca en este PC: se activa "Iniciar con Windows" (luego se puede quitar en la bandeja)
   const primera = path.join(app.getPath('userData'), 'primer-arranque');
   if (!fs.existsSync(primera)) { try { setAutoStart(true); fs.writeFileSync(primera, new Date().toISOString()); } catch (e) { console.error('[autoarranque]', e.message); } }
+  actualizador = crearActualizador({ dirApp: __dirname, dirDatos: app.getPath('userData'),
+    avisar: info => { if (win && !win.isDestroyed()) win.webContents.send('actualizacion', info); } });
+  actualizador.iniciar();
   nucleo = crearNucleo();                                    // antes que el cerebro: el cerebro usa sus modelos
   cerebro = createCerebro({
     nucleo,

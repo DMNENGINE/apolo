@@ -344,7 +344,25 @@ if (bridge.onAnswer) bridge.onAnswer(a => {
   if (a.voz) say(a.voz);
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 90_000);
 });
-$('answer').addEventListener('click', () => $('answer').classList.remove('on'));
+$('answer').addEventListener('click', e => {
+  const b = e.target.closest('button[data-upd]');
+  if (b) {
+    if (b.dataset.upd === 'ahora') { bridge.actualizarAhora(); robot.hud('ACTUALIZANDO…', 30, 'trabajando'); say('Me actualizo. Vuelvo en un momento.'); }
+    else { bridge.actualizarLuego(); toast('Te lo recuerdo mañana. También en la bandeja: Buscar actualizaciones.'); }
+  }
+  $('answer').classList.remove('on');
+});
+// hay una versión nueva en GitHub: la isla se abre, lo dice y pregunta
+if (bridge.onActualizacion) bridge.onActualizacion(i => {
+  const el = $('answer');
+  const lista = (i.cambios || []).map(c => '• ' + esc(c)).join('\n');
+  el.innerHTML = `<b class="t">⬆ Actualización disponible</b>${lista || 'Hay una versión nueva de ' + esc(NOMBRE) + '.'}` +
+    `<div class="upd"><button data-upd="ahora">Actualizar ahora</button><button data-upd="luego">Más tarde</button></div>`;
+  el.classList.add('on'); abrirUnRato(60_000);
+  robot.setFps(40); robot.gesto('sorpresa', 1.6, '¡NOVEDADES!'); sound.play('permiso');
+  say('Hay una actualización disponible. ¿Quieres instalarla?');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 120_000);
+});
 
 // ---------- hablarle a Claude: texto o voz ----------
 async function sendAsk(text, origin = 'isla') {

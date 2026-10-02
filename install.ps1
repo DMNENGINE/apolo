@@ -48,7 +48,11 @@ Paso "Descargando APOLO en $Dir"
 $tmp = Join-Path $env:TEMP ('apolo-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Force $tmp | Out-Null
 $zip = Join-Path $tmp 'apolo.zip'
-Invoke-WebRequest "https://codeload.github.com/$Repo/zip/refs/heads/$Rama" -OutFile $zip -UseBasicParsing
+# version exacta (commit) para que APOLO sepa cuando hay una actualizacion
+$sha = $null
+try { $sha = (Invoke-RestMethod "https://api.github.com/repos/$Repo/commits/$Rama" -Headers @{ 'User-Agent' = 'APOLO-instalador' }).sha } catch { Aviso 'no pude leer la version de GitHub (los avisos de actualizacion no funcionaran)' }
+$ref = if ($sha) { $sha } else { "refs/heads/$Rama" }
+Invoke-WebRequest "https://codeload.github.com/$Repo/zip/$ref" -OutFile $zip -UseBasicParsing
 Expand-Archive $zip -DestinationPath $tmp -Force
 $src = Get-ChildItem $tmp -Directory | Select-Object -First 1
 # si APOLO esta abierto, cerrarlo antes de reemplazar archivos
@@ -59,6 +63,11 @@ New-Item -ItemType Directory -Force $Dir | Out-Null
 Get-ChildItem $Dir -Force | Where-Object { $_.Name -ne 'node_modules' } | Remove-Item -Recurse -Force
 Copy-Item (Join-Path $src.FullName '*') $Dir -Recurse -Force
 Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+if ($sha) {
+  $json = '{"sha":"' + $sha + '","instalado":"' + (Get-Date).ToString('s') + '"}'
+  [IO.File]::WriteAllText((Join-Path $Dir 'instalado.json'), $json)
+  Info ('version ' + $sha.Substring(0, 7))
+}
 Info 'listo'
 
 # ---------- 3. Dependencias (Electron incluido) ----------
