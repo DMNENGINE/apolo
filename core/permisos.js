@@ -31,6 +31,14 @@ function crearPermisos({ cfg, bus }) {
     const peligro = h.siemprePreguntar?.(args, ctx) || esPeligroso(ALIAS[h.nombre] || h.nombre, { command: args.comando, file_path: args.ruta && path.resolve(sesion.cwd, args.ruta) });
     const k = clave(h, args, sesion.cwd);
     if (!peligro && (modo === 'auto' || reglas.some(r => coincide(r, k)))) return { ok: true };
+    // turno de noche (core/turno.js): un permiso NUEVO no despierta a nadie; queda apuntado para la mañana y el encargo sigue/pasa al siguiente.
+    // Lo aprobado por la mañana (reintentar con aprobar) vale solo para ese encargo; lo peligroso, solo para el mismo comando exacto.
+    if (sesion.turnoNoche) {
+      const resumen = String(h.resumen(args) || '').slice(0, 300);
+      if ((sesion.turnoNoche.permitidos || []).some(x => x.herramienta === k.herramienta && x.prefijo === k.prefijo && (!peligro || x.resumen === resumen))) return { ok: true };
+      bus.emit('turno-permiso', { sesion: sesion.id, herramienta: h.nombre, resumen, clave: k, peligro });
+      return { ok: false, motivo: 'TURNO DE NOCHE: esto necesita un permiso nuevo del usuario y queda pendiente para la mañana. No lo intentes por otra vía: sigue con lo que puedas hacer sin ello y apúntalo en tu informe.' };
+    }
 
     const id = `p${Date.now().toString(36)}${(++n).toString(36)}`;
     const req = { id, sesion: sesion.id, herramienta: h.nombre, resumen: h.resumen(args), args, peligro, creado: Date.now() };

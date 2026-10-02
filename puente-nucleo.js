@@ -66,6 +66,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     else if (e.tipo === 'fin' || e.tipo === 'error') {
       toIsland({ ...base, hook_event_name: e.tipo === 'fin' ? 'Stop' : 'StopFailure' });
       if (s.tarea || s.padre) return;                        // las tareas responden por el evento 'tarea'; los subagentes, a su agente
+      if (s.canal === 'consejo' && !origen.has(s.id)) return; // consejo lanzado desde el panel o por una herramienta: no va a ningún canal
       const o = origen.get(s.id) || 'isla';
       reply(o, e.tipo === 'fin' ? (e.texto || '(sin respuesta)') : `❌ ${e.error}`, s.modelo);
     }
@@ -124,6 +125,18 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     if ((m = t.match(/^(?:claude(?:\s*code)?|cc)\s*:\s*([\s\S]+)$/i))) return { claude: m[1].trim() };
     if (/^usa(?:r)?\s+auto(?:m[aá]tico)?$/i.test(t)) { st.destino[c] = '@auto'; guardar(); return { ok: true, msg: '🧭 Modo automático: elijo el destino según lo que me pidas (código → Claude Code; web, PC y lo demás → núcleo).' }; }
     if ((m = t.match(/^(antigravity|ag)\s*:\s*([\s\S]+)$/i))) return aMotor('antigravity', m[2].trim(), origin);
+    // "consejo: <pregunta>" → varios modelos debaten y votan (core/consejo.js); el veredicto vuelve por el 'fin' de su sesión
+    if ((m = t.match(/^consejo\s*:\s*([\s\S]+)$/i)) && nucleo.consejo) {
+      let quienes = [], creado = false;
+      nucleo.consejo.consultar({ pregunta: m[1].trim(), alSesion: (s, r) => { creado = true; origen.set(s.id, origin); quienes = r.miembros.filter(x => x.estado !== 'ausente').map(x => require('./core/consejo').etiqueta(x.modelo)); } })
+        .catch(e => { if (!creado) reply(origin, `❌ Consejo: ${e.message}`, 'consejo'); });   // si ya había sesión, el error llega por su evento
+      return { ok: true, msg: quienes.length ? `🏛️ Convoco al consejo: **${quienes.join(', ')}**. Debaten y te traigo el veredicto.` : '🏛️ Convoco al consejo…' };
+    }
+    // turno de noche: "empieza el turno" lo arranca ya con la cola pendiente (core/turno.js)
+    if (/^(empieza|arranca|inicia|comienza)\s+(el\s+)?turno(\s+de\s+noche)?\.?$/i.test(t) && nucleo.turno) {
+      const r = nucleo.turno.empezar({ modo: 'manual' });
+      return { ok: r.ok, msg: r.ok ? `🌙 Turno de noche en marcha: ${r.estado.cola.filter(x => x.estado === 'pendiente' || x.estado === 'trabajando').length} encargo(s). Te dejo el informe al terminar.` : `🌙 ${r.motivo}.` };
+    }
     if (st.destino[c] === '@antigravity' && !/^usa(?:r)?\s/i.test(t)) return aMotor('antigravity', t, origin);
     if ((m = t.match(/^usa(?:r)?\s+(.+)$/i))) {
       if (/^claude\s*code$/i.test(m[1].trim())) { st.destino[c] = CC; guardar(); return { ok: true, msg: '↩️ Todo a Claude Code. ("usa auto" para el modo automático)' }; }

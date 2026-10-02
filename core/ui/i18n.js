@@ -55,6 +55,16 @@
 
   // ---------- diccionario inglés ----------
   const I18N_EN = {
+    // ===== panel · Dispositivos (core/ui/dispositivos.js, ojo de escritorio ESP32) =====
+    'Dispositivos': 'Devices', 'El cuerpo físico del robot: el ojo de escritorio (ESP32 + pantalla redonda) y, más adelante, la Pi o el humanoide.': "The robot's physical body: the desk eye (ESP32 + round screen) and, later, the Pi or the humanoid.",
+    'Aceptar dispositivos de la red': 'Accept devices from the network', 'Escuchando en el puerto {p} solo para la red local. Cada dispositivo necesita emparejarse una vez.': 'Listening on port {p} for the local network only. Each device must be paired once.',
+    'Apagado: no se abre ningún puerto. Actívalo para conectar el ojo de escritorio.': 'Off: no port is opened. Turn it on to connect the desk eye.', 'Activar': 'Turn on', 'Desactivar': 'Turn off',
+    'Emparejar': 'Pair', 'Código de la pantalla': 'Code on the screen', '{n} dispositivo(s) esperando: {x}': '{n} device(s) waiting: {x}',
+    'Enciende el ojo: te enseña un código de 6 dígitos. Escríbelo aquí.': 'Turn on the eye: it shows a 6-digit code. Type it here.', 'Emparejados': 'Paired', 'conectado': 'connected', 'desconectado': 'disconnected',
+    'Saludar': 'Say hi', 'Olvidar': 'Forget', 'Olvidar dispositivo': 'Forget device', 'Tendrá que emparejarse otra vez con un código nuevo.': 'It will have to pair again with a new code.',
+    'Ninguno todavía. Sin hardware puedes probar con el simulador: tools/simulador-ojo.html': 'None yet. Without hardware you can try the simulator: tools/simulador-ojo.html',
+    'Botón del ojo: corta = Permitir · mantener = Denegar (o hablar si no hay permiso) · doble = pánico. Los permisos peligrosos solo se aprueban en el PC.': "Eye button: short = Allow · hold = Deny (or talk if there's no permission) · double = panic. Dangerous permissions can only be approved on the PC.",
+    'Son 6 dígitos': "It's 6 digits", '✓ {x} emparejado': '✓ {x} paired', 'pantalla': 'screen', 'boton': 'button', 'micro': 'mic', 'altavoz': 'speaker', 'camara': 'camera',
     // ===== panel · base (componentes, barra lateral, permisos, paleta, login) =====
     'unos segundos': 'a few seconds', 'en {x}': 'in {x}', 'hace {x}': '{x} ago', 'ahora': 'now', 'token no válido': 'invalid token',
     'Cerrar': 'Close', 'Cancelar': 'Cancel', 'Sí, hacerlo': 'Yes, do it', 'Aceptar': 'OK', 'código': 'code', 'Copiar': 'Copy', 'Copiado': 'Copied', 'No pude copiar': "Couldn't copy",
@@ -305,6 +315,31 @@
     'Necesito tu permiso para {x}': 'I need your permission to {x}', 'Voz activada': 'Voice on', 'Hola, estoy listo': "Hi, I'm ready", '¡EY!': 'HEY!', '¡PARA, PARA!': 'STOP, STOP!', 'MAREADO': 'DIZZY', '✓ TAREA COMPLETA': '✓ TASK DONE',
     'Mensaje vacío.': 'Empty message.', 'Aún no tengo el historial de esta terminal (llega con su próximo evento).': "I don't have this terminal's history yet (it arrives with its next event).", 'No encuentro la ventana de esa terminal todavía.': "I can't find that terminal's window yet.",
     'Está trabajando: se lo paso en cuanto termine.': "It's working: I'll pass it on as soon as it finishes.", 'Enviado.': 'Sent.', 'No pude escribir en su ventana.': "Couldn't write to its window.",
+    // ===== panel: consejo de modelos (consejo.js) =====
+    'Consejo': 'Council', '¿Qué quieres que debatan? Ej.: ¿Rust o Go para un servidor de juegos?': 'What should they debate? E.g.: Rust or Go for a game server?', 'Rondas de debate': 'Debate rounds',
+    'Convocar al consejo': 'Summon the council', 'Consejos anteriores': 'Previous councils', 'no disponible': 'unavailable', 'No hay modelos configurados para el consejo.': 'No models are configured for the council.',
+    'Escribe una pregunta': 'Write a question', 'Elige al menos un modelo': 'Pick at least one model', 'VEREDICTO': 'VERDICT', 'Pon a varias IAs a debatir': 'Make several AIs debate',
+    'Todas responden a la vez, ven lo que dicen las demás, se corrigen… y un moderador da el veredicto.': 'They all answer at once, see what the others said, correct themselves… and a moderator gives the verdict.',
+    'Ausente': 'Absent', 'Debatiendo…': 'Debating…', 'Pensando…': 'Thinking…', 'no respondió': 'did not answer', 'Debate {n}': 'Debate {n}', 'El moderador está votando…': 'The moderator is voting…',
+    'Ronda de debate {n} de {t}': 'Debate round {n} of {t}', 'Ronda 1: todos responden a la vez': 'Round 1: everyone answers at once', 'Veredicto': 'Verdict', 'La pregunta': 'The question',
+    'El moderador está leyendo a todos y contando votos…': 'The moderator is reading everyone and counting votes…', 'acuerdo': 'agreement', 'Veredicto del consejo': 'Council verdict', 'moderador': 'moderator',
+    'Esto es lo que concluyen': 'This is what they conclude', 'Aún no has convocado ningún consejo.': "You haven't summoned any council yet.", 'A favor': 'For', 'Parcial': 'Partial', 'En contra': 'Against',
+    'Mantiene': 'Holds', 'Se corrige': 'Corrects itself', 'Matiza': 'Nuances', 'en curso': 'running',
+    // ===== panel: turno de noche (turno.js) =====
+    'Turno de noche': 'Night shift', 'Parar': 'Stop', 'Empezar ahora': 'Start now', 'Nuevo encargo': 'New job', 'Ej.: Revisa los tests que fallan en el proyecto y arregla lo que puedas': 'E.g.: Check the failing tests in the project and fix what you can',
+    'Modelo (opcional)': 'Model (optional)', 'Añadir a la cola': 'Add to queue', 'Horario': 'Schedule', 'Cola': 'Queue', 'arrastra para cambiar el orden': 'drag to reorder', 'Informes de la mañana': 'Morning reports',
+    'Turno en marcha': 'Shift running', 'Preparando el informe y el vídeo…': 'Preparing the report and the video…', 'Escribe el encargo': 'Write the job', 'Encargo en la cola': 'Job queued', 'Dentro de la ventana nocturna': 'Inside the night window', 'Esperando a la noche': 'Waiting for the night',
+    '{n} trabajando · {p} en cola': '{n} working · {p} queued', 'Empieza solo entre las {a} y las {b}': 'Starts on its own between {a} and {b}', '{n} espera tu permiso|{n} esperan tu permiso': '{n} waiting for your permission|{n} waiting for your permission',
+    'Arrastrar': 'Drag', 'Aprobar y reintentar': 'Approve and retry', 'Informe': 'Report', '{n} encargos': '{n} jobs', '{n} hecho|{n} hechos': '{n} done|{n} done', '{n} pendiente|{n} pendientes': '{n} pending|{n} pending', '{n} para decidir': '{n} to decide', 'vídeo': 'video',
+    'Grabando el vídeo…': 'Recording the video…', 'Solo animación HTML': 'HTML animation only', 'Vídeo desactivado': 'Video disabled', 'Sin vídeo': 'No video', 'Abrir animación': 'Open animation',
+    'Guion de la narración': 'Narration script', 'ver sesión': 'view session', 'Grabando el vídeo… (~1 min)': 'Recording the video… (~1 min)', 'Regrabar': 'Re-record', 'Grabar vídeo': 'Record video',
+    'Déjale encargos y los hace mientras duermes: cada uno en su propia sesión y, en proyectos git, en una rama aparte (nunca hace push). Por la mañana, informe y vídeo-resumen.': 'Leave it jobs and it does them while you sleep: each in its own session and, in git projects, on a separate branch (it never pushes). In the morning, a report and a video recap.',
+    'Ventana nocturna': 'Night window', 'Empieza solo dentro de este horario si hay encargos en la cola.': 'Starts on its own within this window if there are queued jobs.', 'A la vez': 'At once', 'Encargos en paralelo.': 'Jobs in parallel.',
+    'Hora a la que te avisa (la del resumen del día si está configurado).': 'When it notifies you (the daily summary time if set).', 'Vídeo-resumen': 'Video recap', 'Vertical, ~60 s, con el robot y los titulares.': 'Vertical, ~60 s, with the robot and the headlines.',
+    'Parar el turno': 'Stop the shift', 'Se cancelan los encargos en curso (vuelven a la cola) y se hace el informe de lo terminado.': 'Running jobs are cancelled (back to the queue) and a report of what was finished is made.',
+    'La cola está vacía. Añade encargos y se harán esta noche (o pulsa «Empezar ahora»).': 'The queue is empty. Add jobs and they will be done tonight (or press "Start now").',
+    'Cuando termine un turno, aquí tendrás el informe de la mañana con su vídeo.': 'When a shift ends, its morning report and video will be here.', 'Espera tu permiso': 'Waiting for your permission',
+    'Aprobado: vuelve a la cola': 'Approved: back to the queue', 'Vuelve a la cola': 'Back to the queue', 'Hecho': 'Done', 'listo': 'done', 'cancelado': 'cancelled', 'Pendiente': 'Pending', 'Necesito que decidas': 'I need you to decide', 'En cola': 'Queued',
     // ===== main.js (bandeja, diálogos, avisos) =====
     'Tienes la última versión.': 'You have the latest version.', 'Esta es una copia de desarrollo (git): actualízala con git pull.': 'This is a development copy (git): update it with git pull.',
     'No sé qué versión tienes: reinstala con el comando de una línea para recibir avisos.': "I don't know which version you have: reinstall with the one-line command to get notices.", 'No pude consultar GitHub: {x}': "Couldn't check GitHub: {x}", 'Actualizaciones': 'Updates',

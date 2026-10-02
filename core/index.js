@@ -17,6 +17,8 @@ const { crearControl } = require('./escritorio/control');
 const { crearImportador } = require('./importador');
 const { crearSkills } = require('./skills');
 const { crearPlugins } = require('./plugins');
+const consejoMod = require('./consejo');
+const turnoMod = require('./turno');
 
 function crearNucleo(opciones = {}) {
   const cfg = cargarConfig(opciones.dir);
@@ -32,7 +34,7 @@ function crearNucleo(opciones = {}) {
   const canales = extras.crearCanales();
   const generarJSON = crearEstructurado(proveedores);
   const compactador = crearCompactador({ cfg, generarJSON, memoria, sesiones });
-  let tareas = null, subagentes = null, control = null, navegador = null, nucleo = null;
+  let tareas = null, subagentes = null, control = null, navegador = null, nucleo = null, consejo = null, turno = null;
   const modeloCerebro = () => { const m = nucleo?.cerebro?.leer?.()?.modelo; return m && m.includes('/') ? m : cfg.modeloPorDefecto; };
   const skills = crearSkills({ cfg, bus, generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), embedder, modelo: modeloCerebro, escaner: opciones.escaner,
     tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github'),
@@ -40,7 +42,7 @@ function crearNucleo(opciones = {}) {
       const s = sesiones.crear({ modelo, canal: 'eval', titulo: 'eval de skill' });
       try { return await agente.enviar(s, texto); } finally { sesiones.borrar(s.id); }
     } });
-  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador });
+  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
   // atajo: enviar y emitir los eventos también al bus global
   const enviar = (s, texto, emitir) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); });
   subagentes = crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar: id => agente.cancelar(id) });
@@ -50,6 +52,14 @@ function crearNucleo(opciones = {}) {
     cfg, bus,
     ejecutarAgente: ({ texto, modelo, cwd, canal, titulo }) => enviar(sesiones.crear({ modelo, cwd, canal, titulo, tarea: true }), texto),
   });
+  // FASE 6: consejo de modelos (debate + veredicto) y turno de noche (cola de encargos en worktrees + informe y vídeo matutino)
+  const generarJSONvivo = (...a) => (nucleo?.generarJSON || generarJSON)(...a);
+  consejo = consejoMod.crearConsejo({ cfg, bus, sesiones, proveedores, generarJSON: generarJSONvivo });
+  turno = turnoMod.crearTurno({ cfg, bus, sesiones, enviar, cancelar: id => agente.cancelar(id), generarJSON: generarJSONvivo, registro, video: opciones.video,
+    modeloInforme: modeloCerebro, horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
+  require('./herramientas').registrar([consejoMod.HERRAMIENTA, ...turnoMod.HERRAMIENTAS]);
+  const cancelarAgente = agente.cancelar;                         // "Detener" en Mission Control también para un consejo
+  agente.cancelar = id => cancelarAgente(id) || consejo.cancelar(id);
   // mejora semanal de skills (cfg.skills.mejoraSemanal): propone diffs, nunca aplica
   tareas.registrarInterna('mejorar-skills', () => skills.taller.mejoraSemanal());
   try {
@@ -62,7 +72,8 @@ function crearNucleo(opciones = {}) {
     escaner: () => opciones.escaner || require('./skills/escaner').crearEscaner({ generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), modelo: modeloCerebro() }),
     tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github') });
   if (!opciones.sinPlugins) plugins.iniciar().catch(e => console.log(`[plugins] ${e.message}`));
-  nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills, plugins };
+  nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills, plugins, consejo, turno };
+  nucleo.extensiones.turno = { http: (...a) => turno.http(...a) };   // API /v1/turno (daemon → extensiones)
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }

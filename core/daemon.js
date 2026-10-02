@@ -28,6 +28,12 @@
 //   GET  /v1/plugins · GET /v1/plugins/:nombre (con logs) · POST /v1/plugins/instalar {fuente, reemplazar?, dev?} → {plugin} | {opciones}
 //   PATCH /v1/plugins/:nombre {activo, forzar?} · POST /v1/plugins/:nombre/recargar|escanear · DEL /v1/plugins/:nombre
 //   POST /v1/plugins/comandos/:cmd {texto} → {texto}   (comandos /x que aportan los plugins)
+//   GET  /v1/consejo · POST /v1/consejo {pregunta, miembros?, rondas?} → SSE (fase inicio|miembro|respuesta|ronda|votando|veredicto|fin)
+//   GET  /v1/consejo/:id · POST /v1/consejo/:id/cancelar
+//   /v1/turno (core/turno.js http): GET · POST {texto,cwd,modelo} · POST empezar|parar · PATCH orden {ids} · PATCH config · DEL :id
+//   POST :id/reintentar {aprobar} · GET informes/:id · GET informes/:id/archivo/video.mp4|video.html · POST informes/:id/video
+//   GET  /v1/nodos · POST /v1/nodos/emparejar {codigo} · POST /v1/nodos/activar {activo} · PATCH|DEL /v1/nodos/:id
+//   POST /v1/nodos/:id/gesto {gesto|estado} · POST /v1/nodos/:id/foto → {ruta}   (ojo de escritorio ESP32: core/nodos)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -42,12 +48,17 @@ function estatico(res, nombre) {
   const f = path.join(UI, nombre);
   if (!f.startsWith(UI + path.sep) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'content-type': TIPOS[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-cache',
-    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob: data:", 'x-frame-options': 'DENY' });
+    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob: data:", 'x-frame-options': 'DENY' });
   fs.createReadStream(f).pipe(res);
 }
 
 function iniciar(opciones = {}) {
   const n = opciones.nucleo || crearNucleo(opciones);
+  // nodos de hardware (ojo ESP32…): WebSocket propio en otro puerto (cfg.nodos.puerto); API /v1/nodos vía extensiones (core/nodos)
+  if (!n.nodos) {
+    n.nodos = require('./nodos').crearNodos({ nucleo: n }); n.extensiones.nodos = { http: n.nodos.http };
+    if (n.nodos.activo()) n.nodos.iniciar(opciones.puertoNodos).catch(e => console.log(`[nodos] no pude abrir el puerto: ${e.message}`));
+  }
   const fTok = path.join(n.cfg.dir, 'token');
   let token; try { token = fs.readFileSync(fTok, 'utf8').trim(); } catch { }
   if (!token) { token = crypto.randomBytes(24).toString('hex'); fs.writeFileSync(fTok, token, { mode: 0o600 }); }
@@ -80,8 +91,28 @@ function iniciar(opciones = {}) {
         if (M === 'PATCH') { const c = admin.guardarConfig(n.cfg, await leer(req)); n.proveedores.reset(); return json(res, 200, c); }
       }
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram
-        try { return json(res, 200, await n.extensiones[p[1]].http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {})); }
-        catch (e) { return json(res, e.status || 400, { error: e.message }); }
+        try {
+          const r = await n.extensiones[p[1]].http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {});
+          if (r?.__archivo) {                                  // la extensión devuelve un archivo (p. ej. el vídeo del turno de noche)
+            res.writeHead(200, { 'content-type': TIPOS[path.extname(r.__archivo)] || { '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' }[path.extname(r.__archivo)] || 'application/octet-stream', 'content-length': fs.statSync(r.__archivo).size });
+            return fs.createReadStream(r.__archivo).pipe(res);
+          }
+          return json(res, 200, r);
+        } catch (e) { return json(res, e.status || 400, { error: e.message }); }
+      }
+      if (p[1] === 'consejo') {                                 // consejo de modelos (core/consejo.js)
+        if (!p[2] && M === 'GET') return json(res, 200, { candidatos: n.consejo.candidatos(), enCurso: n.consejo.enCurso(), historial: n.consejo.historial(30) });
+        if (!p[2] && M === 'POST') {                            // → SSE con el progreso; el último evento es fase 'fin'
+          const b = await leer(req);
+          if (!String(b.pregunta || '').trim()) return json(res, 400, { error: 'pregunta' });
+          const enviar = sse(res), ctl = new AbortController();
+          res.on('close', () => { if (!res.writableFinished && b.cancelarAlCerrar) ctl.abort(); });
+          n.consejo.consultar({ pregunta: b.pregunta, miembros: b.miembros, rondas: b.rondas, moderador: b.moderador, signal: ctl.signal, alEvento: enviar })
+            .then(r => enviar({ tipo: 'consejo-resultado', resultado: r }), e => enviar({ tipo: 'consejo-error', error: e.message })).finally(() => res.end());
+          return;
+        }
+        if (p[2] && p[3] === 'cancelar' && M === 'POST') return json(res, 200, { ok: n.consejo.cancelar(p[2]) });
+        if (p[2] && !p[3] && M === 'GET') { const r = n.consejo.obtener(p[2]); return r ? json(res, 200, r) : json(res, 404, { error: 'consejo' }); }
       }
       if (p[1] === 'chatgpt') {                                // ChatGPT vía Codex CLI (plan de ChatGPT, sin API key)
         const cx = require('./proveedores/codex-cli');
@@ -302,7 +333,7 @@ function iniciar(opciones = {}) {
   });
   const puerto = opciones.puerto ?? n.cfg.puerto;
   const host = permitidos.size ? '0.0.0.0' : '127.0.0.1';            // solo se abre a la LAN si hay IPs permitidas
-  return new Promise((ok, mal) => { srv.once('error', mal); srv.listen(puerto, host, () => (opciones.sinTareas || n.tareas.iniciar(), 0) || ok({ nucleo: n, servidor: srv, puerto: srv.address().port, token })); });
+  return new Promise((ok, mal) => { srv.once('error', mal); srv.listen(puerto, host, () => (opciones.sinTareas || (n.tareas.iniciar(), n.turno?.iniciar()), 0) || ok({ nucleo: n, servidor: srv, puerto: srv.address().port, token })); });
 }
 
 if (require.main === module) {

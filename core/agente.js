@@ -70,7 +70,7 @@ function conImagenes(mensajes, sinVision) {
   return out;
 }
 
-function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, personalidad, compactador, subagentes, control, navegador, skills }) {
+function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, personalidad, compactador, subagentes, control, navegador, skills, consejo, turnoNoche }) {
   const enCurso = new Map();   // sesion.id -> AbortController
 
   async function enviar(s, texto, emitir = () => { }) {
@@ -142,7 +142,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           const p = await permisos.pedir({ h, args: c.args || {}, sesion: s, ctx: { skills } });
           if (!p.ok) return `DENEGADO: ${p.motivo}`;
           try {
-            const out = await h.ejecutar(c.args || {}, { cwd: s.cwd, signal: ctl.signal, sesion: s, tareas: tareas(), memoria, personalidad, cfg, subagentes: subagentes?.(), control: control?.(), navegador: navegador?.(), skills });
+            const out = await h.ejecutar(c.args || {}, { cwd: s.cwd, signal: ctl.signal, sesion: s, tareas: tareas(), memoria, personalidad, cfg, subagentes: subagentes?.(), control: control?.(), navegador: navegador?.(), skills, consejo: consejo?.(), turno: turnoNoche?.() });
             return out && typeof out === 'object' ? { texto: String(out.texto || ''), imagenes: out.imagenes || [] } : String(out);   // {texto, imagenes} = resultado con capturas
           } catch (e) { return `error: ${e.message}`; }
         };

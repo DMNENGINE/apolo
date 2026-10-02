@@ -16,6 +16,7 @@ VISTAS.agentes = {
     const l = await api('GET', '/agentes');
     this.agentes = new Map(l.map(a => [a.id, a]));
     v.innerHTML = `<div class="pagina mision">${cabecera('Mission Control', 'Quién está haciendo qué ahora mismo: conversaciones, tareas y los subagentes que lanzan. En vivo.')}
+      ${typeof CJ_pestanas === 'function' ? CJ_pestanas('agentes') : ''}
       <div class="rejilla k" id="mcKpis"></div>
       <div class="seccion">${tr('Agentes')}</div>
       <div id="mcLista"></div></div>`;
