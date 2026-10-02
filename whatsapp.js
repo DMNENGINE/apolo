@@ -13,7 +13,8 @@ const wa = md => String(md ?? '').replace(/\*\*([^*]+)\*\*/g, '*$1*').replace(/_
 const coincide = (numero, n) => { const d = String(n || '').replace(/\D/g, ''); return d.length >= 6 && String(numero).endsWith(d); };
 const CONFIG_DEF = { modo: 'apagado', grupos: false, ignorar: [], auto: { contactos: [], instrucciones: 'Estoy ocupado ahora mismo. Responde breve y amable que vi el mensaje y que contesto en cuanto pueda. No prometas nada ni inventes datos.', maxHora: 3 } };
 
-function crearWhatsapp({ dir, decide, cardAction, onTalk, onAjeno = () => { }, onEstado = () => { }, log = console.log }) {
+function crearWhatsapp({ dir, decide, cardAction, onTalk, transcribir, onAjeno = () => { }, onEstado = () => { }, log = console.log }) {
+  let Bmod = null, pinoLog = null;                            // módulo de Baileys (para descargar audios)
   const fCfg = path.join(path.dirname(dir), 'whatsapp.json');
   let conf = { ...CONFIG_DEF }; try { const g = JSON.parse(fs.readFileSync(fCfg, 'utf8')); conf = { ...CONFIG_DEF, ...g, auto: { ...CONFIG_DEF.auto, ...g.auto } }; } catch { }
   const guardarConf = () => fs.writeFileSync(fCfg, JSON.stringify(conf, null, 2));
@@ -33,12 +34,12 @@ function crearWhatsapp({ dir, decide, cardAction, onTalk, onAjeno = () => { }, o
   async function iniciar() {
     if (vivo) return;
     vivo = true;
-    const B = await import('@whiskeysockets/baileys');
+    const B = Bmod = await import('@whiskeysockets/baileys');
     const makeWASocket = B.default?.default || B.default || B.makeWASocket;
     fs.mkdirSync(dir, { recursive: true });
     const { state, saveCreds } = await B.useMultiFileAuthState(dir);
     let version; try { ({ version } = await B.fetchLatestBaileysVersion()); } catch { }
-    const logger = require('pino')({ level: 'silent' });
+    const logger = pinoLog = require('pino')({ level: 'silent' });
     sock = makeWASocket({ version, auth: state, logger, browser: B.Browsers.windows('APOLO'), markOnlineOnConnect: false, syncFullHistory: false, printQRInTerminal: false });
     sock.ev.on('creds.update', saveCreds);
     sock.ev.on('connection.update', async u => {
@@ -81,13 +82,34 @@ function crearWhatsapp({ dir, decide, cardAction, onTalk, onAjeno = () => { }, o
     if (!m.key?.fromMe) return;                               // en tu chat contigo mismo, solo lo que escribes TÚ
     const msg = m.message?.ephemeralMessage?.message || m.message || {};
     const texto = String(msg.conversation || msg.extendedTextMessage?.text || '').trim();
-    if (msg.audioMessage) return enviar('🎙 Todavía no entiendo notas de voz por aquí. Escríbemelo, porfa.');
+    if (msg.audioMessage) {                                    // tu nota de voz → Whisper → como si lo hubieras escrito
+      const t = await notaDeVoz(m);
+      if (!t) return enviar('🎙 No entendí la nota de voz. ¿Me lo escribes?');
+      enviar(`🎙 _${t}_`);
+      try { await sock.sendPresenceUpdate('composing', jid); } catch { }
+      const r = await onTalk(t);
+      if (r && r.msg) enviar(String(r.msg));
+      return;
+    }
     if (!texto || texto.startsWith('🤖')) return;
     if (await respuestaCorta(texto)) return;
     if (/^\/?(ayuda|help)$/i.test(texto)) return enviar(AYUDA);
     try { await sock.sendPresenceUpdate('composing', jid); } catch { }
     const r = await onTalk(texto);
     if (r && r.msg) enviar(String(r.msg));
+  }
+
+  // descarga un audio de WhatsApp y lo transcribe con Whisper (null si no se puede)
+  async function notaDeVoz(m) {
+    if (!transcribir || !Bmod) return null;
+    try {
+      const buf = await Bmod.downloadMediaMessage(m, 'buffer', {}, { logger: pinoLog, reuploadRequest: sock.updateMediaMessage });
+      const ruta = path.join(require('os').tmpdir(), `apolo-wa-${Date.now()}.ogg`);
+      fs.writeFileSync(ruta, buf);
+      const t = await transcribir(ruta);
+      fs.rm(ruta, () => { });
+      return t.text || null;
+    } catch (e) { log('[whatsapp] voz', e.message); return null; }
   }
 
   // ---------- mensajes que te llegan de otras personas ----------
@@ -98,7 +120,7 @@ function crearWhatsapp({ dir, decide, cardAction, onTalk, onAjeno = () => { }, o
     if (grupo && !conf.grupos) return;
     const msg = m.message?.ephemeralMessage?.message || m.message || {};
     const texto = String(msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption || '').trim()
-      || (msg.audioMessage ? '🎙 (nota de voz)' : msg.imageMessage ? '📷 (foto)' : msg.documentMessage ? '📄 (documento)' : msg.stickerMessage ? '' : '');
+      || (msg.audioMessage ? '🎙 ' + ((await notaDeVoz(m)) || '(nota de voz)') : msg.imageMessage ? '📷 (foto)' : msg.documentMessage ? '📄 (documento)' : msg.stickerMessage ? '' : '');
     if (!texto) return;
     const numero = String((grupo ? m.key.participant : jid) || '').split(/[:@]/)[0];
     if ((conf.ignorar || []).some(n => coincide(numero, n))) return;

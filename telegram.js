@@ -15,7 +15,7 @@ function html(md) {
     .slice(0, 4000);
 }
 
-function crearTelegram({ almacen, decide, cardAction, onTalk, onEstado = () => { }, log = console.log }) {
+function crearTelegram({ almacen, decide, cardAction, onTalk, transcribir, onEstado = () => { }, log = console.log }) {
   let token = almacen.secreto('tg:token') || '';
   const cfg = () => almacen.config().telegram || {};
   const ponerCfg = c => almacen.ponerConfig({ telegram: { ...cfg(), ...c } });
@@ -66,7 +66,13 @@ function crearTelegram({ almacen, decide, cardAction, onTalk, onEstado = () => {
       return llamar('sendMessage', { chat_id: m.chat.id, text: '🔒 Este bot es privado. Para enlazarlo, abre el enlace que aparece en el panel del robot (Configuración → Canales → Telegram).' }).catch(() => { });
     }
     if (m.chat.id !== chat()) return llamar('sendMessage', { chat_id: m.chat.id, text: '🔒 Este bot es privado.' }).catch(() => { });
-    if (m.voice || m.audio) return enviar('🎙 Todavía no entiendo notas de voz por aquí. Escríbemelo, porfa.');
+    if (m.voice || m.audio) {                                  // nota de voz → Whisper → como si lo hubieras escrito
+      const t = await notaDeVoz(m.voice || m.audio);
+      if (!t) return;
+      enviar(`🎙 <i>${esc(t)}</i>`);
+      llamar('sendChatAction', { chat_id: chat(), action: 'typing' }).catch(() => { });
+      return responder(await onTalk(t));
+    }
     if (!texto) return;
     if (/^\/(ayuda|help|start)\b/i.test(texto)) return enviar(AYUDA);
     if (/^\/estado\b/i.test(texto)) return enviar('🟢 Estoy encendido y escuchando.');
@@ -75,6 +81,21 @@ function crearTelegram({ almacen, decide, cardAction, onTalk, onEstado = () => {
     responder(await onTalk(texto));
   }
   const responder = r => { if (r && r.msg) enviar(html(String(r.msg))); };
+  async function notaDeVoz(v) {
+    if (!transcribir) { enviar('🎙 Las notas de voz no están disponibles en este PC.'); return null; }
+    if ((v.file_size || 0) > 20 * 1024 * 1024) { enviar('🎙 Esa nota es demasiado larga.'); return null; }
+    llamar('sendChatAction', { chat_id: chat(), action: 'typing' }).catch(() => { });
+    try {
+      const f = await llamar('getFile', { file_id: v.file_id });
+      const r = await fetch(`https://api.telegram.org/file/bot${token}/${f.file_path}`, { signal: AbortSignal.timeout(60_000) });
+      const ruta = require('path').join(require('os').tmpdir(), `apolo-voz-${Date.now()}${require('path').extname(f.file_path) || '.ogg'}`);
+      require('fs').writeFileSync(ruta, Buffer.from(await r.arrayBuffer()));
+      const t = await transcribir(ruta);
+      require('fs').rm(ruta, () => { });
+      if (!t.text) { enviar('🎙 No entendí la nota de voz' + (t.error ? ` (${esc(t.error)})` : '') + '. ¿Me lo escribes?'); return null; }
+      return t.text;
+    } catch (e) { log('[telegram] voz', e.message); enviar('🎙 No pude descargar la nota de voz.'); return null; }
+  }
 
   async function boton(q) {
     const resp = (t = '') => llamar('answerCallbackQuery', { callback_query_id: q.id, text: t }).catch(() => { });

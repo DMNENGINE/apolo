@@ -447,6 +447,18 @@ function whisperListo(ms = 25_000) {
 }
 function apagarWhisperLuego() { clearTimeout(whisperApagar); whisperApagar = setTimeout(() => { try { whisper && whisper.kill(); console.log('[whisper] descargado (sin uso)'); } catch { } }, 120_000); }
 ipcMain.handle('listen', async () => { const ok = await whisperListo(); apagarWhisperLuego(); return ok && !whisperWait ? listenWhisper() : listenWindows(); });
+// notas de voz (Telegram / WhatsApp): una a una por la misma instancia de Whisper
+let colaWhisper = Promise.resolve();
+function transcribirArchivo(ruta) {
+  const tarea = colaWhisper.then(async () => {
+    if (!await whisperListo(60_000)) return { text: '', error: 'Whisper no está disponible (¿Python y faster-whisper instalados?)' };
+    apagarWhisperLuego();
+    while (whisperWait) await new Promise(ok => setTimeout(ok, 200));          // si estás usando el micro, espera
+    return new Promise(ok => { whisperWait = ok; whisper.stdin.write('file ' + ruta + '\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', error: 'tiempo agotado' }); } }, 120_000); });
+  });
+  colaWhisper = tarea.catch(() => { });
+  return tarea;
+}
 const listenWhisper = () =>
   new Promise(ok => { whisperWait = ok; whisper.stdin.write('listen\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', conf: 0 }); } }, 30000); });
 const listenWindows = () => new Promise(ok => execFile('powershell.exe',
@@ -860,7 +872,7 @@ app.whenReady().then(() => {
     });
     nucleo.extensiones.conectores = conectores;
     telegram = crearTelegram({ almacen: conectores.almacen, decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
-      onTalk: t => handleText(t, 'telegram'), onEstado: e => console.log('[telegram]', e) });
+      onTalk: t => handleText(t, 'telegram'), transcribir: transcribirArchivo, onEstado: e => console.log('[telegram]', e) });
     nucleo.extensiones.telegram = { http: async (M, p, b) => {
       if (M === 'GET') return telegram.estado();
       if (M === 'PUT') return telegram.conectar(b.token);
@@ -871,7 +883,7 @@ app.whenReady().then(() => {
     } };
     telegram.iniciar();
     whatsapp = crearWhatsapp({ dir: path.join(app.getPath('userData'), 'whatsapp-auth'), decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
-      onTalk: t => handleText(t, 'whatsapp'), onAjeno: a => mensajeWhatsapp(a).catch(e => console.error('[whatsapp]', e.message)), onEstado: e => console.log('[whatsapp]', e) });
+      onTalk: t => handleText(t, 'whatsapp'), transcribir: transcribirArchivo, onAjeno: a => mensajeWhatsapp(a).catch(e => console.error('[whatsapp]', e.message)), onEstado: e => console.log('[whatsapp]', e) });
     nucleo.extensiones.whatsapp = { http: async (M, p, b) => {
       if (M === 'GET' && p[2] === 'config') return whatsapp.config();
       if (M === 'PATCH' && p[2] === 'config') return whatsapp.ponerConfig(b);
