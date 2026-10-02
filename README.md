@@ -44,6 +44,18 @@ You stay in control. Every risky action asks first, from the floating island, Di
 
 ## 🚀 Quick start
 
+### One-line install (recommended)
+
+Open **PowerShell** and run:
+
+```powershell
+irm https://raw.githubusercontent.com/DMNENGINE/apolo/main/install.ps1 | iex
+```
+
+It installs whatever is missing (Node.js, Electron, Python and the voice packages), puts APOLO in `%LOCALAPPDATA%APOLO`, creates Start menu and desktop shortcuts, and launches it. Run it again to update. Your data in `%APPDATA%` is kept.
+
+### Manual install
+
 **Requirements:** Windows 10/11 and [Node.js](https://nodejs.org) 20+.
 Optional: [Claude Code](https://claude.com/claude-code), [Ollama](https://ollama.com), and Python 3 (neural voice and Whisper).
 
@@ -62,7 +74,7 @@ Then, from the tray icon:
 
 Neural voice (optional): `pip install edge-tts`.
 
-> A one-line installer (`irm … | iex`) and a signed `.exe` are on the roadmap.
+> A signed `.exe` installer is on the roadmap.
 
 ## 🧩 How it works
 
@@ -100,7 +112,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 ## 🗺️ Roadmap
 
-- [ ] One-line installer and `.exe` release
+- [x] One-line installer
+- [ ] Signed `.exe` release
 - [ ] Telegram channel
 - [ ] Gmail / Calendar / GitHub as sources for the daily briefing
 - [ ] macOS and Linux support

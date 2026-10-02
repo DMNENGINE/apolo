@@ -33,12 +33,10 @@
     "streamdeck": "powershell -NoProfile -ExecutionPolicy Bypass -File streamdeck/instalar.ps1"
   },
   "private": true,
-  "devDependencies": {
-    "electron": "^33.4.11",
-    "three": "^0.160.0"
-  },
   "dependencies": {
     "discord.js": "^14.27.0",
-    "sql.js": "^1.14.2"
+    "sql.js": "^1.14.2",
+    "electron": "^33.4.11",
+    "three": "^0.160.0"
   }
 }

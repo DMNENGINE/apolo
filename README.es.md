@@ -23,6 +23,18 @@ Tú mandas. Cada acción delicada te pide permiso desde la isla flotante, Discor
 
 ## 🚀 Instalación
 
+### Instalación en una línea (recomendada)
+
+Abre **PowerShell** y ejecuta:
+
+```powershell
+irm https://raw.githubusercontent.com/DMNENGINE/apolo/main/install.ps1 | iex
+```
+
+Instala lo que falte (Node.js, Electron, Python y la voz), deja APOLO en `%LOCALAPPDATA%APOLO`, crea accesos directos en el menú Inicio y el Escritorio, y lo arranca. Para actualizar, ejecútalo otra vez; tus datos de `%APPDATA%` se conservan.
+
+### Instalación manual
+
 Requisitos: Windows 10/11 y [Node.js](https://nodejs.org) 20+.
 
 ```powershell
@@ -40,7 +52,7 @@ Después, en el icono de la bandeja:
 
 Voz neural (opcional): `pip install edge-tts`.
 
-> Próximamente: instalador de una línea (`irm … | iex`) y `.exe`.
+> Próximamente: instalador `.exe`.
 
 Arquitectura, seguridad y hoja de ruta: consulta el [README en inglés](README.md).
 
