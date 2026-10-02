@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APOLO · overlay</title>
+<!-- Overlay de OBS (Browser Source, fondo transparente). 1920x1080 o 1080x1920 (se detecta solo; ?formato=vertical|horizontal).
+     Solo recibe por /stream/eventos lo que se enseña en pantalla. ?demo=1 reproduce una escena de ejemplo; ?fondo=juego pinta un juego falso detrás. -->
+<style>
+  :root { --acento: #2bdc7c; --u: calc(100vw / 1920); --fondo: rgba(8, 12, 16, .82); --texto: #f2f7f4; }
+  html.vertical { --u: calc(100vw / 1080); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; color: var(--texto);
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  #juego { position: fixed; inset: 0; width: 100%; height: 100%; display: none; }
+  html.con-fondo #juego { display: block; }
+  .capa { position: fixed; inset: 0; pointer-events: none; }
+
+  /* robot */
+  #zonaRobot { position: absolute; right: calc(40 * var(--u)); bottom: calc(20 * var(--u)); width: calc(420 * var(--u)); height: calc(460 * var(--u)); transition: opacity .4s, transform .5s cubic-bezier(.2, 1.4, .4, 1); }
+  html.vertical #zonaRobot { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(150 * var(--u)); width: calc(640 * var(--u)); height: calc(680 * var(--u)); }
+  #robot { width: 100%; height: calc(100% - 60 * var(--u)); display: block; filter: drop-shadow(0 0 calc(18 * var(--u)) color-mix(in srgb, var(--acento) calc(var(--glow, .6) * 60%), transparent)) drop-shadow(0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,.55)); }
+  html.sin-robot #zonaRobot { opacity: 0; }
+  .placa { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; align-items: center; gap: calc(10 * var(--u)); white-space: nowrap;
+    padding: calc(8 * var(--u)) calc(18 * var(--u)); border-radius: calc(40 * var(--u)); background: var(--fondo); border: calc(2 * var(--u)) solid color-mix(in srgb, var(--acento) 70%, transparent);
+    box-shadow: 0 0 calc(24 * var(--u)) color-mix(in srgb, var(--acento) 35%, transparent); font-size: calc(22 * var(--u)); font-weight: 800; letter-spacing: .08em; }
+  html.vertical .placa { font-size: calc(30 * var(--u)); }
+  .placa small { font-weight: 600; letter-spacing: .02em; opacity: .7; font-size: .72em; text-transform: uppercase; }
+  .punto { width: calc(12 * var(--u)); height: calc(12 * var(--u)); border-radius: 50%; background: var(--acento); box-shadow: 0 0 calc(10 * var(--u)) var(--acento); }
+  body.hablando .punto { animation: latir .5s infinite alternate; }
+  @keyframes latir { to { transform: scale(1.6); opacity: .6; } }
+  #agente { position: absolute; left: 50%; top: calc(-6 * var(--u)); transform: translate(-50%, -100%) scale(.9); opacity: 0; transition: .3s; white-space: nowrap;
+    font-size: calc(18 * var(--u)); padding: calc(6 * var(--u)) calc(14 * var(--u)); border-radius: calc(20 * var(--u)); background: rgba(10, 16, 22, .85); border: calc(1.5 * var(--u)) solid rgba(255,255,255,.18); }
+  #agente.on { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  #agente::before { content: ""; display: inline-block; width: calc(8 * var(--u)); height: calc(8 * var(--u)); border-radius: 50%; background: #5ab0ff; margin-right: calc(8 * var(--u)); vertical-align: middle; animation: latir .7s infinite alternate; }
+
+  /* bocadillo */
+  #bocadillo { position: absolute; right: calc(480 * var(--u)); bottom: calc(230 * var(--u)); max-width: calc(760 * var(--u)); min-width: calc(260 * var(--u));
+    padding: calc(22 * var(--u)) calc(28 * var(--u)); border-radius: calc(28 * var(--u)); background: var(--fondo);
+    border: calc(2.5 * var(--u)) solid var(--acento); box-shadow: 0 0 calc(30 * var(--u)) color-mix(in srgb, var(--acento) 40%, transparent), 0 calc(14 * var(--u)) calc(40 * var(--u)) rgba(0,0,0,.5);
+    backdrop-filter: blur(calc(10 * var(--u))); transform-origin: 100% 100%; transform: scale(.4) translateY(calc(40 * var(--u))); opacity: 0; transition: transform .45s cubic-bezier(.2, 1.5, .4, 1), opacity .25s; }
+  #bocadillo.on { transform: none; opacity: 1; }
+  #bocadillo::after { content: ""; position: absolute; right: calc(-22 * var(--u)); bottom: calc(40 * var(--u)); width: calc(36 * var(--u)); height: calc(36 * var(--u));
+    background: inherit; border: inherit; border-left: 0; border-bottom: 0; transform: rotate(45deg) skew(12deg, 12deg); border-radius: 0 calc(6 * var(--u)) 0 0; backdrop-filter: none; }
+  html.vertical #bocadillo { right: auto; left: 50%; bottom: calc(890 * var(--u)); width: calc(900 * var(--u)); max-width: none; box-sizing: border-box; transform-origin: 50% 100%; transform: translateX(-50%) scale(.4); }
+  html.vertical #bocadillo.on { transform: translateX(-50%); }
+  html.vertical #bocadillo::after { right: auto; left: calc(50% - 18 * var(--u)); bottom: calc(-22 * var(--u)); transform: rotate(135deg) skew(12deg, 12deg); }
+  #bocadillo .quien { font-size: calc(19 * var(--u)); opacity: .75; margin-bottom: calc(8 * var(--u)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bocadillo .quien b { color: var(--acento); }
+  #bocadillo .txt { font-size: calc(34 * var(--u)); line-height: 1.25; font-weight: 650; text-wrap: pretty; }
+  html.vertical #bocadillo .txt { font-size: calc(46 * var(--u)); }
+  html.vertical #bocadillo .quien { font-size: calc(28 * var(--u)); }
+  .cursor { display: inline-block; width: .5em; height: .9em; margin-left: .08em; background: var(--acento); vertical-align: -.08em; animation: parpadeo .7s steps(1) infinite; }
+  @keyframes parpadeo { 50% { opacity: 0; } }
+
+  /* subtítulos */
+  #subs { position: absolute; left: 50%; bottom: calc(46 * var(--u)); transform: translateX(-50%); max-width: calc(1100 * var(--u)); text-align: center; opacity: 0; transition: opacity .2s; }
+  html.vertical #subs { bottom: auto; top: 60%; max-width: calc(980 * var(--u)); }
+  #subs.on { opacity: 1; }
+  #subs span { display: inline; padding: calc(6 * var(--u)) calc(16 * var(--u)); line-height: 1.55; font-size: calc(36 * var(--u)); font-weight: 700; background: rgba(0, 0, 0, .72);
+    box-decoration-break: clone; -webkit-box-decoration-break: clone; border-radius: calc(8 * var(--u)); text-shadow: 0 calc(2 * var(--u)) calc(4 * var(--u)) #000; }
+  html.vertical #subs span { font-size: calc(48 * var(--u)); }
+  html.vertical body.bocadillo-on #subs { display: none; }
+
+  /* alertas */
+  #alertas { position: absolute; left: 50%; top: calc(60 * var(--u)); transform: translateX(-50%); }
+  html.vertical #alertas { top: calc(220 * var(--u)); }
+  .alerta { position: relative; display: flex; align-items: center; gap: calc(22 * var(--u)); min-width: calc(560 * var(--u)); max-width: calc(900 * var(--u)); padding: calc(20 * var(--u)) calc(34 * var(--u)) calc(20 * var(--u)) calc(22 * var(--u));
+    border-radius: calc(26 * var(--u)); background: linear-gradient(120deg, rgba(10, 14, 20, .92), rgba(16, 24, 30, .92)); border: calc(3 * var(--u)) solid var(--c, var(--acento));
+    box-shadow: 0 0 calc(50 * var(--u)) color-mix(in srgb, var(--c, var(--acento)) 55%, transparent), 0 calc(20 * var(--u)) calc(50 * var(--u)) rgba(0,0,0,.6);
+    animation: entrarAlerta .7s cubic-bezier(.2, 1.6, .35, 1) both; overflow: visible; }
+  .alerta.fuera { animation: salirAlerta .45s ease-in both; }
+  @keyframes entrarAlerta { from { transform: translateY(calc(-160 * var(--u))) scale(.6); opacity: 0; } }
+  @keyframes salirAlerta { to { transform: translateY(calc(-120 * var(--u))) scale(.8); opacity: 0; } }
+  .alerta .ico { flex: none; display: grid; place-items: center; width: calc(96 * var(--u)); height: calc(96 * var(--u)); border-radius: 50%; font-size: calc(54 * var(--u));
+    background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c, var(--acento)) 75%, #fff), var(--c, var(--acento)) 60%, color-mix(in srgb, var(--c, var(--acento)) 50%, #000));
+    box-shadow: 0 0 calc(30 * var(--u)) var(--c, var(--acento)); animation: girar 1.2s cubic-bezier(.3, 1.6, .5, 1) both .2s; }
+  @keyframes girar { from { transform: rotate(-200deg) scale(.2); } }
+  .alerta .tit { font-size: calc(22 * var(--u)); font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--c, var(--acento)); }
+  .alerta .nom { font-size: calc(46 * var(--u)); font-weight: 850; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: calc(680 * var(--u)); }
+  .alerta .nom em { font-style: normal; color: var(--c, var(--acento)); }
+  .alerta .msg { font-size: calc(22 * var(--u)); opacity: .85; margin-top: calc(4 * var(--u)); }
+  .confeti { position: absolute; top: 50%; left: 50%; width: calc(12 * var(--u)); height: calc(18 * var(--u)); border-radius: calc(3 * var(--u)); animation: confeti 1.6s cubic-bezier(.1, .7, .3, 1) forwards; }
+  @keyframes confeti { from { transform: translate(-50%, -50%) rotate(0); opacity: 1; } to { transform: translate(var(--x), var(--y)) rotate(var(--r)); opacity: 0; } }
+
+  /* encuesta */
+  #encuesta { position: absolute; left: calc(40 * var(--u)); top: calc(40 * var(--u)); width: calc(520 * var(--u)); padding: calc(20 * var(--u)) calc(24 * var(--u)); border-radius: calc(22 * var(--u));
+    background: var(--fondo); border: calc(2 * var(--u)) solid rgba(255,255,255,.14); box-shadow: 0 calc(12 * var(--u)) calc(40 * var(--u)) rgba(0,0,0,.5);
+    transform: translateX(calc(-620 * var(--u))); transition: transform .5s cubic-bezier(.2, 1.3, .4, 1); }
+  html.vertical #encuesta { left: 50%; top: calc(400 * var(--u)); width: calc(880 * var(--u)); transform: translateX(-50%) scale(0); }
+  #encuesta.on { transform: none; }
+  html.vertical #encuesta.on { transform: translateX(-50%); }
+  #encuesta .cab { display: flex; align-items: center; gap: calc(10 * var(--u)); font-size: calc(16 * var(--u)); letter-spacing: .14em; font-weight: 800; color: var(--acento); text-transform: uppercase; }
+  #encuesta .cab .t { margin-left: auto; color: var(--texto); opacity: .75; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  #encuesta h3 { margin: calc(8 * var(--u)) 0 calc(14 * var(--u)); font-size: calc(28 * var(--u)); line-height: 1.2; }
+  .op { position: relative; margin-top: calc(10 * var(--u)); padding: calc(10 * var(--u)) calc(14 * var(--u)); border-radius: calc(12 * var(--u)); background: rgba(255,255,255,.06); overflow: hidden; font-size: calc(22 * var(--u)); font-weight: 650; display: flex; gap: calc(10 * var(--u)); }
+  html.vertical #encuesta h3 { font-size: calc(40 * var(--u)); } html.vertical .op { font-size: calc(32 * var(--u)); }
+  .op i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--acento) 38%, transparent); transition: width .6s cubic-bezier(.2, 1, .3, 1); }
+  .op span { position: relative; } .op .n { color: var(--acento); font-weight: 850; } .op .v { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .op.gana { outline: calc(2 * var(--u)) solid var(--acento); box-shadow: 0 0 calc(20 * var(--u)) color-mix(in srgb, var(--acento) 50%, transparent); }
+  #encuesta .pie { margin-top: calc(10 * var(--u)); font-size: calc(17 * var(--u)); opacity: .7; }
+
+  html.panico .capa > *:not(#zonaRobot) { display: none !important; }
+</style>
+</head>
+<body>
+  <canvas id="juego"></canvas>
+  <div class="capa">
+    <div id="encuesta"></div>
+    <div id="alertas"></div>
+    <div id="bocadillo"><div class="quien"></div><div class="txt"></div></div>
+    <div id="subs"><span></span></div>
+    <div id="zonaRobot"><div id="agente"></div><canvas id="robot"></canvas><div class="placa"><span class="punto"></span><span id="nombre">APOLO</span><small id="rol">co-host IA</small></div></div>
+  </div>
+  <script type="module" src="/stream-overlay.js"></script>
+</body>
+</html>

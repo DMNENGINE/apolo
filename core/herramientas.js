@@ -189,7 +189,8 @@ const HERRAMIENTAS = [
       },
     },
     resumen: a => (a.imagen === false ? 'elementos de la ventana activa' : `captura${a.monitor ? ` del monitor ${a.monitor}` : ''}`),
-    ejecutar: (a, ctx) => require('./escritorio').verPantalla({ cfg: ctx.cfg, sesion: ctx.sesion, monitor: a.monitor || 0, imagen: a.imagen !== false }),
+    ejecutar: (a, ctx) => (ctx.control?.ver ? ctx.control.ver(ctx.sesion, a)        // pasa por el registro de capturas ("Lo que hizo")
+      : require('./escritorio').verPantalla({ cfg: ctx.cfg, sesion: ctx.sesion, monitor: a.monitor || 0, imagen: a.imagen !== false })),
   },
   {
     nombre: 'tomar_control', riesgo: 'control', siemprePreguntar: () => 'control del ratón y el teclado',
@@ -204,7 +205,8 @@ const HERRAMIENTAS = [
     resumen: a => `${a.motivo} (${a.minutos || 5} min)`,
     ejecutar: async (a, ctx) => {
       const r = await ctx.control.tomar(ctx.sesion, { motivo: a.motivo, minutos: a.minutos });
-      return `Control concedido durante ${r.minutos} min. Flujo: ver_pantalla → acción (clic/escribir/tecla/scroll usando el #elemento o x,y de la imagen) → ver_pantalla para comprobar. Al acabar, soltar_control.`;
+      return `Control concedido durante ${r.minutos} min. Flujo: ver_pantalla → acción (clic/escribir/tecla/scroll usando el #elemento, la celda de la rejilla o x,y de la imagen) → ` +
+        'lee la COMPROBACIÓN que devuelve cada acción (qué cambió; si dice que NO cambió nada, no funcionó). Al acabar, soltar_control.';
     },
   },
   {
@@ -228,11 +230,38 @@ const HERRAMIENTAS = [
       elemento: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' }, elemento2: { type: 'number' }, x2: { type: 'number' }, y2: { type: 'number' } }, [], a => 'arrastrar'],
   ].map(([nombre, descripcion, properties, required, resumen]) => ({
     nombre, riesgo: 'lectura',                         // el permiso es el del encargo (tomar_control) + los delicados, que pregunta el control
-    descripcion: `${descripcion} Requiere tomar_control. Las coordenadas x,y son píxeles de la imagen de ver_pantalla.`,
-    parametros: { type: 'object', properties, required },
+    descripcion: `${descripcion} Requiere tomar_control. Las coordenadas x,y son píxeles de la imagen de ver_pantalla. ` +
+      'Devuelve una COMPROBACIÓN automática (ventana, foco y elementos que aparecen/desaparecen; los #id siguen valiendo). Si no cambió nada, adjunta la captura.',
+    parametros: { type: 'object', required, properties: {
+      ...properties,
+      ...(nombre === 'tecla' ? {} : { celda: { type: 'number', description: 'celda de la rejilla numerada (solo si la captura la trae)' } }),
+      ...(nombre === 'arrastrar' ? { celda2: { type: 'number' } } : {}),
+      ver: { type: 'boolean', description: 'true = adjunta también la captura de después' },
+    } },
     resumen,
     ejecutar: (a, ctx) => ctx.control.accion(ctx.sesion, nombre, a),
   })),
+  {
+    nombre: 'grabar_demostracion',                     // empezar: pregunta SIEMPRE (aunque el modo sea auto o haya regla "siempre"); parar/estado no
+    riesgo: a => (a.accion === 'empezar' ? 'control' : 'lectura'),
+    siemprePreguntar: a => (a.accion === 'empezar' ? 'grabar tu ratón y teclado (macro por demostración)' : null),
+    descripcion: 'Macro POR DEMOSTRACIÓN: "empezar" graba lo que el USUARIO hace con su ratón y teclado (ventanas, clics con el nombre del elemento, texto; nunca contraseñas) ' +
+      'hasta que pulse Parar en el panel, Ctrl+Alt+Esc, o llames a "parar". Al parar se crea una skill BORRADOR (desactivada) en el taller con los pasos. ' +
+      'Úsalo cuando el usuario diga "mira cómo lo hago" / "aprende esto". Siempre pide permiso.',
+    parametros: { type: 'object', properties: { accion: { type: 'string', enum: ['empezar', 'parar', 'estado'] }, nombre: { type: 'string', description: 'nombre de la tarea/skill' } }, required: ['accion'] },
+    resumen: a => `${a.accion}${a.nombre ? ` «${a.nombre}»` : ''}`,
+    ejecutar: async (a, ctx) => {
+      const d = ctx.control?.demo; if (!d) throw new Error('la grabación de demostraciones no está disponible');
+      if (a.accion === 'estado') { const e = d.estado(); return e.grabando ? `Grabando «${e.nombre || 'sin nombre'}»: ${e.eventos} eventos.` : 'No se está grabando nada.'; }
+      if (a.accion === 'parar') {
+        const r = await d.parar({ motivo: 'parada por el modelo', nombre: a.nombre });
+        return `Grabación parada: ${r.pasos.length} pasos.` + (r.skill ? ` Skill borrador creada: "${r.skill.slug}" (desactivada; el usuario la revisa y activa en Skills).` : r.errorSkill ? ` No se creó la skill: ${r.errorSkill}.` : '');
+      }
+      await d.empezar({ nombre: a.nombre, sesion: ctx.sesion, origen: 'herramienta' });   // el permiso ya lo pidió el agente (siemprePreguntar)
+      return 'Grabando. Dile al usuario que haga la tarea a su ritmo y que pulse Parar en el panel (o Ctrl+Alt+Esc) al terminar; también puedes llamar a "parar" cuando te lo diga. ' +
+        'NO uses tomar_control mientras graba.';
+    },
+  },
   // ---------- navegador del usuario (extensión): permiso por sitio dentro del módulo ----------
   ...[
     ['pestanas', 'Lista las pestañas abiertas en el navegador del usuario (id, título, url). Las marcadas [tuya] las abriste tú.', {}, [], () => 'pestañas'],

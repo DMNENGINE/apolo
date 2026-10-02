@@ -4,6 +4,9 @@
 #   {"id":2,"op":"mover|clic|arrastrar|scroll|escribir|tecla", ...}   (coordenadas de PANTALLA reales)
 #   {"id":3,"op":"armar"} / {"op":"desarmar"}  vigilante: si el usuario mueve el ratón, hace clic o pulsa una tecla
 #                                              (o Ctrl+Alt+Esc), emite {"evento":"panico","motivo":..} y se desarma
+#   {"id":4,"op":"grabar"} / {"op":"parar"}    macro por demostración: gancho de bajo nivel (WH_MOUSE_LL/WH_KEYBOARD_LL) SOLO
+#                                              mientras graba; emite {"evento":"demo","tipo":"clic|scroll|tecla",...} (nunca el
+#                                              texto de un campo de contraseña) y {"evento":"demo-fin"} con Ctrl+Alt+Esc
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 [Console]::InputEncoding = [Text.Encoding]::UTF8
@@ -158,6 +161,158 @@ public static class Manos {
     }
   }
 
+  // ---------- grabación de demostraciones (gancho de bajo nivel SOLO mientras graba) ----------
+  delegate IntPtr ProcGancho(int n, IntPtr w, IntPtr l);
+  [DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetWindowsHookEx(int id, ProcGancho fn, IntPtr mod, uint hilo);
+  [DllImport("user32.dll")] static extern bool UnhookWindowsHookEx(IntPtr h);
+  [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr h, int n, IntPtr w, IntPtr l);
+  [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public POINT pt; }
+  [DllImport("user32.dll")] static extern int GetMessage(out MSG m, IntPtr h, uint a, uint b);
+  [DllImport("user32.dll")] static extern bool PeekMessage(out MSG m, IntPtr h, uint a, uint b, uint quitar);
+  [DllImport("user32.dll")] static extern bool PostThreadMessage(uint hilo, uint msg, IntPtr w, IntPtr l);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+  [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string n);
+  [DllImport("user32.dll")] static extern short GetKeyState(int vk);
+  [DllImport("user32.dll")] static extern IntPtr GetKeyboardLayout(uint hilo);
+  [DllImport("user32.dll")] static extern int ToUnicodeEx(uint vk, uint scan, byte[] estado, StringBuilder sb, int n, uint flags, IntPtr hkl);
+  [StructLayout(LayoutKind.Sequential)] struct MSLL { public POINT pt; public uint mouseData, flags, time; public IntPtr extra; }
+  [StructLayout(LayoutKind.Sequential)] struct KBLL { public uint vk, scan, flags, time; public IntPtr extra; }
+
+  class Ev { public string tipo, boton; public int x, y, delta; public uint vk, scan; public bool ctrl, alt, shift, win, caps; public long t; }
+  static readonly System.Collections.Concurrent.BlockingCollection<Ev> cola = new System.Collections.Concurrent.BlockingCollection<Ev>();
+  static ProcGancho procRaton, procTeclado;            // referencias vivas: que el recolector no se lleve los delegados
+  static IntPtr ganchoRaton = IntPtr.Zero, ganchoTeclado = IntPtr.Zero;
+  static uint hiloGancho = 0; static Thread hiloG = null, trabajador = null;
+  static volatile bool grabando = false;
+  static bool Pulsada(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+
+  // el gancho solo encola (tiene que contestar rapidísimo o Windows lo quita); el trabajador hace lo lento (UIA)
+  static IntPtr Raton(int n, IntPtr w, IntPtr l) {
+    if (n >= 0 && grabando) {
+      var d = (MSLL)Marshal.PtrToStructure(l, typeof(MSLL));
+      if ((d.flags & 1) == 0) {                         // LLMHF_INJECTED: lo que hace el propio robot no cuenta
+        int m = w.ToInt32();
+        if (m == 0x201 || m == 0x204 || m == 0x207) cola.Add(new Ev { tipo = "clic", x = d.pt.X, y = d.pt.Y, boton = m == 0x201 ? "izq" : m == 0x204 ? "der" : "medio", t = Ahora() });
+        else if (m == 0x20A) cola.Add(new Ev { tipo = "scroll", x = d.pt.X, y = d.pt.Y, delta = (short)((d.mouseData >> 16) & 0xFFFF), t = Ahora() });
+      }
+    }
+    return CallNextHookEx(IntPtr.Zero, n, w, l);
+  }
+  static IntPtr Teclado(int n, IntPtr w, IntPtr l) {
+    if (n >= 0 && grabando) {
+      var d = (KBLL)Marshal.PtrToStructure(l, typeof(KBLL));
+      int m = w.ToInt32();
+      if ((d.flags & 0x10) == 0 && (m == 0x100 || m == 0x104))   // LLKHF_INJECTED fuera; WM_KEYDOWN / WM_SYSKEYDOWN
+        cola.Add(new Ev { tipo = "tecla", vk = d.vk, scan = d.scan, ctrl = Pulsada(0x11), alt = Pulsada(0x12), shift = Pulsada(0x10),
+          win = Pulsada(0x5B) || Pulsada(0x5C), caps = (GetKeyState(0x14) & 1) != 0, t = Ahora() });
+    }
+    return CallNextHookEx(IntPtr.Zero, n, w, l);
+  }
+
+  static Dictionary<string, object> VentanaActiva() {
+    var h = GetForegroundWindow(); var sb = new StringBuilder(512); GetWindowText(h, sb, 512);
+    uint pid; GetWindowThreadProcessId(h, out pid);
+    string proc = ""; try { proc = System.Diagnostics.Process.GetProcessById((int)pid).ProcessName; } catch { }
+    return new Dictionary<string, object> { {"titulo", sb.ToString()}, {"proceso", proc} };
+  }
+  static Dictionary<string, object> ElemDemo(AutomationElement e) {
+    if (e == null) return null;
+    try {
+      var c = e.Current; string nom = (c.Name ?? ""); if (nom.Length > 100) nom = nom.Substring(0, 100);
+      return new Dictionary<string, object> { {"tipo", c.ControlType.ProgrammaticName.Replace("ControlType.", "")}, {"nombre", nom}, {"id", c.AutomationId ?? ""}, {"password", c.IsPassword} };
+    } catch { return null; }
+  }
+  static string NombreTecla(uint vk) {
+    if (vk >= 0x41 && vk <= 0x5A) return ((char)('a' + vk - 0x41)).ToString();
+    if (vk >= 0x30 && vk <= 0x39) return ((char)('0' + vk - 0x30)).ToString();
+    if (vk >= 0x70 && vk <= 0x87) return "f" + (vk - 0x6F);
+    switch (vk) {
+      case 0x0D: return "enter"; case 0x1B: return "esc"; case 0x09: return "tab"; case 0x08: return "backspace"; case 0x2E: return "delete";
+      case 0x2D: return "insert"; case 0x20: return "space"; case 0x26: return "up"; case 0x28: return "down"; case 0x25: return "left"; case 0x27: return "right";
+      case 0x24: return "home"; case 0x23: return "end"; case 0x21: return "pageup"; case 0x22: return "pagedown"; case 0x2C: return "printscreen"; case 0x5D: return "menu";
+    }
+    return null;
+  }
+  static bool EsModificador(uint vk) { return vk == 0x10 || vk == 0x11 || vk == 0x12 || (vk >= 0xA0 && vk <= 0xA5) || vk == 0x5B || vk == 0x5C || vk == 0x14 || vk == 0x90 || vk == 0x91; }
+  static long focoT = 0; static Dictionary<string, object> focoCache = null;
+
+  static void Trabajar() {
+    foreach (var ev in cola.GetConsumingEnumerable()) {
+      try {
+        var r = new Dictionary<string, object> { {"evento", "demo"}, {"tipo", ev.tipo}, {"t", ev.t} };
+        if (ev.tipo == "clic" || ev.tipo == "scroll") {
+          r["x"] = ev.x; r["y"] = ev.y;
+          if (ev.tipo == "clic") {
+            r["boton"] = ev.boton; Dictionary<string, object> el = null;
+            try { el = ElemDemo(AutomationElement.FromPoint(new System.Windows.Point(ev.x, ev.y))); } catch { }
+            r["elemento"] = el; focoCache = null;
+          } else r["delta"] = ev.delta;
+          r["ventana"] = VentanaActiva();
+        } else {
+          if (EsModificador(ev.vk)) continue;
+          if (ev.ctrl && ev.alt && ev.vk == 0x1B) { Escribir(new Dictionary<string, object> { {"evento", "demo-fin"}, {"motivo", "Ctrl+Alt+Esc"} }); continue; }
+          if (focoCache == null || Ahora() - focoT > 400) { try { focoCache = ElemDemo(AutomationElement.FocusedElement); } catch { focoCache = null; } focoT = Ahora(); }
+          r["ventana"] = VentanaActiva(); r["foco"] = focoCache;
+          bool secreto = focoCache != null && focoCache.ContainsKey("password") && (bool)focoCache["password"];
+          string nombre = NombreTecla(ev.vk);
+          bool altGr = ev.ctrl && ev.alt;
+          if ((ev.ctrl || ev.alt || ev.win) && !altGr) {     // combinación: ctrl+s, alt+tab, win+e…
+            var partes = new List<string>();
+            if (ev.ctrl) partes.Add("ctrl"); if (ev.alt) partes.Add("alt"); if (ev.shift) partes.Add("shift"); if (ev.win) partes.Add("win");
+            partes.Add(nombre ?? ("vk" + ev.vk)); r["combo"] = string.Join("+", partes);
+          } else if (nombre != null && nombre.Length > 1 && ev.vk != 0x20) {   // especiales: enter, tab, flechas, F5…
+            r["combo"] = ev.shift ? "shift+" + nombre : nombre;
+          } else if (secreto) {
+            r["secreto"] = true;                              // campo de contraseña: NUNCA el carácter
+          } else {
+            var est = new byte[256]; if (ev.shift) est[0x10] = 0x80; if (ev.caps) est[0x14] = 0x01; if (altGr) { est[0x11] = 0x80; est[0x12] = 0x80; }
+            var sb = new StringBuilder(8); uint pid;
+            var hkl = GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), out pid));
+            int k = ToUnicodeEx(ev.vk, ev.scan, est, sb, 8, 4, hkl);   // flag 4: no altera el estado de teclas muertas del usuario
+            if (k <= 0) continue;
+            r["texto"] = sb.ToString(0, k);
+          }
+        }
+        Escribir(r);
+      } catch { }
+    }
+  }
+
+  static void Grabar() {
+    if (armado) throw new Exception("el robot tiene el control: no se puede grabar a la vez");
+    if (hiloG != null) return;
+    if (trabajador == null) { trabajador = new Thread(Trabajar); trabajador.IsBackground = true; trabajador.Start(); }
+    string error = null; var listo = new ManualResetEvent(false);
+    hiloG = new Thread(() => {
+      hiloGancho = GetCurrentThreadId();
+      MSG m; PeekMessage(out m, IntPtr.Zero, 0, 0, 0);       // crea la cola de mensajes del hilo antes de avisar
+      procRaton = Raton; procTeclado = Teclado;
+      IntPtr mod = GetModuleHandle(null);
+      ganchoRaton = SetWindowsHookEx(14, procRaton, mod, 0);
+      ganchoTeclado = SetWindowsHookEx(13, procTeclado, mod, 0);
+      if (ganchoRaton == IntPtr.Zero || ganchoTeclado == IntPtr.Zero) {
+        error = "no pude instalar el gancho (" + Marshal.GetLastWin32Error() + ")";
+        if (ganchoRaton != IntPtr.Zero) UnhookWindowsHookEx(ganchoRaton);
+        if (ganchoTeclado != IntPtr.Zero) UnhookWindowsHookEx(ganchoTeclado);
+        ganchoRaton = IntPtr.Zero; ganchoTeclado = IntPtr.Zero; listo.Set(); return;
+      }
+      grabando = true; listo.Set();
+      while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0) { }
+      grabando = false;
+      UnhookWindowsHookEx(ganchoRaton); UnhookWindowsHookEx(ganchoTeclado);
+      ganchoRaton = IntPtr.Zero; ganchoTeclado = IntPtr.Zero;
+    });
+    hiloG.IsBackground = true; hiloG.Start();
+    if (!listo.WaitOne(5000)) throw new Exception("el gancho no arrancó");
+    if (error != null) { hiloG = null; throw new Exception(error); }
+  }
+  static void Parar() {
+    if (hiloG == null) return;
+    grabando = false;
+    for (int k = 0; k < 10 && hiloG.IsAlive; k++) { PostThreadMessage(hiloGancho, 0x0012, IntPtr.Zero, IntPtr.Zero); hiloG.Join(300); }   // WM_QUIT
+    hiloG = null;
+  }
+
   public static void Run() {
     SetProcessDPIAware();
     var t = new Thread(Vigilar); t.IsBackground = true; t.Start();
@@ -174,6 +329,8 @@ public static class Manos {
         if (op == "info") r = Info(o);
         else if (op == "armar") { POINT p; GetCursorPos(out p); espX = p.X; espY = p.Y; graciaHasta = Ahora() + 300; armado = true; r = new Dictionary<string, object>(); }
         else if (op == "desarmar") { armado = false; r = new Dictionary<string, object>(); }
+        else if (op == "grabar") { Grabar(); r = new Dictionary<string, object> { {"grabando", true} }; }
+        else if (op == "parar") { Parar(); r = new Dictionary<string, object> { {"grabando", false} }; }
         else {
           if (o.ContainsKey("armadoRequerido") && Convert.ToBoolean(o["armadoRequerido"]) && !armado) throw new Exception("el control está desactivado");
           ocupado = true;

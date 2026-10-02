@@ -47,7 +47,14 @@ function crearNucleo(opciones = {}) {
   // atajo: enviar y emitir los eventos también al bus global
   const enviar = (s, texto, emitir) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); });
   subagentes = crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar: id => agente.cancelar(id) });
-  control = crearControl({ cfg, bus, permisos, cancelarTurno: id => agente.cancelar(id), manos: opciones.manos });
+  // FASE 3 (manos de verdad): registro de capturas por sesión + comprobar tras cada acción + macros por demostración
+  const registroCapturas = require('./escritorio/registro').crearRegistroCapturas({ cfg, sesiones, video: opciones.videoCapturas });
+  let demo = null;
+  control = crearControl({ cfg, bus, permisos, cancelarTurno: id => agente.cancelar(id), manos: opciones.manos, ojos: opciones.ojos, registro: registroCapturas,
+    bloqueo: () => (demo?.grabando() ? 'se está grabando una demostración del usuario: espera a que pulse Parar' : null) });
+  demo = require('./escritorio/demo').crearDemo({ cfg, bus, permisos, control, taller: skills.taller,
+    generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), modelo: modeloCerebro });
+  control.demo = demo;                                            // la herramienta grabar_demostracion lo encuentra por ctx.control
   navegador = require('./navegador').crearNavegador({ cfg, bus, permisos, cancelarTurno: id => agente.cancelar(id) });
   tareas = crearTareas({
     cfg, bus,
@@ -75,6 +82,9 @@ function crearNucleo(opciones = {}) {
   if (!opciones.sinPlugins) plugins.iniciar().catch(e => console.log(`[plugins] ${e.message}`));
   nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills, plugins, consejo, turno };
   nucleo.extensiones.turno = { http: (...a) => turno.http(...a) };   // API /v1/turno (daemon → extensiones)
+  Object.assign(nucleo, { demo, capturas: registroCapturas });
+  nucleo.extensiones.capturas = { http: (...a) => registroCapturas.http(...a) };   // /v1/capturas ("Lo que hizo" + time-lapse)
+  nucleo.extensiones.demo = { http: (...a) => demo.http(...a) };                   // /v1/demo (grabar demostración → skill)
   // FASE 4: memoria v2 — grafo, fases de sueño, línea de tiempo, privacidad y Wrapped
   const grafo = grafoMod.crearGrafo({ cfg, memoria });
   memoria.grafo = grafo;                                          // la herramienta explorar_grafo lo encuentra por ctx.memoria

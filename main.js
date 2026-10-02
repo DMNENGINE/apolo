@@ -214,6 +214,7 @@ function vigilarPantallaCompleta() {
     while ((i = buf.indexOf('\n')) >= 0) {
       const l = buf.slice(0, i).trim().replace(/^﻿/, ''); buf = buf.slice(i + 1);
       let j; try { j = JSON.parse(l); } catch { continue; }
+      try { if (nucleo) nucleo.bus.emit('pantalla-completa', { completa: !!j.completa, proceso: j.proceso || '' }); } catch { }   // co-host: modo comentarista
       if (!win || win.isDestroyed()) continue;
       if (!pantallaCasa) pantallaCasa = displayDeIsla();
       if (j.completa) {
@@ -674,6 +675,10 @@ async function startNucleo() {
   nucleo = nucleo || crearNucleo();
   nucleo.cerebro = { leer: () => cerebro.config(), guardar: c => cerebro.setConfig(c),
     tarjetas: () => (cerebro ? cerebro.tarjetas() : []), accion: (id, a, t) => cardAction(id, a, t) };   // tarjetas para la app móvil
+  // co-host de streaming (core/stream): genera el mp3 con la voz de la isla; el overlay de OBS lo reproduce
+  nucleo.bus.on('stream-decir', ({ texto, responder }) => {
+    generarTts(texto).then(f => responder && responder(null, f), e => responder && responder(e));
+  });
   // notas de voz de la app móvil (POST /v1/voz/transcribir) → Whisper
   nucleo.bus.on('transcribir-audio', ({ ruta, responder }) => {
     transcribirArchivo(ruta).then(r => responder(r && r.error && !r.text ? r.error : null, (r && r.text) || ''), e => responder(e));
@@ -717,12 +722,20 @@ async function startNucleo() {
     if (a.urgente || isAway()) movil.sendAviso(`📣 **${a.origen}:** ${a.texto.slice(0, 1800)}`, a.urgente ? 'red' : 'blue');
   });
   // control del ratón/teclado: borde rojo en todos los monitores, aviso en la isla y en Discord si no estás
-  const panicoControl = via => {
+  const panicoControl = (via, o = {}) => {
+    if (o.grabando || nucleo.demo?.grabando?.()) { nucleo.demo.parar({ motivo: via }).catch(() => { }); return; }   // grabando una demo: Ctrl+Alt+Esc la para
     const est = nucleo.control.estado();
     nucleo.control.soltarTodo(`el usuario lo detuvo (${via})`);
     for (const c of est) nucleo.agente.cancelar(c.sesion);
   };
   overlayControl = crearOverlay({ alPanico: panicoControl });
+  // FASE 3: grabando una demostración → borde rojo discontinuo + etiqueta "GRABANDO" (indicador SIEMPRE visible)
+  nucleo.bus.on('evento', e => {
+    if (e.tipo !== 'demo') return;
+    if (e.estado === 'grabando' && e.eventos === 0) overlayControl.mostrar(e.nombre || '', { grabando: true });
+    else if (e.estado === 'parada' && !nucleo.control.estado().length) overlayControl.ocultar();
+    if (e.estado === 'skill' && win && !win.isDestroyed()) win.webContents.send('answer', { titulo: `🎬 ${tr('Demostración aprendida')}`, texto: `${tr('Skill borrador creada:')} ${e.slug}` });
+  });
   nucleo.bus.on('control', c => {
     if (c.activo) overlayControl.mostrar(c.motivo);
     else if (!nucleo.control.estado().length) overlayControl.ocultar();

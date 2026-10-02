@@ -42,6 +42,8 @@
 //   móvil: GET|PATCH|DEL /v1/movil/yo · GET /v1/movil/permisos · POST /v1/movil/permisos/:id {decision, prueba} · POST /v1/movil/reto · /v1/movil/passkey/*
 //          POST|DEL /v1/movil/push · GET /v1/movil/tarjetas · POST /v1/movil/tarjetas/:id {accion}   (+ lo que deja movil.alcance: chat, eventos, agentes…)
 //   POST /v1/voz/transcribir (audio binario) → {texto}   (bus 'transcribir-audio' → main.js → Whisper)
+//   STREAM (core/stream): GET /v1/stream · PATCH config · POST secretos|conectar|desconectar|callar|panico|reanudar|clave|silenciar|decir|gesto|alerta|simular|comentar|encuesta
+//   overlay OBS sin token: GET /stream/overlay?clave= · /stream/eventos?clave= (SSE) · /stream/audio/:id?clave=
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -68,6 +70,11 @@ function iniciar(opciones = {}) {
   if (!n.nodos) {
     n.nodos = require('./nodos').crearNodos({ nucleo: n }); n.extensiones.nodos = { http: n.nodos.http };
     if (n.nodos.activo()) n.nodos.iniciar(opciones.puertoNodos).catch(e => console.log(`[nodos] no pude abrir el puerto: ${e.message}`));
+  }
+  // co-host de streaming (core/stream): API /v1/stream con token; overlay de OBS en /stream/* con su clave de solo lectura
+  if (!n.stream) {
+    n.stream = require('./stream').crearStream({ nucleo: n }); n.extensiones.stream = { http: n.stream.http };
+    if (!opciones.sinTareas) n.stream.autoConectar();
   }
   const fTok = path.join(n.cfg.dir, 'token');
   let token; try { token = fs.readFileSync(fTok, 'utf8').trim(); } catch { }
@@ -104,6 +111,7 @@ function iniciar(opciones = {}) {
       if (!total && !lanMovil) { res.writeHead(403); return res.end(); }
       const u = new URL(req.url, 'http://x'); const p = u.pathname.split('/').filter(Boolean); const M = req.method;
       if (M === 'GET' && u.pathname === '/m') { res.writeHead(301, { location: '/m/' + u.search }); return res.end(); }
+      if (p[0] === 'stream' && total) return n.stream.publico(req, res, u);   // overlay de OBS: ?clave= (nunca el token)
       if (M === 'GET' && p[0] !== 'v1') {
         const nombre = p.length ? p.join('/') + (u.pathname.endsWith('/') ? '/index.html' : '') : 'index.html';
         if (lanMovil && !MV.estaticoMovil(nombre)) { res.writeHead(403); return res.end(); }

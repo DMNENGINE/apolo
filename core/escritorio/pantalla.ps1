@@ -3,7 +3,9 @@
 #   -Monitor 0 = el monitor de la ventana activa. Devuelve JSON por stdout:
 #   { monitores:[{n,x,y,ancho,alto,primario}], monitor:n, escala, imagen:{ruta,ancho,alto}, ventana:{titulo,proceso,x,y,ancho,alto}, elementos:[{id,tipo,nombre,valor,x,y,ancho,alto,activo}] }
 #   Las coordenadas de los elementos son de PANTALLA (píxeles reales); x,y de la imagen = (pantalla - origen del monitor) / escala.
-param([string]$Salida, [int]$Monitor = 0, [int]$Ancho = 1280, [int]$Elementos = 1, [int]$MaxElementos = 120, [switch]$SinImagen)
+#   -RejillaSiMenos N [-Columnas 16]: si hay menos de N elementos útiles (con nombre y que no sean Text/Image), guarda además
+#   <Salida>.rejilla.jpg con una rejilla numerada (set-of-marks) → imagen.rejilla = {ruta, cols, filas}
+param([string]$Salida, [int]$Monitor = 0, [int]$Ancho = 1280, [int]$Elementos = 1, [int]$MaxElementos = 120, [switch]$SinImagen, [int]$RejillaSiMenos = 0, [int]$Columnas = 16)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing, UIAutomationClient, UIAutomationTypes
@@ -45,7 +47,7 @@ if (-not $SinImagen) {
   $enc = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
   $par = New-Object Drawing.Imaging.EncoderParameters 1
   $par.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), ([long]72)
-  $peq.Save($Salida, $enc, $par); $peq.Dispose()
+  $peq.Save($Salida, $enc, $par)
   $res.imagen = [ordered]@{ ruta = $Salida; ancho = $w; alto = $hh }
 }
 
@@ -69,6 +71,12 @@ if ($Elementos -and $h -ne [IntPtr]::Zero) {
       if ($tipo -in @('Text','Image') -and -not $nombre) { continue }
       $valor = ''
       if ($tipo -eq 'Edit' -and -not $c.IsPassword) { try { $valor = $e.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value } catch { } }
+      if ($tipo -eq 'Document' -and -not $c.IsPassword) {   # el texto de un documento (Bloc de notas…): sirve para comprobar que se escribió
+        try { $valor = $e.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value } catch {
+          try { $valor = $e.GetCurrentPattern([Windows.Automation.TextPattern]::Pattern).DocumentRange.GetText(200) } catch { } }
+        if ($null -eq $valor) { $valor = '' }
+        $valor = ($valor -replace '\s+', ' ').Trim()
+      }
       if ($c.IsPassword) { $valor = '[contraseña]' }
       if ($valor.Length -gt 120) { $valor = $valor.Substring(0, 120) + '…' }
       if ($nombre.Length -gt 100) { $nombre = $nombre.Substring(0, 100) + '…' }
@@ -77,4 +85,30 @@ if ($Elementos -and $h -ne [IntPtr]::Zero) {
     $res.elementos = @($lista)
   } catch { $res.errorElementos = $_.Exception.Message }
 }
+
+# set-of-marks: pocas cosas accesibles (juegos, apps con lienzo propio…) → rejilla numerada para que el modelo elija celda
+if ($res.imagen -and $RejillaSiMenos -gt 0) {
+  $utiles = @($res.elementos | Where-Object { $_.nombre -and $_.tipo -notin @('Text', 'Image') }).Count
+  if ($utiles -lt $RejillaSiMenos) {
+    $cols = [Math]::Max(4, [Math]::Min(40, $Columnas))
+    $filas = [Math]::Max(2, [int][Math]::Round($cols * $hh / [double]$w))
+    $cw = $w / [double]$cols; $ch = $hh / [double]$filas
+    $g = [Drawing.Graphics]::FromImage($peq); $g.SmoothingMode = 'AntiAlias'; $g.TextRenderingHint = 'AntiAliasGridFit'
+    $lapiz = New-Object Drawing.Pen ([Drawing.Color]::FromArgb(150, 0, 255, 120)), 1
+    for ($i = 1; $i -lt $cols; $i++) { $x = [float]($i * $cw); $g.DrawLine($lapiz, $x, 0, $x, $hh) }
+    for ($j = 1; $j -lt $filas; $j++) { $y = [float]($j * $ch); $g.DrawLine($lapiz, 0, $y, $w, $y) }
+    $fuente = New-Object Drawing.Font 'Segoe UI', ([float][Math]::Max(8, [Math]::Min(13, $ch / 4))), ([Drawing.FontStyle]::Bold), ([Drawing.GraphicsUnit]::Pixel)
+    $fondo = New-Object Drawing.SolidBrush ([Drawing.Color]::FromArgb(170, 0, 0, 0))
+    $tinta = New-Object Drawing.SolidBrush ([Drawing.Color]::FromArgb(255, 120, 255, 170))
+    for ($j = 0; $j -lt $filas; $j++) { for ($i = 0; $i -lt $cols; $i++) {
+      $num = [string]($j * $cols + $i + 1); $tam = $g.MeasureString($num, $fuente)
+      $g.FillRectangle($fondo, [float]($i * $cw + 1), [float]($j * $ch + 1), [float]($tam.Width + 2), [float]($tam.Height))
+      $g.DrawString($num, $fuente, $tinta, [float]($i * $cw + 2), [float]($j * $ch + 1)) } }
+    $g.Dispose(); $lapiz.Dispose(); $fuente.Dispose(); $fondo.Dispose(); $tinta.Dispose()
+    $rutaRejilla = [IO.Path]::ChangeExtension($Salida, $null).TrimEnd('.') + '.rejilla.jpg'
+    $peq.Save($rutaRejilla, $enc, $par)
+    $res.imagen.rejilla = [ordered]@{ ruta = $rutaRejilla; cols = $cols; filas = $filas; utiles = $utiles }
+  }
+}
+if ($peq) { $peq.Dispose() }
 $res | ConvertTo-Json -Depth 5 -Compress

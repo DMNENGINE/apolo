@@ -5,18 +5,28 @@
 //   - ventanas protegidas (bancos, gestores de contraseñas…): ni mira ni actúa
 //   - nunca escribe en un campo de contraseña
 //   - acciones delicadas (enviar, borrar, comprar, pagar, publicar… o Enter en apps de mensajería/correo) piden permiso aparte
+// Fase 3: tras cada acción, COMPROBAR (escritorio/comprobar.js): espera cfg.escritorio.comprobar.ms (600), vuelve a mirar
+// (captura ligera del monitor activo + elementos UIA) y le dice al modelo qué cambió; la imagen solo va si la pide (ver:true)
+// o si no cambió nada. Cada mirada/acción queda en el registro de capturas (registro.js) para "Lo que hizo" de Mission Control.
 // Eventos del bus: 'control' { activo, sesion, motivo, hasta, razon }
 const path = require('path');
 const { spawn } = require('child_process');
-const { recientes, bloqueada } = require('./index');
+const { recientes, bloqueada, verPantalla, mirar, marcoDe, lineaElemento, textoRejilla } = require('./index');
+const { fusionar, describir, cambios } = require('./comprobar');
 
 const DELICADAS = /\b(enviar|env[ií]a|send|borrar|eliminar|delete|remove|quitar|comprar|buy|pagar|pay|checkout|realizar pedido|place order|publicar|post|tweet|compartir|share|confirmar|confirm|submit|instalar|install|desinstalar|uninstall|transferir|transfer|vaciar|empty|formatear|format|firmar|sign|suscribir|subscribe|aprobar|approve|cr[eé]ditos|credits|reiniciar|restart|apagar|shut ?down|cerrar sesi[oó]n|log ?out|sign ?out)\b/i;
 const MENSAJERIA = /discord|whatsapp|telegram|signal|slack|teams|outlook|thunderbird|messenger|gmail|correo|mail|instagram|facebook|twitter|\bx\.com|tiktok/i;
 
-function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   // manos: sustituto del ayudante (tests)
+// manos: sustituto del ayudante (tests). ojos: sustituto de pantalla.ps1 (tests); con manos falsas y sin ojos no se captura nada.
+// registro: registro de capturas por sesión (registro.js). bloqueo(): texto si ahora no se puede tomar el control (p. ej. grabando una demo).
+function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null, ojos, registro = null, bloqueo = null }) {
   const activos = new Map();             // sesion.id -> { hasta, motivo, timer }
-  let hijo = null, buf = '', n = 0, listo = null, apagarTimer = null;
+  let hijo = null, buf = '', n = 0, listo = null, apagarTimer = null, retenido = false;
   const esperas = new Map();
+  const oyentes = new Set();             // eventos del ayudante que no son respuestas (grabación de demostraciones)
+  const ojosEf = ojos || (manos ? null : undefined);   // null = no mirar (tests con manos falsas)
+  const dormir = ms => new Promise(ok => setTimeout(ok, ms));
+  const avisarOyentes = j => { for (const f of oyentes) { try { f(j); } catch { } } };
 
   function arrancar() {
     if (hijo) return listo;
@@ -31,6 +41,7 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
         let j; try { j = JSON.parse(l.replace(/^﻿/, '')); } catch { continue; }
         if (j.evento === 'listo') avisarListo();
         else if (j.evento === 'panico') panico(j.motivo);
+        else if (j.evento) avisarOyentes(j);
         else { esperas.get(j.id)?.(j); esperas.delete(j.id); }
       }
     });
@@ -39,6 +50,7 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
       for (const [, ok] of esperas) ok({ ok: false, error: 'el ayudante de manos se cerró' });
       esperas.clear();
       for (const id of [...activos.keys()]) soltar(id, 'el ayudante de manos se cerró');
+      avisarOyentes({ evento: 'demo-fin', motivo: 'el ayudante de manos se cerró' });
     });
     return listo;
   }
@@ -56,7 +68,7 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
 
   function programarApagado() {                 // sin control activo durante 5 min: se cierra el ayudante
     clearTimeout(apagarTimer);
-    if (!activos.size) { apagarTimer = setTimeout(() => { if (!activos.size && hijo) hijo.stdin.end(); }, 5 * 60_000); apagarTimer.unref?.(); }
+    if (!activos.size && !retenido) { apagarTimer = setTimeout(() => { if (!activos.size && !retenido && hijo) hijo.stdin.end(); }, 5 * 60_000); apagarTimer.unref?.(); }
   }
 
   // marca en memoria (no enumerable: nunca va al .json de la sesión) que usa el riesgo de ver_pantalla
@@ -67,6 +79,7 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
     if (process.platform !== 'win32' && !manos) throw new Error('el control del PC solo está disponible en Windows por ahora');
     minutos = Math.min(Math.max(Number(minutos) || 5, 1), 30);
     for (const id of activos.keys()) if (id !== s.id) throw new Error('otra conversación ya está controlando el PC');
+    const b = bloqueo?.(); if (b) throw new Error(b);
     clearTimeout(activos.get(s.id)?.timer);
     const hasta = Date.now() + minutos * 60_000;
     activos.set(s.id, { hasta, motivo, s, timer: setTimeout(() => soltar(s.id, 'se acabó el tiempo'), minutos * 60_000) });
@@ -94,15 +107,23 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
   }
 
   // coordenadas de la última ver_pantalla de la sesión: #elemento o [x,y] de la imagen → píxeles reales de pantalla
-  function aPantalla(s, { elemento, x, y }) {
+  function aPantalla(s, { elemento, x, y, celda }) {
     const r = recientes.get(s.id);
     if (!r) throw new Error('primero usa ver_pantalla para saber qué hay y dónde');
+    if (celda !== undefined && celda !== null && celda !== '' && (elemento === undefined || elemento === null || elemento === '')) {
+      const rj = r.rejilla, im = r.imagen;
+      if (!rj || !im) throw new Error('la última captura no tiene rejilla: usa #elemento o x,y de la imagen');
+      const c = Math.round(Number(celda));
+      if (!(c >= 1 && c <= rj.cols * rj.filas)) throw new Error(`la celda debe estar entre 1 y ${rj.cols * rj.filas}`);
+      const cx = ((c - 1) % rj.cols + 0.5) * im.ancho / rj.cols, cy = (Math.floor((c - 1) / rj.cols) + 0.5) * im.alto / rj.filas;
+      return { x: Math.round(r.origen.x + cx * r.escala), y: Math.round(r.origen.y + cy * r.escala), celda: c };
+    }
     if (elemento !== undefined && elemento !== null && elemento !== '') {
       const e = r.elementos.find(z => z.id === Number(String(elemento).replace('#', '')));
       if (!e) throw new Error(`no existe el elemento #${elemento} en la última captura; vuelve a usar ver_pantalla`);
       return { x: Math.round(e.x + e.ancho / 2), y: Math.round(e.y + e.alto / 2), nombre: e.nombre, tipo: e.tipo };
     }
-    if (typeof x !== 'number' || typeof y !== 'number') throw new Error('indica "elemento" (#id de ver_pantalla) o x,y de la imagen');
+    if (typeof x !== 'number' || typeof y !== 'number') throw new Error('indica "elemento" (#id de ver_pantalla), "celda" de la rejilla o x,y de la imagen');
     return { x: Math.round(r.origen.x + x * r.escala), y: Math.round(r.origen.y + y * r.escala) };
   }
 
@@ -116,8 +137,9 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
   async function accion(s, op, a = {}) {
     if (!activo(s)) throw new Error('no tienes el control del PC: pide primero "tomar_control" con un motivo claro');
     let p = null, p2 = null;
-    if (op === 'clic' || op === 'mover' || op === 'arrastrar' || (op === 'scroll' && (a.elemento !== undefined || a.x !== undefined)) || (op === 'escribir' && (a.elemento !== undefined || a.x !== undefined))) p = aPantalla(s, a);
-    if (op === 'arrastrar') p2 = aPantalla(s, { elemento: a.elemento2, x: a.x2, y: a.y2 });
+    const conSitio = a.elemento !== undefined || a.x !== undefined || a.celda !== undefined;
+    if (op === 'clic' || op === 'mover' || op === 'arrastrar' || ((op === 'scroll' || op === 'escribir') && conSitio)) p = aPantalla(s, a);
+    if (op === 'arrastrar') p2 = aPantalla(s, { elemento: a.elemento2, x: a.x2, y: a.y2, celda: a.celda2 });
     const info = await orden({ op: 'info', ...(p ? { x: p.x, y: p.y } : {}) });
     const prot = bloqueada(cfg, info.ventana);
     if (prot) throw new Error(`la ventana activa ("${info.ventana.titulo}") está PROTEGIDA: no actúo ahí. Pide al usuario que lo haga él.`);
@@ -136,6 +158,11 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
     if (delicada) await pedirDelicada(s, delicada);
     if (!activo(s)) throw new Error('el control se soltó mientras esperaba tu permiso');
 
+    const hecho = await hacer(s, op, a, p, p2, info, objetivo);
+    return comprobar(s, op, a, info, hecho);
+  }
+
+  async function hacer(s, op, a, p, p2, info, objetivo) {
     if (op === 'escribir') {
       if (p) { await orden({ op: 'clic', x: p.x, y: p.y, armadoRequerido: true }); await new Promise(ok => setTimeout(ok, 150)); }
       const foco = p ? (await orden({ op: 'info' })).foco : info.foco;
@@ -143,7 +170,7 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
       await orden({ op: 'escribir', texto: String(a.texto || ''), armadoRequerido: true }, 120_000);
       return `escrito (${String(a.texto || '').length} caracteres) en ${foco?.nombre ? `"${foco.nombre}"` : 'el campo con el foco'} de "${info.ventana.titulo}"`;
     }
-    if (op === 'clic') { await orden({ op: 'clic', x: p.x, y: p.y, boton: a.boton || 'izq', doble: !!a.doble, armadoRequerido: true }); return `${a.doble ? 'doble ' : ''}clic ${a.boton === 'der' ? 'derecho ' : ''}en ${objetivo ? `"${objetivo}"` : `(${p.x},${p.y})`} · ventana "${info.ventana.titulo}"`; }
+    if (op === 'clic') { await orden({ op: 'clic', x: p.x, y: p.y, boton: a.boton || 'izq', doble: !!a.doble, armadoRequerido: true }); return `${a.doble ? 'doble ' : ''}clic ${a.boton === 'der' ? 'derecho ' : ''}en ${objetivo ? `"${objetivo}"` : p.celda ? `la celda ${p.celda}` : `(${p.x},${p.y})`} · ventana "${info.ventana.titulo}"`; }
     if (op === 'mover') { await orden({ op: 'mover', x: p.x, y: p.y, armadoRequerido: true }); return `ratón movido a ${objetivo ? `"${objetivo}"` : `(${p.x},${p.y})`}`; }
     if (op === 'arrastrar') { await orden({ op: 'arrastrar', x: p.x, y: p.y, x2: p2.x, y2: p2.y, armadoRequerido: true }); return 'arrastrado'; }
     if (op === 'scroll') { await orden({ op: 'scroll', cantidad: Math.max(-30, Math.min(30, Number(a.cantidad) || 3)), ...(p ? { x: p.x, y: p.y } : {}), armadoRequerido: true }); return `scroll ${a.cantidad > 0 || a.cantidad === undefined ? 'abajo' : 'arriba'}`; }
@@ -151,14 +178,69 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null }) {   /
     throw new Error('acción desconocida');
   }
 
+  // ---------- registro de capturas ----------
+  const anotar = (s, e) => { if (!registro || !s?.id) return null; try { return registro.anotar(s.id, e); } catch { return null; } };
+  const hueco = s => { if (!registro || !s?.id) return null; try { return registro.siguiente(s.id); } catch { return null; } };
+
+  // ver_pantalla pasa por aquí para quedar en el registro ("Lo que hizo")
+  async function ver(s, a = {}) {
+    const imagen = a.imagen !== false;
+    const reg = imagen ? hueco(s) : null;
+    const r = await verPantalla({ cfg, sesion: s, monitor: a.monitor || 0, imagen, ojos: ojosEf || undefined, ruta: reg?.ruta });
+    const v = r.vista || {};
+    anotar(s, { n: reg?.n, tipo: 'ver', accion: v.prot ? 'ventana protegida: no miró' : 'miró la pantalla', imagen: v.imagen && reg ? reg.archivo : null,
+      ventana: v.ventana?.titulo || '' });
+    return { texto: r.texto, imagenes: r.imagenes };
+  }
+
+  // ---------- mirar → actuar → COMPROBAR ----------
+  async function comprobar(s, op, a, infoAntes, hecho) {
+    const cc = cfg.escritorio?.comprobar || {};
+    if (cc.activo === false) { anotar(s, { tipo: 'accion', op, accion: hecho, ventana: infoAntes.ventana?.titulo || '' }); return hecho; }
+    const ms = Math.max(0, Math.min(5000, Number(cc.ms ?? 600)));
+    if (ms) await dormir(ms);
+    let infoDespues = null; try { infoDespues = await orden({ op: 'info' }); } catch { }
+    const previo = recientes.get(s.id);
+    const reg = ojosEf === null ? null : hueco(s);
+    let v = null, fallo = '';
+    if (ojosEf !== null) { try { v = await mirar({ cfg, sesion: s, ojos: ojosEf || undefined, ruta: reg?.ruta }); } catch (e) { fallo = e.message; } }
+    const antes = { ventana: infoAntes.ventana, foco: infoAntes.foco };
+    const despues = { ventana: infoDespues?.ventana || v?.ventana || infoAntes.ventana, foco: infoDespues ? infoDespues.foco : infoAntes.foco };
+    if (v?.prot) {                                           // ahora delante hay una ventana protegida: no se mira ni se guarda nada
+      recientes.delete(s.id);
+      anotar(s, { n: reg?.n, tipo: 'accion', op, accion: hecho, imagen: null, ventana: despues.ventana?.titulo || '', cambio: 'ventana protegida (no se guarda)' });
+      return `${hecho}\nCOMPROBACIÓN: ahora la ventana activa ("${despues.ventana?.titulo}") está PROTEGIDA: no la miro. Pide al usuario que compruebe él si salió bien.`;
+    }
+    const hayAntes = !!(v && previo?.elementos?.length);
+    const diff = v ? fusionar(previo?.elementos || [], v.elementos) : { elementos: [], nuevos: [], fuera: [], cambiados: [] };
+    const { nada } = cambios({ antes, despues, diff, hayAntes });
+    const adjuntar = !!(v?.imagen && (a.ver === true || nada));
+    // marco de coordenadas: el de la imagen que el modelo tiene delante (si no se adjunta otra, sigue valiendo la anterior)
+    const marco = adjuntar || !previo ? (v ? marcoDe(v) : null) : { monitor: previo.monitor, escala: previo.escala, origen: previo.origen, imagen: previo.imagen, rejilla: previo.rejilla };
+    if (v && marco) recientes.set(s.id, { t: Date.now(), ...marco, elementos: diff.elementos });
+    const d = describir({ ms, antes, despues, diff, hayAntes, sinLista: !v, linea: e => lineaElemento(e, marco || { origen: { x: 0, y: 0 }, escala: 1 }) });
+    let texto = `${hecho}\n${d.texto}`;
+    if (fallo) texto += `\n(no pude hacer la captura de comprobación: ${fallo}; usa ver_pantalla antes de dar nada por hecho)`;
+    const rj = adjuntar ? v.imagen.rejilla : null;
+    if (rj) texto += `\n${textoRejilla(rj)}`;
+    if (adjuntar) texto += `\nCaptura de después adjunta (${v.imagen.ancho}x${v.imagen.alto}); las [x,y] de arriba se refieren a ella.`;
+    anotar(s, { n: reg?.n, tipo: 'accion', op, accion: hecho, imagen: v?.imagen && reg ? reg.archivo : null, ventana: despues.ventana?.titulo || '', cambio: d.resumen, nada: d.nada });
+    if (!adjuntar) return texto;
+    return { texto, imagenes: [{ mime: 'image/jpeg', ruta: rj?.ruta || v.imagen.ruta }] };
+  }
+
   // si el turno de la sesión termina, el control se suelta solo
   bus.on('evento', e => { if ((e.tipo === 'fin' || e.tipo === 'error') && activos.has(e.sesion)) soltar(e.sesion, 'terminó el encargo'); });
 
   return {
-    tomar, soltar, soltarTodo, accion, activo,
+    tomar, soltar, soltarTodo, accion, activo, ver, orden,
     estado: () => [...activos].map(([sesion, c]) => ({ sesion, motivo: c.motivo, hasta: c.hasta })),
     cerrar: () => { soltarTodo('cierre'); hijo?.kill(); },
-    _orden: orden, _panico: panico,
+    // grabación de demostraciones (demo.js): eventos del ayudante y mantenerlo vivo mientras graba
+    alEventoManos: f => { oyentes.add(f); return () => oyentes.delete(f); },
+    retener: v => { retenido = !!v; if (v) clearTimeout(apagarTimer); else programarApagado(); },
+    registro, simulado: !!manos,
+    _orden: orden, _panico: panico, _evento: avisarOyentes,
   };
 }
 

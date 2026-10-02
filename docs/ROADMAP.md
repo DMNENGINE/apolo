@@ -82,7 +82,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 ---
 
-## FASE 3 — Manos de verdad (control del PC fase 3)
+## FASE 3 — Manos de verdad (control del PC fase 3) 🟡 (2026-10-02: comprobar tras cada acción · "Lo que hizo" + time-lapse · macros por demostración · rejilla de visión ✅ · falta la prueba en vivo con el usuario)
 
 - Bucle mirar → actuar → comprobar con registro de capturas en Mission Control (vídeo de lo que hizo).
 - Prueba en vivo de `manos.ps1` con el usuario delante.
