@@ -52,7 +52,7 @@ Open **PowerShell** and run:
 irm https://raw.githubusercontent.com/DMNENGINE/apolo/main/install.ps1 | iex
 ```
 
-It installs whatever is missing (Node.js, Electron, Python and the voice packages), puts APOLO in `%LOCALAPPDATA%APOLO`, creates Start menu and desktop shortcuts, and launches it. Run it again to update. Your data in `%APPDATA%` is kept.
+It installs whatever is missing (Node.js, Electron, Python and the voice packages), puts APOLO in `%LOCALAPPDATA%\APOLO`, creates Start menu and desktop shortcuts, and launches it. Run it again to update. Your data in `%APPDATA%` is kept.
 
 ### Manual install
 

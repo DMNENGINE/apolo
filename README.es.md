@@ -31,7 +31,7 @@ Abre **PowerShell** y ejecuta:
 irm https://raw.githubusercontent.com/DMNENGINE/apolo/main/install.ps1 | iex
 ```
 
-Instala lo que falte (Node.js, Electron, Python y la voz), deja APOLO en `%LOCALAPPDATA%APOLO`, crea accesos directos en el menú Inicio y el Escritorio, y lo arranca. Para actualizar, ejecútalo otra vez; tus datos de `%APPDATA%` se conservan.
+Instala lo que falte (Node.js, Electron, Python y la voz), deja APOLO en `%LOCALAPPDATA%\APOLO`, crea accesos directos en el menú Inicio y el Escritorio, y lo arranca. Para actualizar, ejecútalo otra vez; tus datos de `%APPDATA%` se conservan.
 
 ### Instalación manual
 
