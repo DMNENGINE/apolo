@@ -739,7 +739,10 @@ function startDms() {
 
 app.whenReady().then(() => {
   ensureToken(); loadRules(); ensureDiscordCfg();
-  nucleo = crearNucleo();                                     // antes que el cerebro: el cerebro usa sus modelos
+  // primera vez que arranca en este PC: se activa "Iniciar con Windows" (luego se puede quitar en la bandeja)
+  const primera = path.join(app.getPath('userData'), 'primer-arranque');
+  if (!fs.existsSync(primera)) { try { setAutoStart(true); fs.writeFileSync(primera, new Date().toISOString()); } catch (e) { console.error('[autoarranque]', e.message); } }
+  nucleo = crearNucleo();                                    // antes que el cerebro: el cerebro usa sus modelos
   cerebro = createCerebro({
     nucleo,
     dataDir: app.getPath('userData'),

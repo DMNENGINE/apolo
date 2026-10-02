@@ -113,9 +113,12 @@ Info 'Menu Inicio y Escritorio'
 
 # ---------- 6. Arrancar ----------
 Paso 'Arrancando APOLO'
-Start-Process $electron -ArgumentList ('"' + $Dir + '"') -WorkingDirectory $Dir
+# a traves del acceso directo con explorer: APOLO queda independiente y NO se cierra al cerrar PowerShell.
+# La primera vez APOLO activa solo "Iniciar con Windows" (se puede quitar desde la bandeja).
+Start-Process explorer.exe -ArgumentList ('"' + $destinos[0] + '"')
 Write-Host ''
 Write-Host '   APOLO esta en marcha: busca el robot arriba de tu pantalla y su icono en la bandeja.' -ForegroundColor Green
 Write-Host '   Desde la bandeja: "Instalar hooks" (Claude Code) y "Abrir panel de control".' -ForegroundColor Gray
+Write-Host '   Arranca solo con Windows. Ya puedes cerrar esta ventana.' -ForegroundColor Gray
 Write-Host '   Para actualizar, vuelve a ejecutar el mismo comando.' -ForegroundColor Gray
 Write-Host ''
