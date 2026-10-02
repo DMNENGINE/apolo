@@ -23,10 +23,10 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 | Importar desde OpenClaw | ✅ |
 | Instalador + autoupdate | 🟡 one-liner PowerShell, sin .exe firmado |
 | **Skills** | ✅ motor + antivirus + taller |
-| Plugins / SDK | 🟡 SDK + gestor + aislamiento + clima; faltan canales migrados y panel |
+| Plugins / SDK | 🟡 SDK + gestor + aislamiento + clima + Telegram (tras flag); faltan WhatsApp/Discord y panel |
 | macOS / Linux | ⬜ (solo Windows) |
-| Inglés | ⬜ (UI y prompts en español) |
-| App móvil / nodos | ⬜ |
+| Inglés | 🟡 panel, isla y bandeja es/en + asistente de bienvenida; faltan textos del servidor y README |
+| App móvil / nodos | 🟡 nodo ojo ESP32 (WebSocket); falta app móvil |
 
 ---
 
@@ -111,7 +111,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 ---
 
-## FASE 6 — Multi-agente y trabajo pesado
+## FASE 6 — Multi-agente y trabajo pesado 🟡 (consejo ✅ · turno de noche ✅ · faltan worktrees sueltos, dashboards, reuniones)
 
 - 🔥 **Consejo de modelos**: una pregunta → Claude, GPT, Gemini y un local responden en paralelo → debaten → votan. Se ve en vivo en Mission Control. Contenido viral garantizado ("puse a 4 IAs a pelear").
 - **Turno de noche** 🔥: le dejas una cola de encargos, trabaja mientras duermes (subagentes + worktrees git), y por la mañana te da un vídeo-resumen de 60 s con su voz.
@@ -125,7 +125,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 **Gancho:** "El agente open source que vive en tu escritorio… y en un robot que te imprimes."
 
-1. **Ojo de escritorio**: GC9A01 + ESP32-S3 (cámara + micro + altavoz) imprimible en Ender 3. Muestra los ojos del casco, mira hacia quien habla, despierta con su nombre. Kit < 25 $.
+1. ✅ (sin hardware probado; falta carcasa) **Ojo de escritorio**: GC9A01 + ESP32-S3 (cámara + micro + altavoz) imprimible en Ender 3. Muestra los ojos del casco, mira hacia quien habla, despierta con su nombre. Kit < 25 $.
 2. **Casco físico**: imprimir `casco_robot.blend` con el visor como pantalla.
 3. **Conexión con el humanoide** (proyecto robot InMoov propio): el mismo cerebro APOLO controla el simulador MuJoCo y luego el robot real. "Mismo agente, cuerpo nuevo".
 4. Paquete de STL + firmware + guía en el repo → la comunidad maker lo hará viral sola (Printables, Reddit r/3Dprinting, TikTok).
