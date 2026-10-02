@@ -804,7 +804,7 @@ app.whenReady().then(() => {
   try {                                                       // correo (varias cuentas), GitHub, Hugging Face, ElevenLabs
     const cifra = safeStorage.isEncryptionAvailable();
     conectores = crearConectores({
-      dir: app.getPath('userData'), nucleo,
+      dir: app.getPath('userData'), nucleo, abrir: url => shell.openExternal(url),
       cifrar: cifra ? s => safeStorage.encryptString(s) : null, descifrar: b => safeStorage.decryptString(b),
       alNuevoCorreo: (c, m) => {                              // correo nuevo → el cerebro lo clasifica y hace tarjeta (con borrador de respuesta)
         if (cerebro) cerebro.ingest({ kind: 'mail', author: m.de, guild: c.email, channel: m.asunto, text: `${m.asunto}\n${m.trozo || ''}`.trim(), correo: { cuenta: c.id, uid: m.uid } });

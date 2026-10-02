@@ -1,31 +1,29 @@
-// Correo: varias cuentas a la vez (Gmail, Yahoo, iCloud, dominio propio por IMAP/SMTP con contraseña de aplicación;
-// Outlook/Hotmail con inicio de sesión de Microsoft, OAuth con código de dispositivo).
+// Correo: varias cuentas a la vez. Gmail y Outlook/Hotmail con OAuth ("Conectar con Google/Microsoft");
+// Yahoo, iCloud y dominio propio por IMAP/SMTP con contraseña de aplicación.
 // Leer y buscar = lectura. Enviar = SIEMPRE pide permiso (en la isla, Discord o Stream Deck).
 const { ImapFlow } = require('imapflow');
 const nodemailer = require('nodemailer');
 const { simpleParser } = require('mailparser');
-const { crearOutlook } = require('./outlook');
 
 // servidores conocidos por dominio; el resto se rellena a mano en el panel
 const PRESETS = [
   { re: /@(gmail|googlemail)\.com$/i, nombre: 'Gmail', imap: { host: 'imap.gmail.com', port: 993, secure: true }, smtp: { host: 'smtp.gmail.com', port: 465, secure: true },
-    ayuda: 'Gmail pide una contraseña de aplicación: myaccount.google.com/apppasswords (necesita la verificación en 2 pasos).' },
+    oauth: 'google', ayuda: 'Gmail: mejor con el botón "Conectar con Google". Con contraseña: myaccount.google.com/apppasswords (necesita la verificación en 2 pasos).' },
   { re: /@(yahoo|ymail)\.[a-z.]+$/i, nombre: 'Yahoo', imap: { host: 'imap.mail.yahoo.com', port: 993, secure: true }, smtp: { host: 'smtp.mail.yahoo.com', port: 465, secure: true },
     ayuda: 'Yahoo: Seguridad de la cuenta → Generar contraseña de aplicación.' },
   { re: /@(icloud|me|mac)\.com$/i, nombre: 'iCloud', imap: { host: 'imap.mail.me.com', port: 993, secure: true }, smtp: { host: 'smtp.mail.me.com', port: 587, secure: false },
     ayuda: 'iCloud: appleid.apple.com → Contraseñas de apps.' },
-  { re: /@(outlook|hotmail|live|msn)\.[a-z.]+$/i, nombre: 'Outlook', oauth: 'ms', imap: { host: 'outlook.office365.com', port: 993, secure: true }, smtp: { host: 'smtp-mail.outlook.com', port: 587, secure: false },
-    ayuda: 'Outlook/Hotmail: se conecta con tu cuenta de Microsoft (te dará un código para escribir en microsoft.com/devicelogin).' },
+  { re: /@(outlook|hotmail|live|msn)\.[a-z.]+$/i, nombre: 'Outlook', oauth: 'microsoft', soloOAuth: true, imap: { host: 'outlook.office365.com', port: 993, secure: true }, smtp: { host: 'smtp-mail.outlook.com', port: 587, secure: false },
+    ayuda: 'Outlook/Hotmail: usa el botón "Conectar con Microsoft".' },
 ];
 const preset = email => PRESETS.find(p => p.re.test(email)) || null;
 const recortar = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s || '');
 
-function crearCorreo({ almacen, log = console.log }) {
-  const outlook = crearOutlook({ almacen, log });
+function crearCorreo({ almacen, oauth, log = console.log }) {
 
-  // credenciales de una cuenta: contraseña o token de Microsoft (se renueva solo)
+  // credenciales de una cuenta: contraseña de aplicación o token OAuth (se renueva solo)
   async function auth(c) {
-    if (c.auth === 'oauth-ms') return { user: c.email, accessToken: await outlook.token(c) };
+    if (String(c.auth).startsWith('oauth')) return { user: c.email, accessToken: await oauth.token(c) };
     return { user: c.usuario || c.email, pass: almacen.secreto(c.id) };
   }
   async function imap(c) {
@@ -157,7 +155,7 @@ function crearCorreo({ almacen, log = console.log }) {
       ejecutar: async a => { const id = await enviar(cuenta(a.cuenta), a); return `enviado (${id})`; } },
   ];
 
-  return { PRESETS: PRESETS.map(({ re, ...p }) => p), preset, bandeja, leer, buscar, nuevos, enviar, probar, herramientas, outlook, cuenta };
+  return { PRESETS: PRESETS.map(({ re, ...p }) => p), preset, bandeja, leer, buscar, nuevos, enviar, probar, herramientas, cuenta };
 }
 
 module.exports = { crearCorreo, preset };

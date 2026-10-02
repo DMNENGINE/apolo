@@ -3,12 +3,14 @@
 const { crearAlmacen } = require('./almacen');
 const { crearCorreo, preset } = require('./correo');
 const { crearServicios } = require('./servicios');
+const { crearOAuth } = require('./oauth');
 
 const CADA_MS = 3 * 60_000;
 
-function crearConectores({ dir, cifrar, descifrar, nucleo, alNuevoCorreo = () => { }, log = console.log }) {
+function crearConectores({ dir, cifrar, descifrar, nucleo, abrir, alNuevoCorreo = () => { }, log = console.log }) {
   const almacen = crearAlmacen({ dir, cifrar, descifrar, log });
-  const correo = crearCorreo({ almacen, log });
+  const oauth = crearOAuth({ almacen, abrir, log });
+  const correo = crearCorreo({ almacen, oauth, log });
   const servicios = crearServicios({ almacen });
   const errores = new Map();                                 // id de cuenta → último error al vigilar
 
@@ -18,11 +20,11 @@ function crearConectores({ dir, cifrar, descifrar, nucleo, alNuevoCorreo = () =>
   nucleo.registrarHerramientas([...correo.herramientas, ...servicios.herramientas]);
 
   const publicaCuenta = c => ({ id: c.id, email: c.email, nombre: c.nombre || '', proveedor: c.proveedor, auth: c.auth, avisos: c.avisos !== false,
-    imap: c.imap, smtp: c.smtp, error: errores.get(c.id) || null, outlook: c.auth === 'oauth-ms' ? correo.outlook.estado(c.id) : null });
+    imap: c.imap, smtp: c.smtp, error: errores.get(c.id) || null });
 
   async function vigilar() {
     for (const c of almacen.cuentas()) {
-      if (c.avisos === false || (c.auth === 'oauth-ms' && !almacen.secreto(c.id))) continue;
+      if (c.avisos === false || !almacen.secreto(c.id)) continue;
       try {
         const nuevos = await correo.nuevos(c);
         errores.delete(c.id);
@@ -37,11 +39,23 @@ function crearConectores({ dir, cifrar, descifrar, nucleo, alNuevoCorreo = () =>
   async function http(M, p, cuerpo) {
     const [, , a, b, c] = p;
     if (!a && M === 'GET') return {
-      cifrado: almacen.cifrado, msClientId: !!(almacen.config().msClientId || process.env.APOLO_MS_CLIENT_ID), presets: correo.PRESETS,
+      cifrado: almacen.cifrado, oauth: { google: oauth.configurado('google'), microsoft: oauth.configurado('microsoft') }, presets: correo.PRESETS,
       cuentas: almacen.cuentas().map(publicaCuenta),
       servicios: Object.fromEntries(servicios.SERVICIOS.map(k => [k, { conectado: !!almacen.servicio(k)?.conectado, quien: almacen.servicio(k)?.quien || '' }])),
     };
-    if (a === 'config' && M === 'PATCH') { if (typeof cuerpo.msClientId === 'string') almacen.ponerConfig({ msClientId: cuerpo.msClientId.trim() }); return { ok: true }; }
+    if (a === 'config' && M === 'PATCH') {                   // credenciales de las apps OAuth registradas (Google / Microsoft)
+      const o = { ...(almacen.config().oauth || {}) };
+      for (const p of ['google', 'microsoft']) {
+        const v = cuerpo.oauth?.[p]; if (!v) continue;
+        o[p] = { ...o[p], ...(v.clientId?.trim() ? { clientId: v.clientId.trim() } : {}), ...(v.clientSecret?.trim() ? { clientSecret: v.clientSecret.trim() } : {}) };
+      }
+      almacen.ponerConfig({ oauth: o }); return { ok: true };
+    }
+    if (a === 'oauth' && M === 'POST' && ['google', 'microsoft'].includes(b)) {          // "Conectar con Google/Microsoft"
+      const f = await oauth.iniciar(b, { cuentaId: cuerpo.cuentaId, alTerminar: id => { errores.delete(id); setTimeout(() => vigilar().catch(() => { }), 3000); } });
+      return { ok: true, ...f };
+    }
+    if (a === 'oauth' && b === 'flujo' && M === 'GET') return oauth.estado(c) || { estado: 'desconocido' };
 
     if (a === 'correo') {
       if (!b && M === 'POST') {                              // añadir cuenta
@@ -53,10 +67,7 @@ function crearConectores({ dir, cifrar, descifrar, nucleo, alNuevoCorreo = () =>
         const base = { email, nombre: cuerpo.nombre || '', proveedor: pr?.nombre || 'Otro', usuario: cuerpo.usuario || '', avisos: true,
           imap: cuerpo.imap?.host ? cuerpo.imap : pr?.imap || { host: 'imap.' + dom, port: 993, secure: true },
           smtp: cuerpo.smtp?.host ? cuerpo.smtp : pr?.smtp || { host: 'smtp.' + dom, port: 465, secure: true } };
-        if (pr?.oauth === 'ms') {
-          const id = almacen.agregarCuenta({ ...base, auth: 'oauth-ms' });
-          try { return { ok: true, id, outlook: await correo.outlook.iniciar(id) }; } catch (e) { almacen.quitarCuenta(id); throw e; }
-        }
+        if (pr?.soloOAuth) throw new Error(`${pr.nombre}: usa el botón "Conectar con Microsoft"`);
         if (!cuerpo.password) throw new Error('falta la contraseña de aplicación');
         const id = almacen.agregarCuenta({ ...base, auth: 'password' });
         almacen.guardarSecreto(id, String(cuerpo.password).replace(/\s+/g, ''));
@@ -67,7 +78,10 @@ function crearConectores({ dir, cifrar, descifrar, nucleo, alNuevoCorreo = () =>
       if (!cu) throw new Error('cuenta no encontrada');
       if (M === 'GET') return publicaCuenta(cu);
       if (c === 'probar' && M === 'POST') return correo.probar(cu);
-      if (c === 'reconectar' && M === 'POST') return { ok: true, outlook: await correo.outlook.iniciar(cu.id) };
+      if (c === 'reconectar' && M === 'POST') {
+        const p = String(cu.auth).replace(/^oauth-/, ''); if (!['google', 'microsoft'].includes(p)) throw new Error('esta cuenta usa contraseña');
+        return { ok: true, ...(await oauth.iniciar(p, { cuentaId: cu.id })) };
+      }
       if (M === 'PATCH') { almacen.actualizar(cu.id, { ...(typeof cuerpo.avisos === 'boolean' ? { avisos: cuerpo.avisos } : {}), ...(typeof cuerpo.nombre === 'string' ? { nombre: cuerpo.nombre } : {}) }); return publicaCuenta(cu); }
       if (M === 'DELETE') { almacen.quitarCuenta(cu.id); errores.delete(cu.id); return { ok: true }; }
     }

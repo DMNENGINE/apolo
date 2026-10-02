@@ -394,29 +394,41 @@ VISTAS['ajustes/conexiones'] = {
   async pintar(v) {
     const d = await api('GET', '/conectores').catch(e => ({ error: e.message }));
     if (d.error) { v.innerHTML = `<div class="pagina estrecha">${cabecera('Correo y servicios', '')}<div class="caja pad mal-txt">${esc(d.error)}</div></div>`; return; }
-    const cuenta = c => `<div class="fila-a" data-c="${esc(c.id)}"><div class="t"><b>${esc(c.email)}</b><small>${esc(c.proveedor)}${c.nombre ? ' · ' + esc(c.nombre) : ''}${c.error ? ` · <span class="mal-txt">${esc(c.error)}</span>` : ''}${c.outlook?.estado === 'esperando' ? ` · <b>código ${esc(c.outlook.codigo)}</b> en ${esc(c.outlook.url)}` : ''}</small><div class="lista tenue" style="font-size:11.5px;margin-top:4px"></div></div>
-      <div class="c"><label class="tenue" style="font-size:12px;display:flex;gap:6px;align-items:center"><input type="checkbox" data-av="${esc(c.id)}" ${c.avisos ? 'checked' : ''}>avisos</label><button class="btn mini" data-x="probar">Probar</button>${c.auth === 'oauth-ms' ? '<button class="btn mini" data-x="reconectar">Reconectar</button>' : ''}<button class="btn mini mal" data-x="quitar">Quitar</button></div></div>`;
-    v.innerHTML = `<div class="pagina estrecha">${cabecera('Correo y servicios', 'Conecta todas tus cuentas. Las contraseñas y tokens se guardan cifrados en este equipo.' + (d.cifrado ? '' : ' (sin cifrado del sistema disponible)'), '<button class="btn pri" id="masCorreo">' + ic('mas') + 'Añadir correo</button>')}
+    const cuenta = c => `<div class="fila-a" data-c="${esc(c.id)}"><div class="t"><b>${esc(c.email)}</b><small>${esc(c.proveedor)}${c.nombre ? ' · ' + esc(c.nombre) : ''}${c.error ? ` · <span class="mal-txt">${esc(c.error)}</span>` : ''}${String(c.auth).startsWith('oauth') ? ' · OAuth' : ' · contraseña de aplicación'}</small><div class="lista tenue" style="font-size:11.5px;margin-top:4px"></div></div>
+      <div class="c"><label class="tenue" style="font-size:12px;display:flex;gap:6px;align-items:center"><input type="checkbox" data-av="${esc(c.id)}" ${c.avisos ? 'checked' : ''}>avisos</label><button class="btn mini" data-x="probar">Probar</button>${String(c.auth).startsWith('oauth') ? '<button class="btn mini" data-x="reconectar">Reconectar</button>' : ''}<button class="btn mini mal" data-x="quitar">Quitar</button></div></div>`;
+    v.innerHTML = `<div class="pagina estrecha">${cabecera('Correo y servicios', 'Conecta todas tus cuentas. Las contraseñas y tokens se guardan cifrados en este equipo.' + (d.cifrado ? '' : ' (sin cifrado del sistema disponible)'), '<div class="flex"><button class="btn pri" id="oaG">Conectar con Google</button><button class="btn pri" id="oaM">Conectar con Microsoft</button><button class="btn" id="masCorreo">' + ic('mas') + 'Otro correo</button></div>')}
       <div class="seccion">Correo <span class="n">${d.cuentas.length}</span></div>
       <p class="seccion-ayuda">Lee y resume tus correos, te avisa de lo importante con tarjetas y prepara respuestas. <b>Nunca envía nada sin que lo apruebes.</b></p>
-      <div class="caja">${d.cuentas.map(cuenta).join('') || '<div class="tenue" style="padding:14px 16px">Ninguna cuenta todavía. Gmail, Outlook/Hotmail, Yahoo, iCloud o el correo de tu dominio.</div>'}</div>
+      <div class="caja">${d.cuentas.map(cuenta).join('') || '<div class="tenue" style="padding:14px 16px">Ninguna cuenta todavía. Gmail y Outlook/Hotmail: botón Conectar (inicias sesión en el navegador). Yahoo, iCloud o tu dominio: Otro correo.</div>'}</div>
       <div class="seccion">Servicios</div>
       <div class="caja">${Object.entries(SERV).map(([k, [n, desc, url]]) => { const s = d.servicios[k] || {}; return `<div class="fila-a" data-s="${k}"><div class="t"><b>${n}</b><small>${desc} ${s.conectado ? `· <span class="ok-txt">✓ ${esc(s.quien)}</span>` : `· <a href="${url}" target="_blank" rel="noopener">conseguir token</a>`}</small></div>
         <div class="c">${s.conectado ? '<button class="btn mini" data-x="sprobar">Probar</button><button class="btn mini mal" data-x="squitar">Desconectar</button>' : '<button class="btn mini pri" data-x="sconectar">Conectar</button>'}</div></div>`; }).join('')}</div>
-      <div class="seccion">Outlook / Hotmail</div>
-      <div class="caja">${fila('Client ID de Microsoft', 'Outlook pide iniciar sesión con Microsoft. Hace falta el "Application (client) ID" de una app registrada en Azure (gratis, una vez). Guía: docs/outlook.md del repo.', `<input id="msId" class="mono" placeholder="${d.msClientId ? '•••• configurado — escribe para cambiarlo' : '00000000-0000-0000-0000-000000000000'}"><button class="btn" id="gMs">Guardar</button>`)}</div></div>`;
+      <div class="seccion">Credenciales OAuth</div><p class="seccion-ayuda">Las apps registradas en Google y Microsoft que usan los botones Conectar. Se hace una vez (guía: docs/oauth.md).</p>
+      <div class="caja">${fila('Google', d.oauth.google ? '<span class="ok-txt">✓ configurado</span>' : 'Client ID y secreto de una app OAuth de tipo "Escritorio" en Google Cloud.', `<input id="gId" class="mono" placeholder="client ID"><input id="gSec" class="mono" type="password" placeholder="client secret">`)}
+        ${fila('Microsoft', d.oauth.microsoft ? '<span class="ok-txt">✓ configurado</span>' : 'Application (client) ID de una app en Entra/Azure con flujos públicos y redirect http://localhost.', `<input id="mId" class="mono" placeholder="application (client) ID">`)}
+        <div style="padding:10px 16px;text-align:right"><button class="btn" id="gOa">Guardar credenciales</button></div></div></div>`;
 
     const recargar = () => this.pintar(v);
-    $('#gMs').onclick = async () => { await api('PATCH', '/conectores/config', { msClientId: $('#msId').value }); aviso('Guardado'); recargar(); };
+    $('#gOa').onclick = async () => {
+      await api('PATCH', '/conectores/config', { oauth: { google: { clientId: $('#gId').value, clientSecret: $('#gSec').value }, microsoft: { clientId: $('#mId').value } } });
+      aviso('Credenciales guardadas'); recargar();
+    };
+    const conectar = async p => {
+      const x = await api('POST', '/conectores/oauth/' + p, {}).catch(e => ({ error: e.message }));
+      if (x.error) return aviso(x.error, true);
+      await this.esperarOAuth(x.id, x.url, p); recargar();
+    };
+    $('#oaG').onclick = () => conectar('google');
+    $('#oaM').onclick = () => conectar('microsoft');
     $('#masCorreo').onclick = async () => {
-      const r = await modal({ titulo: 'Añadir correo', ancho: 520,
-        cuerpo: `<div class="campo">Correo<input id="ce" type="email" placeholder="tu@gmail.com" autocomplete="off"></div>
+      const r = await modal({ titulo: 'Otro correo (contraseña de aplicación)', ancho: 520,
+        cuerpo: `<div class="campo">Correo<input id="ce" type="email" placeholder="tu@yahoo.com" autocomplete="off"></div>
           <div class="campo" id="cpW">Contraseña de aplicación<input id="cp" type="password" autocomplete="new-password" placeholder="NO tu contraseña normal: una de aplicación"></div>
-          <small class="tenue">Gmail: myaccount.google.com/apppasswords · Yahoo: Seguridad → contraseña de aplicación · iCloud: appleid.apple.com → Contraseñas de apps. Outlook/Hotmail no la necesita: te dará un código.</small>
+          <small class="tenue">Yahoo: Seguridad → contraseña de aplicación · iCloud: appleid.apple.com → Contraseñas de apps · Gmail también vale (myaccount.google.com/apppasswords), aunque es mejor Conectar con Google.</small>
           <details style="margin-top:10px"><summary class="tenue">Servidor propio (dominio)</summary>
             <div class="campo">IMAP<input id="ci" class="mono" placeholder="imap.tudominio.com:993"></div><div class="campo">SMTP<input id="cs" class="mono" placeholder="smtp.tudominio.com:465"></div>
             <div class="campo">Usuario (si no es el correo)<input id="cu" autocomplete="off"></div></details>`,
-        alAbrir: m => { const e = m.querySelector('#ce'); e.oninput = () => { m.querySelector('#cpW').style.display = /@(outlook|hotmail|live|msn)\./i.test(e.value) ? 'none' : ''; }; e.focus(); },
+        alAbrir: m => m.querySelector('#ce').focus(),
         botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Conectar', cls: 'pri', valor: m => {
           const hp = (s, def) => { const [host, port] = String(s || '').trim().split(':'); if (!host) return undefined; const pt = +port || def; return { host, port: pt, secure: pt !== 587 }; };
           return { email: m.querySelector('#ce').value.trim(), password: m.querySelector('#cp').value, imap: hp(m.querySelector('#ci').value, 993), smtp: hp(m.querySelector('#cs').value, 465), usuario: m.querySelector('#cu').value.trim() };
@@ -425,8 +437,7 @@ VISTAS['ajustes/conexiones'] = {
       aviso('Conectando…');
       const x = await api('POST', '/conectores/correo', r).catch(e => ({ error: e.message }));
       if (x.error) return aviso(x.error, true);
-      if (x.outlook) await this.esperarOutlook(x.id, x.outlook);
-      else aviso(`✓ Conectado: ${x.mensajes} mensajes, ${x.noLeidos} sin leer`);
+      aviso(`✓ Conectado: ${x.mensajes} mensajes, ${x.noLeidos} sin leer`);
       recargar();
     };
     v.onclick = async e => {
@@ -435,7 +446,7 @@ VISTAS['ajustes/conexiones'] = {
       if (fc) {
         const id = fc.dataset.c;
         if (b.dataset.x === 'quitar') { if (await modal({ titulo: 'Quitar cuenta', cuerpo: 'Se borra de este equipo (tu correo no se toca).', botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Quitar', cls: 'mal', valor: true }] })) { await api('DELETE', `/conectores/correo/${id}`); recargar(); } return; }
-        if (b.dataset.x === 'reconectar') { const x = await api('POST', `/conectores/correo/${id}/reconectar`).catch(er => ({ error: er.message })); if (x.error) return aviso(x.error, true); await this.esperarOutlook(id, x.outlook); return recargar(); }
+        if (b.dataset.x === 'reconectar') { const x = await api('POST', `/conectores/correo/${id}/reconectar`).catch(er => ({ error: er.message })); if (x.error) return aviso(x.error, true); await this.esperarOAuth(x.id, x.url); return recargar(); }
         b.disabled = true; const r = await api('POST', `/conectores/correo/${id}/probar`).catch(er => ({ error: er.message })); b.disabled = false;
         $('.lista', fc).innerHTML = r.error ? `<span class="mal-txt">✗ ${esc(r.error)}</span>` : `<span class="ok-txt">✓ ${r.mensajes} mensajes · ${r.noLeidos} sin leer</span>`;
         return;
@@ -456,17 +467,15 @@ VISTAS['ajustes/conexiones'] = {
       await api('PATCH', `/conectores/correo/${id}`, { avisos: e.target.checked }); aviso(e.target.checked ? 'Avisos activados' : 'Avisos desactivados');
     };
   },
-  // Outlook: muestra el código de Microsoft y espera a que el usuario inicie sesión
-  async esperarOutlook(id, o) {
-    window.open(o.url, '_blank', 'noopener');
-    modal({ titulo: 'Inicia sesión con Microsoft', cuerpo: `<p>Se abrió <b>${esc(o.url)}</b>. Escribe este código:</p><div style="font:700 30px/1.2 ui-monospace,monospace;letter-spacing:4px;text-align:center;margin:14px 0">${esc(o.codigo)}</div><p class="tenue" id="msEst">Esperando a que inicies sesión…</p>`, botones: [{ txt: 'Cerrar', valor: null }] });
-    for (let i = 0; i < 180; i++) {
-      await new Promise(ok => setTimeout(ok, 3000));
-      const el = document.getElementById('msEst'); if (!el) break;
-      const c = await api('GET', `/conectores/correo/${id}`).catch(() => null);
-      const est = c?.outlook?.estado;
-      if (est === 'conectado') { el.innerHTML = '<span class="ok-txt">✓ Conectado. Ya puedes cerrar.</span>'; aviso('✓ Outlook conectado'); break; }
-      if (est === 'error') { el.innerHTML = `<span class="mal-txt">✗ ${esc(c.outlook.mensaje || 'error')}</span>`; break; }
+  // OAuth: el navegador ya se abrió en el equipo; esperamos a que vuelva
+  async esperarOAuth(id, url, p) {
+    modal({ titulo: p === 'microsoft' ? 'Inicia sesión con Microsoft' : p === 'google' ? 'Inicia sesión con Google' : 'Inicia sesión', cuerpo: `<p>Se abrió tu navegador para que inicies sesión y des permiso a APOLO.</p><p class="tenue" style="font-size:12px">¿No se abrió? <a href="${esc(url)}" target="_blank" rel="noopener">Ábrelo aquí</a>.</p><p id="oaEst">Esperando…</p>`, botones: [{ txt: 'Cerrar', valor: null }] });
+    for (let i = 0; i < 200; i++) {
+      await new Promise(ok => setTimeout(ok, 2500));
+      const el = document.getElementById('oaEst'); if (!el) break;
+      const f = await api('GET', '/conectores/oauth/flujo/' + id).catch(() => null);
+      if (f?.estado === 'conectado') { el.innerHTML = `<span class="ok-txt">✓ ${esc(f.email)} conectado. Ya puedes cerrar.</span>`; aviso('✓ ' + f.email + ' conectado'); break; }
+      if (f?.estado === 'error') { el.innerHTML = `<span class="mal-txt">✗ ${esc(f.error || 'error')}</span>`; break; }
     }
   },
 };
