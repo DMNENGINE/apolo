@@ -281,8 +281,7 @@ function decide(id, behavior) {
   if (behavior === 'always') toast(`✓ Regla guardada: la próxima vez no pregunto (${p.tool})`);
   render();
 }
-let showOn = false;                                         // durante la presentación se ignoran los eventos reales
-bridge.onEvent(ev => { if (!showOn) onEvent(ev); });
+bridge.onEvent(onEvent);
 if (bridge.onDecided) bridge.onDecided((id, b) => {             // contestado desde Stream Deck / Discord
   const i = perms.findIndex(p => p.id === id);
   if (i >= 0) { const p = perms.splice(i, 1)[0]; robot.pushLog(`${b === 'deny' ? '✗' : '✓'} ${p.tool} (remoto)`); render(); }
@@ -586,7 +585,6 @@ let voiceOn = true;
 try { voiceOn = localStorage.getItem('robot-voz') !== '0'; } catch { }
 let vozAudio = null, vozTurno = 0;
 function say(text) {
-  if (showOn) return;                                        // en la presentación solo hablan las voces pregrabadas
   if (!voiceOn) return;
   const turno = ++vozTurno;
   try { speechSynthesis.cancel(); } catch { }
@@ -646,137 +644,6 @@ function demo() {
 }
 bridge.onDemo(demo);
 
-// ---------- presentación para vídeo (bandeja > "🎬 Presentación"): ~75 s coreografiados, todo simulado ----------
-function presentacion() {
-  if (showOn) return;
-  showOn = true;
-  const ids = [], timers = [];
-  const at = (t, f) => timers.push(setTimeout(() => { try { f(); } catch (e) { console.error('[show]', e); } }, t));
-  const E = (sid, cwd, hook_event_name, extra = {}, _usage) => { if (!ids.includes(sid)) ids.push(sid);
-    onEvent({ hook_event_name, session_id: sid, cwd, _id: Math.random() * 1e9 | 0, _usage, ...extra }); };
-  const A = 'show-a', B = 'show-b', C = 'show-c', N = 'nucleo:show';
-  const cA = 'D:/RobotCompanion', cB = 'D:/MapaCamaras', cC = 'D:/LigaFutbol', cN = 'D:/Flow';
-  const boom = (n, cols, kind = 'burst') => { const [x, y] = center(); emit(x, y, n, cols, kind); };
-  const G = (nombre, secs, msg) => { robot.setFps(60); robot.gesto(nombre, secs, msg); };
-  const mantener = () => { hovering = true; cerrarTras = 600_000; clearTimeout(leaveTimer); leaveTimer = null; bridge.interactive(false); render(); };
-  const cerrarIsla = () => { hovering = false; cerrarTras = 10_000; render(); };
-  const vozAntes = voiceOn; voiceOn = true;
-  const V = k => { try { speechSynthesis.cancel(); const a = new Audio(`voz-show/${k}.mp3`); a.volume = 1; a.play().catch(() => {}); } catch { } };
-  proximoGesto = Date.now() + 600_000;                        // sin gestos sueltos que pisen la coreografía
-  cerrarIsla();
-
-  // 0–5 s: cuenta atrás (empieza a grabar al dar al menú: tienes 5 s)
-  lastActivity = Date.now() - SLEEP_MS - 1000; render();     // arranca dormido, con las Z
-  robot.setFps(30);
-  at(2000, () => robot.hud('3', 1, 'dormido'));
-  at(3000, () => robot.hud('2', 1, 'dormido'));
-  at(4000, () => robot.hud('1', 1, 'dormido'));
-
-  // 5–17 s: despierta y se presenta
-  at(5000, () => { lastActivity = Date.now(); render(); G('bostezo', 2.4); });
-  at(7600, () => { G('saludo', 2.8, '¡HOLA!'); sound.play('hola'); boom(40, COLORS.listo); emit(0, 0, 50, ['#ffffff', '#7fe3ff', '#b58cff'], 'star');
-    V('hola'); });
-  at(11500, () => G('guino', 1.4));
-  at(13000, () => { G('corazon', 2.5, '♥'); boom(24, ['#ff7ad9', '#ffb3ec']); });
-  at(15500, () => G('reloj', 2.6));
-
-  // 18–40 s: abre la isla y trabaja con 3 terminales a la vez
-  at(18000, () => { mantener(); V('mira'); });
-  at(18600, () => E(A, cA, 'SessionStart'));
-  at(19000, () => E(A, cA, 'UserPromptSubmit', { prompt: 'añade modo oscuro al panel' }, { ctx: 38200, model: 'claude-opus-5-5' }));
-  at(19500, () => E(B, cB, 'SessionStart'));
-  at(19900, () => E(B, cB, 'UserPromptSubmit', { prompt: 'mapa de cámaras en vivo' }, { ctx: 91500, model: 'claude-sonnet-5-5' }));
-  at(20400, () => E(C, cC, 'SessionStart'));
-  at(20800, () => E(C, cC, 'UserPromptSubmit', { prompt: 'ranking de la liga' }, { ctx: 142000, model: 'claude-opus-5-5' }));
-  at(21500, () => E(A, cA, 'PreToolUse', { tool_name: 'Grep', tool_input: { pattern: 'tema-oscuro' } }));
-  at(22200, () => E(B, cB, 'PreToolUse', { tool_name: 'Read', tool_input: { file_path: 'D:/MapaCamaras/cameras.geojson' } }));
-  at(22900, () => E(A, cA, 'PreToolUse', { tool_name: 'Task', tool_input: { subagent_type: 'Explore', description: 'buscar estilos' } }));
-  at(23100, () => E(A, cA, 'SubagentStart', { agent_id: 'sx1', agent_type: 'Explore' }));
-  at(23500, () => E(A, cA, 'PreToolUse', { tool_name: 'Task', tool_input: { subagent_type: 'Plan', description: 'plan de colores' } }));
-  at(23700, () => E(A, cA, 'SubagentStart', { agent_id: 'sx2', agent_type: 'Plan' }));
-  at(24300, () => E(A, cA, 'PreToolUse', { agent_id: 'sx1', tool_name: 'Read', tool_input: { file_path: 'D:/RobotCompanion/core/ui/estilo.css' } }));
-  at(25000, () => E(C, cC, 'PreToolUse', { tool_name: 'Edit', tool_input: { file_path: 'D:/LigaFutbol/src/ranking.js',
-    old_string: 'const puntos = victorias * 3;', new_string: 'const puntos = victorias * 3 + empates;\nconst racha = calcularRacha(partidos);\nif (racha >= 5) logro("🔥 En llamas");' } }, { ctx: 151000, model: 'claude-opus-5-5' }));
-  at(26500, () => E(B, cB, 'PreToolUse', { tool_name: 'Write', tool_input: { file_path: 'D:/MapaCamaras/mapa.js', content: 'const mapa = L.map("mapa").setView([40.4, -3.7], 12);\nfetch("cameras.geojson").then(r => r.json())\n  .then(d => L.geoJSON(d, { pointToLayer: punto }).addTo(mapa));' } }));
-  // permiso peligroso → lo deniega
-  at(28500, () => E(B, cB, 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'rm -rf ./datos' }, _peligro: 'borrado recursivo' }));
-  at(29000, () => V('peligro'));
-  at(32000, () => { const p = perms.find(p => p.ses === B); if (p) { decide(p.id, 'deny'); G('no', 1.6); boom(20, COLORS.error); toast('✗ Bloqueado: rm -rf ./datos'); } });
-  // permiso normal → permitir siempre
-  at(33500, () => E(A, cA, 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'npm test' } }));
-  at(33900, () => V('permiso'));
-  at(36000, () => { const p = perms.find(p => p.ses === A); if (p) { decide(p.id, 'always'); G('si', 1.4); boom(24, COLORS.listo); V('siempre'); } });
-  at(36800, () => E(A, cA, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'npm test' } }, { ctx: 64000, model: 'claude-opus-5-5' }));
-  at(37500, () => { E(A, cA, 'SubagentStop', { agent_id: 'sx1' }); E(A, cA, 'SubagentStop', { agent_id: 'sx2' }); });
-
-  // 39–50 s: Discord + tarjeta con respuesta ya escrita
-  at(39000, () => notif({ kind: 'server', guild: 'BOT CENTRAL', channel: 'alertas', author: 'CONTROL-COMANDER', text: '🟢 Raspberry Pi 5: todos los servicios en línea' }));
-  at(40500, () => { const c = { id: 990001, kind: 'dm', author: 'Cliente', prioridad: 'urgente', resumen: 'Pregunta si el camión estará listo el viernes',
-      text: 'oye, ¿el camión va a estar listo para el viernes?', respuesta: '¡Sí! El viernes por la mañana lo tienes listo 🚛', canSend: true };
-    cards.unshift(c); renderCards(); notif({ kind: 'dm', author: c.author, text: c.text, mention: true });
-    robot.hud('URGENTE', 3, 'error'); sound.play('permiso'); V('cliente'); });
-
-  // 45–56 s: navega por la web solo (núcleo multi-modelo)
-  at(45000, () => E(N, cN, 'UserPromptSubmit', { prompt: 'genera el vídeo en Flow' }, { ctx: 12000, model: 'gemma4:31b-cloud' }));
-  at(45600, () => E(N, cN, 'PreToolUse', { tool_name: 'navegador_abrir', tool_input: { url: 'https://flow.google.com' } }));
-  at(46000, () => V('web'));
-  at(48200, () => E(N, cN, 'PreToolUse', { tool_name: 'navegador_escribir', tool_input: { texto: 'camión naranja al atardecer', enviar: true } }));
-  at(51000, () => E(N, cN, 'PreToolUse', { tool_name: 'navegador_clic', tool_input: { ref: 7 } }));
-
-  // 53–62 s: terminan las tareas
-  at(53500, () => { E(C, cC, 'Stop'); V('listo1'); emit(0, 0, 60, ['#ffffff', '#7fe3ff', '#7dffb2', '#ffd36e'], 'star'); });
-  at(56000, () => { E(B, cB, 'StopFailure'); V('error'); });
-  at(58500, () => { E(A, cA, 'Stop'); E(N, cN, 'Stop'); boom(60, COLORS.listo); });
-  at(59200, () => { const el = $('answer');
-    el.innerHTML = `<b class="t">${esc(NOMBRE)}</b>Hecho: <b>modo oscuro</b> listo, <b>ranking</b> actualizado y tu <b>vídeo</b> en cola. Te aviso por Discord si me necesitas.`;
-    el.classList.add('on'); V('todo'); });
-
-  // 64–80 s: cierra y hace su show de caras
-  at(64500, () => { $('answer').classList.remove('on'); cerrarIsla(); });
-  at(65500, () => G('pensativo', 2.4));
-  at(68000, () => { G('estornudo', 1.8, '¡ACHÍS!'); boom(16, ['#ffffff', '#cfe8ff']); });
-  at(70000, () => G('sorpresa', 1.4));
-  at(71600, () => { robot.dizzy(1); sound.play('mareo'); boom(20, ['#b58cff', '#7fe3ff', '#ff7ad9']); });
-  at(72800, () => { robot.dizzy(2); boom(30, ['#b58cff', '#7fe3ff', '#ff7ad9']); });
-  at(74000, () => { robot.dizzy(3); sound.play('mareo'); boom(44, ['#b58cff', '#7fe3ff', '#ff7ad9']); V('mareo'); });
-  at(79000, () => { G('feliz', 2.5); });
-  at(81500, () => { G('corazon', 3.5, `SOY ${NOMBRE.toUpperCase()}`); sound.play('listo'); boom(60, ['#ff7ad9', '#7fe3ff', '#7dffb2']);
-    emit(0, 0, 80, ['#ffffff', '#7fe3ff', '#b58cff', '#ffd36e'], 'star'); V('final'); });
-
-  // fin: limpia las sesiones de mentira y vuelve a la normalidad
-  at(87000, () => {
-    ids.forEach(id => sessions.delete(id)); perms.splice(0, perms.length, ...perms.filter(p => !ids.includes(p.ses)));
-    const i = cards.findIndex(c => c.id === 990001); if (i >= 0) { cards.splice(i, 1); renderCards(); }
-    lastCode = null; voiceOn = vozAntes; showOn = false; proximoGesto = Date.now() + 60_000;
-    lastActivity = Date.now(); ajustarFps(); render();
-  });
-}
-if (bridge.onPresentacion) bridge.onPresentacion(presentacion);
-
-// ---------- demo real para vídeo: abre la isla, cuenta atrás y ESCRIBE el encargo letra a letra; lo envía como si lo tecleara el usuario ----------
-const ENCARGO_FLOW = 'Abre Gemini y genera una imagen vertical estilo COMING SOON de la app APOLO: un casco de robot futurista blanco con visor negro y ojos HUD verdes brillantes, título grande "APOLO" y debajo "COMING SOON". Descárgala, súbela a Flow y haz un vídeo teaser de COMING SOON: la cámara se acerca al casco, los ojos verdes se encienden y el texto brilla al final.';
-let demoFlowOn = false;
-function demoFlow() {
-  if (demoFlowOn) return; demoFlowOn = true;
-  lastActivity = Date.now(); render();
-  hovering = true; cerrarTras = 300_000; clearTimeout(leaveTimer); leaveTimer = null; render();
-  const inp = $('askIn'); inp.value = '';
-  for (let k = 10; k >= 1; k--) setTimeout(() => robot.hud(String(k), 1, 'reposo'), (10 - k) * 1000);
-  setTimeout(() => {
-    robot.setFps(60); robot.gesto('saludo', 2.4, '¡VAMOS!'); sound.play('hola');
-    const [x, y] = center(); emit(x, y, 30, COLORS.listo, 'burst');
-    let i = 0;
-    const tecla = () => {
-      if (i >= ENCARGO_FLOW.length) { setTimeout(() => { sendAsk(ENCARGO_FLOW); abrirUnRato(300_000); demoFlowOn = false; }, 700); return; }
-      inp.value = ENCARGO_FLOW.slice(0, ++i); inp.scrollLeft = inp.scrollWidth;
-      if (i % 3 === 0) sound.play('blip');
-      setTimeout(tecla, /[ ,.:]/.test(ENCARGO_FLOW[i - 1]) ? 70 : 28 + Math.random() * 30);
-    };
-    tecla();
-  }, 10_000);
-}
-if (bridge.onDemoFlow) bridge.onDemoFlow(demoFlow);
-window.presentacion = presentacion;
 
 if (bridge.onNombre) bridge.onNombre(n => { NOMBRE = n || 'Robot'; document.title = NOMBRE; render(); });
 if (bridge.onMudanza) bridge.onMudanza(dir => {                 // juego a pantalla completa: se va rodando a otro monitor

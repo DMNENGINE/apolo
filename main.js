@@ -113,18 +113,42 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'app', 'index.html'));
 }
 
-// voz neural (edge-tts, Microsoft es-ES-Alvaro) → mp3 en caché; null si falla (la isla usa entonces la voz de Windows)
+// voz: 1) Fish Audio (si hay key y voz en %APPDATA%\robot-companion\voz.json) 2) edge-tts (Microsoft es-ES-Alvaro)
+// 3) null → la isla usa la voz de Windows. Todo en mp3 con caché por texto.
 const VOZ_TTS = { voz: 'es-ES-AlvaroNeural', rate: '+8%', pitch: '+12Hz' };
-ipcMain.handle('tts', (_e, text) => new Promise(ok => {
-  text = String(text || '').slice(0, 600); if (!text.trim()) return ok(null);
+const VOZ_CFG = () => { try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'voz.json'), 'utf8')); } catch { return {}; } };
+let fishCaidoHasta = 0;                                       // si Fish falla, 5 min con edge-tts antes de reintentar
+async function ttsFish(cfg, text, f) {
+  if (!cfg.apiKey || !cfg.voz || Date.now() < fishCaidoHasta) return false;
+  try {
+    const r = await fetch('https://api.fish.audio/v1/tts', {
+      method: 'POST', signal: AbortSignal.timeout(15_000),
+      headers: { Authorization: 'Bearer ' + cfg.apiKey, 'Content-Type': 'application/json', model: cfg.modelo || 's2.1-pro-free' },
+      body: JSON.stringify({ text, reference_id: cfg.voz, format: 'mp3' }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
+    return true;
+  } catch (e) { console.error('[voz] Fish Audio falló:', e.message); fishCaidoHasta = Date.now() + 300_000; return false; }
+}
+ipcMain.handle('tts', async (_e, text) => {
+  text = String(text || '').slice(0, 600); if (!text.trim()) return null;
   const dir = path.join(os.tmpdir(), 'robot-tts'); try { fs.mkdirSync(dir, { recursive: true }); } catch { }
-  const f = path.join(dir, crypto.createHash('sha1').update(VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch + text).digest('hex').slice(0, 16) + '.mp3');
-  if (fs.existsSync(f)) return ok(f);
-  const p = require('child_process').spawn('python', ['-m', 'edge_tts', '--voice', VOZ_TTS.voz, '--rate=' + VOZ_TTS.rate, '--pitch=' + VOZ_TTS.pitch, '--text', text, '--write-media', f], { windowsHide: true });
+  const vc = VOZ_CFG();
+  const firma = vc.apiKey && vc.voz ? 'fish' + vc.voz + (vc.modelo || '') : VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch;
+  const f = path.join(dir, crypto.createHash('sha1').update(firma + text).digest('hex').slice(0, 16) + '.mp3');
+  if (fs.existsSync(f)) return f;
+  if (await ttsFish(vc, text, f)) return f;
+  const fe = path.join(dir, crypto.createHash('sha1').update(VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch + text).digest('hex').slice(0, 16) + '.mp3');
+  if (fs.existsSync(fe)) return fe;
+  return edgeTts(text, fe);
+});
+const edgeTts = (text, f) => new Promise(ok => {
+  const p =require('child_process').spawn('python', ['-m', 'edge_tts', '--voice', VOZ_TTS.voz, '--rate=' + VOZ_TTS.rate, '--pitch=' + VOZ_TTS.pitch, '--text', text, '--write-media', f], { windowsHide: true });
   const t = setTimeout(() => { try { p.kill(); } catch { } ok(null); }, 12_000);
   p.on('error', () => { clearTimeout(t); ok(null); });
   p.on('exit', c => { clearTimeout(t); ok(c === 0 && fs.existsSync(f) ? f : null); });
-}));
+});
 
 ipcMain.on('upd-ahora', () => { if (!actualizador) return; actualizador.actualizar(); });
 ipcMain.on('upd-luego', () => { if (actualizador) actualizador.posponer(24); });
@@ -672,8 +696,6 @@ function buildTray() {
     { type: 'separator' },
     { label: '↔ Mover isla fuera del monitor principal', click: () => moverIsla('otro') },
     { label: '↩ Volver la isla al monitor principal', click: () => moverIsla('casa') },
-    { label: '🎬 Demo Gemini + Flow (escribe solo)', click: () => win.webContents.send('demo-flow') },
-    { label: '🎬 Presentación (vídeo TikTok)', click: () => win.webContents.send('presentacion') },
     { label: 'Evento de prueba', click: () => win.webContents.send('demo') },
     { label: 'Herramientas de desarrollo', click: () => win.webContents.openDevTools({ mode: 'detach' }) },
     { type: 'separator' },

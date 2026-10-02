@@ -8,8 +8,6 @@ contextBridge.exposeInMainWorld('bridge', {
   onActualizacion: fn => ipcRenderer.on('actualizacion', (_e, i) => fn(i)),
   actualizarAhora: () => ipcRenderer.send('upd-ahora'),
   actualizarLuego: () => ipcRenderer.send('upd-luego'),
-  onDemoFlow: fn => ipcRenderer.on('demo-flow', () => fn()),
-  onPresentacion: fn => ipcRenderer.on('presentacion', () => fn()),
   onCursor: fn => ipcRenderer.on('cursor', (_e, p) => fn(p)),
   onDecided: fn => ipcRenderer.on('decided', (_e, id, b) => fn(id, b)),
   onUsage: fn => ipcRenderer.on('usage', (_e, u) => fn(u)),
