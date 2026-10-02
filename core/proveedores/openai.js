@@ -35,8 +35,24 @@ function parseArgs(s) {
   try { return JSON.parse(s || '{}'); } catch { return { _crudo: s }; }
 }
 
-module.exports = (cfg) => ({
+// modelos que no sirven para chatear (para elegir el de "auto")
+const NO_CHAT = /embed|whisper|tts|audio|speech|transcri|image|dall|vision-only|moderation|guard|rerank|ocr|search-preview|realtime|instruct-?\d*k?$/i;
+
+module.exports = (cfg) => {
+  let autoCache = null, autoT = 0;
+  // "auto": pregunta al proveedor qué modelos tiene y elige el principal (cfg.preferido = regex en orden de preferencia)
+  async function elegirAuto(api) {
+    if (autoCache && Date.now() - autoT < 6 * 3600_000) return autoCache;
+    const todos = (await api.modelos()).filter(m => !NO_CHAT.test(m));
+    if (!todos.length) throw new Error('el proveedor no devolvió ningún modelo de chat');
+    let elegido = null;
+    for (const p of [].concat(cfg.preferido || [])) { const re = new RegExp(p, 'i'); elegido = todos.filter(m => re.test(m)).sort().reverse()[0]; if (elegido) break; }
+    autoCache = elegido || todos[0]; autoT = Date.now();
+    return autoCache;
+  }
+  const api = {
   async chat({ model, system, mensajes, herramientas, signal, formatoJSON }) {
+    if (!model || model === 'auto') model = await elegirAuto(api);
     const body = { model, messages: aMensajes(system, mensajes) };
     if (formatoJSON && !herramientas?.length) body.response_format = { type: 'json_object' };
     if (herramientas?.length) body.tools = herramientas.map(h => ({ type: 'function', function: { name: h.nombre, description: h.descripcion, parameters: h.parametros } }));
@@ -52,6 +68,8 @@ module.exports = (cfg) => ({
   },
   async modelos() {
     const j = await pedir(`${cfg.baseUrl}/models`, { method: 'GET', headers: cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {} });
-    return (j.data || []).map(m => m.id);
+    return (j.data || j.models || []).map(m => m.id || m.name).filter(Boolean);
   },
-});
+  };
+  return api;
+};

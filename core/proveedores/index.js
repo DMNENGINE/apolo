@@ -12,7 +12,8 @@ const { execFile } = require('child_process');
 // respaldo: si el proveedor pedido no está disponible en ESTE equipo (sin Ollama, sin key, CLI sin instalar o sin sesión),
 // se usa el primero que sí lo esté, en este orden y con este modelo. Así APOLO funciona en cualquier PC sin tocar nada.
 const RESPALDO = [['chatgpt', 'default'], ['claudecode', 'haiku'], ['anthropic', 'claude-haiku-4-5-20251001'], ['openai', 'gpt-4.1-mini'],
-  ['gemini', 'gemini-3.8-flash'], ['ollama', 'gemma4:31b-cloud']];
+  ['gemini', 'gemini-3.8-flash'], ['deepseek', 'auto'], ['xai', 'auto'], ['groq', 'auto'], ['mistral', 'auto'], ['moonshot', 'auto'], ['zai', 'auto'],
+  ['qwen', 'auto'], ['cerebras', 'auto'], ['together', 'auto'], ['ollama', 'gemma4:31b-cloud'], ['lmstudio', 'auto']];
 const hayComando = cmd => new Promise(ok => execFile(process.platform === 'win32' ? 'where' : 'which', [cmd], { windowsHide: true, timeout: 8000 }, e => ok(!e)));
 
 function crearProveedores(cfg) {
@@ -24,7 +25,7 @@ function crearProveedores(cfg) {
       try {
         if (p.tipo === 'claude-cli') listos[nombre] = await hayComando(p.comando || 'claude');
         else if (p.tipo === 'codex-cli') listos[nombre] = (await TIPOS['codex-cli'].estadoAsync()).sesion;
-        else if (p.local) listos[nombre] = await fetch(p.baseUrl.replace(/\/v1\/?$/, '') + '/api/tags', { signal: AbortSignal.timeout(2500) }).then(r => r.ok).catch(() => false);
+        else if (p.local) listos[nombre] = await fetch(p.baseUrl.replace(/\/$/, '') + '/models', { signal: AbortSignal.timeout(2500) }).then(r => r.ok).catch(() => false);
         else listos[nombre] = !!p.apiKey;
       } catch { listos[nombre] = false; }
     }

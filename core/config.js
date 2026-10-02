@@ -22,12 +22,30 @@ const POR_DEFECTO = {
     ollama: { tipo: 'openai', baseUrl: 'http://localhost:11434/v1', apiKey: 'ollama', local: true },
     claudecode: { tipo: 'claude-cli' },   // usa la CLI `claude` que el usuario ya tenga instalada
     chatgpt: { tipo: 'codex-cli' },       // Codex CLI con la cuenta de ChatGPT (Plus/Pro): sin API key
+    // más proveedores con API compatible con OpenAI: solo falta pegar la clave. Modelo "auto" = su modelo principal (preferido)
+    deepseek: { tipo: 'openai', baseUrl: 'https://api.deepseek.com/v1', apiKey: '', env: 'DEEPSEEK_API_KEY', preferido: ['deepseek-chat'] },
+    xai: { tipo: 'openai', baseUrl: 'https://api.x.ai/v1', apiKey: '', env: 'XAI_API_KEY', preferido: ['^grok-\\d+(\\.\\d+)?$', '^grok-\\d+(?!.*(image|mini|vision))'] },
+    groq: { tipo: 'openai', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', env: 'GROQ_API_KEY', preferido: ['llama-3\\.3-70b', 'llama.*70b', 'gpt-oss-120b'] },
+    mistral: { tipo: 'openai', baseUrl: 'https://api.mistral.ai/v1', apiKey: '', env: 'MISTRAL_API_KEY', preferido: ['mistral-large-latest', 'mistral-medium-latest'] },
+    together: { tipo: 'openai', baseUrl: 'https://api.together.xyz/v1', apiKey: '', env: 'TOGETHER_API_KEY', preferido: ['llama.*70b.*instruct', 'qwen.*instruct'] },
+    perplexity: { tipo: 'openai', baseUrl: 'https://api.perplexity.ai', apiKey: '', env: 'PERPLEXITY_API_KEY', preferido: ['^sonar-pro$', '^sonar$'] },
+    cerebras: { tipo: 'openai', baseUrl: 'https://api.cerebras.ai/v1', apiKey: '', env: 'CEREBRAS_API_KEY', preferido: ['llama.*70b', 'qwen', 'gpt-oss'] },
+    fireworks: { tipo: 'openai', baseUrl: 'https://api.fireworks.ai/inference/v1', apiKey: '', env: 'FIREWORKS_API_KEY', preferido: ['llama.*70b', 'deepseek', 'qwen'] },
+    moonshot: { tipo: 'openai', baseUrl: 'https://api.moonshot.ai/v1', apiKey: '', env: 'MOONSHOT_API_KEY', preferido: ['kimi-k\\d', 'kimi', 'moonshot'] },
+    zai: { tipo: 'openai', baseUrl: 'https://api.z.ai/api/paas/v4', apiKey: '', env: 'ZAI_API_KEY', preferido: ['^glm-\\d(\\.\\d)?$', 'glm'] },
+    qwen: { tipo: 'openai', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', apiKey: '', env: 'DASHSCOPE_API_KEY', preferido: ['^qwen-max', '^qwen-plus', 'qwen'] },
+    nvidia: { tipo: 'openai', baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: '', env: 'NVIDIA_API_KEY', preferido: ['llama.*70b.*instruct', 'nemotron'] },
+    huggingface: { tipo: 'openai', baseUrl: 'https://router.huggingface.co/v1', apiKey: '', env: 'HF_TOKEN', preferido: ['llama.*70b', 'qwen.*instruct', 'deepseek'] },
+    cohere: { tipo: 'openai', baseUrl: 'https://api.cohere.ai/compatibility/v1', apiKey: '', env: 'COHERE_API_KEY', preferido: ['command-a', 'command-r-plus', 'command'] },
+    lmstudio: { tipo: 'openai', baseUrl: 'http://localhost:1234/v1', apiKey: 'lm-studio', local: true },
   },
   // atajos: "qwen: haz X" desde la isla, Discord o voz
   alias: {
     qwen: 'ollama/qwen3.6', gemma: 'ollama/gemma4:31b-cloud', haiku: 'claudecode/haiku', sonnet: 'claudecode/sonnet',
     gpt: 'openai/gpt-4.1-mini', gemini: 'gemini/gemini-3.8-flash', google: 'gemini/gemini-3.8-flash',
     chatgpt: 'chatgpt/default', codex: 'chatgpt/default',
+    deepseek: 'deepseek/auto', grok: 'xai/auto', groq: 'groq/auto', mistral: 'mistral/auto', kimi: 'moonshot/auto', glm: 'zai/auto',
+    perplexity: 'perplexity/auto', cerebras: 'cerebras/auto', cohere: 'cohere/auto', lmstudio: 'lmstudio/auto',
     flash: 'gemini/gemini-3.8-flash', flashlite: 'gemini/gemini-3.1-flash-lite',
   },
   permisos: { modo: 'preguntar' },        // preguntar | auto | solo-lectura

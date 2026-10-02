@@ -384,6 +384,12 @@ const DONDE_CLAVE = [
   [/together/, 'https://api.together.ai/settings/api-keys', 'Together AI', ''],
   [/x\.ai|grok|xai/, 'https://console.x.ai', 'xAI (Grok)', ''],
   [/perplexity/, 'https://www.perplexity.ai/settings/api', 'Perplexity', ''],
+  [/moonshot|kimi/, 'https://platform.moonshot.ai/console/api-keys', 'Moonshot (Kimi)', ''],
+  [/z\.ai|zai|glm|bigmodel/, 'https://z.ai/manage-apikey/apikey-list', 'Z.ai (GLM)', ''],
+  [/dashscope|qwen|aliyun/, 'https://modelstudio.console.alibabacloud.com/?tab=playground#/api-key', 'Alibaba Model Studio (Qwen)', ''],
+  [/nvidia/, 'https://build.nvidia.com/settings/api-keys', 'NVIDIA', 'Créditos gratis al registrarte.'],
+  [/cohere/, 'https://dashboard.cohere.com/api-keys', 'Cohere', 'Tiene clave de prueba gratis.'],
+  [/huggingface|hf\.co/, 'https://huggingface.co/settings/tokens', 'Hugging Face', 'Token con permiso "Make calls to Inference Providers".'],
   [/cerebras/, 'https://cloud.cerebras.ai', 'Cerebras', ''],
   [/fireworks/, 'https://fireworks.ai/account/api-keys', 'Fireworks', ''],
 ];
