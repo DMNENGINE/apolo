@@ -91,7 +91,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 ---
 
-## FASE 4 — Memoria v2 🔥
+## FASE 4 — Memoria v2 🔥 ✅ (2026-10-02: sueño ligera/REM/profunda, grafo, línea de tiempo, exportar/borrar, Wrapped con vídeo)
 
 - **Fases de sueño** (por la noche): ligera (dedupe), REM (conectar recuerdos, detectar patrones), profunda (resumir en perfil). Informe "esta noche aprendí…".
 - Grafo de personas/proyectos/cosas con vista visual en el panel.

@@ -32,6 +32,9 @@
 //   GET  /v1/consejo/:id · POST /v1/consejo/:id/cancelar
 //   /v1/turno (core/turno.js http): GET · POST {texto,cwd,modelo} · POST empezar|parar · PATCH orden {ids} · PATCH config · DEL :id
 //   POST :id/reintentar {aprobar} · GET informes/:id · GET informes/:id/archivo/video.mp4|video.html · POST informes/:id/video
+//   FASE 4 (memoria v2): GET /v1/sueno · POST /v1/sueno (soñar ya) · GET /v1/sueno/:id · POST /v1/sueno/:id/deshacer · PATCH /v1/sueno/config {hora, activo}
+//   GET /v1/grafo · GET /v1/grafo/:entidad · GET /v1/linea?desde&hasta&q&tipos · GET /v1/privacidad · POST /v1/privacidad/exportar (zip) · POST /v1/privacidad/borrar {codigo?, frase?}
+//   GET /v1/wrapped?periodo=semana|mes|año&privado · POST /v1/wrapped/video · GET /v1/wrapped/video (mp4) · POST /v1/wrapped/png {carta?} (png o zip)
 //   GET  /v1/nodos · POST /v1/nodos/emparejar {codigo} · POST /v1/nodos/activar {activo} · PATCH|DEL /v1/nodos/:id
 //   POST /v1/nodos/:id/gesto {gesto|estado} · POST /v1/nodos/:id/foto → {ruta}   (ojo de escritorio ESP32: core/nodos)
 const http = require('http');
@@ -48,7 +51,7 @@ function estatico(res, nombre) {
   const f = path.join(UI, nombre);
   if (!f.startsWith(UI + path.sep) || !fs.existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'content-type': TIPOS[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-cache',
-    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob: data:", 'x-frame-options': 'DENY' });
+    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob: data:", 'x-frame-options': nombre === 'wrapped.html' ? 'SAMEORIGIN' : 'DENY' });
   fs.createReadStream(f).pipe(res);
 }
 
@@ -92,9 +95,10 @@ function iniciar(opciones = {}) {
       }
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram
         try {
-          const r = await n.extensiones[p[1]].http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {});
-          if (r?.__archivo) {                                  // la extensión devuelve un archivo (p. ej. el vídeo del turno de noche)
-            res.writeHead(200, { 'content-type': TIPOS[path.extname(r.__archivo)] || { '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' }[path.extname(r.__archivo)] || 'application/octet-stream', 'content-length': fs.statSync(r.__archivo).size });
+          const r = await n.extensiones[p[1]].http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {}, Object.fromEntries(u.searchParams));
+          if (r?.__archivo) {                                  // la extensión devuelve un archivo (p. ej. el vídeo del turno de noche, el zip de la exportación)
+            res.writeHead(200, { 'content-type': TIPOS[path.extname(r.__archivo)] || { '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.zip': 'application/zip' }[path.extname(r.__archivo)] || 'application/octet-stream', 'content-length': fs.statSync(r.__archivo).size,
+              ...(r.nombre ? { 'content-disposition': `attachment; filename="${String(r.nombre).replace(/[^\w.-]/g, '_')}"` } : {}) });
             return fs.createReadStream(r.__archivo).pipe(res);
           }
           return json(res, 200, r);
@@ -333,7 +337,7 @@ function iniciar(opciones = {}) {
   });
   const puerto = opciones.puerto ?? n.cfg.puerto;
   const host = permitidos.size ? '0.0.0.0' : '127.0.0.1';            // solo se abre a la LAN si hay IPs permitidas
-  return new Promise((ok, mal) => { srv.once('error', mal); srv.listen(puerto, host, () => (opciones.sinTareas || (n.tareas.iniciar(), n.turno?.iniciar()), 0) || ok({ nucleo: n, servidor: srv, puerto: srv.address().port, token })); });
+  return new Promise((ok, mal) => { srv.once('error', mal); srv.listen(puerto, host, () => (opciones.sinTareas || (n.tareas.iniciar(), n.turno?.iniciar(), n.sueno?.programar(), n.sueno?.iniciar()), 0) || ok({ nucleo: n, servidor: srv, puerto: srv.address().port, token })); });
 }
 
 if (require.main === module) {

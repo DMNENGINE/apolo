@@ -1,6 +1,6 @@
 // Memoria persistente compartida por todos los modelos y canales.
 // <dir>/memoria.json: [{ id, texto, tipo, creada, actualizada, usos, origen }]
-//   tipo: perfil (quién es el usuario: va SIEMPRE en el contexto) | preferencia | proyecto | persona | hecho
+//   tipo: perfil (quién es el usuario: va SIEMPRE en el contexto) | preferencia | proyecto | persona | hecho | patron (lo deduce el sueño REM)
 // Búsqueda híbrida: léxica propia (tokens sin acentos, sin palabras vacías, con prefijos y peso por rareza)
 // + semántica con embeddings (vectores.js) si hay modelo; los vectores van en <dir>/memoria_vec.json.
 const fs = require('fs');
@@ -11,7 +11,7 @@ const { coseno, aBase64, deBase64 } = require('./vectores');
 const UMBRAL_SEM = 0.3;       // coseno mínimo para que un recuerdo cuente solo por significado (embeddinggemma: ruido ≤0.23, relevante 0.3–0.55)
 const hash = s => crypto.createHash('sha1').update(s).digest('hex').slice(0, 12);
 
-const TIPOS = ['perfil', 'preferencia', 'proyecto', 'persona', 'hecho'];
+const TIPOS = ['perfil', 'preferencia', 'proyecto', 'persona', 'hecho', 'patron'];
 const VACIAS = new Set(('a al algo como con de del el ella ellos en es esa ese eso esta este esto fue ha hay la las le les lo los me mi mis muy no nos o para pero por que se si sin son su sus te tu tus un una uno unos y ya yo ' +
   'the a an and are as at be by for from has have i in is it of on or that the this to was were with you your').split(' '));
 const SECRETO = /(sk-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|AQ.[A-Za-z0-9_-]{30,}|gh[pousr]_[A-Za-z0-9]{30,}|xox[abp]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY|\b(contrase[nñ]a|password|passwd|api[ _-]?key|token)\b\s*[:=]\s*\S{6,})/i;
@@ -66,7 +66,7 @@ function crearMemoria({ cfg, embedder = null }) {
   indexarLuego();
 
   // guarda o actualiza; si ya hay uno casi igual, lo reemplaza en vez de duplicar
-  function recordar({ texto, tipo = 'hecho', reemplaza, origen }) {
+  function recordar({ texto, tipo = 'hecho', reemplaza, origen, nuevo = false }) {
     sync();
     texto = String(texto || '').trim();
     if (!texto) throw new Error('texto vacío');
@@ -74,7 +74,7 @@ function crearMemoria({ cfg, embedder = null }) {
     if (SECRETO.test(texto)) throw new Error('parece una contraseña o clave: no se guardan secretos en la memoria');
     if (!TIPOS.includes(tipo)) tipo = 'hecho';
     let m = reemplaza && lista.find(x => x.id === reemplaza);
-    if (!m) m = lista.find(x => x.tipo === tipo && parecido(x.texto, texto) >= 0.6);
+    if (!m && !nuevo) m = lista.find(x => x.tipo === tipo && parecido(x.texto, texto) >= 0.6);
     if (m) { Object.assign(m, { texto, tipo, actualizada: Date.now(), origen: origen || m.origen }); guardar(); indexarLuego(); return { ...m, accion: 'actualizada' }; }
     m = { id: crypto.randomUUID().slice(0, 6), texto, tipo, creada: Date.now(), actualizada: Date.now(), usos: 0, origen };
     lista.push(m); guardar(); indexarLuego();
@@ -144,7 +144,18 @@ function crearMemoria({ cfg, embedder = null }) {
     return lineas.join('\n');
   }
 
-  return { recordar, olvidar, buscar, buscarH, contexto, indexar, semantica: () => (embedder ? { modelo: embedder.id, indexados: Object.keys(vecs.v).length } : null), lista: () => { sync(); return lista; }, TIPOS };
+  // cambios directos (los usa el sueño: fusionar usos, condensar el perfil) sin pasar por la deduplicación
+  function editar(id, campos = {}) {
+    sync(); const m = lista.find(x => x.id === id); if (!m) return null;
+    if (campos.texto !== undefined) { const t = String(campos.texto).trim(); if (!t || SECRETO.test(t)) throw new Error('texto no válido'); m.texto = t.slice(0, 600); }
+    for (const k of ['tipo', 'usos', 'origen', 'fusionados']) if (campos[k] !== undefined) m[k] = k === 'tipo' && !TIPOS.includes(campos[k]) ? m.tipo : campos[k];
+    m.actualizada = campos.actualizada || Date.now(); guardar(); indexarLuego(); return { ...m };
+  }
+  // borra todo (privacidad): memoria y vectores
+  function borrarTodo() { sync(); const n = lista.length; lista = []; guardar(); vecs = { modelo: embedder?.id, v: {} }; cache.clear(); try { fs.unlinkSync(fv); } catch { } return n; }
+
+  return { recordar, olvidar, editar, borrarTodo, vector: id => { sync(); const m = lista.find(x => x.id === id); return m && vecs.v[id]?.h === hash(m.texto) ? vector(id) : null; },
+    buscar, buscarH, contexto, indexar, semantica: () => (embedder ? { modelo: embedder.id, indexados: Object.keys(vecs.v).length } : null), lista: () => { sync(); return lista; }, TIPOS };
 }
 
 // búsqueda en conversaciones pasadas (sesiones jsonl)
@@ -169,4 +180,4 @@ function buscarHistorial({ cfg, consulta, dias = 30, limite = 8 }) {
   return res.sort((a, b) => b.s - a.s || b.t - a.t).slice(0, limite);
 }
 
-module.exports = { crearMemoria, buscarHistorial, parecido, tokens };
+module.exports = { crearMemoria, buscarHistorial, parecido, tokens, normal, raiz, TIPOS };

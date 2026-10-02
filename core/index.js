@@ -19,6 +19,7 @@ const { crearSkills } = require('./skills');
 const { crearPlugins } = require('./plugins');
 const consejoMod = require('./consejo');
 const turnoMod = require('./turno');
+const grafoMod = require('./grafo');
 
 function crearNucleo(opciones = {}) {
   const cfg = cargarConfig(opciones.dir);
@@ -74,6 +75,36 @@ function crearNucleo(opciones = {}) {
   if (!opciones.sinPlugins) plugins.iniciar().catch(e => console.log(`[plugins] ${e.message}`));
   nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills, plugins, consejo, turno };
   nucleo.extensiones.turno = { http: (...a) => turno.http(...a) };   // API /v1/turno (daemon → extensiones)
+  // FASE 4: memoria v2 — grafo, fases de sueño, línea de tiempo, privacidad y Wrapped
+  const grafo = grafoMod.crearGrafo({ cfg, memoria });
+  memoria.grafo = grafo;                                          // la herramienta explorar_grafo lo encuentra por ctx.memoria
+  const sueno = require('./sueno').crearSueno({ cfg, bus, memoria, grafo, generarJSON: generarJSONvivo, modelo: modeloCerebro, registro, tareas,
+    horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
+  tareas.registrarInterna('sueno', async () => { await sueno.dormir({ motivo: 'noche' }); return ''; });   // el aviso llega a la hora del briefing
+  require('./herramientas').registrar([grafoMod.HERRAMIENTA]);
+  const linea = require('./linea').crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria });
+  const privacidad = require('./privacidad').crearPrivacidad({ cfg, memoria, grafo, sesiones, personalidad, registro, bus });
+  const wrapped = require('./wrapped').crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos });
+  Object.assign(nucleo, { grafo, sueno, linea, privacidad, wrapped });
+  nucleo.extensiones.sueno = { http: async (M, p, b = {}) => {
+    if (!p[2] && M === 'GET') return { config: sueno.conf(), enCurso: sueno.enCurso(), informes: sueno.informes(30) };
+    if ((!p[2] || p[2] === 'ejecutar') && M === 'POST') return sueno.dormir({ motivo: 'manual' });
+    if (p[2] === 'config' && M === 'PATCH') return { config: sueno.configurar(b) };
+    if (p[2] && p[3] === 'deshacer' && M === 'POST') return sueno.deshacer(p[2]);
+    if (p[2] && !p[3] && M === 'GET') { const i = sueno.leer(p[2]); if (!i) throw Object.assign(new Error('informe'), { status: 404 }); return i; }
+    throw Object.assign(new Error('ruta'), { status: 404 });
+  } };
+  nucleo.extensiones.grafo = { http: async (M, p, b, q = {}) => {
+    if (M !== 'GET') throw Object.assign(new Error('ruta'), { status: 404 });
+    if (!p[2]) return grafo.datos({ min: +q.min || 0 });
+    const r = grafo.explorar(decodeURIComponent(p[2])); if (!r) throw Object.assign(new Error('entidad'), { status: 404 }); return r;
+  } };
+  nucleo.extensiones.linea = { http: async (M, p, b, q = {}) => {
+    if (M !== 'GET') throw Object.assign(new Error('ruta'), { status: 404 });
+    return linea.consultar({ desde: q.desde, hasta: q.hasta, q: q.q, tipos: q.tipos ? String(q.tipos).split(',') : undefined, limite: q.limite });
+  } };
+  nucleo.extensiones.privacidad = { http: (...a) => privacidad.http(...a) };
+  nucleo.extensiones.wrapped = { http: (...a) => wrapped.http(...a) };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }

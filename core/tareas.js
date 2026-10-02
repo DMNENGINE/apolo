@@ -68,6 +68,7 @@ function describir(c) {
 // ---------- tareas ----------
 function crearTareas({ cfg, bus, ejecutarAgente }) {
   const f = path.join(cfg.dir, 'tareas.json');
+  const fHist = path.join(cfg.dir, 'tareas_historial.jsonl');
   let lista = [], mtime = 0;
   // si otro proceso (CLI, otra app) cambió tareas.json, lo releemos antes de tocar nada
   const sync = () => { try { const m = fs.statSync(f).mtimeMs; if (m !== mtime) { lista = JSON.parse(fs.readFileSync(f, 'utf8')); mtime = m; } } catch { } };
@@ -113,7 +114,14 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
     } catch (e) {
       t.ultimoResultado = `error: ${e.message}`;
       bus.emit('tarea', { tarea: t, tipo: 'error', texto: e.message });
-    } finally { corriendo.delete(t.id); guardar(); }
+    } finally {
+      corriendo.delete(t.id); guardar();
+      // historial de ejecuciones (línea de tiempo y Wrapped): solo metadatos, el resultado recortado
+      try { fs.appendFileSync(fHist, JSON.stringify({ t: t.ultima, fin: Date.now(), id: t.id, nombre: t.nombre, tipo: t.accion.tipo, interna: t.accion.nombre, ok: !String(t.ultimoResultado || '').startsWith('error'), resultado: String(t.ultimoResultado || '').slice(0, 160) }) + '\n'); } catch { }
+    }
+  }
+  function historial({ desde = 0, hasta = Infinity } = {}) {
+    try { return fs.readFileSync(fHist, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(x => x && x.t >= desde && x.t <= hasta); } catch { return []; }
   }
 
   function tick(ahora = Date.now()) {
@@ -133,7 +141,7 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
 
   let timer = null;
   return {
-    crear, borrar, pausar, ejecutar, tick, describir,
+    crear, borrar, pausar, ejecutar, tick, describir, historial,
     registrarInterna: (nombre, fn) => internas.set(nombre, fn),
     lista: () => { sync(); return lista; },
     obtener: id => { sync(); return lista.find(t => t.id === id); },

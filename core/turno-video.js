@@ -244,4 +244,4 @@ async function crearVideo(inf, dir, opciones = {}) {
   return { html: 'video.html', mp4: 'video.mp4', segundos: r.segundos, frames: r.frames, ms: Date.now() - t0 };
 }
 
-module.exports = { crearVideo, generarHTML, escenas, buscarNavegador };
+module.exports = { crearVideo, generarHTML, escenas, buscarNavegador, grabar, servidor, hayFfmpeg };

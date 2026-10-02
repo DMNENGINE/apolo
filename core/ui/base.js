@@ -339,7 +339,7 @@ function conectarEventos() {
 }
 
 // ---------- barra lateral ----------
-const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['turno', 'Turno de noche', 'luna'], ['auto', 'Automatizaciones', 'reloj'], ['skills', 'Skills', 'pieza'], ['memoria', 'Memoria', 'cerebro'], ['uso', 'Uso', 'grafica']];
+const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['turno', 'Turno de noche', 'luna'], ['auto', 'Automatizaciones', 'reloj'], ['skills', 'Skills', 'pieza'], ['memoria', 'Memoria', 'cerebro'], ['wrapped', 'Wrapped', 'chispa'], ['uso', 'Uso', 'grafica']];
 function grupoFecha(t) {
   const d = new Date(t), hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dias = (hoy - new Date(d).setHours(0, 0, 0, 0)) / 86400000;

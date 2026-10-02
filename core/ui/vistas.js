@@ -360,7 +360,7 @@ VISTAS.auto = {
 };
 
 // ================= MEMORIA =================
-const TIPOS_MEM = [['perfil', 'Perfil', 'persona'], ['preferencia', 'Preferencias', 'chispa'], ['proyecto', 'Proyectos', 'carpeta'], ['persona', 'Personas', 'persona'], ['hecho', 'Hechos', 'info']];
+const TIPOS_MEM = [['perfil', 'Perfil', 'persona'], ['preferencia', 'Preferencias', 'chispa'], ['proyecto', 'Proyectos', 'carpeta'], ['persona', 'Personas', 'persona'], ['hecho', 'Hechos', 'info'], ['patron', 'Patrones', 'chispa']];
 VISTAS.memoria = {
   tipo: 'todos', q: '',
   async pintar(v) {
