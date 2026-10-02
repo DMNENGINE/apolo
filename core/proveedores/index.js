@@ -6,6 +6,7 @@ const TIPOS = {
   gemini: require('./gemini'),
   'claude-cli': require('./claude-cli'),
   'codex-cli': require('./codex-cli'),
+  responses: require('./responses'),
 };
 const { execFile } = require('child_process');
 
@@ -50,7 +51,7 @@ function crearProveedores(cfg) {
     const crear = TIPOS[p.tipo];
     if (!crear) throw new Error(`tipo de proveedor "${p.tipo}" desconocido`);
     if (['anthropic', 'gemini'].includes(p.tipo) && !p.apiKey) throw new Error(`falta la API key de ${nombre} (config.json o ${p.env})`);
-    if (p.tipo === 'openai' && !p.apiKey && !p.local) throw new Error(`falta la API key de ${nombre} (config.json o ${p.env})`);
+    if (['openai', 'responses'].includes(p.tipo) && !p.apiKey && !p.local) throw new Error(`falta la API key de ${nombre} (config.json o ${p.env})`);
     return { nombre, model, api: cache[nombre] ||= crear(p) };
   }
   function disponibles() {

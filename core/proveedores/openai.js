@@ -67,6 +67,7 @@ module.exports = (cfg) => {
     };
   },
   async modelos() {
+    if (Array.isArray(cfg.modelos) && cfg.modelos.length) return cfg.modelos;   // proveedores sin GET /models (Perplexity)
     const j = await pedir(`${cfg.baseUrl}/models`, { method: 'GET', headers: cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {} });
     return (j.data || j.models || []).map(m => m.id || m.name).filter(Boolean);
   },

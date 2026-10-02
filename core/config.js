@@ -28,7 +28,8 @@ const POR_DEFECTO = {
     groq: { tipo: 'openai', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', env: 'GROQ_API_KEY', preferido: ['llama-3\\.3-70b', 'llama.*70b', 'gpt-oss-120b'] },
     mistral: { tipo: 'openai', baseUrl: 'https://api.mistral.ai/v1', apiKey: '', env: 'MISTRAL_API_KEY', preferido: ['mistral-large-latest', 'mistral-medium-latest'] },
     together: { tipo: 'openai', baseUrl: 'https://api.together.xyz/v1', apiKey: '', env: 'TOGETHER_API_KEY', preferido: ['llama.*70b.*instruct', 'qwen.*instruct'] },
-    perplexity: { tipo: 'openai', baseUrl: 'https://api.perplexity.ai', apiKey: '', env: 'PERPLEXITY_API_KEY', preferido: ['^sonar-pro$', '^sonar$'] },
+    // Perplexity usa su Agent API (formato Responses de OpenAI) con búsqueda web; 'modelos' = presets que eligen el modelo solos
+    perplexity: { tipo: 'responses', baseUrl: 'https://api.perplexity.ai/v1', apiKey: '', env: 'PERPLEXITY_API_KEY', presets: ['low', 'fast', 'medium', 'high', 'xhigh'], porDefecto: 'low', herramientasNativas: [{ type: 'web_search' }] },
     cerebras: { tipo: 'openai', baseUrl: 'https://api.cerebras.ai/v1', apiKey: '', env: 'CEREBRAS_API_KEY', preferido: ['llama.*70b', 'qwen', 'gpt-oss'] },
     fireworks: { tipo: 'openai', baseUrl: 'https://api.fireworks.ai/inference/v1', apiKey: '', env: 'FIREWORKS_API_KEY', preferido: ['llama.*70b', 'deepseek', 'qwen'] },
     moonshot: { tipo: 'openai', baseUrl: 'https://api.moonshot.ai/v1', apiKey: '', env: 'MOONSHOT_API_KEY', preferido: ['kimi-k\\d', 'kimi', 'moonshot'] },
@@ -67,6 +68,9 @@ function cargarConfig(dir = carpetaDatos()) {
   try { guardada = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { }
   const cfg = { ...POR_DEFECTO, ...guardada, permisos: { ...POR_DEFECTO.permisos, ...guardada.permisos }, alias: { ...POR_DEFECTO.alias, ...guardada.alias }, memoria: { ...POR_DEFECTO.memoria, ...guardada.memoria }, compactar: { ...POR_DEFECTO.compactar, ...guardada.compactar }, proveedores: { ...POR_DEFECTO.proveedores } };
   for (const [k, v] of Object.entries(guardada.proveedores || {})) cfg.proveedores[k] = { ...POR_DEFECTO.proveedores[k], ...v };
+  // migraciones de proveedores que cambiaron de API (se conserva la clave)
+  const pp = cfg.proveedores.perplexity;
+  if (pp && pp.tipo === 'openai' && /api\.perplexity\.ai\/?$/.test(pp.baseUrl || '')) cfg.proveedores.perplexity = { ...POR_DEFECTO.proveedores.perplexity, apiKey: pp.apiKey };
   if (!fs.existsSync(f)) fs.writeFileSync(f, JSON.stringify(POR_DEFECTO, null, 2));
   for (const p of Object.values(cfg.proveedores)) if (!p.apiKey && p.env && process.env[p.env]) p.apiKey = process.env[p.env];
   cfg.dir = dir;
