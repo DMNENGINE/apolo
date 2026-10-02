@@ -1,0 +1,16 @@
+[Unit]
+Description=Robot Companion - bot de Discord (habla con el PC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=dmn
+WorkingDirectory=/home/dmn/robot-companion-bot
+ExecStart=/usr/bin/node robot-discord-pi.js
+Restart=always
+RestartSec=5
+MemoryMax=200M
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

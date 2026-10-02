@@ -1,0 +1,9 @@
+{
+  "name": "robot-companion-discord-pi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bot de Discord de Robot Companion para la Raspberry Pi (habla con el núcleo del PC por la LAN)",
+  "main": "robot-discord-pi.js",
+  "dependencies": { "discord.js": "^14.27.0" },
+  "license": "MIT"
+}

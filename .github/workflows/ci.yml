@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Core tests
+        working-directory: core
+        run: npm test
+      - name: Syntax check (app)
+        shell: bash
+        run: |
+          for f in main.js preload.js hablar.js cerebro.js bot-discord.js puente-nucleo.js control-overlay.js; do node --check "$f"; done

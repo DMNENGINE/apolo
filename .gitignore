@@ -1,0 +1,9 @@
+/node_modules/
+*.log
+*.blend1
+app/voz-muestras/
+__pycache__/
+.env
+*.token
+/lanzamiento/
+docs/media/banner.html

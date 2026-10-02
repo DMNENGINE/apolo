@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Robot Companion</title>
+<script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/"}}</script>
+<style>
+  :root{
+    --bg:transparent; --card:rgba(8,10,14,.74); --line:rgba(255,255,255,.08); --tx:#e6ebf2; --mut:#8b95a5;
+    --robot:91px;   /* tamaño fijo del robot en la barra */
+    --ok:#3ddc84; --work:#35c8f0; --warn:#ffb020; --bad:#ff4d4d;
+  }
+  html,body{margin:0;height:100%;background:transparent;color:var(--tx);font:13px "Segoe UI",system-ui,sans-serif;overflow:hidden;user-select:none}
+  #island{position:absolute;top:0;left:50%;transform:translateX(-50%);width:340px;background:transparent;
+    border:none;border-radius:0 0 22px 22px;text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,.8);
+    transition:width .5s cubic-bezier(.2,.8,.2,1), border-radius .5s; overflow:hidden}
+  #island.open{width:540px;border-radius:0 0 26px 26px}
+  #island.open.term{width:860px}
+  /* abierta: izquierda = estado/permisos/pedidos, derecha = terminales + chat con la elegida */
+  #island.open.term #panel{display:grid;grid-template-columns:minmax(0,1fr) 292px;gap:12px;align-items:start}
+  #island:not(.term) #der{display:none}
+  #island.open.term #der{animation:entraDer .45s cubic-bezier(.2,.8,.2,1)}
+  @keyframes entraDer{from{opacity:0;transform:translateX(-28px)}}
+  /* interruptor de la columna de terminales */
+  .sw{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 5px 0 7px;border-radius:12px;border:1px solid var(--line);
+    background:rgba(255,255,255,.05);color:var(--mut);cursor:pointer;font:600 11px "Segoe UI";text-shadow:none;transition:color .25s,border-color .25s}
+  .sw .ico{width:13px;height:13px}
+  .sw .track{width:26px;height:14px;border-radius:7px;background:rgba(255,255,255,.16);position:relative;transition:background .25s}
+  .sw .track i{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:#cfd6e0;transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+  .sw.on{color:var(--tx);border-color:rgba(127,227,255,.45)} .sw.on .track{background:var(--ok)} .sw.on .track i{transform:translateX(12px);background:#fff}
+  #izq{min-width:0} #der{min-width:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px;backdrop-filter:blur(6px)}
+  #tHint{margin-top:8px;font-size:11.5px;color:var(--mut);text-align:center;padding:10px 6px;border:1px dashed var(--line);border-radius:10px}
+  #tchat.on ~ #tHint{display:none}
+  #der #sessions{max-height:176px}
+  .ses.sel{border-color:rgba(127,227,255,.6);background:rgba(127,227,255,.08)}
+  #tchat{display:none;flex-direction:column;margin-top:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;text-shadow:none}
+  #tchat.on{display:flex}
+  #tchat .th{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 10px;border-bottom:1px solid var(--line)}
+  #tchat .th b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #tchat .th span{font:11px Consolas,monospace;color:var(--mut);max-width:40%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #tchat .th .icon{width:24px;height:22px}
+  #tmsgs{max-height:300px;min-height:80px;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:5px;font-size:12px;
+    scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+  .tm{padding:5px 8px;border-radius:9px;white-space:pre-wrap;word-break:break-word;max-width:94%;line-height:1.35}
+  .tm.yo{align-self:flex-end;background:rgba(127,227,255,.13)}
+  .tm.claude{align-self:flex-start;background:rgba(255,255,255,.06)}
+  .tm.herr{align-self:flex-start;color:var(--mut);font:11px Consolas,monospace;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  #tin{display:flex;gap:6px;padding:6px;border-top:1px solid var(--line)}
+  #tinT{flex:1;min-width:0;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:9px;color:var(--tx);padding:6px 9px;font:12.5px "Segoe UI";outline:none}
+  #tinT:focus{border-color:rgba(127,227,255,.55)}
+  /* barra compacta */
+  #bar{display:flex;align-items:center;gap:10px;height:calc(var(--robot) + 4px);min-height:52px;padding:0 14px 0 6px;transition:height .4s}
+  #bar .txt{background:var(--card);border-radius:12px;padding:4px 10px}
+  .kpi,.ses,.perm,.code,.pill,.icon{backdrop-filter:blur(6px)}
+  .kpi,.ses,.code{background:var(--card)!important}
+  .perm{background:rgba(40,28,6,.8)!important}
+  #hero .sum{background:var(--card);border-radius:14px;padding:10px 12px}
+  #mini{width:var(--robot);height:var(--robot);flex:none;transition:width .4s,height .4s}
+  #bar .txt{flex:1;min-width:0}
+  #bar .t1{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #bar .t2{color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Consolas,monospace}
+  .pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;background:var(--mut)}
+  .s-trabajando .dot,.dot.trabajando{background:var(--work);box-shadow:0 0 8px var(--work)}
+  .dot.permiso{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+  .dot.listo{background:var(--ok)} .dot.error{background:var(--bad)} .dot.reposo{background:#5b6472}
+  /* panel abierto */
+  /* el panel se despliega/pliega suave en vez de aparecer/desaparecer de golpe */
+  #panel{padding:0 14px;position:relative;max-height:0;opacity:0;overflow:hidden;transform:translateY(-8px);
+    transition:max-height .6s cubic-bezier(.2,.8,.2,1), opacity .45s ease, transform .5s ease, padding .5s}
+  #island.open #panel{max-height:720px;opacity:1;transform:none;padding-bottom:14px}
+  #island.open #mini{display:none}
+  #island.open #bar{display:none}                 /* abierta: el panel ya muestra estado y robot grande */
+  #island.open #panel{padding-top:12px}
+  #mini canvas,#big canvas{width:100%;height:100%;display:block;filter:drop-shadow(0 0 6px var(--glow,#3ddc8466)) drop-shadow(0 4px 10px rgba(0,0,0,.6))}
+  #badge.reposo{display:none}
+  #hero{display:flex;gap:14px;align-items:center;margin:4px 0 10px}
+  #big{width:128px;height:128px;flex:none}
+  #hero .sum{flex:1;min-width:0}
+  #hero .sum h2{margin:0 0 2px;font-size:15px}
+  #hero .sum p{margin:0;color:var(--mut)}
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:8px}
+  .kpi{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:3px 8px;min-width:0}
+  .kpi b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .kpi span{color:var(--mut);font-size:10.5px;white-space:nowrap}
+  /* permisos */
+  .perm{border:1px solid rgba(255,176,32,.45);background:rgba(255,176,32,.07);border-radius:14px;padding:10px 12px;margin-bottom:10px}
+  .perm .h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .perm .h b{color:var(--warn)}
+  .perm pre{margin:0 0 8px;white-space:pre-wrap;word-break:break-all;max-height:84px;overflow:auto;font:12px Consolas,monospace;color:#f3e3c2;background:rgba(0,0,0,.35);padding:6px 8px;border-radius:8px}
+  .perm .btns{display:flex;gap:8px}
+  .perm button{flex:1;border:0;border-radius:10px;padding:8px;font-weight:600;cursor:pointer;color:#0b0d10}
+  .perm .yes{background:var(--ok)} .perm .no{background:#3a4150;color:var(--tx)}
+  .perm .bar{height:3px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:8px;overflow:hidden}
+  .perm .bar i{display:block;height:100%;background:var(--warn);transition:width 1s linear}
+  /* sesiones */
+  /* sesiones: una línea por terminal, altura limitada (~4 filas) con desplazamiento y difuminado abajo */
+  #sessions{display:flex;flex-direction:column;gap:3px;max-height:142px;overflow:auto;padding-bottom:2px;
+    scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+  #sessions.largo{-webkit-mask-image:linear-gradient(#000 78%,transparent);mask-image:linear-gradient(#000 78%,transparent)}
+  #sesH{display:flex;align-items:center;gap:8px;margin:2px 2px 5px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+  #sesH .ln{flex:1;height:1px;background:var(--line)}
+  .ses{display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;border-radius:9px;background:var(--card);border:1px solid transparent;flex:none;min-width:0}
+  .ses.s-reposo{opacity:.72}
+  .ses .dot{margin:0;flex:none}
+  .ses .name{font-weight:600;flex:0 1 auto;max-width:42%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ses .act{color:var(--mut);font:11.5px Consolas,monospace;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ses .sa{flex:none;font-size:11px;color:#c9a8ff;display:flex;align-items:center;gap:4px}
+  .ses .anillo{--p:0;flex:none;width:18px;height:18px;border-radius:50%;
+    background:conic-gradient(var(--c,var(--ok)) calc(var(--p)*1%),rgba(255,255,255,.1) 0);
+    -webkit-mask:radial-gradient(circle 6px,transparent 98%,#000);mask:radial-gradient(circle 6px,transparent 98%,#000)}
+  .spin{width:9px;height:9px;border:2px solid var(--work);border-right-color:transparent;border-radius:50%;animation:sp 0.8s linear infinite;flex:none}
+  .ok{color:var(--ok);flex:none}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .empty{color:var(--mut);text-align:center;padding:14px 0}
+  .perm.peligro{border-color:rgba(255,77,77,.8);background:rgba(55,8,8,.88)!important;animation:alerta 1s infinite}
+  .perm.peligro .h b{color:var(--bad)}
+  .perm .why{color:#ff9b9b;font-size:12px;font-weight:600;margin:-2px 0 6px}
+  .perm .always{background:#1d3b2b;color:#9ff0c0;flex:.75}
+  @keyframes alerta{50%{box-shadow:0 0 0 3px rgba(255,77,77,.35)}}
+  .ses{cursor:pointer;transition:border-color .2s,opacity .2s} .ses:hover{border-color:rgba(127,227,255,.45);opacity:1}
+  .ses .go{font-size:11px;color:var(--mut);display:none;flex:none} .ses:hover .go{display:block}
+  #toast{font-size:12px;color:#9ff0c0;background:rgba(10,40,24,.85);border:1px solid rgba(61,220,132,.35);border-radius:10px;padding:6px 10px;margin-bottom:8px;display:none}
+  #toast.on{display:block;animation:lin .3s both}
+  #badge.dormido{display:block;background:#4a5a8a;color:#dfe6ff}
+  #ask{display:flex;gap:6px;margin-bottom:10px}
+  /* tarjetas de acción del cerebro */
+  #cards{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;max-height:260px;overflow:auto}
+  .card{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--work);border-radius:12px;padding:8px 10px;text-shadow:none}
+  .card.urgente{border-left-color:var(--bad)} .card.dm{border-left-color:#ff7ad9} .card.pi{border-left-color:var(--warn)}
+  .card .h{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--mut)} .card .h b{color:var(--tx)}
+  .card .rs{margin:4px 0;font-weight:600;font-size:13px}
+  .card .tx{color:var(--mut);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card textarea{width:100%;box-sizing:border-box;margin-top:6px;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px;color:#d6f5e3;font:12px "Segoe UI";padding:6px;resize:vertical;min-height:38px}
+  .card .acts{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+  .card .acts button{border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--tx);border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer}
+  .card .acts .go{background:#1d3b2b;color:#9ff0c0;border-color:rgba(61,220,132,.4)}
+  #answer{display:none;background:rgba(20,30,48,.9);border:1px solid rgba(127,227,255,.35);border-radius:12px;padding:9px 11px;margin-bottom:10px;font-size:12.5px;line-height:1.45;white-space:pre-wrap;max-height:220px;overflow:auto;text-shadow:none}
+  #answer.on{display:block;animation:lin .3s both} #answer b.t{display:block;margin-bottom:4px;color:#7fe3ff}
+  .pill.pausa{color:var(--warn);border-color:var(--warn)}
+  #askIn{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:7px 10px;font:13px "Segoe UI";outline:none;text-shadow:none}
+  #askIn:focus{border-color:rgba(127,227,255,.55)}
+  #mic.on{background:rgba(255,77,77,.25);border-color:var(--bad);animation:pulse 1s infinite}
+  /* avisos de Discord: tarjetas que bajan bajo la isla y se van solas */
+  #notifs{position:absolute;top:calc(var(--robot) + 12px);left:50%;transform:translateX(-50%);width:340px;display:flex;flex-direction:column;gap:6px;z-index:4;pointer-events:none}
+  #island.open ~ #notifs, #island.open + #notifs{display:none}
+  .nt{background:rgba(20,22,40,.9);border:1px solid rgba(114,137,218,.45);border-radius:12px;padding:7px 10px;font-size:12px;
+    box-shadow:0 6px 18px rgba(0,0,0,.4);animation:ntin .35s cubic-bezier(.2,1.3,.4,1) both;text-shadow:none}
+  .nt.out{animation:ntout .4s ease both}
+  .nt .w{color:#aab4ff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nt .x{color:#dfe3ff;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .nt.dm{border-color:rgba(255,122,217,.5)} .nt.dm .w{color:#ff9fe5} .nt.mention{border-color:#ffb020}
+  @keyframes ntin{from{opacity:0;transform:translateY(-12px) scale(.96)}to{opacity:1;transform:none}}
+  @keyframes ntout{to{opacity:0;transform:translateY(-8px)}}
+  /* entrada: cae desde arriba con rebote */
+  #island.intro{animation:drop .9s cubic-bezier(.2,1.4,.4,1) both}
+  @keyframes drop{from{transform:translate(-50%,-110%)}to{transform:translate(-50%,0)}}
+  #fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+  /* robot + globito de estado */
+  .rwrap{position:relative;width:100%;height:100%;cursor:pointer}
+  #badge{position:absolute;top:2px;left:2px;min-width:16px;height:16px;border-radius:9px;padding:0 4px;font:bold 10px/16px "Segoe UI";
+    text-align:center;color:#07121a;background:var(--mut);box-shadow:0 0 0 2px rgba(0,0,0,.5);transition:background .3s,transform .3s}
+  #island.open #badge{top:8px;left:8px;height:22px;min-width:22px;border-radius:12px;font-size:13px;line-height:22px}
+  #badge.trabajando{background:var(--work)} #badge.permiso{background:var(--warn);animation:pulse 1s infinite}
+  #badge.listo{background:var(--ok);transform:scale(1.15)} #badge.error{background:var(--bad);color:#fff}
+  #badge .dots i{display:inline-block;width:3px;height:3px;margin:0 1px;border-radius:50%;background:#07121a;animation:dot 1s infinite}
+  #badge .dots i:nth-child(2){animation-delay:.15s} #badge .dots i:nth-child(3){animation-delay:.3s}
+  @keyframes dot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-3px)}}
+  @keyframes pulse{50%{transform:scale(1.25)}}
+  /* bolitas de sesión en la barra (con satélites = subagentes) */
+  #orbs{display:flex;gap:7px;align-items:center}
+  .orb{position:relative;width:12px;height:12px;border-radius:50%;background:#5b6472;flex:none}
+  .orb.trabajando{background:var(--work);box-shadow:0 0 10px var(--work);animation:breath 1.2s infinite}
+  .orb.permiso{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:pulse .8s infinite}
+  .orb.listo{background:var(--ok);box-shadow:0 0 10px var(--ok)} .orb.error{background:var(--bad)}
+  .orb .sat{position:absolute;left:3px;top:3px;width:6px;height:6px;border-radius:50%;background:#b58cff;box-shadow:0 0 6px #b58cff;animation:orbit 1.6s linear infinite}
+  @keyframes orbit{from{transform:rotate(0) translateX(11px)}to{transform:rotate(360deg) translateX(11px)}}
+  @keyframes breath{50%{transform:scale(1.25)}}
+  /* código en vivo */
+  .code{border:1px solid var(--line);border-radius:14px;background:#07090c;margin-bottom:10px;overflow:hidden}
+  #der .code{margin:8px 0 0;border-radius:10px}
+  .code .h{display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--line);font-size:12px}
+  .code .h b{font-weight:600} .code .h span{color:var(--mut);font-family:Consolas,monospace}
+  .code pre{margin:0;padding:4px 0;font:11.5px/1.5 Consolas,monospace;max-height:88px;overflow:hidden}
+  .code .l{display:block;padding:0 12px;white-space:pre;overflow:hidden;text-overflow:ellipsis;animation:lin .35s both}
+  .code .del{background:rgba(255,77,77,.13);color:#ff9b9b;text-decoration:line-through;text-decoration-color:rgba(255,120,120,.5)}
+  .code .add{background:rgba(61,220,132,.12);color:#9ff0c0}
+  .code .cmd{color:#7fe3ff}
+  @keyframes lin{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+  .cab{display:flex;align-items:center;gap:8px}
+  .cab h2{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #tools{display:flex;gap:5px;align-items:center;flex:none}
+  #tools .icon{width:26px;height:24px}
+  .ico{width:15px;height:15px;vertical-align:-3px;flex:none}
+  .icon{display:inline-grid;place-items:center;padding:0}
+  .icon .ico{width:15px;height:15px}
+  .card .acts .ico,.perm .ico,.nt .ico{width:13px;height:13px;vertical-align:-2px}
+  #badge .ico{width:12px;height:12px;vertical-align:-1px}
+  .icon{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--tx);border-radius:9px;width:30px;height:26px;cursor:pointer;font-size:13px}
+</style></head>
+<body>
+<canvas id="fx"></canvas>
+<div id="island" class="intro">
+  <div id="bar">
+    <div id="mini"></div>
+    <div class="txt"><div class="t1" id="t1">Robot listo</div><div class="t2" id="t2">esperando a Claude Code…</div></div>
+    <div id="orbs"></div>
+    <span class="pill" id="pSes">0 sesiones</span>
+  </div>
+  <div id="panel">
+   <div id="izq">
+    <div id="hero">
+      <div id="big"></div>
+      <div class="sum">
+        <div class="cab"><h2 id="h2">Todo tranquilo</h2><div id="tools"><span class="pill" id="steps"></span><button class="icon" id="voz" title="Voz del robot"></button><button class="icon" id="snd" title="Sonido"></button><span class="sw" id="tTog" title="Mostrar / ocultar las terminales"><span id="tIco"></span><b id="tCnt">0</b><span class="track"><i></i></span></span></div></div>
+        <p id="hp">No hay nada pendiente.</p>
+        <div class="kpis">
+          <div class="kpi"><b id="kSes">0</b><span>sesiones</span></div>
+          <div class="kpi"><b id="kSub">0</b><span>subagentes activos</span></div>
+          <div class="kpi"><b id="kCtx">—</b><span>contexto máx.</span></div>
+          <div class="kpi" id="kpiHoy" title=""><b id="kHoy">—</b><span>uso hoy <i id="kHoyCache" style="font-style:normal;opacity:.6"></i></span></div>
+          <div class="kpi" id="kpi5h" title="Ventana de 5 h del plan"><b id="k5h">—</b><span>últimas 5 h</span></div>
+          <div class="kpi" id="kpiSem" title="Últimos 7 días"><b id="kSem">—</b><span>semana</span></div>
+        </div>
+      </div>
+    </div>
+    <div id="ask"><input id="askIn" placeholder="Pídele algo a Claude…  (en Proyecto: …)" autocomplete="off"><button class="icon" id="mic" title="Hablar (Ctrl+Alt+Espacio)"></button><button class="icon" id="askGo" title="Enviar"></button></div>
+    <div id="toast"></div>
+    <div id="answer"></div>
+    <div id="cards"></div>
+    <div id="perms"></div>
+   </div>
+   <div id="der">
+    <div id="sesH"><span id="sesT">Terminales</span><span class="ln"></span></div>
+    <div id="sessions"><div class="empty">Sin sesiones de Claude Code todavía.</div></div>
+    <div id="code"></div>
+    <div id="tchat"><div class="th"><b id="tN">Terminal</b><span id="tSt"></span><button class="icon" id="tIr" title="Ir a su ventana"></button><button class="icon" id="tX" title="Cerrar"></button></div>
+      <div id="tmsgs"></div>
+      <div id="tin"><input id="tinT" placeholder="Escríbele a esta terminal…" autocomplete="off"><button class="icon" id="tGo" title="Enviar a esta terminal"></button></div></div>
+    <div id="tHint">Toca una terminal para ver su conversación y escribirle desde aquí</div>
+   </div>
+  </div>
+</div>
+<div id="notifs"></div>
+<script src="../shared/peligro.js"></script>
+<script type="module" src="island.js"></script>
+</body></html>

@@ -1,0 +1,56 @@
+// Configuración del núcleo: carpeta de datos, config.json y claves (también desde variables de entorno).
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+function carpetaDatos() {
+  if (process.env.NUCLEO_HOME) return process.env.NUCLEO_HOME;
+  const base = process.platform === 'win32' ? (process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'))
+    : process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support')
+    : (process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'));
+  return path.join(base, 'robot-companion', 'nucleo');
+}
+
+const POR_DEFECTO = {
+  modeloPorDefecto: 'ollama/qwen3.6',
+  proveedores: {
+    // tipo openai = cualquier API compatible con Chat Completions
+    openai: { tipo: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: '', env: 'OPENAI_API_KEY' },
+    anthropic: { tipo: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', apiKey: '', env: 'ANTHROPIC_API_KEY' },
+    gemini: { tipo: 'gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', apiKey: '', env: 'GEMINI_API_KEY' },
+    openrouter: { tipo: 'openai', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '', env: 'OPENROUTER_API_KEY' },
+    ollama: { tipo: 'openai', baseUrl: 'http://localhost:11434/v1', apiKey: 'ollama', local: true },
+    claudecode: { tipo: 'claude-cli' },   // usa la CLI `claude` que el usuario ya tenga instalada
+  },
+  // atajos: "qwen: haz X" desde la isla, Discord o voz
+  alias: {
+    qwen: 'ollama/qwen3.6', gemma: 'ollama/gemma4:31b-cloud', haiku: 'claudecode/haiku', sonnet: 'claudecode/sonnet',
+    gpt: 'openai/gpt-4.1-mini', gemini: 'gemini/gemini-3.8-flash', google: 'gemini/gemini-3.8-flash',
+    flash: 'gemini/gemini-3.8-flash', flashlite: 'gemini/gemini-3.1-flash-lite',
+  },
+  permisos: { modo: 'preguntar' },        // preguntar | auto | solo-lectura
+  // memoria semántica: 'proveedor/modelo' de embeddings (API compatible OpenAI) o null = solo búsqueda por palabras
+  memoria: { embeddings: 'ollama/embeddinggemma' },
+  // conversaciones largas: a partir de `umbral` tokens (aprox.) se resume lo antiguo y lo duradero va a la memoria.
+  // modelo null = resume el mismo modelo de la sesión; porModelo: { 'ollama/qwen3.6': 8000 } para modelos de contexto corto
+  compactar: { umbral: 24000, conservar: 6000, modelo: null, porModelo: {} },
+  maxPasos: 25,
+  puerto: 47900,
+  // red: por defecto solo este equipo. permitidos = IPs de la LAN que pueden entrar (con token), ej. la Pi
+  red: { permitidos: [] },
+};
+
+function cargarConfig(dir = carpetaDatos()) {
+  fs.mkdirSync(dir, { recursive: true });
+  const f = path.join(dir, 'config.json');
+  let guardada = {};
+  try { guardada = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { }
+  const cfg = { ...POR_DEFECTO, ...guardada, permisos: { ...POR_DEFECTO.permisos, ...guardada.permisos }, alias: { ...POR_DEFECTO.alias, ...guardada.alias }, memoria: { ...POR_DEFECTO.memoria, ...guardada.memoria }, compactar: { ...POR_DEFECTO.compactar, ...guardada.compactar }, proveedores: { ...POR_DEFECTO.proveedores } };
+  for (const [k, v] of Object.entries(guardada.proveedores || {})) cfg.proveedores[k] = { ...POR_DEFECTO.proveedores[k], ...v };
+  if (!fs.existsSync(f)) fs.writeFileSync(f, JSON.stringify(POR_DEFECTO, null, 2));
+  for (const p of Object.values(cfg.proveedores)) if (!p.apiKey && p.env && process.env[p.env]) p.apiKey = process.env[p.env];
+  cfg.dir = dir;
+  return cfg;
+}
+
+module.exports = { cargarConfig, carpetaDatos };

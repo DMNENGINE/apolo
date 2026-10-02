@@ -1,0 +1,38 @@
+{
+  "SDKVersion": 2,
+  "UUID": "com.robotcompanion",
+  "Author": "Yosoy",
+  "CodePath": "plugin.js",
+  "Description": "Botones del Robot Companion: permitir/denegar permisos de Claude Code y ver el estado del robot.",
+  "Name": "Robot Companion",
+  "Icon": "imgs/plugin-list",
+  "Category": "Robot Companion",
+  "CategoryIcon": "imgs/plugin-list",
+  "Version": "1.0.0",
+  "Software": { "MinimumVersion": "6.0" },
+  "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
+  "Nodejs": { "Version": "20" },
+  "Actions": [
+    {
+      "Name": "Permitir",
+      "UUID": "com.robotcompanion.allow",
+      "Icon": "imgs/allow-list",
+      "Tooltip": "Permite la petición de Claude Code que está esperando. Si es peligrosa, mantenlo pulsado 1 segundo.",
+      "States": [{ "Image": "imgs/allow", "ShowTitle": false }]
+    },
+    {
+      "Name": "Denegar",
+      "UUID": "com.robotcompanion.deny",
+      "Icon": "imgs/deny-list",
+      "Tooltip": "Deniega la petición de Claude Code que está esperando.",
+      "States": [{ "Image": "imgs/deny", "ShowTitle": false }]
+    },
+    {
+      "Name": "Estado del robot",
+      "UUID": "com.robotcompanion.status",
+      "Icon": "imgs/status-list",
+      "Tooltip": "Muestra el estado del robot. Púlsalo para tocarlo.",
+      "States": [{ "Image": "imgs/status", "ShowTitle": false }]
+    }
+  ]
+}

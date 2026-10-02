@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Robot Companion · Navegador",
+  "short_name": "Robot",
+  "version": "0.2.3",
+  "description": "Deja que tu compañero (Robot Companion) use tu navegador: abrir, leer, hacer clic y escribir, con tu permiso por sitio.",
+  "minimum_chrome_version": "120",
+  "permissions": ["tabs", "scripting", "storage", "alarms", "tabGroups", "debugger"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "sw.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Robot Companion", "default_icon": { "16": "iconos/16.png", "32": "iconos/32.png" } },
+  "icons": { "16": "iconos/16.png", "32": "iconos/32.png", "48": "iconos/48.png", "128": "iconos/128.png" }
+}

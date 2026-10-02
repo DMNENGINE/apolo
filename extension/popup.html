@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<style>
+  :root{--bg:#0b0d10;--card:#12161b;--line:rgba(255,255,255,.1);--tx:#e8edf2;--mut:#8b96a3;--ok:#3ddc84;--bad:#ff5d5d;--warn:#ffb020}
+  body{margin:0;width:300px;background:var(--bg);color:var(--tx);font:13px "Segoe UI",system-ui,sans-serif}
+  header{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  header img{width:34px;height:34px}
+  header b{display:block;font-size:14px} header span{color:var(--mut);font-size:11.5px}
+  main{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+  .estado{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .p{width:9px;height:9px;border-radius:50%;background:var(--mut);flex:none}
+  .p.conectado{background:var(--ok);box-shadow:0 0 8px var(--ok)} .p.token,.p.sin-token,.p.error{background:var(--bad)} .p.sin-robot{background:var(--warn)}
+  label{font-size:11.5px;color:var(--mut)}
+  input{width:100%;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:9px;color:var(--tx);padding:7px 9px;font:12px Consolas,monospace;outline:none}
+  input:focus{border-color:rgba(127,227,255,.55)}
+  .fila{display:flex;gap:8px;align-items:center}
+  button{flex:1;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--tx);border-radius:9px;padding:7px;font:600 12px "Segoe UI";cursor:pointer}
+  button.pri{background:#1d3b2b;border-color:rgba(61,220,132,.45);color:#b9f5d2}
+  .ayuda{color:var(--mut);font-size:11.5px;line-height:1.45}
+  .sw{display:flex;align-items:center;justify-content:space-between}
+  .sw input{width:auto}
+</style></head>
+<body>
+<header><img src="iconos/48.png" alt=""><div><b id="nom">Robot Companion</b><span>Control del navegador</span></div></header>
+<main>
+  <div class="estado"><span class="p" id="punto"></span><span id="txt">…</span></div>
+  <div class="sw"><label for="activo">Permitir que use este navegador</label><input type="checkbox" id="activo"></div>
+  <div><label for="token">Token del robot</label><input id="token" type="password" placeholder="pega aquí el token" autocomplete="off"></div>
+  <div class="fila"><button class="pri" id="guardar">Guardar y conectar</button></div>
+  <p class="ayuda">El token se copia desde el icono del robot en la bandeja de Windows → <b>Copiar token para la extensión</b>.
+    El robot te pedirá permiso para cada sitio y para acciones delicadas (enviar, comprar, borrar…). Nunca toca contraseñas ni tarjetas.</p>
+</main>
+<script src="popup.js"></script>
+</body></html>

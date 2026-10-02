@@ -1,0 +1,44 @@
+{
+  "name": "robot-companion",
+  "version": "0.1.0",
+  "description": "APOLO: open-source AI desktop companion. A 3D robot that watches, approves and directs your AI agents (Claude Code, Gemini CLI, Ollama, OpenAI...).",
+  "author": "DMNENGINE",
+  "license": "MIT",
+  "homepage": "https://github.com/DMNENGINE/apolo#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DMNENGINE/apolo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DMNENGINE/apolo/issues"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "claude-code",
+    "gemini-cli",
+    "ollama",
+    "desktop-companion",
+    "electron",
+    "mcp",
+    "stream-deck",
+    "discord-bot"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "streamdeck": "powershell -NoProfile -ExecutionPolicy Bypass -File streamdeck/instalar.ps1"
+  },
+  "private": true,
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "three": "^0.160.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0",
+    "sql.js": "^1.14.2"
+  }
+}

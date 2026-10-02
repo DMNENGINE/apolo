@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Página de pruebas del robot (no la usa la app): node tools/galeria-robot.js genera una hoja con cada gesto. -->
+<html lang="es"><head><meta charset="utf-8"><title>Galería del robot</title>
+<script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/"}}</script>
+<style>
+  html,body{margin:0;background:#11151b;color:#e6ebf2;font:600 15px "Segoe UI",sans-serif}
+  #c{width:260px;height:260px;display:block;margin:0 auto;filter:drop-shadow(0 0 8px var(--glow,#3ddc8466))}
+  #t{text-align:center;margin-top:-6px;letter-spacing:.04em}
+</style></head><body>
+<canvas id="c"></canvas><div id="t"></div>
+<script type="module">
+  import { createRobot } from './robot.js';
+  const robot = createRobot(document.getElementById('c'));
+  window.robot = robot;
+  // mostrar(gesto|estado, etiqueta): congela la pose a mitad del gesto para la captura
+  window.mostrar = (que, etiqueta, opts = {}) => {
+    document.getElementById('t').textContent = etiqueta || que;
+    if (opts.estado) robot.setState(opts.estado);
+    else robot.setState('reposo');
+    if (que === 'dizzy') robot.dizzy(opts.fuerza || 2);
+    else if (que === 'greet') robot.greet();
+    else if (que !== 'nada') robot.gesto(que, opts.secs || 4, opts.msg);
+  };
+</script></body></html>

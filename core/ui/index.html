@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es" data-modo="oscuro" data-tema="casco">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Robot Companion</title>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#07090b">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+  <div id="app" hidden>
+    <aside id="lado"></aside>
+    <main id="vista"></main>
+  </div>
+  <button id="btnMenu" class="btn icono solo-movil" aria-label="Menú" style="position:fixed;left:10px;top:10px;z-index:44">
+    <svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <div id="permisos"></div>
+  <div id="avisos"></div>
+  <script src="base.js"></script>
+  <script src="vistas.js"></script>
+  <script src="mision.js"></script>
+  <script src="ajustes.js"></script>
+  <script src="movil.js"></script>
+  <script type="module" src="robot3d-ui.js"></script>
+</body>
+</html>
