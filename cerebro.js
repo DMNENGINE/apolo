@@ -115,7 +115,7 @@ function createCerebro({ dataDir, onCard, onAnswer, notifyUrgent, getSessions, n
     }
     need.forEach((x, i) => {
       const a = res.find(z => z.i === i);
-      x.prioridad = a ? a.prioridad : (x.kind === 'dm' || x.mention || x.kind === 'pi' ? 'normal' : 'ruido');
+      x.prioridad = a ? a.prioridad : (x.kind === 'dm' || x.mention || x.kind === 'pi' || x.kind === 'mail' ? 'normal' : 'ruido');
       x.resumen = a ? a.resumen : x.text.slice(0, 140);
       x.respuesta = a && a.necesita_respuesta ? (a.respuesta || '') : '';
     });
@@ -125,8 +125,8 @@ function createCerebro({ dataDir, onCard, onAnswer, notifyUrgent, getSessions, n
       if (x.prioridad === 'ruido' && !x.extra.length) continue;
       const card = {
         id: nextCard++, kind: x.kind, prioridad: x.prioridad, author: x.author, guild: x.guild, channel: x.channel,
-        resumen: x.resumen, text: x.text, respuesta: x.respuesta, canSend: !!x.msgId && x.kind === 'server',
-        link: x.guildId && x.channelId ? `https://discord.com/channels/${x.guildId}/${x.channelId}${x.msgId ? '/' + x.msgId : ''}` : 'discord://',
+        resumen: x.resumen, text: x.text, respuesta: x.respuesta, canSend: (!!x.msgId && x.kind === 'server') || x.kind === 'mail', correo: x.correo,
+        link: x.kind === 'mail' ? null : x.guildId && x.channelId ? `https://discord.com/channels/${x.guildId}/${x.channelId}${x.msgId ? '/' + x.msgId : ''}` : 'discord://',
         msgId: x.msgId, channelId: x.channelId, extra: x.extra, t: x.t,
       };
       cards.set(card.id, card);

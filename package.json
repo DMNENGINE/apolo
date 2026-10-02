@@ -35,8 +35,11 @@
   "private": true,
   "dependencies": {
     "discord.js": "^14.27.0",
-    "sql.js": "^1.14.2",
     "electron": "^33.4.11",
+    "imapflow": "^2.2.1",
+    "mailparser": "^3.9.33",
+    "nodemailer": "^10.0.13",
+    "sql.js": "^1.14.2",
     "three": "^0.160.0"
   }
 }

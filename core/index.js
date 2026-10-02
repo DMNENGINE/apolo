@@ -40,7 +40,7 @@ function crearNucleo(opciones = {}) {
     cfg, bus,
     ejecutarAgente: ({ texto, modelo, cwd, canal, titulo }) => enviar(sesiones.crear({ modelo, cwd, canal, titulo, tarea: true }), texto),
   });
-  const nucleo = { cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador };
+  const nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores,
     modelo: () => { const m = nucleo.cerebro?.leer?.()?.modelo; return m && m.includes('/') ? m : cfg.modeloPorDefecto; } });
   return nucleo;

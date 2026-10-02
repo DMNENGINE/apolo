@@ -69,6 +69,11 @@ function iniciar(opciones = {}) {
         if (M === 'GET') return json(res, 200, admin.configPublica(n.cfg));
         if (M === 'PATCH') { const c = admin.guardarConfig(n.cfg, await leer(req)); n.proveedores.reset(); return json(res, 200, c); }
       }
+      if (p[1] === 'conectores') {                             // correo, GitHub, Hugging Face, ElevenLabs (los pone la app)
+        if (!n.extensiones.conectores) return json(res, 404, { error: 'conectores no disponibles' });
+        try { return json(res, 200, await n.extensiones.conectores.http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {})); }
+        catch (e) { return json(res, e.status || 400, { error: e.message }); }
+      }
       if (p[1] === 'chatgpt') {                                // ChatGPT vía Codex CLI (plan de ChatGPT, sin API key)
         const cx = require('./proveedores/codex-cli');
         if (M === 'GET') {

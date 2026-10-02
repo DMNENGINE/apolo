@@ -298,4 +298,12 @@ const HERRAMIENTAS = [
 ];
 
 const porNombre = Object.fromEntries(HERRAMIENTAS.map(h => [h.nombre, h]));
-module.exports = { HERRAMIENTAS, porNombre };
+// herramientas de fuera del núcleo (conectores de la app: correo, GitHub…). h.disponible() = si se ofrecen al modelo ahora
+function registrar(lista) {
+  for (const h of lista) {
+    const i = HERRAMIENTAS.findIndex(x => x.nombre === h.nombre);
+    if (i >= 0) HERRAMIENTAS[i] = h; else HERRAMIENTAS.push(h);
+    porNombre[h.nombre] = h;
+  }
+}
+module.exports = { HERRAMIENTAS, porNombre, registrar };

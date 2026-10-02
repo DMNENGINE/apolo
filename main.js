@@ -10,7 +10,8 @@
 // socket y token de mensajería…). Las terminales de Claude que abra el robot creerían ser sesiones "hijas":
 // no guardarían transcripción (el uso de hoy saldría a 0) y recibirían el token de otra sesión. Se borran al arrancar.
 for (const k of Object.keys(process.env)) if (/^(CLAUDE_CODE_|CLAUDECODE$|CLAUDE_PID$|CLAUDE_EFFORT$)/.test(k)) delete process.env[k];
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, shell, globalShortcut, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, shell, globalShortcut, clipboard, safeStorage } = require('electron');
+const { crearConectores } = require('./conectores');
 const http = require('http');
 const fs = require('fs');
 const os = require('os');
@@ -27,7 +28,7 @@ const { crearNucleo } = require('./core');
 const { iniciar: iniciarDaemon } = require('./core/daemon');
 const { createPuente } = require('./puente-nucleo.js');
 const { crearOverlay } = require('./control-overlay.js');
-let nucleo = null, puente = null;
+let nucleo = null, puente = null, conectores = null;
 const nombreCompanero = () => { try { return nucleo ? nucleo.personalidad.nombre() : 'Robot'; } catch { return 'Robot'; } };
 
 const PORT = 47823;
@@ -376,12 +377,21 @@ async function cardAction(id, action, text) {
   const c = cerebro && cerebro.card(id);
   if (!c) return 'Esa tarjeta ya no existe.';
   const msg = text || c.respuesta || '';
+  if (action === 'enviar' && c.kind === 'mail' && c.correo && conectores) {   // tarjeta de correo: "Responder" = tu aprobación
+    try {
+      const cu = conectores.correo.cuenta(c.correo.cuenta), o = await conectores.correo.leer(cu, c.correo.uid);
+      const para = (o.de.match(/<([^>]+)>/) || [, o.de])[1];
+      await conectores.correo.enviar(cu, { para, asunto: /^re:/i.test(o.asunto) ? o.asunto : 'Re: ' + o.asunto, texto: msg, enRespuestaA: o.messageId, referencias: [...o.referencias, o.messageId].filter(Boolean) });
+      cerebro.dropCard(id); win && win.webContents.send('card-done', id);
+      return `📨 Respuesta enviada a ${para}.`;
+    } catch (e) { return '❌ No pude enviarla: ' + e.message; }
+  }
   if (action === 'enviar') {
     const ok = c.canSend && msg && await discord.replyTo(c.channelId, c.msgId, msg);
     if (ok) { cerebro.dropCard(id); win && win.webContents.send('card-done', id); }
     return ok ? '📨 Respuesta enviada.' : '❌ No pude enviarla.';
   }
-  if (action === 'copiar') { clipboard.writeText(msg); shell.openExternal(c.link || 'discord://'); return '📋 Copiada; pégala en Discord.'; }
+  if (action === 'copiar') { clipboard.writeText(msg); if (c.kind === 'mail') return '📋 Respuesta copiada.'; shell.openExternal(c.link || 'discord://'); return '📋 Copiada; pégala en Discord.'; }
   if (['urgente', 'normal', 'ruido'].includes(action)) {
     cerebro.learn(id, action);
     if (action === 'ruido') { cerebro.dropCard(id); win && win.webContents.send('card-done', id); }
@@ -791,6 +801,18 @@ app.whenReady().then(() => {
   actualizador.iniciar();
   setTimeout(() => revisarModelos(), 25_000);                 // da tiempo a que el núcleo compruebe qué hay instalado
   nucleo = crearNucleo();                                    // antes que el cerebro: el cerebro usa sus modelos
+  try {                                                       // correo (varias cuentas), GitHub, Hugging Face, ElevenLabs
+    const cifra = safeStorage.isEncryptionAvailable();
+    conectores = crearConectores({
+      dir: app.getPath('userData'), nucleo,
+      cifrar: cifra ? s => safeStorage.encryptString(s) : null, descifrar: b => safeStorage.decryptString(b),
+      alNuevoCorreo: (c, m) => {                              // correo nuevo → el cerebro lo clasifica y hace tarjeta (con borrador de respuesta)
+        if (cerebro) cerebro.ingest({ kind: 'mail', author: m.de, guild: c.email, channel: m.asunto, text: `${m.asunto}\n${m.trozo || ''}`.trim(), correo: { cuenta: c.id, uid: m.uid } });
+        else if (win && !win.isDestroyed()) win.webContents.send('notif', { kind: 'dm', author: `✉ ${m.de}`, text: m.asunto });
+      },
+    });
+    nucleo.extensiones.conectores = conectores;
+  } catch (e) { console.error('[conectores]', e.message); }
   cerebro = createCerebro({
     nucleo,
     dataDir: app.getPath('userData'),

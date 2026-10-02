@@ -306,14 +306,14 @@ if (bridge.onNotif) bridge.onNotif(notif);
 
 // ---------- cerebro: tarjetas de acción, urgentes, respuestas ----------
 const cards = [];
-const KIND = { server: '#', dm: ICO.chat, pi: ICO.pi, claude: ICO.bot };
+const KIND = { server: '#', dm: ICO.chat, pi: ICO.pi, claude: ICO.bot, mail: '✉' };
 function renderCards() {
   $('cards').innerHTML = cards.map(c => `<div class="card ${c.prioridad} ${c.kind}" data-card="${c.id}">
     <div class="h"><span>${KIND[c.kind] || '•'}</span><b>${esc(c.author || '')}</b>${c.guild ? `<span>${esc(c.guild)}${c.channel ? ' #' + esc(c.channel) : ''}</span>` : ''}${c.prioridad === 'urgente' ? '<span class="pill" style="color:var(--bad);border-color:var(--bad)">urgente</span>' : ''}</div>
     <div class="rs">${esc(c.resumen)}</div><div class="tx">${esc(c.text)}</div>
     ${c.respuesta ? `<textarea data-txt="${c.id}">${esc(c.respuesta)}</textarea>` : ''}
     <div class="acts">
-      ${c.respuesta && c.canSend ? `<button class="go" data-a="enviar">${ICO.enviar} Enviar (como bot)</button>` : ''}
+      ${c.respuesta && c.canSend ? `<button class="go" data-a="enviar">${ICO.enviar} ${c.kind === 'mail' ? 'Responder' : 'Enviar (como bot)'}</button>` : ''}
       ${c.respuesta ? `<button data-a="copiar" title="Copia la respuesta y abre Discord para que la mandes tú">${ICO.copiar} Copiar y abrir</button>` : `<button data-a="copiar">${ICO.abrir} Abrir</button>`}
       <button data-a="descartar" title="Descartar">${ICO.x}</button>
       <button data-a="urgente" title="Esto es importante">${ICO.arriba}</button><button data-a="ruido" title="Esto no me importa">${ICO.silenciar}</button>
