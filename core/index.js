@@ -15,6 +15,7 @@ const { crearCompactador } = require('./compactar');
 const { crearSubagentes } = require('./subagentes');
 const { crearControl } = require('./escritorio/control');
 const { crearImportador } = require('./importador');
+const { crearSkills } = require('./skills');
 
 function crearNucleo(opciones = {}) {
   const cfg = cargarConfig(opciones.dir);
@@ -22,15 +23,19 @@ function crearNucleo(opciones = {}) {
   const proveedores = crearProveedores(cfg);
   const permisos = crearPermisos({ cfg, bus });
   const sesiones = crearSesiones({ cfg });
-  const memoria = crearMemoria({ cfg, embedder: crearEmbedder(cfg) });
+  const embedder = opciones.embedder !== undefined ? opciones.embedder : crearEmbedder(cfg);
+  const memoria = crearMemoria({ cfg, embedder });
   const personalidad = extras.crearPersonalidad(cfg, bus);
   const registro = extras.crearRegistro(bus);
   const historialPermisos = extras.crearHistorialPermisos(cfg, bus);
   const canales = extras.crearCanales();
   const generarJSON = crearEstructurado(proveedores);
   const compactador = crearCompactador({ cfg, generarJSON, memoria, sesiones });
-  let tareas = null, subagentes = null, control = null, navegador = null;
-  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador });
+  let tareas = null, subagentes = null, control = null, navegador = null, nucleo = null;
+  const modeloCerebro = () => { const m = nucleo?.cerebro?.leer?.()?.modelo; return m && m.includes('/') ? m : cfg.modeloPorDefecto; };
+  const skills = crearSkills({ cfg, bus, generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), embedder, modelo: modeloCerebro, escaner: opciones.escaner,
+    tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github') });
+  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador });
   // atajo: enviar y emitir los eventos también al bus global
   const enviar = (s, texto, emitir) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); });
   subagentes = crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar: id => agente.cancelar(id) });
@@ -40,9 +45,8 @@ function crearNucleo(opciones = {}) {
     cfg, bus,
     ejecutarAgente: ({ texto, modelo, cwd, canal, titulo }) => enviar(sesiones.crear({ modelo, cwd, canal, titulo, tarea: true }), texto),
   });
-  const nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador };
-  nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores,
-    modelo: () => { const m = nucleo.cerebro?.leer?.()?.modelo; return m && m.includes('/') ? m : cfg.modeloPorDefecto; } });
+  nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills };
+  nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }
 

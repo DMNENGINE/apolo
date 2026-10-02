@@ -13,6 +13,7 @@ function crearPermisos({ cfg, bus }) {
   let n = 0;
 
   function clave(h, args, cwd) {
+    if (h.clavePermiso) return { herramienta: h.nombre, prefijo: h.clavePermiso(args) };   // p. ej. scripts de skills: por skill/script
     if (h.nombre === 'shell') return { herramienta: 'shell', prefijo: String(args.comando || '').trim().split(/\s+/)[0] };
     if (args.dominio !== undefined) return { herramienta: h.nombre, prefijo: String(args.dominio) };   // navegador: regla por sitio
     if (args.ruta === undefined) return { herramienta: h.nombre, prefijo: '*' };
@@ -21,13 +22,13 @@ function crearPermisos({ cfg, bus }) {
   const coincide = (r, k) => r.herramienta === k.herramienta &&
     (k.herramienta === 'shell' || k.prefijo === '*' ? r.prefijo === k.prefijo : (k.prefijo + path.sep).startsWith(r.prefijo + path.sep));
 
-  async function pedir({ h, args, sesion }) {
+  async function pedir({ h, args, sesion, ctx }) {
     const modo = cfg.permisos.modo;
     const riesgo = typeof h.riesgo === 'function' ? h.riesgo(args, sesion) : h.riesgo;
     if (riesgo === 'lectura') return { ok: true };
     if (modo === 'solo-lectura') return { ok: false, motivo: 'modo solo-lectura' };
     // siemprePreguntar: herramientas que se aprueban una a una (control del PC, acciones delicadas): sin reglas "siempre" ni modo auto
-    const peligro = h.siemprePreguntar?.(args) || esPeligroso(ALIAS[h.nombre] || h.nombre, { command: args.comando, file_path: args.ruta && path.resolve(sesion.cwd, args.ruta) });
+    const peligro = h.siemprePreguntar?.(args, ctx) || esPeligroso(ALIAS[h.nombre] || h.nombre, { command: args.comando, file_path: args.ruta && path.resolve(sesion.cwd, args.ruta) });
     const k = clave(h, args, sesion.cwd);
     if (!peligro && (modo === 'auto' || reglas.some(r => coincide(r, k)))) return { ok: true };
 

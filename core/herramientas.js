@@ -265,6 +265,93 @@ const HERRAMIENTAS = [
     resumen,
     ejecutar: (a, ctx) => (ctx.navegador ? ctx.navegador.accion(ctx.sesion, op, a) : 'error: el navegador no está disponible aquí'),
   })),
+  // ---------- skills (core/skills): instrucciones especializadas instaladas por el usuario ----------
+  {
+    nombre: 'usar_skill', riesgo: 'lectura',
+    descripcion: 'Carga las instrucciones completas (SKILL.md) de una skill de "SKILLS DISPONIBLES". Úsala ANTES de hacer una tarea que encaje con una skill, y sigue sus pasos.',
+    parametros: { type: 'object', properties: { nombre: { type: 'string', description: 'nombre (slug) de la skill' } }, required: ['nombre'] },
+    resumen: a => a.nombre,
+    ejecutar: async (a, ctx) => {
+      if (!ctx.skills) return 'error: las skills no están disponibles aquí';
+      const s = ctx.skills.activa(a.nombre), c = ctx.skills.almacen.contenido(s.slug);
+      ctx.skills.almacen.contarUso(s.slug);
+      const extra = [c.referencias.length ? `Referencias (leer_recurso_skill): ${c.referencias.join(', ')}` : '', c.scripts.length ? `Scripts (ejecutar_script_skill): ${c.scripts.join(', ')}` : '',
+        c.recursos.length ? `Recursos: ${c.recursos.slice(0, 40).join(', ')}` : ''].filter(Boolean).join('\n');
+      return recortar(`SKILL "${s.slug}" (carpeta ${s.dir})\n${extra ? extra + '\n' : ''}\n${c.cuerpo.trim()}`);
+    },
+  },
+  {
+    nombre: 'leer_recurso_skill', riesgo: 'lectura',
+    descripcion: 'Lee un archivo de una skill activa (references/…, assets/…, scripts/… o cualquier ruta relativa a su carpeta).',
+    parametros: { type: 'object', properties: { nombre: { type: 'string' }, ruta: { type: 'string', description: 'ruta relativa dentro de la skill, p. ej. references/api.md' } }, required: ['nombre', 'ruta'] },
+    resumen: a => `${a.nombre}: ${a.ruta}`,
+    ejecutar: async (a, ctx) => {
+      if (!ctx.skills) return 'error: las skills no están disponibles aquí';
+      const s = ctx.skills.activa(a.nombre), f = ctx.skills.rutaDentro(s, a.ruta);
+      if (!fs.existsSync(f)) return `error: no existe ${a.ruta} en la skill ${s.slug}`;
+      if (fs.statSync(f).isDirectory()) return fs.readdirSync(f).join('\n') || '(vacía)';
+      const b = fs.readFileSync(f);
+      if (b.subarray(0, 8000).includes(0)) return `[archivo binario de ${b.length} bytes: ${f}]`;
+      return recortar(b.toString('utf8'));
+    },
+  },
+  {
+    nombre: 'ejecutar_script_skill', riesgo: 'ejecucion',
+    siemprePreguntar: (a, ctx) => ctx?.skills?.motivoPreguntar(a.nombre) || '',
+    clavePermiso: a => `skill:${a.nombre}/${String(a.script || '').replace(/\\/g, '/')}`,
+    descripcion: 'Ejecuta un script de una skill activa (python .py, node .js/.mjs, PowerShell .ps1, bash .sh) con la carpeta de la skill como directorio de trabajo. ' +
+      'args = lista de argumentos (usa rutas absolutas para archivos del usuario). Pide permiso.',
+    parametros: {
+      type: 'object',
+      properties: { nombre: { type: 'string' }, script: { type: 'string', description: 'ruta relativa, p. ej. scripts/convertir.py' }, args: { type: 'array', items: { type: 'string' } }, timeoutSeg: { type: 'number' } },
+      required: ['nombre', 'script'],
+    },
+    resumen: a => `${a.nombre}: ${a.script} ${(Array.isArray(a.args) ? a.args : []).join(' ')}`.trim(),
+    ejecutar: (a, ctx) => new Promise(ok => {
+      if (!ctx.skills) return ok('error: las skills no están disponibles aquí');
+      let s, f;
+      try {
+        s = ctx.skills.activa(a.nombre); f = ctx.skills.rutaDentro(s, a.script);
+        if (!fs.existsSync(f) && !/[\\/]/.test(a.script)) f = ctx.skills.rutaDentro(s, `scripts/${a.script}`);
+        if (!fs.existsSync(f)) return ok(`error: no existe ${a.script} en la skill ${s.slug}`);
+      } catch (e) { return ok(`error: ${e.message}`); }
+      const ext = path.extname(f).toLowerCase(), args = (Array.isArray(a.args) ? a.args : a.args ? [a.args] : []).map(String);
+      const win = process.platform === 'win32';
+      const cmd = { '.py': [win ? 'python' : 'python3', [f, ...args]], '.js': [process.execPath, [f, ...args]], '.mjs': [process.execPath, [f, ...args]], '.cjs': [process.execPath, [f, ...args]],
+        '.ps1': [win ? 'powershell.exe' : 'pwsh', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', f, ...args]], '.sh': ['bash', [f, ...args]] }[ext];
+      if (!cmd) return ok(`error: tipo de script no soportado (${ext || 'sin extensión'})`);
+      const p = spawn(cmd[0], cmd[1], { cwd: s.dir, windowsHide: true,               // ELECTRON_RUN_AS_NODE: dentro de la app, execPath es Electron
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PYTHONIOENCODING: 'utf-8', SKILL_DIR: s.dir, APOLO_CWD: ctx.cwd || '' } });
+      let out = '';
+      p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
+      const t = setTimeout(() => { p.kill(); out += '\n[cancelado por tiempo]'; }, Math.min(a.timeoutSeg || 120, 600) * 1000);
+      ctx.signal?.addEventListener('abort', () => p.kill(), { once: true });
+      p.on('close', code => { clearTimeout(t); ok(recortar(`${out.trim()}\n[código de salida ${code}]`)); });
+      p.on('error', e => { clearTimeout(t); ok(`error: ${e.message}`); });
+    }),
+  },
+  {
+    nombre: 'instalar_skill', riesgo: 'escritura',
+    descripcion: 'Instala una skill desde una carpeta, un .zip/.skill, una URL o GitHub ("owner/repo/ruta" o la URL de github.com). ' +
+      'Queda DESACTIVADA y se escanea: informa al usuario del resultado del escaneo; él la activa. Si la fuente trae varias, devuelve la lista para elegir.',
+    parametros: { type: 'object', properties: { fuente: { type: 'string' } }, required: ['fuente'] },
+    resumen: a => a.fuente,
+    ejecutar: async (a, ctx) => {
+      if (!ctx.skills) return 'error: las skills no están disponibles aquí';
+      const r = await ctx.skills.instalar(a.fuente);
+      if (r.opciones) return `La fuente trae ${r.opciones.length} skills; vuelve a llamar con la fuente de la que quieras:\n` + r.opciones.map(o => `- ${o.fuente} — ${o.descripcion.slice(0, 120)}`).join('\n');
+      const s = r.skill, e = s.escaneo || {};
+      return `Skill "${s.slug}" instalada y DESACTIVADA. Escaneo: ${e.nivel || '?'}${e.resumen ? ' — ' + e.resumen : ''}${e.explicacion ? '\n' + e.explicacion : ''}\n` +
+        `${(e.hallazgos || []).slice(0, 8).map(h => `· [${h.gravedad}] ${h.archivo}:${h.linea} ${h.regla}`).join('\n')}\nEl usuario puede activarla en el panel (Skills) o con /skill on ${s.slug}.`;
+    },
+  },
+  {
+    nombre: 'ver_skills', riesgo: 'lectura',
+    descripcion: 'Lista las skills instaladas (activas y desactivadas) con su descripción y el resultado del escaneo.',
+    parametros: { type: 'object', properties: {} },
+    resumen: () => '',
+    ejecutar: async (a, ctx) => (ctx.skills ? ctx.skills.lista().map(s => `${s.activa ? '●' : '○'} ${s.slug}${s.externa ? ' [externa]' : ''} · escaneo ${s.escaneo?.nivel || 'pendiente'} · ${s.usos} usos · ${s.descripcion.slice(0, 160)}`).join('\n') || '(no hay skills instaladas)' : 'error: las skills no están disponibles aquí'),
+  },
   {
     nombre: 'delegar', riesgo: 'lectura',            // lo que haga el subagente pasa por permisos igual que lo tuyo
     descripcion: 'Encarga una subtarea a un SUBAGENTE independiente (contexto limpio, mismas herramientas y permisos) y devuelve su informe final. ' +

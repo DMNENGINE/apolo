@@ -11,7 +11,7 @@
 //   3) un modelo extrae hechos duraderos sobre el usuario de los .md → memoria (deduplica y bloquea secretos)
 //   4) automatizaciones → tareas del robot, PAUSADAS (las activas tú tras revisarlas: ejecutan herramientas)
 //   5) agentes → plantillas de subagente (<dir>/agentes.json; "delegar" las usa por nombre)
-//   6) skills → <dir>/skills/<nombre>.md (de momento solo guardadas)
+//   6) skills → <dir>/skills/<slug>/SKILL.md (formato estándar, DESACTIVADAS y escaneadas; ver core/skills)
 // También acepta el formato antiguo { origen, archivos }.
 const fs = require('fs');
 const path = require('path');
@@ -32,7 +32,7 @@ const limpiaRuta = r => String(r).replace(/\\/g, '/').split('/').filter(p => p &
 const tapar = t => String(t ?? '').replace(SECRETO, '[REDACTADO]');
 const buscar = (archivos, re) => Object.entries(archivos).find(([k]) => re.test(k.split('/').pop()))?.[1] || '';
 
-function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tareas, proveedores }) {
+function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tareas, proveedores, skills: motorSkills }) {
   async function importar(entrada = {}) {
     const origen = String(entrada.origen || 'externo').replace(/[^\w-]/g, '').slice(0, 30) || 'externo';
     const archivos = Object.fromEntries(Object.entries(entrada.archivos || {}).filter(([k, v]) => typeof v === 'string' && limpiaRuta(k)).map(([k, v]) => [limpiaRuta(k), tapar(v)]));
@@ -124,13 +124,16 @@ function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tare
       fs.writeFileSync(f, JSON.stringify(lista, null, 2));
     }
 
-    // 6) skills → guardadas como .md
+    // 6) skills → <dir>/skills/<slug>/SKILL.md (formato estándar), DESACTIVADAS y escaneadas
     if (skills.length) {
-      const dir = path.join(cfg.dir, 'skills'); fs.mkdirSync(dir, { recursive: true });
+      const motor = motorSkills || (motorSkills = require('./skills').crearSkills({ cfg, generarJSON, modelo }));
       for (const s of skills.slice(0, 100)) {
         const nombre = limpiaRuta(String(s.nombre || '')).replace(/\//g, '-').slice(0, 60); if (!nombre) continue;
-        fs.writeFileSync(path.join(dir, `${nombre}.md`), `# ${nombre}\n\n${tapar(s.descripcion || '')}\n\n${tapar(s.contenido || '')}`.slice(0, 200_000));
-        res.skills.push(nombre);
+        try {
+          const sk = await motor.instalarTexto({ nombre, descripcion: tapar(s.descripcion || ''), contenido: tapar(s.contenido || '').slice(0, 200_000), origen: `importado de ${origen}` });
+          res.skills.push(sk.slug);
+          if (sk.escaneo?.nivel === 'rojo') res.errores.push(`skill "${sk.slug}": el escáner la marcó en ROJO (${sk.escaneo.resumen})`);
+        } catch (e) { res.errores.push(`skill "${nombre}": ${e.message}`); }
       }
     }
 

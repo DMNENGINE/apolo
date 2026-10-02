@@ -16,7 +16,7 @@ function agentesGuardados(s, cfg) {
   return require('./importador').leerAgentes(cfg).slice(0, 20).map(a => `- ${a.nombre}: ${a.descripcion || '(sin descripción)'}`).join('\n');
 }
 
-function sistema(s, recuerdos, personalidad, resumen, cfg) {
+function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '') {
   const guardados = agentesGuardados(s, cfg);
   return [
     'Eres Robot Companion, un asistente personal que trabaja en el ordenador del usuario usando herramientas.',
@@ -31,6 +31,7 @@ function sistema(s, recuerdos, personalidad, resumen, cfg) {
     recuerdos ? `LO QUE SABES DEL USUARIO (memoria):\n${recuerdos}` : 'Memoria: aún no sabes nada del usuario.',
     personalidad ? `\nPERSONALIDAD E INSTRUCCIONES DEL USUARIO (síguelas):\n${personalidad}` : '',
     guardados ? `\nAGENTES GUARDADOS (úsalos con delegar + "agente"):\n${guardados}` : '',
+    skills ? `\n${skills}` : '',
     resumen ? `\nRESUMEN DE LA PARTE ANTERIOR DE ESTA CONVERSACIÓN (ya no ves esos mensajes; continúa desde aquí):\n${resumen}` : '',
   ].filter(Boolean).join('\n');
 }
@@ -61,7 +62,7 @@ function conImagenes(mensajes, sinVision) {
   return out;
 }
 
-function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, personalidad, compactador, subagentes, control, navegador }) {
+function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, personalidad, compactador, subagentes, control, navegador, skills }) {
   const enCurso = new Map();   // sesion.id -> AbortController
 
   async function enviar(s, texto, emitir = () => { }) {
@@ -75,19 +76,22 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       ev('inicio', { modelo: s.modelo });
       let recuerdos = ''; try { recuerdos = memoria ? await memoria.contexto(texto) : ''; } catch { }
       let pers = ''; try { pers = personalidad ? personalidad.prompt() : ''; } catch { }
+      let sk = ''; try { sk = skills ? (await skills.seccion({ sesion: s, mensaje: texto })).texto : ''; } catch { }   // índice + sugeridas (o la skill ya cargada)
       const apagadas = new Set(cfg.herramientasOff || []);
       if (s.padre || !subagentes) apagadas.add('delegar');                // los subagentes no delegan (sin recursión)
+      let hayActivas = false; try { hayActivas = !!skills?.almacen.lista().some(x => x.activa); } catch { }
+      if (!hayActivas) ['usar_skill', 'leer_recurso_skill', 'ejecutar_script_skill'].forEach(x => apagadas.add(x));   // sin skills activas: menos herramientas
       const herramientas = HERRAMIENTAS.filter(h => !apagadas.has(h.nombre) && (!h.disponible || h.disponible()));
       const disponibles = new Set(herramientas.map(h => h.nombre));
       let final = '', empujones = 0, empujon = false;
       for (let paso = 0; paso < cfg.maxPasos; paso++) {
-        const base = sistema(s, recuerdos, pers, '', cfg);
+        const base = sistema(s, recuerdos, pers, '', cfg, sk);
         if (compactador?.hace(s, base)) {              // conversación larga: resumir lo antiguo antes de seguir
           try { const c = await compactador.compactar(s, { signal: ctl.signal }); if (c) ev('compactacion', c); }
           catch (e) { if (ctl.signal.aborted) throw e; ev('aviso', { texto: `no pude compactar la conversación: ${e.message}` }); }
         }
         const v = vista(s.mensajes);
-        const sys = sistema(s, recuerdos, pers, v.resumen, cfg);
+        const sys = sistema(s, recuerdos, pers, v.resumen, cfg, sk);
         let historial = conImagenes(v.mensajes, s.sinVision);
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
         let r;
@@ -118,10 +122,10 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           const h = disponibles.has(c.name) ? porNombre[c.name] : null;
           if (!h) return `error: herramienta "${c.name}" no existe`;
           ev('herramienta', { id: c.id, nombre: c.name, args: c.args || {}, resumen: h.resumen(c.args || {}) });
-          const p = await permisos.pedir({ h, args: c.args || {}, sesion: s });
+          const p = await permisos.pedir({ h, args: c.args || {}, sesion: s, ctx: { skills } });
           if (!p.ok) return `DENEGADO: ${p.motivo}`;
           try {
-            const out = await h.ejecutar(c.args || {}, { cwd: s.cwd, signal: ctl.signal, sesion: s, tareas: tareas(), memoria, personalidad, cfg, subagentes: subagentes?.(), control: control?.(), navegador: navegador?.() });
+            const out = await h.ejecutar(c.args || {}, { cwd: s.cwd, signal: ctl.signal, sesion: s, tareas: tareas(), memoria, personalidad, cfg, subagentes: subagentes?.(), control: control?.(), navegador: navegador?.(), skills });
             return out && typeof out === 'object' ? { texto: String(out.texto || ''), imagenes: out.imagenes || [] } : String(out);   // {texto, imagenes} = resultado con capturas
           } catch (e) { return `error: ${e.message}`; }
         };

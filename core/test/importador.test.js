@@ -10,14 +10,14 @@ function nucleoFalso(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nucleo-'));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ memoria: { embeddings: null } }));
   const { crearNucleo } = require('../index');
-  const n = crearNucleo({ dir });
+  const n = crearNucleo({ dir, escaner: { escanear: async () => ({ nivel: 'verde', hallazgos: [], resumen: 'limpia', explicacion: '' }) } });
   const prompts = [];
   n.generarJSON = async ({ prompt }) => {                     // el importador lo recibe por referencia al crearse: se sustituye abajo
     prompts.push(prompt);
     return { datos: { hechos: [{ texto: 'Tiene un taller de camiones en Ohio', tipo: 'perfil' }, { texto: 'Su clave es sk-abcdefghijklmnopqrstuvwx', tipo: 'hecho' }], identidad: 'Jarvis, irónico' } };
   };
   const { crearImportador } = require('../importador');
-  n.importador = crearImportador({ cfg: n.cfg, memoria: n.memoria, generarJSON: n.generarJSON, personalidad: n.personalidad, tareas: n.tareas, proveedores: n.proveedores, modelo: () => 'x/y' });
+  n.importador = crearImportador({ cfg: n.cfg, memoria: n.memoria, generarJSON: n.generarJSON, personalidad: n.personalidad, tareas: n.tareas, proveedores: n.proveedores, skills: n.skills, modelo: () => 'x/y' });
   t.after(() => n.tareas.detener?.());
   return { n, dir, prompts };
 }
@@ -67,7 +67,10 @@ test('migración completa: personalidad, recuerdos, tareas pausadas, agentes y s
   // agentes y skills
   const ags = require('../importador').leerAgentes(n.cfg);
   assert.deepStrictEqual(ags.map(a => [a.nombre, a.modelo]), [['Investigador', 'ollama/gemma4:31b-cloud']]);
-  assert.ok(fs.existsSync(path.join(dir, 'skills', 'ats-mods.md')));
+  assert.ok(fs.existsSync(path.join(dir, 'skills', 'ats-mods', 'SKILL.md')));       // formato estándar, desactivada y escaneada
+  const sk = n.skills.obtener('ats-mods');
+  assert.strictEqual(sk.activa, false); assert.strictEqual(sk.escaneo.nivel, 'verde'); assert.match(sk.descripcion, /Mods de ATS/); assert.match(sk.contenido, /^---\nname: ats-mods/);
+  assert.deepStrictEqual(r.skills, ['ats-mods']);
   // backup: copia de los archivos (con rutas saneadas, nada fuera) y de la personalidad anterior
   assert.ok(fs.existsSync(path.join(r.backup, 'archivos', 'memory', '2026-09-30.md')));
   assert.ok(fs.existsSync(path.join(r.backup, 'archivos', 'fuera.md')));

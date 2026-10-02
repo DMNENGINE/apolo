@@ -59,6 +59,9 @@ const POR_DEFECTO = {
   puerto: 47900,
   // red: por defecto solo este equipo. permitidos = IPs de la LAN que pueden entrar (con token), ej. la Pi
   red: { permitidos: [] },
+  // skills (core/skills): rutasExtra = más carpetas de skills externas (solo lectura); externasActivas = las de ~/.claude/skills,
+  // ~/.codex/skills… entran activas; autoInyectar = a modelos locales pequeños se les mete la skill si la confianza ≥ umbralInyectar
+  skills: { rutasExtra: [], externasActivas: false, autoInyectar: true, umbralInyectar: 0.85, presupuestoLocal: 1500, presupuestoNube: 5000, usarTokenGithub: true },
 };
 
 function cargarConfig(dir = carpetaDatos()) {
@@ -66,7 +69,7 @@ function cargarConfig(dir = carpetaDatos()) {
   const f = path.join(dir, 'config.json');
   let guardada = {};
   try { guardada = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { }
-  const cfg = { ...POR_DEFECTO, ...guardada, permisos: { ...POR_DEFECTO.permisos, ...guardada.permisos }, alias: { ...POR_DEFECTO.alias, ...guardada.alias }, memoria: { ...POR_DEFECTO.memoria, ...guardada.memoria }, compactar: { ...POR_DEFECTO.compactar, ...guardada.compactar }, proveedores: { ...POR_DEFECTO.proveedores } };
+  const cfg = { ...POR_DEFECTO, ...guardada, permisos: { ...POR_DEFECTO.permisos, ...guardada.permisos }, alias: { ...POR_DEFECTO.alias, ...guardada.alias }, memoria: { ...POR_DEFECTO.memoria, ...guardada.memoria }, compactar: { ...POR_DEFECTO.compactar, ...guardada.compactar }, skills: { ...POR_DEFECTO.skills, ...guardada.skills }, proveedores: { ...POR_DEFECTO.proveedores } };
   for (const [k, v] of Object.entries(guardada.proveedores || {})) cfg.proveedores[k] = { ...POR_DEFECTO.proveedores[k], ...v };
   // migraciones de proveedores que cambiaron de API (se conserva la clave)
   const pp = cfg.proveedores.perplexity;

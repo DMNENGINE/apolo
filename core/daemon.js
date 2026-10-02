@@ -18,6 +18,9 @@
 //   GET  /v1/eventos                     SSE global (permisos, tareas, eventos de todas las sesiones)
 //   GET  /v1/memoria?q= · POST /v1/memoria {texto,tipo} · DEL /v1/memoria/:id
 //   GET  /v1/tareas · POST /v1/tareas {nombre,cuando,accion,canal} · DEL /v1/tareas/:id · POST /v1/tareas/:id/ejecutar
+//   GET  /v1/skills · GET /v1/skills/:slug (con contenido) · POST /v1/skills/instalar {fuente} → {skill} | {opciones}
+//   PATCH /v1/skills/:slug {activa, forzar} · POST /v1/skills/:slug/escanear · POST /v1/skills/:slug/actualizar {aplicar} → {diff, aplicado}
+//   DEL  /v1/skills/:slug (no las externas)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -188,6 +191,26 @@ function iniciar(opciones = {}) {
         const { decision } = await leer(req);
         if (!['allow', 'always', 'deny'].includes(decision)) return json(res, 400, { error: 'decision' });
         return json(res, n.permisos.resolver(p[2], decision) ? 200 : 404, {});
+      }
+      if (p[1] === 'skills') {                                    // motor de skills (core/skills)
+        const sk = n.skills, err = (e, c = 400) => json(res, e.status || c, { error: e.message });
+        if (!p[2] && M === 'GET') return json(res, 200, { skills: sk.lista() });
+        if (p[2] === 'instalar' && !p[3] && M === 'POST') {
+          const { fuente } = await leer(req);
+          if (!fuente) return json(res, 400, { error: 'fuente' });
+          try { return json(res, 200, await sk.instalar(String(fuente))); } catch (e) { return err(e); }
+        }
+        const s = p[2] && sk.obtener(decodeURIComponent(p[2]));
+        if (!s) return json(res, 404, { error: 'skill' });
+        if (!p[3] && M === 'GET') return json(res, 200, s);
+        if (!p[3] && M === 'PATCH') {
+          const b = await leer(req);
+          if (typeof b.activa !== 'boolean') return json(res, 400, { error: 'activa' });
+          try { return json(res, 200, (x => ({ ...x, skill: x }))(await sk.activar(s.slug, b.activa, { forzar: !!b.forzar }))); } catch (e) { return err(e); }
+        }
+        if (!p[3] && M === 'DELETE') { try { return json(res, 200, { ok: sk.borrar(s.slug) }); } catch (e) { return err(e, 403); } }
+        if (p[3] === 'escanear' && M === 'POST') { try { return json(res, 200, (x => ({ ...x, escaneo: x }))(await sk.escanear(s.slug))); } catch (e) { return err(e, 500); } }
+        if (p[3] === 'actualizar' && M === 'POST') { try { return json(res, 200, await sk.actualizar(s.slug, { aplicar: !!(await leer(req)).aplicar })); } catch (e) { return err(e); } }
       }
       if (p[1] === 'memoria') {
         if (!p[2] && M === 'GET') { const q = u.searchParams.get('q'); return json(res, 200, q ? await n.memoria.buscarH(q, { limite: 50 }) : n.memoria.lista()); }
