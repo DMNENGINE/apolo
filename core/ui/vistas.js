@@ -6,37 +6,38 @@ VISTAS.inicio = {
   async pintar(v) {
     const [sis, canales, tareas, regs, uso, mem] = await Promise.all([
       api('GET', '/sistema'), api('GET', '/canales'), api('GET', '/tareas'), api('GET', '/registros'), api('GET', '/uso?dias=14'), api('GET', '/memoria')]);
-    const h = new Date().getHours(), saludo = h < 6 ? 'Buenas noches' : h < 13 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
+    const h = new Date().getHours(), saludo = tr(h < 6 ? 'Buenas noches' : h < 13 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches');
     const hoy = new Date().toISOString().slice(0, 10);
     const tokHoy = (uso.porDia[hoy]?.entrada || 0) + (uso.porDia[hoy]?.salida || 0);
     const sesHoy = E.sesiones.filter(s => grupoFecha(s.actualizada) === 'Hoy').length;
     const activas = tareas.filter(t => t.activa).sort((a, b) => a.proxima - b.proxima);
     const dias = []; for (let i = 13; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10); dias.push([d, (uso.porDia[d]?.entrada || 0) + (uso.porDia[d]?.salida || 0)]); }
     const max = Math.max(1, ...dias.map(d => d[1]));
-    const estadoTxt = E.pendientes.size ? `Tienes <b class="aviso-txt">${E.pendientes.size} permiso${E.pendientes.size > 1 ? 's' : ''}</b> esperando.` : E.trabajando.size ? `Estoy trabajando en ${E.trabajando.size} conversación${E.trabajando.size > 1 ? 'es' : ''}.` : 'Todo en calma. ¿Qué hacemos?';
+    const estadoTxt = E.pendientes.size ? tr('Tienes <b class="aviso-txt">{n} permiso</b> esperando.|Tienes <b class="aviso-txt">{n} permisos</b> esperando.', { n: E.pendientes.size }) : E.trabajando.size ? tr('Estoy trabajando en {n} conversación.|Estoy trabajando en {n} conversaciones.', { n: E.trabajando.size }) : tr('Todo en calma. ¿Qué hacemos?');
+    const L = I18N.locale();
     v.innerHTML = `<div class="pagina">
-      <div class="saludo"><div class="robot-inicio" id="robotInicio" title="Tócame">${casco('casco-grande' + (E.pendientes.size ? ' permiso' : E.trabajando.size ? ' trabajando' : ''))}</div>
+      <div class="saludo"><div class="robot-inicio" id="robotInicio" title="${tr('Tócame')}">${casco('casco-grande' + (E.pendientes.size ? ' permiso' : E.trabajando.size ? ' trabajando' : ''))}</div>
         <div class="crece"><h1>${saludo}</h1><p>${estadoTxt}</p></div>
-        <a class="btn pri" href="#/chat">${ic('editar')}Nueva conversación</a></div>
+        <a class="btn pri" href="#/chat">${ic('editar')}${tr('Nueva conversación')}</a></div>
       <div class="rejilla k">
-        <div class="kpi"><small>${ic('chispa')}Modelo por defecto</small><b style="font-size:16px;margin-top:8px" class="flex">${avatar(E.config.modeloPorDefecto)}${esc(nombreModelo(E.config.modeloPorDefecto))}</b></div>
-        <div class="kpi"><small>${ic('chat')}Conversaciones hoy</small><b>${sesHoy}</b><span>${E.sesiones.length} en total</span></div>
-        <div class="kpi"><small>${ic('rayo')}Tokens hoy</small><b>${fmtK(tokHoy)}</b><span>${fmtK(Object.values(uso.porDia).reduce((n, d) => n + d.entrada + d.salida, 0))} en 14 días</span></div>
-        <div class="kpi"><small>${ic('reloj')}Automatizaciones</small><b>${activas.length}</b><span>${tareas.length - activas.length} pausadas o hechas</span></div>
-        <div class="kpi"><small>${ic('cerebro')}Recuerdos</small><b>${mem.length}</b><span>${mem.filter(m => m.tipo === 'perfil').length} de perfil</span></div>
+        <div class="kpi"><small>${ic('chispa')}${tr('Modelo por defecto')}</small><b style="font-size:16px;margin-top:8px" class="flex">${avatar(E.config.modeloPorDefecto)}${esc(nombreModelo(E.config.modeloPorDefecto))}</b></div>
+        <div class="kpi"><small>${ic('chat')}${tr('Conversaciones hoy')}</small><b>${sesHoy}</b><span>${tr('{n} en total', { n: E.sesiones.length })}</span></div>
+        <div class="kpi"><small>${ic('rayo')}${tr('Tokens hoy')}</small><b>${fmtK(tokHoy)}</b><span>${tr('{n} en 14 días', { n: fmtK(Object.values(uso.porDia).reduce((n, d) => n + d.entrada + d.salida, 0)) })}</span></div>
+        <div class="kpi"><small>${ic('reloj')}${tr('Automatizaciones')}</small><b>${activas.length}</b><span>${tr('{n} pausadas o hechas', { n: tareas.length - activas.length })}</span></div>
+        <div class="kpi"><small>${ic('cerebro')}${tr('Recuerdos')}</small><b>${mem.length}</b><span>${tr('{n} de perfil', { n: mem.filter(m => m.tipo === 'perfil').length })}</span></div>
       </div>
       <div class="rejilla" style="margin-top:12px">
-        <section class="tarjeta"><header>${ic('monitor')}<span class="crece">Equipo</span><span class="chip ok"><span class="punto ok"></span>${esc(sis.host)}</span></header><div class="cuerpo" id="equipo"></div></section>
-        <section class="tarjeta"><header>${ic('enchufe')}<span class="crece">Canales</span><a class="btn fantasma mini" href="#/ajustes/canales">Ver</a></header><div class="cuerpo lista-mini">
-          ${canales.map(c => `<div>${ic(ICONO_CANAL[c.tipo] || 'enlace')}<span class="t">${esc(c.nombre)}<br><small class="tenue">${esc(c.detalle || '')}</small></span><span class="punto ${c.estado === 'activo' ? 'ok' : c.estado === 'respaldo' ? 'aviso' : ''}"></span></div>`).join('')}</div></section>
-        <section class="tarjeta"><header>${ic('reloj')}<span class="crece">Próximas automatizaciones</span><a class="btn fantasma mini" href="#/auto">Todas</a></header><div class="cuerpo lista-mini">
+        <section class="tarjeta"><header>${ic('monitor')}<span class="crece">${tr('Equipo')}</span><span class="chip ok"><span class="punto ok"></span>${esc(sis.host)}</span></header><div class="cuerpo" id="equipo"></div></section>
+        <section class="tarjeta"><header>${ic('enchufe')}<span class="crece">${tr('Canales')}</span><a class="btn fantasma mini" href="#/ajustes/canales">${tr('Ver')}</a></header><div class="cuerpo lista-mini">
+          ${canales.map(c => `<div>${ic(ICONO_CANAL[c.tipo] || 'enlace')}<span class="t">${esc(tr(c.nombre))}<br><small class="tenue">${esc(tr(c.detalle || ''))}</small></span><span class="punto ${c.estado === 'activo' ? 'ok' : c.estado === 'respaldo' ? 'aviso' : ''}"></span></div>`).join('')}</div></section>
+        <section class="tarjeta"><header>${ic('reloj')}<span class="crece">${tr('Próximas automatizaciones')}</span><a class="btn fantasma mini" href="#/auto">${tr('Todas')}</a></header><div class="cuerpo lista-mini">
           ${activas.slice(0, 6).map(t => `<div>${ic(t.accion.tipo === 'aviso' ? 'campana' : 'robot')}<span class="t">${esc(t.nombre)}</span><span class="tenue" style="font-size:12px">${hace(t.proxima)}</span></div>`).join('') || vacio('reloj', 'Nada programado. Pídele al robot “recuérdame…”.')}</div></section>
-        <section class="tarjeta"><header>${ic('grafica')}<span class="crece">Uso · 14 días</span><a class="btn fantasma mini" href="#/uso">Detalle</a></header><div class="cuerpo">
-          <div class="barras mini" style="height:90px">${dias.map(([d, n]) => `<div style="height:${n / max * 100}%" title="${d}: ${n.toLocaleString('es')} tokens"></div>`).join('')}</div>
-          <div class="eje"><span>${dias[0][0].slice(5)}</span><span>hoy</span></div></div></section>
-        <section class="tarjeta"><header>${ic('chat')}<span class="crece">Conversaciones recientes</span></header><div class="cuerpo lista-mini">
+        <section class="tarjeta"><header>${ic('grafica')}<span class="crece">${tr('Uso · 14 días')}</span><a class="btn fantasma mini" href="#/uso">${tr('Detalle')}</a></header><div class="cuerpo">
+          <div class="barras mini" style="height:90px">${dias.map(([d, n]) => `<div style="height:${n / max * 100}%" title="${d}: ${n.toLocaleString(L)} tokens"></div>`).join('')}</div>
+          <div class="eje"><span>${dias[0][0].slice(5)}</span><span>${tr('hoy')}</span></div></div></section>
+        <section class="tarjeta"><header>${ic('chat')}<span class="crece">${tr('Conversaciones recientes')}</span></header><div class="cuerpo lista-mini">
           ${E.sesiones.slice(0, 6).map(s => `<div>${avatar(s.modelo)}<a class="t" href="#/chat/${esc(s.id)}" style="color:var(--txt)">${esc(s.titulo)}</a><span class="tenue" style="font-size:12px">${hace(s.actualizada)}</span></div>`).join('') || vacio('chat', 'Aún no hay conversaciones.')}</div></section>
-        <section class="tarjeta"><header>${ic('latido')}<span class="crece">Actividad en vivo</span><a class="btn fantasma mini" href="#/ajustes/registros">Registros</a></header><div class="cuerpo lista-mini" id="actividad"></div></section>
+        <section class="tarjeta"><header>${ic('latido')}<span class="crece">${tr('Actividad en vivo')}</span><a class="btn fantasma mini" href="#/ajustes/registros">${tr('Registros')}</a></header><div class="cuerpo lista-mini" id="actividad"></div></section>
       </div></div>`;
     this.regs = regs.slice(-8).reverse();
     this.pintarActividad();
@@ -45,8 +46,8 @@ VISTAS.inicio = {
         const s = await api('GET', '/sistema'); const el = $('#equipo'); if (!el) return;
         const m = 1 - s.memoria.libre / s.memoria.total, d = s.disco ? 1 - s.disco.libre / s.disco.total : 0;
         const barra = (t, p, det) => `<div style="margin-bottom:12px"><div class="flex"><span class="crece">${t}</span><b>${Math.round(p * 100)}%</b></div><div class="medidor ${p > .9 ? 'mal' : p > .75 ? 'aviso' : ''}"><i style="width:${p * 100}%"></i></div><small class="tenue">${det}</small></div>`;
-        el.innerHTML = barra('CPU', s.cpu.uso, `${s.cpu.nucleos} núcleos · ${esc(s.cpu.modelo)}`) + barra('Memoria', m, `${fmtB(s.memoria.total - s.memoria.libre)} de ${fmtB(s.memoria.total)}`) +
-          (s.disco ? barra(`Disco ${esc(s.disco.ruta)}`, d, `${fmtB(s.disco.libre)} libres de ${fmtB(s.disco.total)}`) : '') + `<small class="tenue">Encendido ${duracion(s.encendidoSeg)} · núcleo ${duracion(s.nucleoSeg)}</small>`;
+        el.innerHTML = barra('CPU', s.cpu.uso, `${tr('{n} núcleos', { n: s.cpu.nucleos })} · ${esc(s.cpu.modelo)}`) + barra(tr('Memoria'), m, tr('{a} de {b}', { a: fmtB(s.memoria.total - s.memoria.libre), b: fmtB(s.memoria.total) })) +
+          (s.disco ? barra(tr('Disco {x}', { x: esc(s.disco.ruta) }), d, tr('{a} libres de {b}', { a: fmtB(s.disco.libre), b: fmtB(s.disco.total) })) : '') + `<small class="tenue">${tr('Encendido {a} · núcleo {b}', { a: duracion(s.encendidoSeg), b: duracion(s.nucleoSeg) })}</small>`;
       } catch { }
     };
     equipo(); this.t = setInterval(equipo, 4000);
@@ -67,22 +68,22 @@ VISTAS.chat = {
   async pintar(v, id) {
     desmontarRobot($('#robotChat'));
     this.sesion = id ? await api('GET', `/sesiones/${id}`).catch(() => null) : null;
-    if (id && !this.sesion) { aviso('Esa conversación ya no existe', true); location.hash = '#/chat'; return; }
+    if (id && !this.sesion) { aviso(tr('Esa conversación ya no existe'), true); location.hash = '#/chat'; return; }
     const s = this.sesion;
     this.modelo = s ? s.modelo : (this.modelo || E.config.modeloPorDefecto);
     this.cwd = s ? s.cwd : (this.cwd || E.config.carpeta || '');
     const insp = leerLocal('inspector', true) && s;
     v.innerHTML = `<div class="chat"><div class="chat-principal">
       <div class="chat-cab"><span class="solo-movil" style="width:30px"></span>
-        ${s ? avatar(s.modelo) : ''}<div class="titulo" id="titulo">${s ? esc(s.titulo) : 'Nueva conversación'} ${s ? `<span class="ruta">· ${esc(s.cwd)}</span>` : ''}</div>
-        ${s ? `<button class="btn fantasma icono" id="renombrar" title="Renombrar">${ic('editar')}</button><button class="btn fantasma icono" id="borrar" title="Borrar">${ic('basura')}</button>
-        <button class="btn fantasma icono" id="togInsp" title="Detalles">${ic('panel')}</button>` : ''}</div>
+        ${s ? avatar(s.modelo) : ''}<div class="titulo" id="titulo">${s ? esc(s.titulo) : tr('Nueva conversación')} ${s ? `<span class="ruta">· ${esc(s.cwd)}</span>` : ''}</div>
+        ${s ? `<button class="btn fantasma icono" id="renombrar" title="${tr('Renombrar')}">${ic('editar')}</button><button class="btn fantasma icono" id="borrar" title="${tr('Borrar')}">${ic('basura')}</button>
+        <button class="btn fantasma icono" id="togInsp" title="${tr('Detalles')}">${ic('panel')}</button>` : ''}</div>
       <div class="hilo" id="hilo"><div class="hilo-int" id="msgs"></div></div>
       <div class="compositor-zona"><form class="compositor" id="comp">
-        <textarea id="entrada" rows="1" placeholder="Escribe un mensaje…  (Enter envía · Shift+Enter nueva línea)"></textarea>
+        <textarea id="entrada" rows="1" placeholder="${tr('Escribe un mensaje…  (Enter envía · Shift+Enter nueva línea)')}"></textarea>
         <div class="barra"><button type="button" class="chip-btn" id="chipModelo">${avatar(this.modelo)}<span>${esc(nombreModelo(this.modelo))}</span>${ic('abajo')}</button>
-          <button type="button" class="chip-btn" id="chipCarpeta" title="Carpeta de trabajo">${ic('carpeta')}<span>${esc(this.cwd ? this.cwd.split(/[\\/]/).filter(Boolean).pop() : 'carpeta por defecto')}</span></button>
-          <button class="enviar" id="enviar" title="Enviar">${ic('enviar')}</button></div></form></div>
+          <button type="button" class="chip-btn" id="chipCarpeta" title="${tr('Carpeta de trabajo')}">${ic('carpeta')}<span>${esc(this.cwd ? this.cwd.split(/[\\/]/).filter(Boolean).pop() : tr('carpeta por defecto'))}</span></button>
+          <button class="enviar" id="enviar" title="${tr('Enviar')}">${ic('enviar')}</button></div></form></div>
     </div>${insp ? '<aside class="inspector" id="insp"></aside>' : ''}</div>`;
     const entrada = $('#entrada');
     const ajustar = () => { entrada.style.height = 'auto'; entrada.style.height = Math.min(entrada.scrollHeight, 240) + 'px'; };
@@ -96,7 +97,7 @@ VISTAS.chat = {
         const t = await modal({ titulo: 'Renombrar conversación', cuerpo: `<input id="nt" style="width:100%" value="${esc(s.titulo)}">`, botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Guardar', cls: 'pri', valor: m => $('#nt', m).value.trim() || false }] });
         if (t) { await api('PATCH', `/sesiones/${s.id}`, { titulo: t }); s.titulo = t; $('#titulo').firstChild.textContent = t + ' '; cargarSesiones(); }
       };
-      $('#borrar').onclick = async () => { if (await confirmar('Borrar conversación', `“${s.titulo}” se borrará para siempre.`, true)) { await api('DELETE', `/sesiones/${s.id}`); cargarSesiones(); location.hash = '#/chat'; } };
+      $('#borrar').onclick = async () => { if (await confirmar('Borrar conversación', tr('“{x}” se borrará para siempre.', { x: s.titulo }), true)) { await api('DELETE', `/sesiones/${s.id}`); cargarSesiones(); location.hash = '#/chat'; } };
       $('#togInsp').onclick = () => { guardarLocal('inspector', !leerLocal('inspector', true)); this.pintar(v, s.id); };
     }
     this.pintarMensajes();
@@ -108,19 +109,19 @@ VISTAS.chat = {
   estadoBoton() {
     const b = $('#enviar'); if (!b) return;
     const o = this.ocupada();
-    b.classList.toggle('parar', o); b.innerHTML = ic(o ? 'parar' : 'enviar'); b.title = o ? 'Detener' : 'Enviar';
+    b.classList.toggle('parar', o); b.innerHTML = ic(o ? 'parar' : 'enviar'); b.title = tr(o ? 'Detener' : 'Enviar');
   },
   pintarMensajes() {
     const m = $('#msgs'), s = this.sesion;
     if (!s) {
-      m.innerHTML = `<div class="bienvenida"><div class="robot-bienvenida" id="robotChat" title="Tócame">${casco('casco-grande')}</div><h2>¿En qué te ayudo?</h2>
-        <p>Hablas con <b>${esc(this.modelo)}</b>. Todos los modelos comparten memoria, herramientas y permisos.</p>
+      m.innerHTML = `<div class="bienvenida"><div class="robot-bienvenida" id="robotChat" title="${tr('Tócame')}">${casco('casco-grande')}</div><h2>${tr('¿En qué te ayudo?')}</h2>
+        <p>${tr('Hablas con <b>{m}</b>. Todos los modelos comparten memoria, herramientas y permisos.', { m: esc(this.modelo) })}</p>
         <div class="sugerencias">${[
           ['carpeta', 'Revisa qué hay en mi carpeta de descargas y dime qué puedo borrar'],
           ['reloj', 'Recuérdame mañana a las 9 revisar los pedidos del taller'],
           ['cerebro', '¿Qué sabes de mí?'],
           ['latido', 'Cada 30 min comprueba si 10.0.0.5 responde y avísame solo si falla'],
-        ].map(([i, t]) => `<button data-sug="${esc(t)}">${ic(i)}<span>${esc(t)}</span></button>`).join('')}</div></div>`;
+        ].map(([i, t]) => `<button data-sug="${esc(tr(t))}">${ic(i)}<span>${esc(tr(t))}</span></button>`).join('')}</div></div>`;
       m.onclick = e => { const b = e.target.closest('[data-sug]'); if (b) this.enviar(b.dataset.sug); };
       montarRobot($('#robotChat'), 'vitrina', 60);
       return;
@@ -152,7 +153,7 @@ VISTAS.chat = {
   // separador: lo de arriba ya no lo ve el modelo, solo su resumen (desplegable)
   resumida(resumen, recuerdos) {
     const el = document.createElement('details'); el.className = 'm-resumida';
-    el.innerHTML = `<summary><span>${ic('cerebro')} Conversación resumida${recuerdos ? ` · ${recuerdos} recuerdo${recuerdos > 1 ? 's' : ''} a la memoria` : ''}</span></summary><div class="md"></div>`;
+    el.innerHTML = `<summary><span>${ic('cerebro')} ${tr('Conversación resumida')}${recuerdos ? ` · ${tr('{n} recuerdo a la memoria|{n} recuerdos a la memoria', { n: recuerdos })}` : ''}</span></summary><div class="md"></div>`;
     $('.md', el).innerHTML = md(resumen || '');
     this.antesDePensando(el); this.bloque = null;
   },
@@ -179,12 +180,12 @@ VISTAS.chat = {
     const c = this.bloque && $('.cont', this.bloque); if (!c || $('.pie-msg', c)) return;
     const texto = $$('.md', c).map(x => x.innerText).join('\n\n');
     const d = document.createElement('div'); d.className = 'pie-msg';
-    d.innerHTML = `<span>${fmtK(uso.entrada)} ↑ · ${fmtK(uso.salida)} ↓ tokens${final ? ' (conversación)' : ''}</span><button class="btn fantasma mini" data-copiar="${esc(texto)}">${ic('copiar')}Copiar</button>`;
+    d.innerHTML = `<span>${fmtK(uso.entrada)} ↑ · ${fmtK(uso.salida)} ↓ tokens${final ? ` (${tr('conversación')})` : ''}</span><button class="btn fantasma mini" data-copiar="${esc(texto)}">${ic('copiar')}${tr('Copiar')}</button>`;
     c.append(d);
   },
   pensando(si) {
     let p = $('#msgs .pensando');
-    if (si && !p) { p = document.createElement('div'); p.className = 'pensando'; p.innerHTML = `${avatar(this.sesion?.modelo || this.modelo)}<span class="puntos"><i></i><i></i><i></i></span><span>pensando…</span>`; $('#msgs').append(p); }
+    if (si && !p) { p = document.createElement('div'); p.className = 'pensando'; p.innerHTML = `${avatar(this.sesion?.modelo || this.modelo)}<span class="puntos"><i></i><i></i><i></i></span><span>${tr('pensando…')}</span>`; $('#msgs').append(p); }
     if (!si && p) p.remove();
   },
   abajo(forzar) { const h = $('#hilo'); if (!h) return; if (forzar || h.scrollHeight - h.scrollTop - h.clientHeight < 140) h.scrollTop = h.scrollHeight; },
@@ -234,14 +235,14 @@ VISTAS.chat = {
     const c = E.config, alias = Object.entries(c.alias);
     const recientes = [...new Set(E.sesiones.map(s => s.modelo))].slice(0, 6);
     const op = (m, extra = '') => `<div class="op" data-v="${esc(m)}">${avatar(m)}<span>${esc(nombreModelo(m))}</span><small>${esc(extra || m.split('/')[0])}</small></div>`;
-    const p = popover(ancla, `<input placeholder="proveedor/modelo  (Enter)" id="mLibre">
-      <div class="grupo">Atajos</div>${alias.map(([a, m]) => op(m, a)).join('')}
-      ${recientes.length ? `<div class="grupo">Recientes</div>${recientes.map(m => op(m)).join('')}` : ''}
-      <div class="grupo">Proveedores</div>${Object.keys(c.proveedores).map(k => `<div class="op" data-v="__ver:${esc(k)}">${avatar(k + '/')}<span>${esc(k)}</span><small>ver modelos ›</small></div>`).join('')}`, async val => {
+    const p = popover(ancla, `<input placeholder="${tr('proveedor/modelo  (Enter)')}" id="mLibre">
+      <div class="grupo">${tr('Atajos')}</div>${alias.map(([a, m]) => op(m, a)).join('')}
+      ${recientes.length ? `<div class="grupo">${tr('Recientes')}</div>${recientes.map(m => op(m)).join('')}` : ''}
+      <div class="grupo">${tr('Proveedores')}</div>${Object.keys(c.proveedores).map(k => `<div class="op" data-v="__ver:${esc(k)}">${avatar(k + '/')}<span>${esc(k)}</span><small>${tr('ver modelos ›')}</small></div>`).join('')}`, async val => {
       if (val.startsWith('__ver:')) {
         const k = val.slice(6), r = await api('GET', `/proveedores/${k}/modelos`);
         if (!r.ok) return aviso(r.error, true);
-        popover(ancla, `<div class="grupo">${esc(k)} · ${r.modelos.length} modelos</div>${r.modelos.slice(0, 150).map(m => op(`${k}/${m}`)).join('')}`, v2 => this.cambiarModelo(v2));
+        popover(ancla, `<div class="grupo">${esc(k)} · ${tr('{n} modelos', { n: r.modelos.length })}</div>${r.modelos.slice(0, 150).map(m => op(`${k}/${m}`)).join('')}`, v2 => this.cambiarModelo(v2));
         return;
       }
       this.cambiarModelo(val);
@@ -252,13 +253,13 @@ VISTAS.chat = {
   async cambiarModelo(m) {
     this.modelo = m;
     $('#chipModelo').innerHTML = `${avatar(m)}<span>${esc(nombreModelo(m))}</span>${ic('abajo')}`;
-    if (this.sesion) { await api('PATCH', `/sesiones/${this.sesion.id}`, { modelo: m }); this.sesion.modelo = m; cargarSesiones(); this.pintarInspector(); aviso(`Ahora con ${m}`); }
+    if (this.sesion) { await api('PATCH', `/sesiones/${this.sesion.id}`, { modelo: m }); this.sesion.modelo = m; cargarSesiones(); this.pintarInspector(); aviso(tr('Ahora con {m}', { m })); }
   },
   async elegirCarpeta() {
-    const r = await modal({ titulo: 'Carpeta de trabajo', cuerpo: `<div class="campo">Ruta donde el asistente lee, escribe y ejecuta<input id="cw" class="mono" value="${esc(this.cwd)}" placeholder="C:\\Users\\…"></div>`, botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Usar', cls: 'pri', valor: m => $('#cw', m).value.trim() }] });
+    const r = await modal({ titulo: 'Carpeta de trabajo', cuerpo: `<div class="campo">${tr('Ruta donde el asistente lee, escribe y ejecuta')}<input id="cw" class="mono" value="${esc(this.cwd)}" placeholder="C:\\Users\\…"></div>`, botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Usar', cls: 'pri', valor: m => $('#cw', m).value.trim() }] });
     if (r === null || r === undefined) return;
     this.cwd = r;
-    $('#chipCarpeta span').textContent = r ? r.split(/[\\/]/).filter(Boolean).pop() : 'carpeta por defecto';
+    $('#chipCarpeta span').textContent = r ? r.split(/[\\/]/).filter(Boolean).pop() : tr('carpeta por defecto');
     if (this.sesion && r) { const s = await api('PATCH', `/sesiones/${this.sesion.id}`, { cwd: r }); this.sesion.cwd = s.cwd; this.pintarInspector(); }
   },
   salir() { desmontarRobot($('#robotChat')); },
@@ -266,18 +267,19 @@ VISTAS.chat = {
     const el = $('#insp'), s = this.sesion; if (!el || !s) return;
     const usos = {};
     for (const m of s.mensajes || []) for (const c of m.toolCalls || []) usos[c.name] = (usos[c.name] || 0) + 1;
-    el.innerHTML = `<h3>Conversación</h3><dl><dt>Modelo</dt><dd>${esc(s.modelo)}</dd><dt>Canal</dt><dd>${esc(s.canal)}</dd><dt>Creada</dt><dd>${fecha(s.creada)}</dd><dt>Mensajes</dt><dd>${(s.mensajes || []).filter(m => m.role === 'user').length}</dd><dt>Carpeta</dt><dd class="mono">${esc(s.cwd)}</dd></dl>
-      <h3>Tokens</h3><dl><dt>Entrada</dt><dd>${(s.uso?.entrada || 0).toLocaleString('es')}</dd><dt>Salida</dt><dd>${(s.uso?.salida || 0).toLocaleString('es')}</dd></dl>
-      <h3>Herramientas usadas</h3><dl>${Object.entries(usos).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<dt>${esc(NOMBRE_HERR[k] || k)}</dt><dd>${n}</dd>`).join('') || '<dt class="tenue">Ninguna</dt><dd></dd>'}</dl>
-      <h3>Contexto</h3><dl><dt>Resúmenes</dt><dd>${(s.mensajes || []).filter(m => m.role === 'compactacion').length}</dd></dl>
-      <button class="btn mini" id="compactar" title="Resume lo antiguo (el modelo deja de verlo, solo su resumen) y guarda lo duradero en la memoria">${ic('cerebro')}Resumir ahora</button>
-      <h3>Id</h3><dl><dt>Sesión</dt><dd class="mono">${esc(s.id)}</dd></dl>`;
+    const L = I18N.locale();
+    el.innerHTML = `<h3>${tr('Conversación')}</h3><dl><dt>${tr('Modelo')}</dt><dd>${esc(s.modelo)}</dd><dt>${tr('Canal')}</dt><dd>${esc(s.canal)}</dd><dt>${tr('Creada')}</dt><dd>${fecha(s.creada)}</dd><dt>${tr('Mensajes')}</dt><dd>${(s.mensajes || []).filter(m => m.role === 'user').length}</dd><dt>${tr('Carpeta')}</dt><dd class="mono">${esc(s.cwd)}</dd></dl>
+      <h3>Tokens</h3><dl><dt>${tr('Entrada')}</dt><dd>${(s.uso?.entrada || 0).toLocaleString(L)}</dd><dt>${tr('Salida')}</dt><dd>${(s.uso?.salida || 0).toLocaleString(L)}</dd></dl>
+      <h3>${tr('Herramientas usadas')}</h3><dl>${Object.entries(usos).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<dt>${esc(NOMBRE_HERR[k] || k)}</dt><dd>${n}</dd>`).join('') || `<dt class="tenue">${tr('Ninguna')}</dt><dd></dd>`}</dl>
+      <h3>${tr('Contexto')}</h3><dl><dt>${tr('Resúmenes')}</dt><dd>${(s.mensajes || []).filter(m => m.role === 'compactacion').length}</dd></dl>
+      <button class="btn mini" id="compactar" title="${tr('Resume lo antiguo (el modelo deja de verlo, solo su resumen) y guarda lo duradero en la memoria')}">${ic('cerebro')}${tr('Resumir ahora')}</button>
+      <h3>Id</h3><dl><dt>${tr('Sesión')}</dt><dd class="mono">${esc(s.id)}</dd></dl>`;
     $('#compactar', el).onclick = async () => {
       if (this.ocupada()) return aviso('Espera a que termine de trabajar', true);
-      const b = $('#compactar', el); b.disabled = true; b.textContent = 'Resumiendo…';
+      const b = $('#compactar', el); b.disabled = true; b.textContent = tr('Resumiendo…');
       try {
         const r = await api('POST', `/sesiones/${s.id}/compactar`);
-        aviso(r.ok ? `Resumida: ${fmtK(r.antes)} → ${fmtK(r.despues)} tokens${r.recuerdos.length ? ` · ${r.recuerdos.length} a la memoria` : ''}` : r.motivo, !r.ok);
+        aviso(r.ok ? tr('Resumida: {a} → {b} tokens', { a: fmtK(r.antes), b: fmtK(r.despues) }) + (r.recuerdos.length ? ` · ${tr('{n} a la memoria', { n: r.recuerdos.length })}` : '') : r.motivo, !r.ok);
         await this.recargar();
       } catch (e) { aviso(e.message, true); b.disabled = false; }
     };
@@ -295,21 +297,21 @@ VISTAS.auto = {
   filtro: 'todas',
   async pintar(v) {
     const l = await api('GET', '/tareas');
-    const cuando = c => c.en ? `Una vez · ${fecha(new Date(c.en).getTime())}` : c.cadaMin ? `Cada ${c.cadaMin} min` : `Cron <code>${esc(c.cron)}</code>`;
+    const cuando = c => c.en ? `${tr('Una vez')} · ${fecha(new Date(c.en).getTime())}` : c.cadaMin ? tr('Cada {n} min', { n: c.cadaMin }) : `Cron <code>${esc(c.cron)}</code>`;
     const f = { todas: l, activas: l.filter(t => t.activa), pausadas: l.filter(t => !t.activa) };
     const hist = l.filter(t => t.ultima).sort((a, b) => b.ultima - a.ultima);
     const lista = this.filtro === 'historial' ? [] : f[this.filtro];
-    v.innerHTML = `<div class="pagina">${cabecera('Automatizaciones', 'Recordatorios y trabajos que el robot hace solo. También se crean hablando: “cada lunes a las 8 revisa…”.', `<button class="btn pri" id="nueva">${ic('mas')}Nueva automatización</button>`)}
-      <div class="pestanas">${[['todas', 'Todas'], ['activas', 'Activas'], ['pausadas', 'Pausadas'], ['historial', 'Historial de ejecuciones']].map(([k, t]) => `<button data-f="${k}" class="${this.filtro === k ? 'on' : ''}">${t}<span class="n">${k === 'historial' ? hist.length : f[k].length}</span></button>`).join('')}</div>
+    v.innerHTML = `<div class="pagina">${cabecera('Automatizaciones', 'Recordatorios y trabajos que el robot hace solo. También se crean hablando: “cada lunes a las 8 revisa…”.', `<button class="btn pri" id="nueva">${ic('mas')}${tr('Nueva automatización')}</button>`)}
+      <div class="pestanas">${[['todas', 'Todas'], ['activas', 'Activas'], ['pausadas', 'Pausadas'], ['historial', 'Historial de ejecuciones']].map(([k, t]) => `<button data-f="${k}" class="${this.filtro === k ? 'on' : ''}">${tr(t)}<span class="n">${k === 'historial' ? hist.length : f[k].length}</span></button>`).join('')}</div>
       <div class="caja tabla-env">${this.filtro === 'historial'
-        ? (hist.length ? `<table class="tabla"><tr><th>Automatización</th><th>Cuándo</th><th>Resultado</th></tr>${hist.map(t => `<tr><td><b>${esc(t.nombre)}</b></td><td class="suave">${fecha(t.ultima)}</td><td class="suave" style="max-width:520px">${esc((t.ultimoResultado || '').slice(0, 220))}</td></tr>`).join('')}</table>` : vacio('reloj', 'Todavía no se ha ejecutado ninguna.'))
-        : (lista.length ? `<table class="tabla"><tr><th style="width:34px"></th><th>Nombre</th><th>Programación</th><th>Próxima</th><th>Última</th><th class="der">Activa</th><th></th></tr>
+        ? (hist.length ? `<table class="tabla"><tr><th>${tr('Automatización')}</th><th>${tr('Cuándo')}</th><th>${tr('Resultado')}</th></tr>${hist.map(t => `<tr><td><b>${esc(t.nombre)}</b></td><td class="suave">${fecha(t.ultima)}</td><td class="suave" style="max-width:520px">${esc((t.ultimoResultado || '').slice(0, 220))}</td></tr>`).join('')}</table>` : vacio('reloj', 'Todavía no se ha ejecutado ninguna.'))
+        : (lista.length ? `<table class="tabla"><tr><th style="width:34px"></th><th>${tr('Nombre')}</th><th>${tr('Programación')}</th><th>${tr('Próxima')}</th><th>${tr('Última')}</th><th class="der">${tr('Activa')}</th><th></th></tr>
           ${lista.map(t => `<tr data-id="${esc(t.id)}"><td><span class="punto ${t.activa ? 'ok' : ''}"></span></td>
-            <td><b>${esc(t.nombre)}</b><div class="flex" style="margin-top:3px"><span class="chip">${t.accion.tipo === 'aviso' ? 'recordatorio' : 'agente'}</span>${t.accion.soloSiHayAlgo ? '<span class="chip acento">vigilancia</span>' : ''}<span class="chip">${ic(ICONO_CANAL[t.canal] || 'isla')}${esc(t.canal)}</span>${t.accion.modelo ? `<span class="chip">${esc(nombreModelo(t.accion.modelo))}</span>` : ''}</div></td>
+            <td><b>${esc(t.nombre)}</b><div class="flex" style="margin-top:3px"><span class="chip">${tr(t.accion.tipo === 'aviso' ? 'recordatorio' : 'agente')}</span>${t.accion.soloSiHayAlgo ? `<span class="chip acento">${tr('vigilancia')}</span>` : ''}<span class="chip">${ic(ICONO_CANAL[t.canal] || 'isla')}${esc(t.canal)}</span>${t.accion.modelo ? `<span class="chip">${esc(nombreModelo(t.accion.modelo))}</span>` : ''}</div></td>
             <td class="suave">${cuando(t.cuando)}</td><td>${t.activa && t.proxima ? `<span title="${fecha(t.proxima)}">${hace(t.proxima)}</span>` : '<span class="tenue">—</span>'}</td>
-            <td class="suave" title="${esc(t.ultimoResultado || '')}">${t.ultima ? `${t.ultimoResultado?.startsWith('error') ? `<span class="mal-txt">${ic('x')}</span>` : `<span class="ok-txt">${ic('check')}</span>`} ${hace(t.ultima)}` : '<span class="tenue">nunca</span>'}</td>
+            <td class="suave" title="${esc(t.ultimoResultado || '')}">${t.ultima ? `${t.ultimoResultado?.startsWith('error') ? `<span class="mal-txt">${ic('x')}</span>` : `<span class="ok-txt">${ic('check')}</span>`} ${hace(t.ultima)}` : `<span class="tenue">${tr('nunca')}</span>`}</td>
             <td class="der">${sw('act:' + t.id, t.activa)}</td>
-            <td class="der" style="white-space:nowrap"><button class="btn fantasma icono" data-x="ejecutar" title="Ejecutar ahora">${ic('play')}</button><button class="btn fantasma icono" data-x="borrar" title="Borrar">${ic('basura')}</button></td></tr>`).join('')}</table>`
+            <td class="der" style="white-space:nowrap"><button class="btn fantasma icono" data-x="ejecutar" title="${tr('Ejecutar ahora')}">${ic('play')}</button><button class="btn fantasma icono" data-x="borrar" title="${tr('Borrar')}">${ic('basura')}</button></td></tr>`).join('')}</table>`
           : vacio('reloj', 'No hay automatizaciones aquí.'))}</div></div>`;
     $('.pestanas', v).onclick = e => { const b = e.target.closest('[data-f]'); if (b) { this.filtro = b.dataset.f; this.pintar(v); } };
     $('#nueva').onclick = () => this.nueva(v);
@@ -326,21 +328,21 @@ VISTAS.auto = {
     const local = new Date(ahora - ahora.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
     const r = await modal({
       titulo: 'Nueva automatización', ancho: 600,
-      cuerpo: `<div class="campo">Tipo ${seg('tipo', [['aviso', 'Recordatorio'], ['agente', 'Agente (hace el trabajo)']], 'aviso')}</div>
-        <div class="campo">Nombre<input id="nNombre" placeholder="Revisar la Pi"></div>
-        <div class="campo"><span id="lblTexto">Mensaje del recordatorio</span><textarea id="nTexto" rows="3" placeholder="Llamar al proveedor de frenos"></textarea></div>
-        <div class="campo">Cuándo ${seg('modo', [['en', 'Una vez'], ['cron', 'Repetir'], ['cadaMin', 'Cada N minutos']], 'en')}</div>
-        <div class="campo" data-m="en">Fecha y hora<input type="datetime-local" id="nEn" value="${local}"></div>
-        <div class="campo" data-m="cron" hidden>Expresión cron (minuto hora día mes díaSemana)<input id="nCron" class="mono" value="0 8 * * 1-5"><small class="tenue">Ej: <code>0 8 * * 1-5</code> = laborables a las 8:00 · <code>*/30 * * * *</code> = cada 30 min</small></div>
-        <div class="campo" data-m="cadaMin" hidden>Minutos<input type="number" id="nCada" min="1" value="30"></div>
-        <div data-a hidden><div class="campo">Modelo<input id="nModelo" list="dlMod" value="${esc(E.config.modeloPorDefecto)}"><datalist id="dlMod">${modelosConocidos().map(m => `<option value="${esc(m)}">`).join('')}</datalist></div>
-          <div class="fila-a" style="padding:6px 0;border:0"><div class="t"><b>Solo avisar si hay algo</b><small>Modo vigilancia: si no encuentra nada importante, no te molesta.</small></div><div class="c">${sw('solo', false)}</div></div></div>
-        <div class="campo">Avisarme en ${seg('canal', [['isla', 'Isla'], ['discord', 'Discord']], 'isla')}</div>`,
+      cuerpo: `<div class="campo">${tr('Tipo')} ${seg('tipo', [['aviso', 'Recordatorio'], ['agente', 'Agente (hace el trabajo)']], 'aviso')}</div>
+        <div class="campo">${tr('Nombre')}<input id="nNombre" placeholder="${tr('Revisar la Pi')}"></div>
+        <div class="campo"><span id="lblTexto">${tr('Mensaje del recordatorio')}</span><textarea id="nTexto" rows="3" placeholder="${tr('Llamar al proveedor de frenos')}"></textarea></div>
+        <div class="campo">${tr('Cuándo')} ${seg('modo', [['en', 'Una vez'], ['cron', 'Repetir'], ['cadaMin', 'Cada N minutos']], 'en')}</div>
+        <div class="campo" data-m="en">${tr('Fecha y hora')}<input type="datetime-local" id="nEn" value="${local}"></div>
+        <div class="campo" data-m="cron" hidden>${tr('Expresión cron (minuto hora día mes díaSemana)')}<input id="nCron" class="mono" value="0 8 * * 1-5"><small class="tenue">${tr('Ej: <code>0 8 * * 1-5</code> = laborables a las 8:00 · <code>*/30 * * * *</code> = cada 30 min')}</small></div>
+        <div class="campo" data-m="cadaMin" hidden>${tr('Minutos')}<input type="number" id="nCada" min="1" value="30"></div>
+        <div data-a hidden><div class="campo">${tr('Modelo')}<input id="nModelo" list="dlMod" value="${esc(E.config.modeloPorDefecto)}"><datalist id="dlMod">${modelosConocidos().map(m => `<option value="${esc(m)}">`).join('')}</datalist></div>
+          <div class="fila-a" style="padding:6px 0;border:0"><div class="t"><b>${tr('Solo avisar si hay algo')}</b><small>${tr('Modo vigilancia: si no encuentra nada importante, no te molesta.')}</small></div><div class="c">${sw('solo', false)}</div></div></div>
+        <div class="campo">${tr('Avisarme en')} ${seg('canal', [['isla', 'Isla'], ['discord', 'Discord']], 'isla')}</div>`,
       botones: [{ txt: 'Cancelar', valor: null }, {
         txt: 'Crear', cls: 'pri', valor: m => {
           const g = k => $(`[data-seg="${k}"] .on`, m)?.dataset.v;
           const modo = g('modo'), tipo = g('tipo');
-          const texto = $('#nTexto', m).value.trim(); if (!texto) { aviso('Escribe el texto', true); return false; }
+          const texto = $('#nTexto', m).value.trim(); if (!texto) { aviso(tr('Escribe el texto'), true); return false; }
           const cuando = modo === 'en' ? { en: $('#nEn', m).value } : modo === 'cron' ? { cron: $('#nCron', m).value.trim() } : { cadaMin: +$('#nCada', m).value };
           const accion = { tipo, texto };
           if (tipo === 'agente') Object.assign(accion, { modelo: $('#nModelo', m).value.trim(), soloSiHayAlgo: $('[data-sw="solo"]', m).getAttribute('aria-checked') === 'true', cwd: E.config.carpeta || undefined });
@@ -349,7 +351,7 @@ VISTAS.auto = {
       }],
       alAbrir: m => enlazarControles(m, (id, val) => {
         if (id === 'modo') $$('[data-m]', m).forEach(x => { x.hidden = x.dataset.m !== val; });
-        if (id === 'tipo') { $('[data-a]', m).hidden = val !== 'agente'; $('#lblTexto', m).textContent = val === 'agente' ? 'Instrucción para el agente' : 'Mensaje del recordatorio'; }
+        if (id === 'tipo') { $('[data-a]', m).hidden = val !== 'agente'; $('#lblTexto', m).textContent = tr(val === 'agente' ? 'Instrucción para el agente' : 'Mensaje del recordatorio'); }
       }),
     });
     if (!r) return;
@@ -365,12 +367,12 @@ VISTAS.memoria = {
     const todas = await api('GET', '/memoria');
     const l = this.q ? await api('GET', '/memoria?q=' + encodeURIComponent(this.q)) : todas;
     const vis = l.filter(m => this.tipo === 'todos' || m.tipo === this.tipo).sort((a, b) => b.actualizada - a.actualizada);
-    v.innerHTML = `<div class="pagina">${cabecera('Memoria', 'Lo que el robot sabe de ti. La comparten todos los modelos y canales. El <b>perfil</b> va siempre en el contexto; el resto entra solo cuando viene a cuento.', `<button class="btn pri" id="nuevo">${ic('mas')}Añadir recuerdo</button>`)}
-      <div class="pestanas"><button data-t="todos" class="${this.tipo === 'todos' ? 'on' : ''}">Todos<span class="n">${todas.length}</span></button>${TIPOS_MEM.map(([k, t]) => `<button data-t="${k}" class="${this.tipo === k ? 'on' : ''}">${t}<span class="n">${todas.filter(m => m.tipo === k).length}</span></button>`).join('')}</div>
-      <div class="buscador-lado" style="margin:0 0 14px">${ic('buscar')}<input id="qM" placeholder="Buscar en la memoria…" value="${esc(this.q)}"></div>
+    v.innerHTML = `<div class="pagina">${cabecera('Memoria', 'Lo que el robot sabe de ti. La comparten todos los modelos y canales. El <b>perfil</b> va siempre en el contexto; el resto entra solo cuando viene a cuento.', `<button class="btn pri" id="nuevo">${ic('mas')}${tr('Añadir recuerdo')}</button>`)}
+      <div class="pestanas"><button data-t="todos" class="${this.tipo === 'todos' ? 'on' : ''}">${tr('Todos')}<span class="n">${todas.length}</span></button>${TIPOS_MEM.map(([k, t]) => `<button data-t="${k}" class="${this.tipo === k ? 'on' : ''}">${tr(t)}<span class="n">${todas.filter(m => m.tipo === k).length}</span></button>`).join('')}</div>
+      <div class="buscador-lado" style="margin:0 0 14px">${ic('buscar')}<input id="qM" placeholder="${tr('Buscar en la memoria…')}" value="${esc(this.q)}"></div>
       <div class="caja">${vis.length ? vis.map(m => `<div class="fila-a" data-id="${esc(m.id)}"><span class="av" style="background:var(--capa-3);color:var(--acento)">${ic((TIPOS_MEM.find(x => x[0] === m.tipo) || [])[2] || 'info')}</span>
-          <div class="t"><b style="font-weight:500">${esc(m.texto)}</b><small>${esc(m.tipo)} · ${m.origen ? `guardado por ${esc(m.origen)} · ` : ''}${hace(m.actualizada)}${m.usos ? ` · usado ${m.usos} ${m.usos === 1 ? 'vez' : 'veces'}` : ''}</small></div>
-          <div class="c"><button class="btn fantasma icono" data-x="editar" title="Editar">${ic('editar')}</button><button class="btn fantasma icono" data-x="olvidar" title="Olvidar">${ic('basura')}</button></div></div>`).join('')
+          <div class="t"><b style="font-weight:500">${esc(m.texto)}</b><small>${esc(tr(m.tipo))} · ${m.origen ? `${tr('guardado por {x}', { x: esc(m.origen) })} · ` : ''}${hace(m.actualizada)}${m.usos ? ` · ${tr('usado {n} vez|usado {n} veces', { n: m.usos })}` : ''}</small></div>
+          <div class="c"><button class="btn fantasma icono" data-x="editar" title="${tr('Editar')}">${ic('editar')}</button><button class="btn fantasma icono" data-x="olvidar" title="${tr('Olvidar')}">${ic('basura')}</button></div></div>`).join('')
         : vacio('cerebro', this.q ? 'Nada coincide con la búsqueda.' : 'Aún vacía. Cuéntale cosas al robot y se irá llenando sola.')}</div></div>`;
     $('.pestanas', v).onclick = e => { const b = e.target.closest('[data-t]'); if (b) { this.tipo = b.dataset.t; this.pintar(v); } };
     let t; $('#qM').oninput = e => { clearTimeout(t); t = setTimeout(async () => { this.q = e.target.value.trim(); await this.pintar(v); const q = $('#qM'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 280); };
@@ -385,13 +387,13 @@ VISTAS.memoria = {
   async editar(v, m) {
     const r = await modal({
       titulo: m ? 'Editar recuerdo' : 'Nuevo recuerdo',
-      cuerpo: `<div class="campo">Recuerdo<textarea id="mt" rows="3" placeholder="Prefiere respuestas cortas y en español">${esc(m?.texto || '')}</textarea></div>
-        <div class="campo">Tipo ${seg('tipo', TIPOS_MEM.map(([k, t]) => [k, t]), m?.tipo || 'hecho')}</div><small class="tenue">No guardes contraseñas ni claves: se rechazan.</small>`,
+      cuerpo: `<div class="campo">${tr('Recuerdo')}<textarea id="mt" rows="3" placeholder="${tr('Prefiere respuestas cortas y en español')}">${esc(m?.texto || '')}</textarea></div>
+        <div class="campo">${tr('Tipo')} ${seg('tipo', TIPOS_MEM.map(([k, t]) => [k, t]), m?.tipo || 'hecho')}</div><small class="tenue">${tr('No guardes contraseñas ni claves: se rechazan.')}</small>`,
       botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Guardar', cls: 'pri', valor: x => ({ texto: $('#mt', x).value.trim(), tipo: $('[data-seg="tipo"] .on', x).dataset.v }) }],
       alAbrir: x => enlazarControles(x),
     });
     if (!r || !r.texto) return;
-    try { const res = await api('POST', '/memoria', { ...r, reemplaza: m?.id }); aviso(`Recuerdo ${res.accion}`); this.pintar(v); } catch (e) { aviso(e.message, true); }
+    try { const res = await api('POST', '/memoria', { ...r, reemplaza: m?.id }); aviso(tr('Recuerdo {x}', { x: tr(res.accion) })); this.pintar(v); } catch (e) { aviso(e.message, true); }
   },
 };
 
@@ -412,17 +414,17 @@ VISTAS.uso = {
     const q = p => vals[Math.floor(p * (vals.length - 1))] || 0;
     const nivel = n => (!n ? 0 : n <= q(.25) ? 1 : n <= q(.5) ? 2 : n <= q(.8) ? 3 : 4);
     v.innerHTML = `<div class="pagina">${cabecera('Uso', 'Tokens del núcleo en todas las conversaciones y automatizaciones. El uso de Claude Code va aparte, en la isla.', seg('dias', [['7', '7 días'], ['30', '30 días'], ['90', '90 días']], String(this.dias)))}
-      <div class="rejilla k"><div class="kpi"><small>${ic('rayo')}Tokens</small><b>${fmtK(total)}</b><span>${this.dias} días</span></div>
-        <div class="kpi"><small>${ic('enviar')}Entrada</small><b>${fmtK(ent)}</b><span>${total ? Math.round(ent / total * 100) : 0}%</span></div>
-        <div class="kpi"><small>${ic('abajo')}Salida</small><b>${fmtK(sal)}</b><span>${total ? Math.round(sal / total * 100) : 0}%</span></div>
-        <div class="kpi"><small>${ic('chat')}Conversaciones</small><b>${u.sesiones}</b><span>${modelos.length} modelos</span></div></div>
-      <div class="seccion">Tokens por día</div>
-      <div class="caja pad"><div class="barras">${serie.map(([d, n]) => `<div style="height:${n / max * 100}%" title="${d}: ${n.toLocaleString('es')} tokens"></div>`).join('')}</div><div class="eje"><span>${serie[0][0]}</span><span>hoy</span></div></div>
-      <div class="seccion">Actividad · 26 semanas</div>
-      <div class="caja pad"><div class="mapa-calor">${celdas.map(([k, n]) => `<i data-n="${nivel(n)}" title="${k}: ${n.toLocaleString('es')} tokens"></i>`).join('')}</div>
-        <div class="flex tenue" style="justify-content:flex-end;font-size:11px;margin-top:8px">Menos <span class="mapa-calor" style="grid-template-rows:12px">${[0, 1, 2, 3, 4].map(n => `<i data-n="${n}"></i>`).join('')}</span> Más</div></div>
-      <div class="seccion">Por modelo</div>
-      <div class="caja tabla-env">${modelos.length ? `<table class="tabla"><tr><th>Modelo</th><th>Conversaciones</th><th>Entrada</th><th>Salida</th><th style="width:28%">Proporción</th></tr>
+      <div class="rejilla k"><div class="kpi"><small>${ic('rayo')}Tokens</small><b>${fmtK(total)}</b><span>${tr('{n} días', { n: this.dias })}</span></div>
+        <div class="kpi"><small>${ic('enviar')}${tr('Entrada')}</small><b>${fmtK(ent)}</b><span>${total ? Math.round(ent / total * 100) : 0}%</span></div>
+        <div class="kpi"><small>${ic('abajo')}${tr('Salida')}</small><b>${fmtK(sal)}</b><span>${total ? Math.round(sal / total * 100) : 0}%</span></div>
+        <div class="kpi"><small>${ic('chat')}${tr('Conversaciones')}</small><b>${u.sesiones}</b><span>${tr('{n} modelos', { n: modelos.length })}</span></div></div>
+      <div class="seccion">${tr('Tokens por día')}</div>
+      <div class="caja pad"><div class="barras">${serie.map(([d, n]) => `<div style="height:${n / max * 100}%" title="${d}: ${n.toLocaleString(I18N.locale())} tokens"></div>`).join('')}</div><div class="eje"><span>${serie[0][0]}</span><span>${tr('hoy')}</span></div></div>
+      <div class="seccion">${tr('Actividad · 26 semanas')}</div>
+      <div class="caja pad"><div class="mapa-calor">${celdas.map(([k, n]) => `<i data-n="${nivel(n)}" title="${k}: ${n.toLocaleString(I18N.locale())} tokens"></i>`).join('')}</div>
+        <div class="flex tenue" style="justify-content:flex-end;font-size:11px;margin-top:8px">${tr('Menos')} <span class="mapa-calor" style="grid-template-rows:12px">${[0, 1, 2, 3, 4].map(n => `<i data-n="${n}"></i>`).join('')}</span> ${tr('Más')}</div></div>
+      <div class="seccion">${tr('Por modelo')}</div>
+      <div class="caja tabla-env">${modelos.length ? `<table class="tabla"><tr><th>${tr('Modelo')}</th><th>${tr('Conversaciones')}</th><th>${tr('Entrada')}</th><th>${tr('Salida')}</th><th style="width:28%">${tr('Proporción')}</th></tr>
         ${modelos.map(([k, m]) => { const t = m.entrada + m.salida; return `<tr><td><div class="flex">${avatar(k)}<span class="mono">${esc(k)}</span></div></td><td>${m.sesiones}</td><td>${fmtK(m.entrada)}</td><td>${fmtK(m.salida)}</td>
           <td><div class="flex"><div class="medidor crece" style="margin:0"><i style="width:${total ? t / total * 100 : 0}%"></i></div><b style="min-width:52px;text-align:right">${fmtK(t)}</b></div></td></tr>`; }).join('')}</table>` : vacio('grafica', 'Sin uso en este periodo.')}</div></div>`;
     enlazarControles(v, (id, val) => { if (id === 'dias') { this.dias = +val; this.pintar(v); } });

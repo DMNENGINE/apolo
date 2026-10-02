@@ -371,18 +371,21 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     if (react <= 0) { prevState = stateName; prevMsg = message; }
     stateName = name; target = STATES[name]; message = msg; react = secs;
   }
+  // textos del visor traducidos si la página cargó core/ui/i18n.js (isla y panel); si no, en español
+  const T = s => (typeof globalThis.tr === 'function' ? globalThis.tr(s) : s);
+  const MSG_ESTADO = () => ({ permiso: T('¿PERMISO?'), listo: T('✓ TAREA COMPLETA'), error: T('✗ ERROR'), dormido: '' });
   return {
     lookAtClient,
-    poke() { wob = 1; flash('listo', '¡EY!', 1.1); },
+    poke() { wob = 1; flash('listo', T('¡EY!'), 1.1); },
     hud(msg, secs = 3, st = 'trabajando') { flash(st, msg, secs); },
     // fuerza 1..3: cuantas más vueltas, más largo el mareo con ojos de remolino
     dizzy(fuerza = 1) {
       spin = Math.min(2.2, .9 + fuerza * .45); wob = .6;
       const secs = 2.6 + fuerza * 1.1;
       gesto = 'remolino'; gestoIni = performance.now(); gestoHasta = gestoIni + secs * 1000;
-      flash('error', fuerza >= 3 ? '@_@  ¡PARA, PARA!' : '@_@  MAREADO', secs);
+      flash('error', '@_@  ' + T(fuerza >= 3 ? '¡PARA, PARA!' : 'MAREADO'), secs);
     },
-    greet(msg = '¡HOLA! 👋') { wob = .8; this.gesto('saludo', 2.4); flash('listo', msg, 2.8); },
+    greet(msg = T('¡HOLA! 👋')) { wob = .8; this.gesto('saludo', 2.4); flash('listo', msg, 2.8); },
     // gestos: ojos remolino|guino|corazon|sorpresa|reloj|feliz|triste|duda|bostezo|estornudo|pensativo
     //         cabeza saludo|si|no|mirar|celebrar (y la de cada gesto de ojos). msg !== undefined = cara despierta + ese texto
     gesto(nombre, secs = 3, msg) {
@@ -395,9 +398,9 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     rodar(dir = 1) { const base = react > 0 ? prevState : stateName; spin = 1.7 * dir; wob = .35; flash(base === 'dormido' ? 'reposo' : base, '', 1.3); },
     setState(name, msg = '') {
       if (!STATES[name]) return;
-      if (react > 0) { prevState = name; prevMsg = msg || { permiso: '¿PERMISO?', listo: '✓ TAREA COMPLETA', error: '✗ ERROR' }[name] || ''; return; }
+      if (react > 0) { prevState = name; prevMsg = msg || MSG_ESTADO()[name] || ''; return; }
       stateName = name; target = STATES[name];
-      message = msg || { permiso: '¿PERMISO?', listo: '✓ TAREA COMPLETA', error: '✗ ERROR', dormido: '' }[name] || '';
+      message = msg || MSG_ESTADO()[name] || '';
     },
     pushLog(line) { log.push(String(line)); if (log.length > 60) log.shift(); scroll = 0; },
     setFps(v) { fps = v; },

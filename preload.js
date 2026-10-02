@@ -31,5 +31,6 @@ contextBridge.exposeInMainWorld('bridge', {
   interactive: on => ipcRenderer.send('interactive', on),
   onIconSize: fn => ipcRenderer.on('icon-size', (_e, px) => fn(px)),
   onNombre: fn => ipcRenderer.on('nombre', (_e, n) => fn(n)),
+  onIdioma: fn => ipcRenderer.on('idioma', (_e, l) => fn(l)),
   onMudanza: fn => ipcRenderer.on('mudanza', (_e, dir) => fn(dir)),
 });

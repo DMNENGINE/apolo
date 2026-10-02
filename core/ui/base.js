@@ -5,14 +5,14 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtK = n => { n = n || 0; return n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n); };
 const fmtB = n => { const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return `${n.toFixed(i > 2 ? 1 : 0)} ${u[i]}`; };
-const fecha = t => (t ? new Date(t).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
-const hora = t => new Date(t).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+const fecha = t => (t ? new Date(t).toLocaleString(I18N.locale(), { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+const hora = t => new Date(t).toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' });
 const hace = t => {
   if (!t) return '—';
   const s = (Date.now() - t) / 1000, f = s < 0;
   const a = Math.abs(s);
-  const txt = a < 45 ? 'unos segundos' : a < 3600 ? `${Math.round(a / 60)} min` : a < 86400 ? `${Math.round(a / 3600)} h` : `${Math.round(a / 86400)} d`;
-  return f ? `en ${txt}` : a < 45 ? 'ahora' : `hace ${txt}`;
+  const txt = a < 45 ? tr('unos segundos') : a < 3600 ? `${Math.round(a / 60)} min` : a < 86400 ? `${Math.round(a / 3600)} h` : `${Math.round(a / 86400)} d`;
+  return f ? tr('en {x}', { x: txt }) : a < 45 ? tr('ahora') : tr('hace {x}', { x: txt });
 };
 const duracion = s => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : `${m} min`; };
 const guardarLocal = (k, v) => { try { localStorage.setItem('rc.' + k, JSON.stringify(v)); } catch { } };
@@ -77,6 +77,7 @@ const P = {
   mas2: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   salir: '<path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/>',
   enlace: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+  pieza: '<path d="M4 7.5h4.2a2.3 2.3 0 1 1 4.6 0H17v4.2a2.3 2.3 0 1 1 0 4.6V20.5H4z"/>',
 };
 const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || P.info}</svg>`;
 
@@ -122,7 +123,7 @@ if (mHash) { TOKEN = mHash[1]; guardarLocal('token', TOKEN); history.replaceStat
 
 async function api(metodo, ruta, cuerpo) {
   const r = await fetch('/v1' + ruta, { method: metodo, headers: { 'x-robot-token': TOKEN, 'content-type': 'application/json' }, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
-  if (r.status === 401) { pantallaLogin(); throw new Error('token no válido'); }
+  if (r.status === 401) { pantallaLogin(); throw new Error(tr('token no válido')); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
@@ -145,18 +146,19 @@ async function flujo(metodo, ruta, cuerpo, alEvento, senal) {
 }
 
 // ---------- componentes ----------
+// los componentes pasan sus textos por tr(): si el texto es una clave conocida sale traducido; si no (datos, ya traducido), tal cual
 function aviso(texto, mal = false) {
   const el = document.createElement('div');
   el.className = 'toast' + (mal ? ' mal' : '');
-  el.innerHTML = `${ic(mal ? 'x' : 'check')}<div>${esc(texto)}</div>`;
+  el.innerHTML = `${ic(mal ? 'x' : 'check')}<div>${esc(tr(String(texto ?? '')))}</div>`;
   $('#avisos').append(el);
   setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = 0; setTimeout(() => el.remove(), 300); }, mal ? 6500 : 3200);
 }
 function modal({ titulo, cuerpo = '', botones = [{ txt: 'Cerrar', valor: null }], ancho, alAbrir }) {
   return new Promise(ok => {
     const v = document.createElement('div'); v.className = 'velo';
-    v.innerHTML = `<div class="modal" role="dialog" aria-modal="true" ${ancho ? `style="width:min(${ancho}px,100%)"` : ''}><header>${esc(titulo)}</header><div class="cuerpo">${cuerpo}</div>
-      <footer>${botones.map((b, i) => `<button class="btn ${b.cls || ''}" data-i="${i}">${esc(b.txt)}</button>`).join('')}</footer></div>`;
+    v.innerHTML = `<div class="modal" role="dialog" aria-modal="true" ${ancho ? `style="width:min(${ancho}px,100%)"` : ''}><header>${esc(tr(titulo))}</header><div class="cuerpo">${tr(cuerpo)}</div>
+      <footer>${botones.map((b, i) => `<button class="btn ${b.cls || ''}" data-i="${i}">${esc(tr(b.txt))}</button>`).join('')}</footer></div>`;
     const cerrar = valor => { v.remove(); document.removeEventListener('keydown', tecla); ok(valor); };
     const tecla = e => { if (e.key === 'Escape') cerrar(null); };
     v.addEventListener('mousedown', e => { if (e.target === v) cerrar(null); });
@@ -173,7 +175,7 @@ function modal({ titulo, cuerpo = '', botones = [{ txt: 'Cerrar', valor: null }]
     ($('input,textarea,select', v) || $('.btn.pri', v))?.focus();
   });
 }
-const confirmar = (titulo, texto, peligro) => modal({ titulo, cuerpo: `<p class="suave" style="margin:0">${esc(texto)}</p>`, botones: [{ txt: 'Cancelar', valor: null }, { txt: peligro ? 'Sí, hacerlo' : 'Aceptar', cls: peligro ? 'mal pri' : 'pri', valor: true }] }).then(v => v === true);
+const confirmar = (titulo, texto, peligro) => modal({ titulo, cuerpo: `<p class="suave" style="margin:0">${esc(tr(texto))}</p>`, botones: [{ txt: 'Cancelar', valor: null }, { txt: peligro ? 'Sí, hacerlo' : 'Aceptar', cls: peligro ? 'mal pri' : 'pri', valor: true }] }).then(v => v === true);
 function popover(ancla, html, alClic) {
   $$('.pop').forEach(p => p.remove());
   const p = document.createElement('div'); p.className = 'pop'; p.innerHTML = html;
@@ -187,10 +189,10 @@ function popover(ancla, html, alClic) {
   return p;
 }
 const sw = (id, on, extra = '') => `<button class="sw" role="switch" aria-checked="${!!on}" data-sw="${esc(id)}" ${extra}></button>`;
-const seg = (id, ops, val) => `<div class="seg" data-seg="${esc(id)}">${ops.map(([v, t]) => `<button type="button" data-v="${esc(v)}" class="${v === val ? 'on' : ''}">${esc(t)}</button>`).join('')}</div>`;
-const fila = (titulo, desc, control) => `<div class="fila-a"><div class="t"><b>${titulo}</b>${desc ? `<small>${desc}</small>` : ''}</div><div class="c">${control}</div></div>`;
-const vacio = (icono, texto) => `<div class="vacio">${ic(icono)}${texto}</div>`;
-const cabecera = (titulo, desc, acciones = '') => `<div class="cab-pag"><div><h1>${esc(titulo)}</h1>${desc ? `<p>${desc}</p>` : ''}</div><div class="flex">${acciones}</div></div>`;
+const seg = (id, ops, val) => `<div class="seg" data-seg="${esc(id)}">${ops.map(([v, t]) => `<button type="button" data-v="${esc(v)}" class="${v === val ? 'on' : ''}">${esc(tr(t))}</button>`).join('')}</div>`;
+const fila = (titulo, desc, control) => `<div class="fila-a"><div class="t"><b>${tr(titulo)}</b>${desc ? `<small>${tr(desc)}</small>` : ''}</div><div class="c">${control}</div></div>`;
+const vacio = (icono, texto) => `<div class="vacio">${ic(icono)}${tr(texto)}</div>`;
+const cabecera = (titulo, desc, acciones = '') => `<div class="cab-pag"><div><h1>${esc(tr(titulo))}</h1>${desc ? `<p>${tr(desc)}</p>` : ''}</div><div class="flex">${acciones}</div></div>`;
 // activa interruptores y segmentados dentro de un contenedor
 function enlazarControles(raiz, alCambiar) {
   raiz.addEventListener('click', e => {
@@ -207,7 +209,7 @@ function md(t) {
   let html = '';
   for (let i = 0; i < partes.length; i++) {
     if (i % 3 === 1) continue;
-    if (i % 3 === 2) { html += `<div class="bloque-cod"><header><span>${esc(partes[i - 1] || 'código')}</span><button class="btn fantasma mini" data-copiar>${ic('copiar')}Copiar</button></header><pre><code>${esc(partes[i].replace(/\n$/, ''))}</code></pre></div>`; continue; }
+    if (i % 3 === 2) { html += `<div class="bloque-cod"><header><span>${esc(partes[i - 1] || tr('código'))}</span><button class="btn fantasma mini" data-copiar>${ic('copiar')}${tr('Copiar')}</button></header><pre><code>${esc(partes[i].replace(/\n$/, ''))}</code></pre></div>`; continue; }
     let lista = null;
     for (const l of esc(partes[i]).split('\n')) {
       const ul = l.match(/^\s*[-*•]\s+(.*)/), ol = l.match(/^\s*\d+[.)]\s+(.*)/), it = ul || ol;
@@ -252,7 +254,9 @@ aplicarTema();
 
 // ---------- estado compartido ----------
 const E = { config: null, estado: null, pendientes: new Map(), trabajando: new Set(), sesiones: [], oyentes: new Set(), vista: null };
-const NOMBRE_HERR = { shell: 'Terminal', leer_archivo: 'Leer archivo', listar: 'Listar carpeta', escribir_archivo: 'Escribir archivo', editar_archivo: 'Editar archivo', web: 'Web', programar_tarea: 'Programar tarea', ver_tareas: 'Ver tareas', borrar_tarea: 'Borrar tarea', recordar: 'Recordar', buscar_memoria: 'Buscar en memoria', olvidar: 'Olvidar', buscar_historial: 'Buscar historial', delegar: 'Subagente' };
+// nombres bonitos de las herramientas; el Proxy los devuelve ya traducidos (NOMBRE_HERR[x] || x sigue funcionando)
+const NOMBRE_HERR = new Proxy({ shell: 'Terminal', leer_archivo: 'Leer archivo', listar: 'Listar carpeta', escribir_archivo: 'Escribir archivo', editar_archivo: 'Editar archivo', web: 'Web', programar_tarea: 'Programar tarea', ver_tareas: 'Ver tareas', borrar_tarea: 'Borrar tarea', recordar: 'Recordar', buscar_memoria: 'Buscar en memoria', olvidar: 'Olvidar', buscar_historial: 'Buscar historial', delegar: 'Subagente' },
+  { get: (o, k) => (typeof k === 'string' && o[k] ? tr(o[k]) : undefined) });
 const ICONO_HERR = { shell: 'terminal', leer_archivo: 'archivo', listar: 'carpeta', escribir_archivo: 'editar', editar_archivo: 'editar', web: 'mundo', programar_tarea: 'reloj', ver_tareas: 'reloj', borrar_tarea: 'reloj', recordar: 'cerebro', buscar_memoria: 'cerebro', olvidar: 'cerebro', buscar_historial: 'buscar', delegar: 'robot' };
 function modelosConocidos() {
   const c = E.config; if (!c) return [];
@@ -261,7 +265,7 @@ function modelosConocidos() {
 
 // ---------- robot 3D (el mismo casco de la isla) ----------
 E.robots = new Set();
-const logRobot = ['> robot listo', 'núcleo conectado…'];
+const logRobot = [tr('> robot listo'), tr('núcleo conectado…')];
 function estadoActual() { return E.pendientes.size ? 'permiso' : E.trabajando.size ? 'trabajando' : 'reposo'; }
 // monta un robot 3D en el contenedor (que ya tiene el casco SVG de respaldo); devuelve el robot o null
 function montarRobot(caja, animacion, fps = 60) {
@@ -289,9 +293,9 @@ function pintarPermisos() {
   for (const p of E.pendientes.values()) {
     const el = document.createElement('div');
     el.className = 'perm' + (p.peligro ? ' peligro' : '');
-    el.innerHTML = `<div class="t">${ic(p.peligro ? 'escudo' : ICONO_HERR[p.herramienta] || 'escudo')}${p.peligro ? `Peligro: ${esc(p.peligro)}` : `Permiso · ${esc(NOMBRE_HERR[p.herramienta] || p.herramienta)}`}<small>${hace(p.creado)}</small></div>
+    el.innerHTML = `<div class="t">${ic(p.peligro ? 'escudo' : ICONO_HERR[p.herramienta] || 'escudo')}${p.peligro ? tr('Peligro: {x}', { x: esc(p.peligro) }) : tr('Permiso · {x}', { x: esc(NOMBRE_HERR[p.herramienta] || p.herramienta) })}<small>${hace(p.creado)}</small></div>
       <pre>${esc(p.resumen)}</pre>
-      <div class="flex"><button class="btn pri" data-d="allow">${ic('check')}Permitir</button>${p.peligro ? '' : `<button class="btn" data-d="always">Siempre</button>`}<button class="btn mal" data-d="deny" style="margin-left:auto">Denegar</button></div>`;
+      <div class="flex"><button class="btn pri" data-d="allow">${ic('check')}${tr('Permitir')}</button>${p.peligro ? '' : `<button class="btn" data-d="always">${tr('Siempre')}</button>`}<button class="btn mal" data-d="deny" style="margin-left:auto">${tr('Denegar')}</button></div>`;
     el.onclick = async e => {
       const b = e.target.closest('[data-d]'); if (!b) return;
       if (p.peligro && b.dataset.d === 'allow' && !(await confirmar('Acción peligrosa', `${p.peligro}: ${p.resumen}`, true))) return;
@@ -308,7 +312,7 @@ function actualizarEstadoRobot() {
   const c = $('#cascoLado'), t = $('#estadoTxt'); if (!t) return;
   const estado = E.pendientes.size ? 'permiso' : E.trabajando.size ? 'trabajando' : '';
   if (c) c.className.baseVal = `casco ${estado}`;
-  $('#estadoTxt').textContent = E.pendientes.size ? `${E.pendientes.size} permiso${E.pendientes.size > 1 ? 's' : ''} esperando` : E.trabajando.size ? `Trabajando en ${E.trabajando.size} sesión${E.trabajando.size > 1 ? 'es' : ''}` : 'En reposo';
+  $('#estadoTxt').textContent = E.pendientes.size ? tr('{n} permiso esperando|{n} permisos esperando', { n: E.pendientes.size }) : E.trabajando.size ? tr('Trabajando en {n} sesión|Trabajando en {n} sesiones', { n: E.trabajando.size }) : tr('En reposo');
 }
 
 // ---------- eventos en vivo ----------
@@ -318,16 +322,16 @@ function conectarEventos() {
   const marcar = ok => { const p = $('#puntoConexion'); if (p) p.className = 'punto ' + (ok ? 'ok' : 'mal'); };
   marcar(true);
   flujo('GET', '/eventos', undefined, e => {
-    if (e.tipo === 'permiso') { E.pendientes.set(e.id, e); pintarPermisos(); robotsLog(`? permiso: ${NOMBRE_HERR[e.herramienta] || e.herramienta}`); }
+    if (e.tipo === 'permiso') { E.pendientes.set(e.id, e); pintarPermisos(); robotsLog(`? ${tr('permiso')}: ${NOMBRE_HERR[e.herramienta] || e.herramienta}`); }
     else if (e.tipo === 'permiso-resuelto') { E.pendientes.delete(e.id); pintarPermisos(); }
-    else if (e.tipo === 'tarea') { robotsLog(`⏰ ${e.tarea.nombre}`); robotsFlash('⏰ TAREA', 'listo'); }
+    else if (e.tipo === 'tarea') { robotsLog(`⏰ ${e.tarea.nombre}`); robotsFlash(tr('⏰ TAREA'), 'listo'); }
     if (e.tipo === 'tarea') aviso(`${e.tarea.nombre}: ${String(e.texto).slice(0, 140)}`, e.subtipo === 'error');
     else if (e.sesion && e.tipo) {
-      if (e.tipo === 'inicio') { E.trabajando.add(e.sesion); robotsLog(`> ${nombreModelo(e.modelo)} pensando…`); }
+      if (e.tipo === 'inicio') { E.trabajando.add(e.sesion); robotsLog(`> ${tr('{m} pensando…', { m: nombreModelo(e.modelo) })}`); }
       if (e.tipo === 'herramienta') robotsLog(`> ${NOMBRE_HERR[e.nombre] || e.nombre} ${String(e.resumen || '').slice(0, 30)}`);
       if (e.tipo === 'fin' || e.tipo === 'error') E.trabajando.delete(e.sesion);
-      if (e.tipo === 'fin') { robotsLog('✓ respuesta lista'); if (!E.trabajando.size && !E.pendientes.size) robotsFlash('✓ LISTO', 'listo'); }
-      if (e.tipo === 'error') { robotsLog(`✗ ${String(e.error).slice(0, 34)}`); robotsFlash('✗ ERROR', 'error'); }
+      if (e.tipo === 'fin') { robotsLog(tr('✓ respuesta lista')); if (!E.trabajando.size && !E.pendientes.size) robotsFlash(tr('✓ LISTO'), 'listo'); }
+      if (e.tipo === 'error') { robotsLog(`✗ ${String(e.error).slice(0, 34)}`); robotsFlash(tr('✗ ERROR'), 'error'); }
       if (e.tipo === 'inicio' || e.tipo === 'fin' || e.tipo === 'error') { cargarSesiones(); actualizarEstadoRobot(); }
     }
     for (const o of E.oyentes) { try { o(e); } catch { } }
@@ -335,7 +339,7 @@ function conectarEventos() {
 }
 
 // ---------- barra lateral ----------
-const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['auto', 'Automatizaciones', 'reloj'], ['memoria', 'Memoria', 'cerebro'], ['uso', 'Uso', 'grafica']];
+const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['auto', 'Automatizaciones', 'reloj'], ['skills', 'Skills', 'pieza'], ['memoria', 'Memoria', 'cerebro'], ['uso', 'Uso', 'grafica']];
 function grupoFecha(t) {
   const d = new Date(t), hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dias = (hoy - new Date(d).setHours(0, 0, 0, 0)) / 86400000;
@@ -349,10 +353,10 @@ function pintarSesionesLado() {
   let g = '', html = '';
   for (const s of l) {
     const gg = grupoFecha(s.actualizada);
-    if (gg !== g) { html += `<div class="lado-grupo">${gg}</div>`; g = gg; }
+    if (gg !== g) { html += `<div class="lado-grupo">${tr(gg)}</div>`; g = gg; }
     html += `<a class="lado-ses ${s.id === actual ? 'on' : ''}" href="#/chat/${esc(s.id)}"><b>${E.trabajando.has(s.id) ? '<span class="punto ok vivo"></span>' : ''}${s.tarea ? ic('reloj') : ''}${esc(s.titulo)}</b><small>${esc(nombreModelo(s.modelo))} · ${hace(s.actualizada)}</small></a>`;
   }
-  caja.innerHTML = html || `<div class="tenue" style="padding:8px 10px;font-size:12px">${filtroSes ? 'Nada coincide.' : 'Aún no hay conversaciones.'}</div>`;
+  caja.innerHTML = html || `<div class="tenue" style="padding:8px 10px;font-size:12px">${tr(filtroSes ? 'Nada coincide.' : 'Aún no hay conversaciones.')}</div>`;
 }
 let cargando = null;
 function cargarSesiones() {
@@ -364,23 +368,23 @@ function pintarLado(modo) {
   const lado = $('#lado');
   desmontarRobot($('#robotLado')); desmontarRobot($('#robotMarca'));
   if (modo === 'ajustes') {
-    lado.innerHTML = `<div class="lado-cab"><a class="btn fantasma mini" href="#/inicio">${ic('izq')}Volver</a><span class="tenue" style="margin-left:auto;font-size:11px">ESC</span></div>
-      <div style="padding:0 14px 8px;font-size:17px;font-weight:650">Configuración</div>
-      <div class="buscador-lado">${ic('buscar')}<input id="buscaAjustes" placeholder="Buscar en la configuración…"></div>
+    lado.innerHTML = `<div class="lado-cab"><a class="btn fantasma mini" href="#/inicio">${ic('izq')}${tr('Volver')}</a><span class="tenue" style="margin-left:auto;font-size:11px">ESC</span></div>
+      <div style="padding:0 14px 8px;font-size:17px;font-weight:650">${tr('Configuración')}</div>
+      <div class="buscador-lado">${ic('buscar')}<input id="buscaAjustes" placeholder="${tr('Buscar en la configuración…')}"></div>
       <div class="lado-scroll" id="navAjustes"></div>
-      <div class="lado-pie"><span class="tenue" style="font-size:11px">Robot Companion · núcleo v${esc(E.estado?.version || '')}</span></div>`;
+      <div class="lado-pie"><span class="tenue" style="font-size:11px">Robot Companion · ${tr('núcleo')} v${esc(E.estado?.version || '')}</span></div>`;
     pintarNavAjustes('');
     $('#buscaAjustes').oninput = e => pintarNavAjustes(e.target.value);
     return;
   }
   lado.innerHTML = `<div class="lado-cab"><a class="marca" href="#/inicio" style="color:var(--txt);text-decoration:none"><span class="robot-marca" id="robotMarca">${casco()}</span><span>${esc(E.estado?.nombre && E.estado.nombre !== 'Robot' ? E.estado.nombre : 'Robot Companion')}</span></a>
-      <button class="btn fantasma icono" id="btnPaleta" title="Buscar (Ctrl+K)">${ic('buscar')}</button><a class="btn fantasma icono" href="#/chat" title="Nueva conversación">${ic('editar')}</a></div>
-    <nav class="lado-nav">${NAV_APP.map(([r, t, i]) => `<a href="#/${r}" data-r="${r}">${ic(i)}<span>${t}</span>${r === 'inicio' ? '<span class="cuenta" data-cuenta-perm hidden></span>' : ''}</a>`).join('')}</nav>
-    <div class="lado-sec">Conversaciones<button class="btn fantasma icono mini" id="btnBuscaSes" title="Filtrar">${ic('buscar')}</button></div>
-    <div class="buscador-lado" id="cajaBuscaSes" hidden>${ic('buscar')}<input id="buscaSes" placeholder="Filtrar conversaciones…"></div>
+      <button class="btn fantasma icono" id="btnPaleta" title="${tr('Buscar (Ctrl+K)')}">${ic('buscar')}</button><a class="btn fantasma icono" href="#/chat" title="${tr('Nueva conversación')}">${ic('editar')}</a></div>
+    <nav class="lado-nav">${NAV_APP.map(([r, t, i]) => `<a href="#/${r}" data-r="${r}">${ic(i)}<span>${tr(t)}</span>${r === 'inicio' ? '<span class="cuenta" data-cuenta-perm hidden></span>' : ''}</a>`).join('')}</nav>
+    <div class="lado-sec">${tr('Conversaciones')}<button class="btn fantasma icono mini" id="btnBuscaSes" title="${tr('Filtrar')}">${ic('buscar')}</button></div>
+    <div class="buscador-lado" id="cajaBuscaSes" hidden>${ic('buscar')}<input id="buscaSes" placeholder="${tr('Filtrar conversaciones…')}"></div>
     <div class="lado-scroll" id="ladoSesiones"></div>
-    <div class="lado-pie"><div class="estado-robot"><div class="robot-lado" id="robotLado" title="Tócame">${casco('').replace('class="casco ', 'id="cascoLado" class="casco ')}</div><div><span id="estadoTxt">En reposo</span><small title="Modelo por defecto (cámbialo en Configuración → Modelos)"><span class="punto ok" id="puntoConexion" style="display:inline-block;margin-right:5px;vertical-align:1px"></span>por defecto: ${esc(nombreModelo(E.config?.modeloPorDefecto))}</small></div></div>
-      <a class="btn fantasma icono" href="#/ajustes/apariencia" title="Configuración">${ic('ajustes')}</a></div>`;
+    <div class="lado-pie"><div class="estado-robot"><div class="robot-lado" id="robotLado" title="${tr('Tócame')}">${casco('').replace('class="casco ', 'id="cascoLado" class="casco ')}</div><div><span id="estadoTxt">${tr('En reposo')}</span><small title="${tr('Modelo por defecto (cámbialo en Configuración → Modelos)')}"><span class="punto ok" id="puntoConexion" style="display:inline-block;margin-right:5px;vertical-align:1px"></span>${tr('por defecto:')} ${esc(nombreModelo(E.config?.modeloPorDefecto))}</small></div></div>
+      <a class="btn fantasma icono" href="#/ajustes/apariencia" title="${tr('Configuración')}">${ic('ajustes')}</a></div>`;
   $('#btnPaleta').onclick = abrirPaleta;
   $('#btnBuscaSes').onclick = () => { const c = $('#cajaBuscaSes'); c.hidden = !c.hidden; if (!c.hidden) $('#buscaSes').focus(); else { filtroSes = ''; pintarSesionesLado(); } };
   $('#buscaSes').oninput = e => { filtroSes = e.target.value.trim().toLowerCase(); pintarSesionesLado(); };
@@ -393,13 +397,15 @@ function pintarLado(modo) {
 function abrirPaleta() {
   if ($('.paleta')) return;
   const acciones = [
-    ...NAV_APP.map(([r, t, i]) => ({ t, i, sub: 'Ir a', go: `#/${r}` })),
-    { t: 'Nueva conversación', i: 'editar', sub: 'Acción', go: '#/chat' },
-    ...AJUSTES.flatMap(([, items]) => items.map(([r, t, i]) => ({ t, i, sub: 'Configuración', go: `#/ajustes/${r}` }))),
+    ...NAV_APP.map(([r, t, i]) => ({ t: tr(t), i, sub: tr('Ir a'), go: `#/${r}` })),
+    { t: tr('Nueva conversación'), i: 'editar', sub: tr('Acción'), go: '#/chat' },
+    { t: tr('Asistente de bienvenida'), i: 'chispa', sub: tr('Acción'), go: '#/bienvenida' },
+    ...(typeof SK_paleta === 'function' ? SK_paleta() : []),
+    ...AJUSTES.flatMap(([, items]) => items.map(([r, t, i]) => ({ t: tr(t), i, sub: tr('Configuración'), go: `#/ajustes/${r}` }))),
     ...E.sesiones.slice(0, 40).map(s => ({ t: s.titulo, i: 'chat', sub: nombreModelo(s.modelo), go: `#/chat/${s.id}` })),
   ];
   const v = document.createElement('div'); v.className = 'velo';
-  v.innerHTML = `<div class="modal paleta"><input placeholder="Busca páginas, ajustes o conversaciones…"><div class="res"></div></div>`;
+  v.innerHTML = `<div class="modal paleta"><input placeholder="${tr('Busca páginas, ajustes o conversaciones…')}"><div class="res"></div></div>`;
   document.body.append(v);
   const inp = $('input', v), res = $('.res', v);
   let sel = 0, lista = [];
@@ -407,7 +413,7 @@ function abrirPaleta() {
     const q = inp.value.trim().toLowerCase();
     lista = acciones.filter(a => !q || (a.t + ' ' + a.sub).toLowerCase().includes(q)).slice(0, 40);
     sel = Math.min(sel, Math.max(0, lista.length - 1));
-    res.innerHTML = lista.map((a, i) => `<div class="op ${i === sel ? 'sel' : ''}" data-i="${i}">${ic(a.i)}<span>${esc(a.t)}</span><small>${esc(a.sub)}</small></div>`).join('') || '<div class="vacio">Sin resultados</div>';
+    res.innerHTML = lista.map((a, i) => `<div class="op ${i === sel ? 'sel' : ''}" data-i="${i}">${ic(a.i)}<span>${esc(a.t)}</span><small>${esc(a.sub)}</small></div>`).join('') || `<div class="vacio">${tr('Sin resultados')}</div>`;
   };
   const cerrar = () => { v.remove(); document.removeEventListener('keydown', tecla); };
   const ir = a => { cerrar(); if (a) location.hash = a.go; };
@@ -435,8 +441,8 @@ function pantallaLogin() {
   if (!l) {
     l = document.createElement('div'); l.id = 'login'; l.className = 'login';
     l.innerHTML = `<div style="width:84px;margin:0 auto">${casco('casco-grande')}</div><h1 style="margin:14px 0 6px">Robot Companion</h1>
-      <p class="suave">Pega el token del núcleo. Está en el archivo <code>token</code> de la carpeta de datos, o ábrelo desde el robot: bandeja → <b>Abrir panel de control</b>.</p>
-      <form><input type="password" placeholder="token" autocomplete="off" required><button class="btn pri">Entrar</button></form>`;
+      <p class="suave">${tr('Pega el token del núcleo. Está en el archivo <code>token</code> de la carpeta de datos, o ábrelo desde el robot: bandeja → <b>Abrir panel de control</b>.')}</p>
+      <form><input type="password" placeholder="token" autocomplete="off" required><button class="btn pri">${tr('Entrar')}</button></form>`;
     document.body.append(l);
     $('form', l).onsubmit = e => { e.preventDefault(); TOKEN = $('input', l).value.trim(); guardarLocal('token', TOKEN); l.remove(); arrancar(); };
   }
@@ -449,9 +455,9 @@ function pintarNavAjustes(q) {
   q = q.trim().toLowerCase();
   const actual = (location.hash.match(/^#\/ajustes\/([\w-]+)/) || [])[1];
   $('#navAjustes').innerHTML = AJUSTES.map(([g, items]) => {
-    const f = items.filter(([r, t]) => !q || t.toLowerCase().includes(q) || g.toLowerCase().includes(q) || (VISTAS['ajustes/' + r]?.claves || '').includes(q));
-    return f.length ? `<div class="lado-sec" style="padding-left:10px">${g}</div><nav class="lado-nav" style="padding:0">${f.map(([r, t, i]) => `<a href="#/ajustes/${r}" class="${r === actual ? 'on' : ''}">${ic(i)}<span>${t}</span></a>`).join('')}</nav>` : '';
-  }).join('') || '<div class="tenue" style="padding:10px">Nada coincide.</div>';
+    const f = items.filter(([r, t]) => !q || tr(t).toLowerCase().includes(q) || t.toLowerCase().includes(q) || tr(g).toLowerCase().includes(q) || (VISTAS['ajustes/' + r]?.claves || '').includes(q));
+    return f.length ? `<div class="lado-sec" style="padding-left:10px">${tr(g)}</div><nav class="lado-nav" style="padding:0">${f.map(([r, t, i]) => `<a href="#/ajustes/${r}" class="${r === actual ? 'on' : ''}">${ic(i)}<span>${tr(t)}</span></a>`).join('')}</nav>` : '';
+  }).join('') || `<div class="tenue" style="padding:10px">${tr('Nada coincide.')}</div>`;
 }
 let modoLado = '';
 async function ruta() {
@@ -459,6 +465,7 @@ async function ruta() {
   document.body.classList.remove('menu');
   const h = location.hash.replace(/^#\/?/, '') || 'inicio';
   const [seccion, sub] = h.split('/');
+  document.body.classList.toggle('modo-bienvenida', seccion === 'bienvenida');   // el asistente ocupa toda la pantalla
   const modo = seccion === 'ajustes' ? 'ajustes' : 'app';
   if (modo !== modoLado) { modoLado = modo; pintarLado(modo); }
   if (modo === 'ajustes') pintarNavAjustes($('#buscaAjustes')?.value || '');
@@ -475,8 +482,12 @@ async function arrancar() {
   if (!TOKEN) return pantallaLogin();
   try {
     [E.estado, E.config, E.sesiones] = await Promise.all([api('GET', '/estado'), api('GET', '/config'), api('GET', '/sesiones')]);
+    if (E.config.idioma) { I18N.poner(E.config.idioma); guardarLocal('idioma', E.config.idioma); }   // el idioma elegido en el núcleo manda
+    else { const l = leerLocal('idioma', ''); I18N.poner(l || I18N.delSistema()); }
     $('#app').hidden = false;
     for (const p of E.estado.permisos) E.pendientes.set(p.id, p);
+    // primer arranque: el asistente de bienvenida se abre solo hasta que se termina o se salta (config.bienvenida)
+    if (E.config.bienvenida !== true && !/^#\/bienvenida/.test(location.hash) && !sessionStorage.getItem('rc.bienvenida-saltada')) history.replaceState(null, '', '#/bienvenida');
     modoLado = ''; conectarEventos(); ruta();
   } catch (e) { if (TOKEN) aviso(e.message, true); }
 }

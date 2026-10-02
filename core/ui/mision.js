@@ -17,12 +17,12 @@ VISTAS.agentes = {
     this.agentes = new Map(l.map(a => [a.id, a]));
     v.innerHTML = `<div class="pagina mision">${cabecera('Mission Control', 'Quién está haciendo qué ahora mismo: conversaciones, tareas y los subagentes que lanzan. En vivo.')}
       <div class="rejilla k" id="mcKpis"></div>
-      <div class="seccion">Agentes</div>
+      <div class="seccion">${tr('Agentes')}</div>
       <div id="mcLista"></div></div>`;
     v.onclick = async e => {
       const b = e.target.closest('[data-parar]'); if (!b) return;
       b.disabled = true;
-      try { await api('POST', `/sesiones/${b.dataset.parar}/cancelar`); aviso('Detenido'); } catch (er) { aviso(er.message, true); b.disabled = false; }
+      try { await api('POST', `/sesiones/${b.dataset.parar}/cancelar`); aviso(tr('Detenido')); } catch (er) { aviso(er.message, true); b.disabled = false; }
     };
     this.repintar();
     clearInterval(this.t);
@@ -46,7 +46,7 @@ VISTAS.agentes = {
       ['robot', 'Subagentes', hijosVivos, 'activos ahora'],
       ['escudo', 'Esperando permiso', esperando, esperando ? 'te necesitan' : 'nadie'],
       ['check', 'Terminados', hechos, 'últimas 6 h'],
-    ].map(([i, t, n, s]) => `<div class="kpi${t === 'Esperando permiso' && n ? ' aviso' : ''}"><small>${ic(i)}${t}</small><b>${n}</b><span>${s}</span></div>`).join('');
+    ].map(([i, t, n, s]) => `<div class="kpi${t === 'Esperando permiso' && n ? ' aviso' : ''}"><small>${ic(i)}${tr(t)}</small><b>${n}</b><span>${tr(s)}</span></div>`).join('');
 
     // árbol: principales (y huérfanos cuyo padre ya no está en la lista) con sus hijos debajo
     const porPadre = new Map();
@@ -61,22 +61,22 @@ VISTAS.agentes = {
       : vacio('robot', 'Nadie trabajando ahora. Cuando un modelo use "delegar", sus subagentes aparecen aquí, cada uno con lo que está haciendo.');
   },
   tarjeta(a, hijo) {
-    const [cls, txt] = a.esperando ? ['aviso vivo', 'Esperando permiso'] : (ESTADO_AG[a.estado] || ESTADO_AG.quieto);
+    const [cls, txt0] = a.esperando ? ['aviso vivo', 'Esperando permiso'] : (ESTADO_AG[a.estado] || ESTADO_AG.quieto), txt = tr(txt0);
     const vivo = a.estado === 'trabajando';
-    const actividad = a.esperando ? `${ic('escudo')}<span>Esperando tu decisión</span>`
+    const actividad = a.esperando ? `${ic('escudo')}<span>${tr('Esperando tu decisión')}</span>`
       : a.herramienta ? `${ic(ICONO_HERR[a.herramienta.nombre] || 'llaveinglesa')}<b>${esc(NOMBRE_HERR[a.herramienta.nombre] || a.herramienta.nombre)}</b><span>${esc(a.herramienta.resumen)}</span>`
       : a.error ? `${ic('x')}<span>${esc(a.error)}</span>`
       : a.ultimo ? `${ic('chat')}<span>${esc(a.ultimo.replace(/\s+/g, ' '))}</span>`
-      : vivo ? `${ic('chispa')}<span>pensando…</span>` : '';
+      : vivo ? `${ic('chispa')}<span>${tr('pensando…')}</span>` : '';
     return `<div class="mc-tarjeta ${hijo ? 'hijo' : ''} ${vivo ? 'vivo' : ''} ${a.esperando ? 'espera' : ''}" data-id="${esc(a.id)}">
       <div class="mc-cab">${avatar(a.modelo)}
-        <div class="mc-nombre"><b>${hijo ? '' : a.tarea ? ic('reloj') : ''}${esc(a.nombre || a.id)}</b><small>${esc(nombreModelo(a.modelo))}${hijo ? ' · subagente' : a.canal ? ` · ${esc(a.canal)}` : ''}</small></div>
+        <div class="mc-nombre"><b>${hijo ? '' : a.tarea ? ic('reloj') : ''}${esc(a.nombre || a.id)}</b><small>${esc(nombreModelo(a.modelo))}${hijo ? ` · ${tr('subagente')}` : a.canal ? ` · ${esc(a.canal)}` : ''}</small></div>
         <span class="mc-estado"><span class="punto ${cls}"></span>${txt}</span>
       </div>
       <div class="mc-act">${actividad}</div>
       <div class="mc-pie"><span data-crono="${a.inicio}" data-fin="${a.fin || ''}">${a.inicio ? cronoTxt((a.fin || Date.now()) - a.inicio) : '—'}</span>
-        <span>${a.pasos || 0} paso${a.pasos === 1 ? '' : 's'}</span>${a.uso?.entrada ? `<span>${fmtK(a.uso.entrada + a.uso.salida)} tokens</span>` : ''}${a.compactada ? `<span>${ic('cerebro')}resumida</span>` : ''}
-        <span class="mc-acc">${vivo ? `<button class="btn mini mal" data-parar="${esc(a.id)}">${ic('parar')}Detener</button>` : ''}<a class="btn mini fantasma" href="#/chat/${esc(a.id)}">Abrir ${ic('der')}</a></span></div>
+        <span>${tr('{n} paso|{n} pasos', { n: a.pasos || 0 })}</span>${a.uso?.entrada ? `<span>${fmtK(a.uso.entrada + a.uso.salida)} tokens</span>` : ''}${a.compactada ? `<span>${ic('cerebro')}${tr('resumida')}</span>` : ''}
+        <span class="mc-acc">${vivo ? `<button class="btn mini mal" data-parar="${esc(a.id)}">${ic('parar')}${tr('Detener')}</button>` : ''}<a class="btn mini fantasma" href="#/chat/${esc(a.id)}">${tr('Abrir')} ${ic('der')}</a></span></div>
     </div>`;
   },
   relojes() {

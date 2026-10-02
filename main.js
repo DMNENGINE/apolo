@@ -31,6 +31,10 @@ const { iniciar: iniciarDaemon } = require('./core/daemon');
 const { createPuente } = require('./puente-nucleo.js');
 const { crearOverlay } = require('./control-overlay.js');
 let nucleo = null, puente = null, conectores = null;
+// idioma de la app (bandeja, avisos, isla): el elegido en el panel (config del núcleo `idioma`) o el del sistema. Mismo diccionario que el panel.
+const I18N = require('./core/ui/i18n.js');
+const idiomaApp = () => I18N.normal((nucleo && nucleo.cfg && nucleo.cfg.idioma) || (app.isReady() ? app.getLocale() : '') || 'es');
+const tr = (k, v) => { I18N.poner(idiomaApp()); return I18N.tr(k, v); };
 const nombreCompanero = () => { try { return nucleo ? nucleo.personalidad.nombre() : 'Robot'; } catch { return 'Robot'; } };
 
 const PORT = 47823;
@@ -130,7 +134,7 @@ function createWindow() {
 
 // voz: 1) Fish Audio (si hay key y voz en %APPDATA%\robot-companion\voz.json) 2) edge-tts (Microsoft es-ES-Alvaro)
 // 3) null → la isla usa la voz de Windows. Todo en mp3 con caché por texto.
-const VOZ_TTS = { voz: 'es-ES-AlvaroNeural', rate: '+8%', pitch: '+12Hz' };
+const VOZ_TTS_IDIOMA = { es: { voz: 'es-ES-AlvaroNeural', rate: '+8%', pitch: '+12Hz' }, en: { voz: 'en-US-AndrewNeural', rate: '+6%', pitch: '+8Hz' } };
 const VOZ_CFG = () => { try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'voz.json'), 'utf8')); } catch { return {}; } };
 let fishCaidoHasta = 0;                                       // si Fish falla, 5 min con edge-tts antes de reintentar
 async function ttsFish(cfg, text, f) {
@@ -150,15 +154,16 @@ ipcMain.handle('tts', async (_e, text) => {
   text = String(text || '').slice(0, 600); if (!text.trim()) return null;
   const dir = path.join(os.tmpdir(), 'robot-tts'); try { fs.mkdirSync(dir, { recursive: true }); } catch { }
   const vc = VOZ_CFG();
+  const VOZ_TTS = VOZ_TTS_IDIOMA[idiomaApp()] || VOZ_TTS_IDIOMA.es;     // edge-tts con la voz del idioma elegido
   const firma = vc.apiKey && vc.voz ? 'fish' + vc.voz + (vc.modelo || '') : VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch;
   const f = path.join(dir, crypto.createHash('sha1').update(firma + text).digest('hex').slice(0, 16) + '.mp3');
   if (fs.existsSync(f)) return f;
   if (await ttsFish(vc, text, f)) return f;
   const fe = path.join(dir, crypto.createHash('sha1').update(VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch + text).digest('hex').slice(0, 16) + '.mp3');
   if (fs.existsSync(fe)) return fe;
-  return edgeTts(text, fe);
+  return edgeTts(text, fe, VOZ_TTS);
 });
-const edgeTts = (text, f) => new Promise(ok => {
+const edgeTts = (text, f, VOZ_TTS = VOZ_TTS_IDIOMA.es) => new Promise(ok => {
   const p =require('child_process').spawn('python', ['-m', 'edge_tts', '--voice', VOZ_TTS.voz, '--rate=' + VOZ_TTS.rate, '--pitch=' + VOZ_TTS.pitch, '--text', text, '--write-media', f], { windowsHide: true });
   const t = setTimeout(() => { try { p.kill(); } catch { } ok(null); }, 12_000);
   p.on('error', () => { clearTimeout(t); ok(null); });
@@ -169,9 +174,9 @@ ipcMain.on('upd-ahora', () => { if (!actualizador) return; actualizador.actualiz
 ipcMain.on('upd-luego', () => { if (actualizador) actualizador.posponer(24); });
 async function buscarActualizacion() {
   const r = await actualizador.comprobar(true);
-  const txt = { 'al-dia': 'Tienes la última versión.', desarrollo: 'Esta es una copia de desarrollo (git): actualízala con git pull.',
-    desconocido: 'No sé qué versión tienes: reinstala con el comando de una línea para recibir avisos.', error: 'No pude consultar GitHub: ' + (r.error || '') }[r.estado];
-  if (txt && win && !win.isDestroyed()) win.webContents.send('answer', { titulo: 'Actualizaciones', texto: txt });
+  const txt = { 'al-dia': tr('Tienes la última versión.'), desarrollo: tr('Esta es una copia de desarrollo (git): actualízala con git pull.'),
+    desconocido: tr('No sé qué versión tienes: reinstala con el comando de una línea para recibir avisos.'), error: tr('No pude consultar GitHub: {x}', { x: r.error || '' }) }[r.estado];
+  if (txt && win && !win.isDestroyed()) win.webContents.send('answer', { titulo: tr('Actualizaciones'), texto: txt });
 }
 
 ipcMain.on('interactive', (_e, on) => { if (win) win.setIgnoreMouseEvents(!on, { forward: true }); });
@@ -531,7 +536,7 @@ function startServer() {
       }
     });
   });
-  srv.on('error', e => dialog.showErrorBox('Robot Companion', `No pude abrir el puerto ${PORT}: ${e.message}`));
+  srv.on('error', e => dialog.showErrorBox('Robot Companion', tr('No pude abrir el puerto {p}: {e}', { p: PORT, e: e.message })));
   srv.listen(PORT, '127.0.0.1');
 }
 // al móvil: ya si no estás en la PC, o si nadie contesta en 20 s
@@ -554,9 +559,9 @@ function revisarModelos() {
   if (!nucleo || !win || win.isDestroyed()) return;
   const l = nucleo.proveedores.listos();
   if (!Object.keys(l).length || Object.values(l).some(Boolean)) return;
-  win.webContents.send('answer', { titulo: 'Conecta un modelo para hablar conmigo',
-    texto: 'Ahora mismo no tengo ningún modelo de IA disponible. Lo más fácil:\n• **¿Pagas ChatGPT?** Bandeja → **Conectar ChatGPT**.\n• **¿Tienes Claude?** Instala Claude Code y ya está.\n• **Gratis:** una key de Gemini (aistudio.google.com) en Panel → Modelos.',
-    voz: 'Para hablar conmigo necesito un modelo. Si pagas ChatGPT, pulsa Conectar ChatGPT en la bandeja.' });
+  win.webContents.send('answer', { titulo: tr('Conecta un modelo para hablar conmigo'),
+    texto: tr('Ahora mismo no tengo ningún modelo de IA disponible. Lo más fácil:\n• **¿Pagas ChatGPT?** Bandeja → **Conectar ChatGPT**.\n• **¿Tienes Claude?** Instala Claude Code y ya está.\n• **Gratis:** una key de Gemini (aistudio.google.com) en Panel → Modelos.'),
+    voz: tr('Para hablar conmigo necesito un modelo. Si pagas ChatGPT, pulsa Conectar ChatGPT en la bandeja.') });
 }
 
 // ---------- núcleo multi-modelo (core/): API en 127.0.0.1:47900 + puente con la isla ----------
@@ -584,15 +589,16 @@ async function startNucleo() {
   });
   // canales del robot visibles en el panel
   const canalesRobot = () => {
-    nucleo.canales.registrar('isla', { nombre: 'Isla de escritorio', tipo: 'isla', estado: 'activo', detalle: `Destino: ${puente.destino('isla') || 'Claude Code'}` });
-    nucleo.canales.registrar('discord', { nombre: 'Discord', tipo: 'discord', estado: /conectado/i.test(discord.status) ? 'activo' : 'inactivo', detalle: `${discord.status} · destino: ${puente.destino('discord') || 'Claude Code'}` });
-    nucleo.canales.registrar('telegram', { nombre: 'Telegram', tipo: 'telegram', estado: telegram.enabled && telegram.status === 'conectado' ? 'activo' : 'inactivo', detalle: `${telegram.status} · destino: ${puente.destino('telegram') || 'automático'}` });
-    nucleo.canales.registrar('whatsapp', { nombre: 'WhatsApp', tipo: 'whatsapp', estado: whatsapp.enabled ? 'activo' : 'inactivo', detalle: `${whatsapp.status} · destino: ${puente.destino('whatsapp') || 'automático'}` });
-    nucleo.canales.registrar('voz', { nombre: 'Voz', tipo: 'voz', estado: 'activo', detalle: whisperReady ? 'Whisper cargado · Ctrl+Alt+Espacio' : 'Whisper se carga al hablar · Ctrl+Alt+Espacio' });
-    nucleo.canales.registrar('streamdeck', { nombre: 'Stream Deck', tipo: 'streamdeck', estado: fs.existsSync(path.join(process.env.APPDATA || '', 'Elgato', 'StreamDeck', 'Plugins', 'com.robotcompanion.sdPlugin')) ? 'activo' : 'inactivo', detalle: 'Permitir / Denegar / Estado' });
-    nucleo.canales.registrar('gemini', { nombre: 'Gemini CLI (hooks)', tipo: 'claudecode', estado: geminiHooksInstalled() ? 'activo' : 'inactivo', detalle: geminiHooksInstalled() ? 'Hooks instalados: permisos y actividad en la isla' : cliInstalado.gemini ? 'Instálalos desde la bandeja' : 'Gemini CLI no está instalado (npm i -g @google/gemini-cli)' });
-    nucleo.canales.registrar('codex', { nombre: 'Codex CLI', tipo: 'claudecode', estado: 'inactivo', detalle: 'Sus hooks son experimentales y aún no funcionan en Windows' });
-    nucleo.canales.registrar('claudecode', { nombre: 'Claude Code (hooks)', tipo: 'claudecode', estado: hooksInstalled() ? 'activo' : 'inactivo', detalle: hooksInstalled() ? 'Hooks instalados' : 'Instálalos desde la bandeja' });
+    // nombre/detalle en el idioma de la app (el panel los vuelve a pasar por tr por si cambió); `instalado` lo usa el asistente de bienvenida
+    nucleo.canales.registrar('isla', { nombre: tr('Isla de escritorio'), tipo: 'isla', estado: 'activo', detalle: `${tr('Destino:')} ${puente.destino('isla') || 'Claude Code'}` });
+    nucleo.canales.registrar('discord', { nombre: 'Discord', tipo: 'discord', estado: /conectado/i.test(discord.status) ? 'activo' : 'inactivo', detalle: `${tr(discord.status)} · ${tr('destino:')} ${puente.destino('discord') || 'Claude Code'}` });
+    nucleo.canales.registrar('telegram', { nombre: 'Telegram', tipo: 'telegram', estado: telegram.enabled && telegram.status === 'conectado' ? 'activo' : 'inactivo', detalle: `${tr(telegram.status)} · ${tr('destino:')} ${puente.destino('telegram') || tr('automático')}` });
+    nucleo.canales.registrar('whatsapp', { nombre: 'WhatsApp', tipo: 'whatsapp', estado: whatsapp.enabled ? 'activo' : 'inactivo', detalle: `${tr(whatsapp.status)} · ${tr('destino:')} ${puente.destino('whatsapp') || tr('automático')}` });
+    nucleo.canales.registrar('voz', { nombre: tr('Voz'), tipo: 'voz', estado: 'activo', detalle: tr(whisperReady ? 'Whisper cargado · Ctrl+Alt+Espacio' : 'Whisper se carga al hablar · Ctrl+Alt+Espacio') });
+    nucleo.canales.registrar('streamdeck', { nombre: 'Stream Deck', tipo: 'streamdeck', estado: fs.existsSync(path.join(process.env.APPDATA || '', 'Elgato', 'StreamDeck', 'Plugins', 'com.robotcompanion.sdPlugin')) ? 'activo' : 'inactivo', detalle: tr('Permitir / Denegar / Estado') });
+    nucleo.canales.registrar('gemini', { nombre: 'Gemini CLI (hooks)', tipo: 'claudecode', instalado: cliInstalado.gemini, estado: geminiHooksInstalled() ? 'activo' : 'inactivo', detalle: tr(geminiHooksInstalled() ? 'Hooks instalados: permisos y actividad en la isla' : cliInstalado.gemini ? 'Instálalos desde la bandeja' : 'Gemini CLI no está instalado (npm i -g @google/gemini-cli)') });
+    nucleo.canales.registrar('codex', { nombre: 'Codex CLI', tipo: 'claudecode', instalado: cliInstalado.codex, estado: 'inactivo', detalle: tr('Sus hooks son experimentales y aún no funcionan en Windows') });
+    nucleo.canales.registrar('claudecode', { nombre: 'Claude Code (hooks)', tipo: 'claudecode', estado: hooksInstalled() ? 'activo' : 'inactivo', detalle: tr(hooksInstalled() ? 'Hooks instalados' : 'Instálalos desde la bandeja') });
   };
   canalesRobot(); setInterval(canalesRobot, 15_000);
   // avisos de agentes externos (MCP: Antigravity, Cursor…) → isla con voz + Discord si urgente o no estás
@@ -610,8 +616,8 @@ async function startNucleo() {
   nucleo.bus.on('control', c => {
     if (c.activo) overlayControl.mostrar(c.motivo);
     else if (!nucleo.control.estado().length) overlayControl.ocultar();
-    const texto = c.activo ? `🖱️ Tomo el control del ratón y teclado: ${c.motivo}` : `✋ Control devuelto: ${c.razon || 'terminado'}`;
-    if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: '🤖 Control del PC', texto });
+    const texto = c.activo ? `🖱️ ${tr('Tomo el control del ratón y teclado:')} ${c.motivo}` : `✋ ${tr('Control devuelto:')} ${c.razon || tr('terminado')}`;
+    if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: `🤖 ${tr('Control del PC')}`, texto });
     if (isAway()) movil.sendAviso(texto, c.activo ? 'red' : 'blue');
   });
   nucleo.bus.on('permiso-resuelto', ({ id: nid }) => {          // contestado por otra vía (API, tiempo agotado)
@@ -661,12 +667,12 @@ function installHooks() {
   const b = backup();
   fs.mkdirSync(path.dirname(SETTINGS), { recursive: true });
   fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2));
-  dialog.showMessageBox({ message: 'Hooks instalados.', detail: `Copia de seguridad: ${b || '(no había settings.json)'}\nAbre una sesión nueva de Claude Code para que los use.` });
+  dialog.showMessageBox({ message: tr('Hooks instalados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}\n${tr('Abre una sesión nueva de Claude Code para que los use.')}` });
 }
 function removeHooks() {
   const b = backup();
   fs.writeFileSync(SETTINGS, JSON.stringify(stripOurs(readSettings()), null, 2));
-  dialog.showMessageBox({ message: 'Hooks quitados.', detail: `Copia de seguridad: ${b}` });
+  dialog.showMessageBox({ message: tr('Hooks quitados.'), detail: `${tr('Copia de seguridad:')} ${b}` });
 }
 const hooksInstalled = () => JSON.stringify(readSettings()).includes('RobotCompanion/hook/hook.js');
 
@@ -685,7 +691,7 @@ function geminiHooks(instalar) {
   if (fs.existsSync(GEMINI_SETTINGS)) { b = GEMINI_SETTINGS + '.robot-backup-' + new Date().toISOString().replace(/[:.]/g, '-'); fs.copyFileSync(GEMINI_SETTINGS, b); }
   fs.mkdirSync(path.dirname(GEMINI_SETTINGS), { recursive: true });
   fs.writeFileSync(GEMINI_SETTINGS, JSON.stringify(s, null, 2));
-  dialog.showMessageBox({ message: instalar ? 'Hooks de Gemini CLI instalados.' : 'Hooks de Gemini CLI quitados.', detail: `Copia de seguridad: ${b || '(no había settings.json)'}${instalar ? '\nAbre una sesión nueva de Gemini CLI. Puedes comprobarlos con /hooks.' : ''}` });
+  dialog.showMessageBox({ message: tr(instalar ? 'Hooks de Gemini CLI instalados.' : 'Hooks de Gemini CLI quitados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}${instalar ? '\n' + tr('Abre una sesión nueva de Gemini CLI. Puedes comprobarlos con /hooks.') : ''}` });
 }
 const tieneCLI = n => { try { require('child_process').execSync(`where ${n}`, { stdio: 'ignore', windowsHide: true }); return true; } catch { return false; } };
 const cliInstalado = { gemini: tieneCLI('gemini'), codex: tieneCLI('codex') };
@@ -708,42 +714,43 @@ function buildTray() {
   tray = new Tray(trayIcon());
   tray.setToolTip('Robot Companion');
   const menu = () => Menu.buildFromTemplate([
-    { label: hooksInstalled() ? '✓ Hooks de Claude Code instalados' : 'Hooks NO instalados', enabled: false },
-    { label: 'Instalar hooks', click: installHooks },
-    { label: 'Quitar hooks', click: removeHooks },
-    { label: geminiHooksInstalled() ? '✓ Hooks de Gemini CLI instalados' : `Gemini CLI: hooks no instalados${cliInstalado.gemini ? '' : ' (CLI no encontrado)'}`, enabled: false },
-    { label: geminiHooksInstalled() ? 'Quitar hooks de Gemini CLI' : 'Instalar hooks de Gemini CLI', click: () => geminiHooks(!geminiHooksInstalled()) },
+    { label: tr(hooksInstalled() ? '✓ Hooks de Claude Code instalados' : 'Hooks NO instalados'), enabled: false },
+    { label: tr('Instalar hooks'), click: installHooks },
+    { label: tr('Quitar hooks'), click: removeHooks },
+    { label: geminiHooksInstalled() ? tr('✓ Hooks de Gemini CLI instalados') : `${tr('Gemini CLI: hooks no instalados')}${cliInstalado.gemini ? '' : ' ' + tr('(CLI no encontrado)')}`, enabled: false },
+    { label: tr(geminiHooksInstalled() ? 'Quitar hooks de Gemini CLI' : 'Instalar hooks de Gemini CLI'), click: () => geminiHooks(!geminiHooksInstalled()) },
     { type: 'separator' },
-    { label: '⬆ Buscar actualizaciones', click: () => buscarActualizacion() },
-    { label: 'Iniciar con Windows', type: 'checkbox', checked: autoStart(), click: i => setAutoStart(i.checked) },
+    { label: `⬆ ${tr('Buscar actualizaciones')}`, click: () => buscarActualizacion() },
+    { label: tr('Iniciar con Windows'), type: 'checkbox', checked: autoStart(), click: i => setAutoStart(i.checked) },
     { type: 'separator' },
-    { label: `🤖 Núcleo: isla → ${(puente && puente.destino('isla')) || 'Claude Code'} · Discord → ${(puente && puente.destino('discord')) || 'Claude Code'}`, enabled: false },
-    { label: '🖥️ Abrir panel de control', click: () => abrirPanel() },
-    { label: '💬 Conectar ChatGPT (tu plan, sin API key)', click: () => abrirPanel('/ajustes/modelos') },
-    { label: '🧩 Copiar token para la extensión del navegador', click: () => { try { clipboard.writeText(fs.readFileSync(path.join(nucleo.cfg.dir, 'token'), 'utf8').trim()); } catch { } } },
-    { label: '🧩 Abrir carpeta de la extensión', click: () => shell.openPath(path.join(__dirname, 'extension')) },
-    { label: 'Configurar modelos (abrir config del núcleo)…', click: () => nucleo && shell.openPath(path.join(nucleo.cfg.dir, 'config.json')) },
+    { label: `🤖 ${tr('Núcleo')}: ${tr('isla')} → ${(puente && puente.destino('isla')) || 'Claude Code'} · Discord → ${(puente && puente.destino('discord')) || 'Claude Code'}`, enabled: false },
+    { label: `🖥️ ${tr('Abrir panel de control')}`, click: () => abrirPanel() },
+    { label: `✨ ${tr('Asistente de bienvenida')}`, click: () => abrirPanel('/bienvenida') },
+    { label: `💬 ${tr('Conectar ChatGPT (tu plan, sin API key)')}`, click: () => abrirPanel('/ajustes/modelos') },
+    { label: `🧩 ${tr('Copiar token para la extensión del navegador')}`, click: () => { try { clipboard.writeText(fs.readFileSync(path.join(nucleo.cfg.dir, 'token'), 'utf8').trim()); } catch { } } },
+    { label: `🧩 ${tr('Abrir carpeta de la extensión')}`, click: () => shell.openPath(path.join(__dirname, 'extension')) },
+    { label: tr('Configurar modelos (abrir config del núcleo)…'), click: () => nucleo && shell.openPath(path.join(nucleo.cfg.dir, 'config.json')) },
     { type: 'separator' },
-    { label: `Discord: ${discord.status}`, enabled: false },
-    { label: 'Configurar Discord (abrir archivo)…', click: () => { ensureDiscordCfg(); shell.openPath(DISCORD_CFG()); } },
-    { label: 'Reconectar Discord', click: startDiscord },
-    { label: '☀️ Resumen del día ahora', click: () => runBriefing() },
-    { label: `🧠 Cerebro: ${cerebro && cerebro.paused ? 'en pausa (cerca del límite del plan)' : 'activo'}`, enabled: false },
-    { label: 'Enviarme un aviso de prueba', click: () => movil.sendAviso('🤖 **Prueba:** así te llegarán los avisos del Robot Companion.', 'blue') },
-    { label: `Avisos de DMs: ${dmsStatus}`, enabled: false },
+    { label: `Discord: ${tr(discord.status)}`, enabled: false },
+    { label: tr('Configurar Discord (abrir archivo)…'), click: () => { ensureDiscordCfg(); shell.openPath(DISCORD_CFG()); } },
+    { label: tr('Reconectar Discord'), click: startDiscord },
+    { label: `☀️ ${tr('Resumen del día ahora')}`, click: () => runBriefing() },
+    { label: `🧠 ${tr('Cerebro')}: ${tr(cerebro && cerebro.paused ? 'en pausa (cerca del límite del plan)' : 'activo')}`, enabled: false },
+    { label: tr('Enviarme un aviso de prueba'), click: () => movil.sendAviso(tr('🤖 **Prueba:** así te llegarán los avisos del Robot Companion.'), 'blue') },
+    { label: `${tr('Avisos de DMs')}: ${tr(dmsStatus)}`, enabled: false },
     {
-      label: `Reglas "Permitir siempre" (${rules.length})`, submenu: rules.length ? [
-        ...rules.map((r, i) => ({ label: `✕ quitar: ${r.label}`, click: () => { rules.splice(i, 1); saveRules(); } })),
-        { type: 'separator' }, { label: 'Quitar todas', click: () => { rules = []; saveRules(); } },
-      ] : [{ label: '(ninguna)', enabled: false }],
+      label: tr('Reglas "Permitir siempre" ({n})', { n: rules.length }), submenu: rules.length ? [
+        ...rules.map((r, i) => ({ label: `✕ ${tr('quitar')}: ${r.label}`, click: () => { rules.splice(i, 1); saveRules(); } })),
+        { type: 'separator' }, { label: tr('Quitar todas'), click: () => { rules = []; saveRules(); } },
+      ] : [{ label: tr('(ninguna)'), enabled: false }],
     },
     { type: 'separator' },
-    { label: '↔ Mover isla fuera del monitor principal', click: () => moverIsla('otro') },
-    { label: '↩ Volver la isla al monitor principal', click: () => moverIsla('casa') },
-    { label: 'Evento de prueba', click: () => win.webContents.send('demo') },
-    { label: 'Herramientas de desarrollo', click: () => win.webContents.openDevTools({ mode: 'detach' }) },
+    { label: `↔ ${tr('Mover isla fuera del monitor principal')}`, click: () => moverIsla('otro') },
+    { label: `↩ ${tr('Volver la isla al monitor principal')}`, click: () => moverIsla('casa') },
+    { label: tr('Evento de prueba'), click: () => win.webContents.send('demo') },
+    { label: tr('Herramientas de desarrollo'), click: () => win.webContents.openDevTools({ mode: 'detach' }) },
     { type: 'separator' },
-    { label: 'Salir', click: () => app.quit() },
+    { label: tr('Salir'), click: () => app.quit() },
   ]);
   tray.on('click', () => tray.popUpContextMenu(menu()));
   tray.on('right-click', () => tray.popUpContextMenu(menu()));
@@ -924,6 +931,11 @@ app.whenReady().then(() => {
   win.webContents.on('did-finish-load', enviarNombre);
   nucleo.bus.on('evento', e => { if (e && e.tipo === 'identidad') enviarNombre(); });
   enviarNombre();
+  // idioma: a la isla al cargar y cada vez que cambie en el panel (PATCH /v1/config {idioma} cambia nucleo.cfg en memoria)
+  let idiomaEnviado = '';
+  const enviarIdioma = forzar => { const l = idiomaApp(); if (!forzar && l === idiomaEnviado) return; idiomaEnviado = l; if (win && !win.isDestroyed()) win.webContents.send('idioma', l); };
+  win.webContents.on('did-finish-load', () => enviarIdioma(true));
+  setInterval(() => enviarIdioma(false), 3000);
   setInterval(async () => {                                   // ☀️ resumen del día: a la hora fijada y si estás en la PC
     if (!cerebro || !cerebro.briefingDue() || Date.now() - lastMove > 10 * 60_000) return;
     runBriefing();

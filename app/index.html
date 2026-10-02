@@ -209,19 +209,19 @@
     <div id="hero">
       <div id="big"></div>
       <div class="sum">
-        <div class="cab"><h2 id="h2">Todo tranquilo</h2><div id="tools"><span class="pill" id="steps"></span><button class="icon" id="voz" title="Voz del robot"></button><button class="icon" id="snd" title="Sonido"></button><span class="sw" id="tTog" title="Mostrar / ocultar las terminales"><span id="tIco"></span><b id="tCnt">0</b><span class="track"><i></i></span></span></div></div>
+        <div class="cab"><h2 id="h2">Todo tranquilo</h2><div id="tools"><span class="pill" id="steps"></span><button class="icon" id="voz" title="Voz del robot" data-i18n-attr="title"></button><button class="icon" id="snd" title="Sonido" data-i18n-attr="title"></button><span class="sw" id="tTog" title="Mostrar / ocultar las terminales" data-i18n-attr="title"><span id="tIco"></span><b id="tCnt">0</b><span class="track"><i></i></span></span></div></div>
         <p id="hp">No hay nada pendiente.</p>
         <div class="kpis">
-          <div class="kpi"><b id="kSes">0</b><span>sesiones</span></div>
-          <div class="kpi"><b id="kSub">0</b><span>subagentes activos</span></div>
-          <div class="kpi"><b id="kCtx">—</b><span>contexto máx.</span></div>
-          <div class="kpi" id="kpiHoy" title=""><b id="kHoy">—</b><span>uso hoy <i id="kHoyCache" style="font-style:normal;opacity:.6"></i></span></div>
-          <div class="kpi" id="kpi5h" title="Ventana de 5 h del plan"><b id="k5h">—</b><span>últimas 5 h</span></div>
-          <div class="kpi" id="kpiSem" title="Últimos 7 días"><b id="kSem">—</b><span>semana</span></div>
+          <div class="kpi"><b id="kSes">0</b><span data-i18n>sesiones</span></div>
+          <div class="kpi"><b id="kSub">0</b><span data-i18n>subagentes activos</span></div>
+          <div class="kpi"><b id="kCtx">—</b><span data-i18n>contexto máx.</span></div>
+          <div class="kpi" id="kpiHoy" title=""><b id="kHoy">—</b><span><span data-i18n>uso hoy</span> <i id="kHoyCache" style="font-style:normal;opacity:.6"></i></span></div>
+          <div class="kpi" id="kpi5h" title="Ventana de 5 h del plan"><b id="k5h">—</b><span data-i18n>últimas 5 h</span></div>
+          <div class="kpi" id="kpiSem" title="Últimos 7 días" data-i18n-attr="title"><b id="kSem">—</b><span data-i18n>semana</span></div>
         </div>
       </div>
     </div>
-    <div id="ask"><input id="askIn" placeholder="Pídele algo a Claude…  (en Proyecto: …)" autocomplete="off"><button class="icon" id="mic" title="Hablar (Ctrl+Alt+Espacio)"></button><button class="icon" id="askGo" title="Enviar"></button></div>
+    <div id="ask"><input id="askIn" placeholder="Pídele algo a Claude…  (en Proyecto: …)" data-i18n-attr="placeholder" autocomplete="off"><button class="icon" id="mic" title="Hablar (Ctrl+Alt+Espacio)" data-i18n-attr="title"></button><button class="icon" id="askGo" title="Enviar" data-i18n-attr="title"></button></div>
     <div id="toast"></div>
     <div id="answer"></div>
     <div id="cards"></div>
@@ -231,14 +231,15 @@
     <div id="sesH"><span id="sesT">Terminales</span><span class="ln"></span></div>
     <div id="sessions"><div class="empty">Sin sesiones de Claude Code todavía.</div></div>
     <div id="code"></div>
-    <div id="tchat"><div class="th"><b id="tN">Terminal</b><span id="tSt"></span><button class="icon" id="tIr" title="Ir a su ventana"></button><button class="icon" id="tX" title="Cerrar"></button></div>
+    <div id="tchat"><div class="th"><b id="tN">Terminal</b><span id="tSt"></span><button class="icon" id="tIr" title="Ir a su ventana" data-i18n-attr="title"></button><button class="icon" id="tX" title="Cerrar" data-i18n-attr="title"></button></div>
       <div id="tmsgs"></div>
-      <div id="tin"><input id="tinT" placeholder="Escríbele a esta terminal…" autocomplete="off"><button class="icon" id="tGo" title="Enviar a esta terminal"></button></div></div>
-    <div id="tHint">Toca una terminal para ver su conversación y escribirle desde aquí</div>
+      <div id="tin"><input id="tinT" placeholder="Escríbele a esta terminal…" data-i18n-attr="placeholder" autocomplete="off"><button class="icon" id="tGo" title="Enviar a esta terminal" data-i18n-attr="title"></button></div></div>
+    <div id="tHint" data-i18n>Toca una terminal para ver su conversación y escribirle desde aquí</div>
    </div>
   </div>
 </div>
 <div id="notifs"></div>
 <script src="../shared/peligro.js"></script>
+<script src="../core/ui/i18n.js"></script>
 <script type="module" src="island.js"></script>
 </body></html>

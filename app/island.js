@@ -3,6 +3,9 @@ import { createRobot } from './robot.js';
 import { emit, COLORS, sound } from './fx.js';
 
 const $ = id => document.getElementById(id);
+// i18n: ../core/ui/i18n.js (script clásico, va antes) deja tr() global; sin él, el español tal cual
+const tr = window.tr || ((k, v) => String(k).replace(/\{(\w+)\}/g, (m, x) => (v && v[x] !== undefined ? v[x] : m)));
+try { window.I18N?.estaticos(); } catch { }
 
 // ---------- iconos SVG (trazo, heredan el color del texto) ----------
 let NOMBRE = 'Robot';                                  // nombre del compañero (lo manda main desde la identidad del núcleo)
@@ -55,7 +58,7 @@ rwrap.addEventListener('click', e => {
     clicks = []; mareoHasta = now + 4000 + nivelMareo * 1100;
     robot.dizzy(nivelMareo); sound.play('mareo');
     emit(x, y, 18 + nivelMareo * 10, ['#b58cff', '#7fe3ff', '#ff7ad9'], 'burst');
-    if (nivelMareo >= 3) say('¡Para, para! Todo me da vueltas');
+    if (nivelMareo >= 3) say(tr('¡Para, para! Todo me da vueltas'));
   } else { robot.poke(); sound.play('poke'); emit(x, y, 10, COLORS.listo, 'burst'); }
 });
 
@@ -68,7 +71,7 @@ const GESTOS = [                                            // [peso, nombre, se
 ];
 function hacerGesto(nombre, secs, msg) {
   robot.setFps(40);
-  robot.gesto(nombre, secs, msg);
+  robot.gesto(nombre, secs, msg ? tr(msg) : msg);
   setTimeout(ajustarFps, secs * 1000 + 400);
 }
 let proximoGesto = Date.now() + 20_000, ultimaHora = -1;
@@ -83,7 +86,7 @@ function despertar() {
   let ya = ''; try { ya = localStorage.getItem('robot-buenosdias') || ''; } catch { }
   if (h >= 5 && h < 12 && ya !== hoy) {
     try { localStorage.setItem('robot-buenosdias', hoy); } catch { }
-    setTimeout(() => { robot.greet('¡BUENOS DÍAS!'); say('¡Buenos días!'); const [x, y] = center(); emit(x, y, 24, ['#ffd25a', '#ffb020', '#7fe3ff'], 'burst'); }, 2300);
+    setTimeout(() => { robot.greet(tr('¡BUENOS DÍAS!')); say(tr('¡Buenos días!')); const [x, y] = center(); emit(x, y, 24, ['#ffd25a', '#ffb020', '#7fe3ff'], 'burst'); }, 2300);
   }
 }
 
@@ -147,11 +150,11 @@ function toolText(name, inp = {}) {
     case 'Glob': return `Glob  ${short(inp.pattern, 40)}`;
     case 'WebFetch': try { return `WebFetch  ${new URL(inp.url).host}`; } catch { return 'WebFetch'; }
     case 'WebSearch': return `WebSearch  ${short(inp.query, 40)}`;
-    case 'Task': case 'Agent': return `Agente  ${short(inp.description || inp.subagent_type, 50)}`;
-    case 'navegador_abrir': try { return `Navegador  abre ${new URL(/^[a-z]+:/i.test(inp.url) ? inp.url : 'https://' + inp.url).host}`; } catch { return 'Navegador  abre'; }
-    case 'navegador_escribir': return `Navegador  escribe "${short(inp.texto, 30)}"${inp.enviar ? ' ⏎' : ''}`;
-    case 'navegador_clic': return `Navegador  clic [${inp.ref}]`;
-    case 'navegador_esperar': return `Navegador  esperando ${inp.segundos || ''} s`;
+    case 'Task': case 'Agent': return `${tr('Agente')}  ${short(inp.description || inp.subagent_type, 50)}`;
+    case 'navegador_abrir': try { return `${tr('Navegador')}  ${tr('abre')} ${new URL(/^[a-z]+:/i.test(inp.url) ? inp.url : 'https://' + inp.url).host}`; } catch { return `${tr('Navegador')}  ${tr('abre')}`; }
+    case 'navegador_escribir': return `${tr('Navegador')}  ${tr('escribe')} "${short(inp.texto, 30)}"${inp.enviar ? ' ⏎' : ''}`;
+    case 'navegador_clic': return `${tr('Navegador')}  ${tr('clic')} [${inp.ref}]`;
+    case 'navegador_esperar': return `${tr('Navegador')}  ${tr('esperando {n} s', { n: inp.segundos || '' })}`;
     default: return name && name.startsWith('mcp__') ? `MCP  ${name.split('__').slice(1).join(' › ')}` : (name || '');
   }
 }
@@ -169,10 +172,10 @@ function onEvent(ev) {
   const inSub = ev.agent_id && s.subs.get(ev.agent_id);
   switch (e) {
     case 'SessionStart':
-      s.state = 'reposo'; s.act = 'sesión iniciada'; robot.pushLog(`▶ ${s.name}`); break;
+      s.state = 'reposo'; s.act = tr('sesión iniciada'); robot.pushLog(`▶ ${s.name}`); break;
     case 'UserPromptSubmit':
       if (!s.title && ev.prompt) { s.title = String(ev.prompt).trim().split(/\s+/).slice(0, 5).join(' ').slice(0, 32); if (GENERIC.test(s.folder || '')) s.name = s.title; }
-      s.state = 'trabajando'; s.act = 'pensando…'; s.steps = 0; robot.pushLog(`> ${String(ev.prompt || '').slice(0, 40)}`); break;
+      s.state = 'trabajando'; s.act = tr('pensando…'); s.steps = 0; robot.pushLog(`> ${String(ev.prompt || '').slice(0, 40)}`); break;
     case 'PreToolUse': {
       const txt = toolText(ev.tool_name, ev.tool_input);
       if (!inSub) s.steps++;
@@ -181,7 +184,7 @@ function onEvent(ev) {
       if (inSub) inSub.act = txt; else { s.state = 'trabajando'; s.act = txt; }
       if (String(ev.tool_name).startsWith('navegador_')) {   // usando la web: ojos-globo + lo que hace en el visor
         robot.setFps(40); robot.gesto('navegando', ev.tool_name === 'navegador_esperar' ? Math.min(60, (ev.tool_input?.segundos || 10) + 3) : 7,
-          '🌐 ' + txt.replace(/^Navegador\s+/, '').replace(/^navegador_/, '').toUpperCase().slice(0, 22));
+          '🌐 ' + txt.replace(/^\S+\s+/, '').replace(/^navegador_/, '').toUpperCase().slice(0, 22));
         clearTimeout(window._navFps); window._navFps = setTimeout(ajustarFps, 8000);
       }
       if (ev.tool_name === 'Task' || ev.tool_name === 'Agent') {
@@ -198,36 +201,36 @@ function onEvent(ev) {
       }
       break;
     case 'PostToolUseFailure':
-      robot.pushLog(`✗ ${ev.tool_name || ''} falló`); break;
+      robot.pushLog(`✗ ${tr('{x} falló', { x: ev.tool_name || '' })}`); break;
     case 'SubagentStart': {
       const p = s.pendingTask.shift() || {};
       const id = ev.agent_id || 'sa' + ev._id;
       s.subs.set(id, { id, type: ev.agent_type || p.type || 'agente', desc: p.desc || '', running: true, start: Date.now(), act: '' });
-      robot.pushLog(`⧉ subagente ${ev.agent_type || p.type || ''}`); break;
+      robot.pushLog(`⧉ ${tr('subagente')} ${ev.agent_type || p.type || ''}`); break;
     }
     case 'SubagentStop': {
       const sa = (ev.agent_id && s.subs.get(ev.agent_id)) || [...s.subs.values()].find(x => x.running);
       if (sa) { sa.running = false; sa.end = Date.now(); }
-      robot.pushLog(`✓ subagente ${sa ? sa.type : ''} terminó`); break;
+      robot.pushLog(`✓ ${tr('subagente {x} terminó', { x: sa ? sa.type : '' })}`); break;
     }
     case 'PermissionRequest':
       if (ev._auto) {                                           // regla "Permitir siempre": ya contestado
-        robot.pushLog(`✓ auto: ${ev.tool_name}`); toast(`✓ Permitido automáticamente · ${ev._auto}`);
+        robot.pushLog(`✓ auto: ${ev.tool_name}`); toast(`✓ ${tr('Permitido automáticamente')} · ${ev._auto}`);
         s.state = 'trabajando'; break;
       }
       s.state = 'permiso';
       perms.push({ id: ev._id, ses: s.id, name: s.name, tool: ev.tool_name, detail: permDetail(ev.tool_name, ev.tool_input),
         peligro: ev._peligro || (window.esPeligroso ? window.esPeligroso(ev.tool_name, ev.tool_input) : ''), t: Date.now() });
-      robot.pushLog(`? permiso: ${ev.tool_name}`);
+      robot.pushLog(`? ${tr('permiso')}: ${ev.tool_name}`);
       speakPerm(perms[perms.length - 1], ev.tool_input || {}); reaccion('duda', 2.4); break;
     case 'Notification':
       robot.pushLog(`! ${String(ev.message || '').slice(0, 40)}`); break;
     case 'Stop':
-      s.state = 'listo'; s.act = 'listo ✓'; s.doneAt = Date.now(); robot.pushLog(`✓ ${s.name}: terminado`); say(`Listo, terminé en ${s.name}`); reaccion('celebrar', 2.4); break;
+      s.state = 'listo'; s.act = tr('listo ✓'); s.doneAt = Date.now(); robot.pushLog(`✓ ${s.name}: ${tr('terminado')}`); say(tr('Listo, terminé en {x}', { x: s.name })); reaccion('celebrar', 2.4); break;
     case 'StopFailure':
-      s.state = 'error'; s.act = 'terminó con error'; s.doneAt = Date.now(); robot.pushLog(`✗ ${s.name}: error`); say(`Algo falló en ${s.name}`); reaccion('triste', 3); break;
+      s.state = 'error'; s.act = tr('terminó con error'); s.doneAt = Date.now(); robot.pushLog(`✗ ${s.name}: error`); say(tr('Algo falló en {x}', { x: s.name })); reaccion('triste', 3); break;
     case 'SessionEnd':
-      robot.pushLog(`■ ${s.name} cerrada`); setTimeout(() => { sessions.delete(s.id); render(); }, 3000); break;
+      robot.pushLog(`■ ${tr('{x} cerrada', { x: s.name })}`); setTimeout(() => { sessions.delete(s.id); render(); }, 3000); break;
   }
   if (!ev._auto) fxEvent(e, ev);
   lastActivity = Date.now();
@@ -277,14 +280,14 @@ function decide(id, behavior) {
   bridge.decide(id, behavior);
   const s = sessions.get(p.ses);
   if (s) { s.state = behavior === 'deny' ? 'reposo' : 'trabajando'; }
-  robot.pushLog(behavior === 'deny' ? `✗ denegado: ${p.tool}` : behavior === 'always' ? `✓ siempre: ${p.tool}` : `✓ permitido: ${p.tool}`);
-  if (behavior === 'always') toast(`✓ Regla guardada: la próxima vez no pregunto (${p.tool})`);
+  robot.pushLog(behavior === 'deny' ? `✗ ${tr('denegado')}: ${p.tool}` : behavior === 'always' ? `✓ ${tr('siempre')}: ${p.tool}` : `✓ ${tr('permitido')}: ${p.tool}`);
+  if (behavior === 'always') toast(tr('✓ Regla guardada: la próxima vez no pregunto ({x})', { x: p.tool }));
   render();
 }
 bridge.onEvent(onEvent);
 if (bridge.onDecided) bridge.onDecided((id, b) => {             // contestado desde Stream Deck / Discord
   const i = perms.findIndex(p => p.id === id);
-  if (i >= 0) { const p = perms.splice(i, 1)[0]; robot.pushLog(`${b === 'deny' ? '✗' : '✓'} ${p.tool} (remoto)`); render(); }
+  if (i >= 0) { const p = perms.splice(i, 1)[0]; robot.pushLog(`${b === 'deny' ? '✗' : '✓'} ${p.tool} (${tr('remoto')})`); render(); }
 });
 if (bridge.onUsage) bridge.onUsage(u => { usageToday = u; render(); });
 // ---------- avisos de Discord (servidores y DMs) ----------
@@ -300,7 +303,7 @@ function notif(n) {
   const [x, y] = center(); emit(x, y, 8, n.kind === 'dm' ? ['#ff7ad9', '#ffb3ec'] : ['#7289da', '#aab4ff'], 'ring');
   sound.play('blip'); lastActivity = Date.now();
   robot.pushLog(n.kind === 'dm' ? `@${n.author}` : `# ${n.channel}: ${n.author}`);
-  if (n.kind === 'dm' || n.mention) say(n.kind === 'dm' ? `Mensaje de ${n.author}` : `${n.author} te mencionó en ${n.guild}`);
+  if (n.kind === 'dm' || n.mention) say(n.kind === 'dm' ? tr('Mensaje de {x}', { x: n.author }) : tr('{a} te mencionó en {g}', { a: n.author, g: n.guild }));
 }
 if (bridge.onNotif) bridge.onNotif(notif);
 
@@ -309,14 +312,14 @@ const cards = [];
 const KIND = { server: '#', dm: ICO.chat, pi: ICO.pi, claude: ICO.bot, mail: '✉', whatsapp: ICO.chat };
 function renderCards() {
   $('cards').innerHTML = cards.map(c => `<div class="card ${c.prioridad} ${c.kind}" data-card="${c.id}">
-    <div class="h"><span>${KIND[c.kind] || '•'}</span><b>${esc(c.author || '')}</b>${c.guild ? `<span>${esc(c.guild)}${c.channel ? ' #' + esc(c.channel) : ''}</span>` : ''}${c.prioridad === 'urgente' ? '<span class="pill" style="color:var(--bad);border-color:var(--bad)">urgente</span>' : ''}</div>
+    <div class="h"><span>${KIND[c.kind] || '•'}</span><b>${esc(c.author || '')}</b>${c.guild ? `<span>${esc(c.guild)}${c.channel ? ' #' + esc(c.channel) : ''}</span>` : ''}${c.prioridad === 'urgente' ? `<span class="pill" style="color:var(--bad);border-color:var(--bad)">${tr('urgente')}</span>` : ''}</div>
     <div class="rs">${esc(c.resumen)}</div><div class="tx">${esc(c.text)}</div>
     ${c.respuesta ? `<textarea data-txt="${c.id}">${esc(c.respuesta)}</textarea>` : ''}
     <div class="acts">
-      ${c.respuesta && c.canSend ? `<button class="go" data-a="enviar">${ICO.enviar} ${c.kind === 'mail' || c.kind === 'whatsapp' ? 'Responder' : 'Enviar (como bot)'}</button>` : ''}
-      ${c.respuesta ? `<button data-a="copiar" title="Copia la respuesta y abre Discord para que la mandes tú">${ICO.copiar} Copiar y abrir</button>` : `<button data-a="copiar">${ICO.abrir} Abrir</button>`}
-      <button data-a="descartar" title="Descartar">${ICO.x}</button>
-      <button data-a="urgente" title="Esto es importante">${ICO.arriba}</button><button data-a="ruido" title="Esto no me importa">${ICO.silenciar}</button>
+      ${c.respuesta && c.canSend ? `<button class="go" data-a="enviar">${ICO.enviar} ${tr(c.kind === 'mail' || c.kind === 'whatsapp' ? 'Responder' : 'Enviar (como bot)')}</button>` : ''}
+      ${c.respuesta ? `<button data-a="copiar" title="${tr('Copia la respuesta y abre Discord para que la mandes tú')}">${ICO.copiar} ${tr('Copiar y abrir')}</button>` : `<button data-a="copiar">${ICO.abrir} ${tr('Abrir')}</button>`}
+      <button data-a="descartar" title="${tr('Descartar')}">${ICO.x}</button>
+      <button data-a="urgente" title="${tr('Esto es importante')}">${ICO.arriba}</button><button data-a="ruido" title="${tr('Esto no me importa')}">${ICO.silenciar}</button>
     </div></div>`).join('');
 }
 $('cards').addEventListener('click', async e => {
@@ -324,21 +327,21 @@ $('cards').addEventListener('click', async e => {
   const el = b.closest('[data-card]'), id = +el.dataset.card, ta = el.querySelector('textarea');
   const r = await bridge.cardAction(id, b.dataset.a, ta ? ta.value : undefined);
   toast(r);
-  if (['enviar', 'descartar', 'ruido'].includes(b.dataset.a) && !/No pude/.test(r)) { const i = cards.findIndex(c => c.id === id); if (i >= 0) cards.splice(i, 1); renderCards(); }
+  if (['enviar', 'descartar', 'ruido'].includes(b.dataset.a) && !/No pude|Couldn't/i.test(r)) { const i = cards.findIndex(c => c.id === id); if (i >= 0) cards.splice(i, 1); renderCards(); }
 });
 if (bridge.onCard) bridge.onCard(c => {
   cards.unshift(c); if (cards.length > 8) cards.pop(); renderCards();
   notif({ kind: c.kind === 'server' ? 'server' : 'dm', guild: c.guild || '', channel: c.channel || c.kind, author: c.author || '', text: c.resumen, mention: c.prioridad === 'urgente' });
 });
 if (bridge.onUrgent) bridge.onUrgent(c => {
-  robot.hud('URGENTE', 4, 'error'); sound.play('permiso');
-  say(`Urgente: ${c.resumen}`); abrirUnRato(25_000);
+  robot.hud(tr('URGENTE'), 4, 'error'); sound.play('permiso');
+  say(tr('Urgente: {x}', { x: c.resumen })); abrirUnRato(25_000);
 });
 if (bridge.onCardDone) bridge.onCardDone(id => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { cards.splice(i, 1); renderCards(); } });
-if (bridge.onThinking) bridge.onThinking(v => { if (v) robot.hud('PENSANDO…', 30, 'trabajando'); else robot.hud('', 0.01, 'reposo'); });
+if (bridge.onThinking) bridge.onThinking(v => { if (v) robot.hud(tr('PENSANDO…'), 30, 'trabajando'); else robot.hud('', 0.01, 'reposo'); });
 if (bridge.onAnswer) bridge.onAnswer(a => {
   const el = $('answer');
-  el.innerHTML = `<b class="t">${esc(a.titulo || 'Respuesta')}</b>${esc(a.texto || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}`;
+  el.innerHTML = `<b class="t">${esc(tr(a.titulo || 'Respuesta'))}</b>${esc(a.texto || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}`;
   el.classList.add('on'); abrirUnRato(25_000);
   if (a.voz) say(a.voz);
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 90_000);
@@ -346,8 +349,8 @@ if (bridge.onAnswer) bridge.onAnswer(a => {
 $('answer').addEventListener('click', e => {
   const b = e.target.closest('button[data-upd]');
   if (b) {
-    if (b.dataset.upd === 'ahora') { bridge.actualizarAhora(); robot.hud('ACTUALIZANDO…', 30, 'trabajando'); say('Me actualizo. Vuelvo en un momento.'); }
-    else { bridge.actualizarLuego(); toast('Te lo recuerdo mañana. También en la bandeja: Buscar actualizaciones.'); }
+    if (b.dataset.upd === 'ahora') { bridge.actualizarAhora(); robot.hud(tr('ACTUALIZANDO…'), 30, 'trabajando'); say(tr('Me actualizo. Vuelvo en un momento.')); }
+    else { bridge.actualizarLuego(); toast(tr('Te lo recuerdo mañana. También en la bandeja: Buscar actualizaciones.')); }
   }
   $('answer').classList.remove('on');
 });
@@ -355,11 +358,11 @@ $('answer').addEventListener('click', e => {
 if (bridge.onActualizacion) bridge.onActualizacion(i => {
   const el = $('answer');
   const lista = (i.cambios || []).map(c => '• ' + esc(c)).join('\n');
-  el.innerHTML = `<b class="t">⬆ Actualización disponible</b>${lista || 'Hay una versión nueva de ' + esc(NOMBRE) + '.'}` +
-    `<div class="upd"><button data-upd="ahora">Actualizar ahora</button><button data-upd="luego">Más tarde</button></div>`;
+  el.innerHTML = `<b class="t">⬆ ${tr('Actualización disponible')}</b>${lista || tr('Hay una versión nueva de {x}.', { x: esc(NOMBRE) })}` +
+    `<div class="upd"><button data-upd="ahora">${tr('Actualizar ahora')}</button><button data-upd="luego">${tr('Más tarde')}</button></div>`;
   el.classList.add('on'); abrirUnRato(60_000);
-  robot.setFps(40); robot.gesto('sorpresa', 1.6, '¡NOVEDADES!'); sound.play('permiso');
-  say('Hay una actualización disponible. ¿Quieres instalarla?');
+  robot.setFps(40); robot.gesto('sorpresa', 1.6, tr('¡NOVEDADES!')); sound.play('permiso');
+  say(tr('Hay una actualización disponible. ¿Quieres instalarla?'));
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 120_000);
 });
 
@@ -367,7 +370,7 @@ if (bridge.onActualizacion) bridge.onActualizacion(i => {
 async function sendAsk(text, origin = 'isla') {
   text = String(text || '').trim(); if (!text || !bridge.talk) return;
   $('askIn').value = '';
-  robot.hud('ENVIANDO…', 1.5);
+  robot.hud(tr('ENVIANDO…'), 1.5);
   const r = await bridge.talk(text, origin);
   toast(r.msg.replace(/\*\*/g, '').replace(/`/g, ''));
 }
@@ -378,17 +381,17 @@ async function startListen() {
   if (listening || !bridge.listen) return;
   listening = true; $('mic').classList.add('on');
   abrirUnRato(25_000);                                         // abre la isla para que veas lo que entendió
-  robot.hud('TE ESCUCHO…', 9, 'permiso'); sound.play('abrir');
+  robot.hud(tr('TE ESCUCHO…'), 9, 'permiso'); sound.play('abrir');
   const r = await bridge.listen();
   listening = false; $('mic').classList.remove('on');
-  if (!r.text) { robot.hud('NO TE ENTENDÍ', 2, 'error'); toast('No entendí nada. Prueba otra vez (Ctrl+Alt+Espacio).'); return; }
+  if (!r.text) { robot.hud(tr('NO TE ENTENDÍ'), 2, 'error'); toast(tr('No entendí nada. Prueba otra vez (Ctrl+Alt+Espacio).')); return; }
   $('askIn').value = r.text;
-  if (r.conf >= .6) { say(`Entendido: ${r.text}`); sendAsk(r.text, 'voz'); }
-  else toast(`¿Esto es lo que dijiste? Revísalo y pulsa Enviar (confianza ${Math.round(r.conf * 100)}%)`);
+  if (r.conf >= .6) { say(tr('Entendido: {x}', { x: r.text })); sendAsk(r.text, 'voz'); }
+  else toast(tr('¿Esto es lo que dijiste? Revísalo y pulsa Enviar (confianza {n}%)', { n: Math.round(r.conf * 100) }));
 }
 $('mic').addEventListener('click', startListen);
 if (bridge.onListenKey) bridge.onListenKey(startListen);
-if (bridge.onSay) bridge.onSay(t => { robot.hud('RESPUESTA', 4, 'listo'); say(String(t).replace(/[`*#>_]/g, '').slice(0, 400)); });
+if (bridge.onSay) bridge.onSay(t => { robot.hud(tr('RESPUESTA'), 4, 'listo'); say(String(t).replace(/[`*#>_]/g, '').slice(0, 400)); });
 if (bridge.onPoke) bridge.onPoke(() => { const [x, y] = center(); robot.poke(); sound.play('poke'); emit(x, y, 14, COLORS.listo, 'burst'); lastActivity = Date.now(); render(); });
 bridge.onExpired(id => { const i = perms.findIndex(p => p.id === id); if (i >= 0) { perms.splice(i, 1); render(); } });
 
@@ -420,7 +423,7 @@ function render() {
     if (st === 'dormido') sound.play('bostezo');
     else if (lastState === 'dormido') despertar();
     const bad = st === 'permiso' && perms[0]?.peligro;
-    robot.setState(bad ? 'error' : st, st === 'permiso' ? (bad ? `PELIGRO: ${perms[0].tool}` : `¿PERMISO? ${perms[0]?.tool || ''}`) : '');
+    robot.setState(bad ? 'error' : st, st === 'permiso' ? (bad ? `${tr('PELIGRO')}: ${perms[0].tool}` : `${tr('¿PERMISO?')} ${perms[0]?.tool || ''}`) : '');
     if (bridge.robotState) bridge.robotState(st);
     lastState = st;
     ajustarFps();
@@ -430,24 +433,24 @@ function render() {
   const subsActive = all.reduce((n, s) => n + [...s.subs.values()].filter(x => x.running).length, 0);
   const maxCtx = all.reduce((m, s) => s.usage ? Math.max(m, s.usage.ctx / ctxMax(s.usage)) : m, 0);
 
-  const titles = { permiso: 'Claude necesita tu permiso', trabajando: 'Trabajando…', listo: 'Tarea terminada', error: 'Algo falló', reposo: `${NOMBRE} listo` };
+  const titles = { permiso: tr('Claude necesita tu permiso'), trabajando: tr('Trabajando…'), listo: tr('Tarea terminada'), error: tr('Algo falló'), reposo: tr('{x} listo', { x: NOMBRE }) };
   $('t1').textContent = st === 'trabajando' && working.length === 1 ? `${working[0].name}` : titles[st];
-  $('t2').textContent = perms[0] ? `${perms[0].tool}: ${perms[0].detail}` : (working[0]?.act || all[0]?.act || 'esperando a Claude Code…');
-  $('pSes').textContent = `${all.length} ${all.length === 1 ? 'sesión' : 'sesiones'}${subsActive ? ` · ${subsActive} ⧉` : ''}`;
+  $('t2').textContent = perms[0] ? `${perms[0].tool}: ${perms[0].detail}` : (working[0]?.act || all[0]?.act || tr('esperando a Claude Code…'));
+  $('pSes').textContent = `${tr('{n} sesión|{n} sesiones', { n: all.length })}${subsActive ? ` · ${subsActive} ⧉` : ''}`;
   $('h2').textContent = titles[st];
-  $('hp').textContent = st === 'trabajando' ? `${working.length} sesión(es) trabajando` : perms.length ? `${perms.length} permiso(s) esperando` : 'No hay nada pendiente.';
+  $('hp').textContent = st === 'trabajando' ? tr('{n} sesión trabajando|{n} sesiones trabajando', { n: working.length }) : perms.length ? tr('{n} permiso esperando|{n} permisos esperando', { n: perms.length }) : tr('No hay nada pendiente.');
   $('kSes').textContent = all.length; $('kSub').textContent = subsActive;
   $('kCtx').textContent = maxCtx ? Math.round(maxCtx * 100) + '%' : '—';
   if (usageToday && usageToday.h5 !== undefined) {
     $('k5h').textContent = fmtK(usageToday.h5) + (usageToday.p5 ? ` · ${Math.round(usageToday.p5 * 100)}%` : '');
     $('kSem').textContent = fmtK(usageToday.week) + (usageToday.pW ? ` · ${Math.round(usageToday.pW * 100)}%` : '');
-    $('kpi5h').title = usageToday.p5 ? 'Ventana de 5 h (límite aprendido del plan)' : 'Ventana de 5 h. El % aparece cuando el robot aprenda tu límite (la primera vez que lo alcances) o si lo pones en limites.json';
+    $('kpi5h').title = tr(usageToday.p5 ? 'Ventana de 5 h (límite aprendido del plan)' : 'Ventana de 5 h. El % aparece cuando el robot aprenda tu límite (la primera vez que lo alcances) o si lo pones en limites.json');
     $('steps').classList.toggle('pausa', !!usageToday.paused);
   }
   if (usageToday) {                                               // lo nuevo grande; la relectura de caché (cuenta mucho menos) aparte
     $('kHoy').textContent = fmtK(usageToday.nuevo ?? usageToday.tokens);
-    $('kHoyCache').textContent = usageToday.cache != null ? `+${fmtK(usageToday.cache)} caché` : '';
-    $('kpiHoy').title = `${usageToday.msgs} mensajes · ${fmtK(usageToday.out)} escritos por Claude · ${fmtK(usageToday.nuevo ?? 0)} nuevos · ${fmtK(usageToday.cache ?? 0)} relectura de caché (total ${fmtK(usageToday.tokens)})`;
+    $('kHoyCache').textContent = usageToday.cache != null ? tr('+{x} caché', { x: fmtK(usageToday.cache) }) : '';
+    $('kpiHoy').title = tr('{m} mensajes · {o} escritos por Claude · {n} nuevos · {c} relectura de caché (total {t})', { m: usageToday.msgs, o: fmtK(usageToday.out), n: fmtK(usageToday.nuevo ?? 0), c: fmtK(usageToday.cache ?? 0), t: fmtK(usageToday.tokens) });
   }
 
   $('orbs').innerHTML = all.slice(0, 6).map(s => {
@@ -457,7 +460,7 @@ function render() {
   badge.className = st;
   badge.innerHTML = st === 'trabajando' ? '<span class="dots"><i></i><i></i><i></i></span>' : { permiso: '!', listo: ICO.ok, error: ICO.x, reposo: '', dormido: 'z' }[st];
   const cur0 = working[0] || all[0];
-  $('steps').textContent = cur0 && cur0.steps ? `paso ${cur0.steps}` : '';
+  $('steps').textContent = cur0 && cur0.steps ? tr('paso {n}', { n: cur0.steps }) : '';
   $('steps').style.display = cur0 && cur0.steps ? '' : 'none';
   renderCode();
   // los botones solo se recrean si cambia la lista: si se rehiciera cada segundo, un clic que cae justo en ese momento se pierde
@@ -466,10 +469,10 @@ function render() {
     for (const p of perms) { const i = $('perms').querySelector(`.perm[data-pid="${p.id}"] .bar i`); if (i) i.style.width = `${Math.max(0, 105 - (now - p.t) / 1000) / 105 * 100}%`; }
   } else $('perms').dataset.firma = firmaPerms, $('perms').innerHTML = perms.map(p => {
     const left = Math.max(0, 105 - (now - p.t) / 1000);
-    return `<div class="perm${p.peligro ? ' peligro' : ''}" data-pid="${p.id}"><div class="h"><b>${p.peligro ? ICO.peligro + ' PELIGRO · ' : ICO.alerta + ' '}${esc(p.tool)}</b><span class="pill">${esc(p.name)}</span></div>
-      ${p.peligro ? `<div class="why">Ojo: ${esc(p.peligro)}. Revísalo bien antes de permitir.</div>` : ''}
+    return `<div class="perm${p.peligro ? ' peligro' : ''}" data-pid="${p.id}"><div class="h"><b>${p.peligro ? ICO.peligro + ` ${tr('PELIGRO')} · ` : ICO.alerta + ' '}${esc(p.tool)}</b><span class="pill">${esc(p.name)}</span></div>
+      ${p.peligro ? `<div class="why">${tr('Ojo: {x}. Revísalo bien antes de permitir.', { x: esc(p.peligro) })}</div>` : ''}
       <pre>${esc(p.detail)}</pre>
-      <div class="btns"><button class="yes" data-id="${p.id}" data-b="allow">${ICO.ok} Permitir</button>${p.peligro ? '' : `<button class="always" data-id="${p.id}" data-b="always" title="No volver a preguntar por esto">${ICO.ok} Siempre</button>`}<button class="no" data-id="${p.id}" data-b="deny">${ICO.x} Denegar</button></div>
+      <div class="btns"><button class="yes" data-id="${p.id}" data-b="allow">${ICO.ok} ${tr('Permitir')}</button>${p.peligro ? '' : `<button class="always" data-id="${p.id}" data-b="always" title="${tr('No volver a preguntar por esto')}">${ICO.ok} ${tr('Siempre')}</button>`}<button class="no" data-id="${p.id}" data-b="deny">${ICO.x} ${tr('Denegar')}</button></div>
       <div class="bar"><i style="width:${left / 105 * 100}%"></i></div></div>`;
   }).join('');
 
@@ -478,25 +481,25 @@ function render() {
   const ORDEN = { permiso: 0, trabajando: 1, error: 2, listo: 3, reposo: 4 };
   const filas = [...all].sort((a, b) => (ORDEN[a.state] ?? 5) - (ORDEN[b.state] ?? 5) || b.t - a.t);
   $('tCnt').textContent = all.length;
-  $('sesT').textContent = all.length ? `Terminales · ${all.length}${working.length ? ` · ${working.length} trabajando` : ''}` : 'Terminales';
+  $('sesT').textContent = all.length ? `${tr('Terminales')} · ${all.length}${working.length ? ` · ${tr('{n} trabajando', { n: working.length })}` : ''}` : tr('Terminales');
   $('sessions').classList.toggle('largo', filas.length > 4);
   $('sessions').innerHTML = filas.length ? filas.map(s => {
     const subs = [...s.subs.values()].filter(x => x.running);
     const pct = s.usage ? Math.min(100, s.usage.ctx / ctxMax(s.usage) * 100) : 0;
     const color = pct > 85 ? 'var(--bad)' : pct > 65 ? 'var(--warn)' : 'var(--ok)';
-    const tip = [`${s.name}`, s.act || '', s.usage ? `contexto: ${fmtK(s.usage.ctx)} tokens (${Math.round(pct)}%)` : '',
-      ...subs.map(x => `⧉ ${x.type}: ${x.act || x.desc}`), 'Clic: chatear con ella aquí · flecha: ir a su ventana'].filter(Boolean).join('\n');
+    const tip = [`${s.name}`, s.act || '', s.usage ? tr('contexto: {x} tokens ({p}%)', { x: fmtK(s.usage.ctx), p: Math.round(pct) }) : '',
+      ...subs.map(x => `⧉ ${x.type}: ${x.act || x.desc}`), tr('Clic: chatear con ella aquí · flecha: ir a su ventana')].filter(Boolean).join('\n');
     return `<div class="ses s-${s.state}${s.id === tSel ? ' sel' : ''}" data-sid="${esc(s.id)}" title="${esc(tip)}"><span class="dot ${s.state}"></span>
       <span class="name">${esc(s.name)}</span><span class="act">${esc(s.act || '—')}</span>
       ${subs.length ? `<span class="sa"><span class="spin"></span>${subs.length}</span>` : ''}
       ${s.usage ? `<span class="anillo" style="--p:${pct.toFixed(0)};--c:${color}"></span>` : ''}<span class="go">${ICO.abrir}</span></div>`;
-  }).join('') : '<div class="empty">Sin sesiones de Claude Code todavía.</div>';
+  }).join('') : `<div class="empty">${tr('Sin sesiones de Claude Code todavía.')}</div>`;
   setOpen(hovering || perms.length > 0);
 }
 async function irATerminal(sid) {
   if (!bridge.focusTerminal) return;
   const ok = await bridge.focusTerminal(sid);
-  if (!ok) toast('No encontré la ventana de esa terminal todavía (se detecta con el siguiente evento de la sesión).');
+  if (!ok) toast(tr('No encontré la ventana de esa terminal todavía (se detecta con el siguiente evento de la sesión).'));
 }
 $('sessions').addEventListener('click', e => {
   const el = e.target.closest('.ses[data-sid]'); if (!el) return;
@@ -506,7 +509,7 @@ $('sessions').addEventListener('click', e => {
 
 // ---------- chat con una terminal, dentro de la isla (lee su historial y le escribe en su ventana) ----------
 function abrirChat(sid) {
-  tSel = sid; tFirma = ''; $('tmsgs').innerHTML = '<div class="empty">Cargando…</div>';
+  tSel = sid; tFirma = ''; $('tmsgs').innerHTML = `<div class="empty">${tr('Cargando…')}</div>`;
   $('tchat').classList.add('on'); cargarChat();
   clearInterval(tTimer); tTimer = setInterval(() => { if (open) cargarChat(); }, 2500);
   render(); setTimeout(() => $('tinT').focus(), 50);
@@ -516,15 +519,15 @@ async function cargarChat() {
   const sid = tSel; if (!sid) return;
   const s = sessions.get(sid);
   $('tN').textContent = s ? s.name : 'Terminal'; $('tSt').textContent = s ? (s.act || s.state) : '';
-  if (sid.startsWith('nucleo:') || !bridge.sesChat) { $('tmsgs').innerHTML = '<div class="empty">Esta conversación es del núcleo: ábrela en el panel de control.</div>'; return; }
+  if (sid.startsWith('nucleo:') || !bridge.sesChat) { $('tmsgs').innerHTML = `<div class="empty">${tr('Esta conversación es del núcleo: ábrela en el panel de control.')}</div>`; return; }
   const r = await bridge.sesChat(sid);
   if (sid !== tSel) return;
   const firma = JSON.stringify(r); if (firma === tFirma) return;
   const primera = !tFirma; tFirma = firma;
   const box = $('tmsgs'), abajo = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  box.innerHTML = !r.ok ? `<div class="empty">${esc(r.msg)}</div>`
-    : (r.mensajes.length ? r.mensajes.map(m => `<div class="tm ${m.rol}">${esc(m.texto)}</div>`).join('') : '<div class="empty">Sin mensajes todavía.</div>')
-      + (r.busy ? '<div class="tm herr">trabajando…</div>' : '') + (r.cola ? `<div class="tm herr">${r.cola} en cola</div>` : '');
+  box.innerHTML = !r.ok ? `<div class="empty">${esc(tr(r.msg))}</div>`
+    : (r.mensajes.length ? r.mensajes.map(m => `<div class="tm ${m.rol}">${esc(m.texto)}</div>`).join('') : `<div class="empty">${tr('Sin mensajes todavía.')}</div>`)
+      + (r.busy ? `<div class="tm herr">${tr('trabajando…')}</div>` : '') + (r.cola ? `<div class="tm herr">${tr('{n} en cola', { n: r.cola })}</div>` : '');
   if (primera || abajo) box.scrollTop = box.scrollHeight;
 }
 async function enviarChat() {
@@ -532,7 +535,7 @@ async function enviarChat() {
   $('tinT').value = '';
   const r = await bridge.sesSend(tSel, t);
   if (!r.ok) { toast(r.msg); $('tinT').value = t; return; }
-  if (r.msg !== 'Enviado.') toast(r.msg);
+  if (r.msg !== 'Enviado.' && r.msg !== 'Sent.') toast(tr(r.msg));
   $('tmsgs').insertAdjacentHTML('beforeend', `<div class="tm yo">${esc(t)}</div>`); $('tmsgs').scrollTop = $('tmsgs').scrollHeight;
   setTimeout(cargarChat, 1500);
 }
@@ -600,17 +603,18 @@ function say(text) {
 function sayWin(text) {
   if (!window.speechSynthesis) return;
   const u = new SpeechSynthesisUtterance(text);
-  const v = speechSynthesis.getVoices().find(v => /^es/i.test(v.lang));
+  const l = (window.I18N?.idioma() || 'es');                   // la voz de Windows del idioma elegido
+  const v = speechSynthesis.getVoices().find(v => v.lang.toLowerCase().startsWith(l));
   if (v) u.voice = v;
-  u.lang = v ? v.lang : 'es-ES'; u.rate = 1.05; u.pitch = 1.15;
+  u.lang = v ? v.lang : (l === 'es' ? 'es-ES' : 'en-US'); u.rate = 1.05; u.pitch = 1.15;
   speechSynthesis.cancel(); speechSynthesis.speak(u);
 }
 function speakPerm(p, inp) {
-  const que = { Bash: 'ejecutar un comando', PowerShell: 'ejecutar un comando', Edit: `editar ${base(inp.file_path)}`, Write: `crear ${base(inp.file_path)}`, WebFetch: 'entrar a una web' }[p.tool] || `usar ${p.tool}`;
-  say(p.peligro ? `Cuidado. Claude quiere hacer algo peligroso: ${p.peligro}` : `Necesito tu permiso para ${que}`);
+  const que = { Bash: tr('ejecutar un comando'), PowerShell: tr('ejecutar un comando'), Edit: tr('editar {x}', { x: base(inp.file_path) }), Write: tr('crear {x}', { x: base(inp.file_path) }), WebFetch: tr('entrar a una web') }[p.tool] || tr('usar {x}', { x: p.tool });
+  say(p.peligro ? tr('Cuidado. Claude quiere hacer algo peligroso: {x}', { x: p.peligro }) : tr('Necesito tu permiso para {x}', { x: que }));
 }
 $('voz').style.opacity = voiceOn ? 1 : .45;
-$('voz').addEventListener('click', () => { voiceOn = !voiceOn; try { localStorage.setItem('robot-voz', voiceOn ? '1' : '0'); } catch { } $('voz').style.opacity = voiceOn ? 1 : .45; if (voiceOn) say('Voz activada'); });
+$('voz').addEventListener('click', () => { voiceOn = !voiceOn; try { localStorage.setItem('robot-voz', voiceOn ? '1' : '0'); } catch { } $('voz').style.opacity = voiceOn ? 1 : .45; if (voiceOn) say(tr('Voz activada')); });
 let toastT;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 4500); }
 
@@ -618,7 +622,7 @@ $('voz').innerHTML = ICO.voz; $('mic').innerHTML = ICO.mic; $('askGo').innerHTML
 $('snd').innerHTML = sound.muted ? ICO.mudo : ICO.sonido;
 $('snd').addEventListener('click', () => { $('snd').innerHTML = sound.toggle() ? ICO.mudo : ICO.sonido; });
 setTimeout(() => {                                        // saludo al arrancar
-  robot.greet(); sound.play('hola'); say('Hola, estoy listo');
+  robot.greet(tr('¡HOLA! 👋')); sound.play('hola'); say(tr('Hola, estoy listo'));
   const [x, y] = center(); emit(x, y, 36, COLORS.listo, 'burst'); emit(0, 0, 40, ['#ffffff', '#7fe3ff', '#b58cff'], 'star');
   island.classList.remove('intro');
 }, 900);
@@ -646,6 +650,12 @@ bridge.onDemo(demo);
 
 
 if (bridge.onNombre) bridge.onNombre(n => { NOMBRE = n || 'Robot'; document.title = NOMBRE; render(); });
+// idioma elegido en el panel (config del núcleo) o el del sistema: lo manda main al cargar y cuando cambia
+if (bridge.onIdioma) bridge.onIdioma(l => {
+  if (!window.I18N || !l) return;
+  window.I18N.poner(l); try { localStorage.setItem('robot-idioma', l); } catch { }
+  window.I18N.estaticos(); lastState = ''; renderCards(); render();
+});
 if (bridge.onMudanza) bridge.onMudanza(dir => {                 // juego a pantalla completa: se va rodando a otro monitor
   robot.setFps(60); robot.rodar(dir); sound.play('blip');
   const [x, y] = center(); emit(x, y, 14, COLORS.trabajando, 'burst');

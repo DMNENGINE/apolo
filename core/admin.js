@@ -9,7 +9,8 @@ function configPublica(cfg) {
     const { apiKey, ...resto } = p;
     proveedores[k] = { ...resto, tieneKey: !!apiKey && apiKey !== 'ollama', keyDeEntorno: !!(p.env && process.env[p.env]) };
   }
-  return { herramientasOff: cfg.herramientasOff || [], modeloPorDefecto: cfg.modeloPorDefecto, alias: cfg.alias, permisos: cfg.permisos, maxPasos: cfg.maxPasos, puerto: cfg.puerto, carpeta: cfg.carpeta || '', proveedores, dir: cfg.dir };
+  return { herramientasOff: cfg.herramientasOff || [], modeloPorDefecto: cfg.modeloPorDefecto, alias: cfg.alias, permisos: cfg.permisos, maxPasos: cfg.maxPasos, puerto: cfg.puerto, carpeta: cfg.carpeta || '', proveedores, dir: cfg.dir,
+    idioma: cfg.idioma || '', bienvenida: cfg.bienvenida === true };      // idioma '' = automático (el del sistema); bienvenida = asistente de primer arranque hecho
 }
 
 // aplica cambios del panel a la config en memoria y en config.json
@@ -19,6 +20,8 @@ function guardarConfig(cfg, cambios) {
   if (typeof cambios.modeloPorDefecto === 'string' && cambios.modeloPorDefecto.includes('/')) cfg.modeloPorDefecto = disco.modeloPorDefecto = cambios.modeloPorDefecto.trim();
   if (Number.isInteger(cambios.maxPasos) && cambios.maxPasos >= 1 && cambios.maxPasos <= 200) cfg.maxPasos = disco.maxPasos = cambios.maxPasos;
   if (typeof cambios.carpeta === 'string') cfg.carpeta = disco.carpeta = cambios.carpeta.trim();
+  if (typeof cambios.idioma === 'string' && /^([a-z]{2})?$/.test(cambios.idioma)) cfg.idioma = disco.idioma = cambios.idioma;
+  if (typeof cambios.bienvenida === 'boolean') cfg.bienvenida = disco.bienvenida = cambios.bienvenida;
   if (cambios.permisos && ['preguntar', 'auto', 'solo-lectura'].includes(cambios.permisos.modo)) {
     cfg.permisos.modo = cambios.permisos.modo; disco.permisos = { ...disco.permisos, modo: cambios.permisos.modo };
   }
