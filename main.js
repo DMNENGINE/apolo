@@ -400,6 +400,11 @@ async function cardAction(id, action, text) {
       return `📨 Respuesta enviada a ${para}.`;
     } catch (e) { return '❌ No pude enviarla: ' + e.message; }
   }
+  if (action === 'enviar' && c.kind === 'whatsapp' && c.whatsapp) {     // tarjeta de WhatsApp: "Responder" = tu aprobación
+    if (!msg) return '❌ No hay texto para enviar.';
+    try { await whatsapp.enviarA(c.whatsapp.jid, msg); cerebro.dropCard(id); win && win.webContents.send('card-done', id); return `📨 Enviado a ${c.author} por WhatsApp.`; }
+    catch (e) { return '❌ No pude enviarlo: ' + e.message; }
+  }
   if (action === 'enviar') {
     const ok = c.canSend && msg && await discord.replyTo(c.channelId, c.msgId, msg);
     if (ok) { cerebro.dropCard(id); win && win.webContents.send('card-done', id); }
@@ -793,6 +798,31 @@ function startDiscord() {
   });
 }
 
+// ---------- WhatsApp: mensajes que te llegan de otras personas (modo avisar / auto en el panel) ----------
+async function mensajeWhatsapp(a) {
+  const conv = a.historial.map(h => `${h.de === 'yo' ? 'YO' : h.de}: ${h.texto}`).join('\n');
+  if (a.auto && nucleo) {
+    try {
+      const { datos } = await nucleo.generarJSON({ modelo: nucleo.cfg.modeloPorDefecto,
+        system: 'Respondes mensajes de WhatsApp EN NOMBRE del usuario, como si fueras él (primera persona, natural, breve, en el idioma del mensaje). ' +
+          'Sigue estas instrucciones del usuario: "' + whatsapp.config().auto.instrucciones + '". ' +
+          'NO respondas (responder=false) si el mensaje pide dinero, pagos, contraseñas, datos privados, una cita o decisión importante, o si es urgente o delicado: eso lo decide el usuario.',
+        prompt: `Conversación reciente con ${a.nombre}:\n${conv}\n\n¿Respondo al último mensaje? Si sí, ¿qué digo?`,
+        schema: { type: 'object', properties: { responder: { type: 'boolean' }, texto: { type: 'string' }, motivo: { type: 'string' } }, required: ['responder', 'texto'] } });
+      if (datos.responder && datos.texto) {
+        await whatsapp.enviarA(a.jid, datos.texto, { automatico: true });
+        const aviso = `🤖 Respondí a **${a.nombre}** por WhatsApp\n› ${a.texto.slice(0, 300)}\n**Yo:** ${datos.texto}`;
+        if (win && !win.isDestroyed()) win.webContents.send('notif', { kind: 'dm', author: `🤖 → ${a.nombre}`, text: datos.texto });
+        movil.sendAviso(aviso);
+        return;
+      }
+    } catch (e) { console.error('[whatsapp auto]', e.message); }
+  }
+  // avisar (o auto que decidió no responder): el cerebro lo clasifica y deja una tarjeta con respuesta sugerida
+  if (cerebro) cerebro.ingest({ kind: 'whatsapp', author: a.nombre, guild: a.grupo ? 'Grupo de WhatsApp' : 'WhatsApp', text: conv || a.texto, whatsapp: { jid: a.jid } });
+  else if (win && !win.isDestroyed()) win.webContents.send('notif', { kind: 'dm', author: a.nombre, text: a.texto });
+}
+
 // ---------- avisos de DMs (notificaciones de Windows de la app de Discord) ----------
 let dmsStatus = 'iniciando', dmsLast = -1;
 function startDms() {
@@ -841,8 +871,10 @@ app.whenReady().then(() => {
     } };
     telegram.iniciar();
     whatsapp = crearWhatsapp({ dir: path.join(app.getPath('userData'), 'whatsapp-auth'), decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
-      onTalk: t => handleText(t, 'whatsapp'), onEstado: e => console.log('[whatsapp]', e) });
-    nucleo.extensiones.whatsapp = { http: async (M, p) => {
+      onTalk: t => handleText(t, 'whatsapp'), onAjeno: a => mensajeWhatsapp(a).catch(e => console.error('[whatsapp]', e.message)), onEstado: e => console.log('[whatsapp]', e) });
+    nucleo.extensiones.whatsapp = { http: async (M, p, b) => {
+      if (M === 'GET' && p[2] === 'config') return whatsapp.config();
+      if (M === 'PATCH' && p[2] === 'config') return whatsapp.ponerConfig(b);
       if (M === 'GET') return whatsapp.estado();
       if (M === 'POST' && p[2] === 'vincular') return whatsapp.vincular();
       if (M === 'POST' && p[2] === 'prueba') { await whatsapp.prueba(); return whatsapp.estado(); }
@@ -857,7 +889,7 @@ app.whenReady().then(() => {
     onCard: c => win && !win.isDestroyed() && win.webContents.send('card', c),
     notifyUrgent: c => {
       if (win && !win.isDestroyed()) win.webContents.send('urgent', c);
-      if (isAway() || (c.extra || []).includes('dm')) movil.sendCard(c);
+      if (isAway() || (c.extra || []).includes('dm') || c.kind === 'whatsapp') movil.sendCard(c);
     },
     getSessions: () => talk ? talk.recent() : [],
   });

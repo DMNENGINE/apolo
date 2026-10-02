@@ -99,8 +99,9 @@ VISTAS['ajustes/canales'] = {
       if (a === 'vincular') { b.disabled = true; b.textContent = 'Preparando…'; r = await api('POST', '/whatsapp/vincular').catch(er => ({ error: er.message })); if (r.error) return aviso(r.error, true); this.waEsperar(r); }
       if (a === 'prueba') { await api('POST', '/whatsapp/prueba'); return aviso('Mensaje de prueba enviado a tu chat'); }
       if (a === 'quitar') { if (!await modal({ titulo: 'Desvincular WhatsApp', cuerpo: 'Se cierra la sesión de APOLO en tu WhatsApp (como cerrar WhatsApp Web).', botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Desvincular', cls: 'mal', valor: true }] })) return; r = await api('DELETE', '/whatsapp'); }
-      if (r) $('#waCaja').innerHTML = this.waHtml(r);
+      if (r) { $('#waCaja').innerHTML = this.waHtml(r); this.waAjustes(); }
     };
+    this.waAjustes();
     $('#tgCaja').onclick = async e => {
       const b = e.target.closest('button[data-tg]'); if (!b) return;
       const a = b.dataset.tg; let r;
@@ -121,7 +122,7 @@ VISTAS['ajustes/canales'] = {
   // tarjeta de WhatsApp: aviso del riesgo → QR → conectado
   waHtml(w) {
     if (!w) return '<div class="tenue" style="padding:14px 16px">No disponible.</div>';
-    if (w.conectado) return fila(`<span class="flex">${ic('enviar')}+${esc(w.numero)}</span>`, '<span class="ok-txt">✓ Vinculado.</span> Escríbele en tu chat contigo mismo ("Tú" / "Mensaje para ti"). Solo lee ese chat.',
+    if (w.conectado) return fila(`<span class="flex">${ic('enviar')}+${esc(w.numero)}</span>`, '<span class="ok-txt">✓ Vinculado.</span> Escríbele en tu chat contigo mismo ("Tú" / "Mensaje para ti").',
       '<button class="btn mini" data-wa="prueba">Probar</button><button class="btn mini mal" data-wa="quitar">Desvincular</button>');
     if (w.qr) return `<div style="display:flex;gap:18px;align-items:center;padding:14px 16px"><img src="${w.qr}" alt="QR" style="width:200px;height:200px;border-radius:8px;background:#fff;padding:6px">
       <div style="line-height:1.7"><b>En tu móvil:</b><br>WhatsApp → <b>Ajustes</b> → <b>Dispositivos vinculados</b> → <b>Vincular un dispositivo</b> → escanea este código.<br><span class="tenue" id="waEsp">Esperando…</span></div></div>`;
@@ -129,6 +130,34 @@ VISTAS['ajustes/canales'] = {
       <span class="mal-txt">⚠️ No es la API oficial de WhatsApp: va contra sus términos y existe un riesgo (bajo) de que bloqueen el número.</span> Te recomendamos <b>un número secundario</b>.<br>
       <span class="tenue">Privacidad: APOLO solo lee y escribe en tu chat contigo mismo; nunca toca tus otras conversaciones.</span></div>
       ${fila('Estado', esc(w.estado), '<button class="btn pri" data-wa="vincular">Vincular con QR</button>')}`;
+  },
+  // "Mensajes que te llegan": apagado / avisar y sugerir respuesta / responder solo
+  async waAjustes() {
+    const caja = $('#waCaja'); if (!caja || !caja.querySelector('[data-wa="quitar"]') || caja.querySelector('#waModo')) return;
+    const c = await api('GET', '/whatsapp/config').catch(() => null); if (!c) return;
+    const lista = a => (a || []).join(', ');
+    caja.insertAdjacentHTML('beforeend', `<div style="padding:14px 16px;border-top:1px solid var(--borde, #222)">
+      <b>Mensajes que te llegan</b>
+      <div class="tenue" style="font-size:12px;margin:4px 0 10px">Por defecto APOLO solo lee tu chat contigo mismo. Si lo activas, también leerá los mensajes que te mandan (no los grupos, salvo que los actives).</div>
+      <select id="waModo" style="width:100%;margin-bottom:10px">
+        <option value="apagado" ${c.modo === 'apagado' ? 'selected' : ''}>Apagado — solo mi chat conmigo mismo</option>
+        <option value="avisar" ${c.modo === 'avisar' ? 'selected' : ''}>Avisarme y sugerir respuesta (yo apruebo antes de enviar)</option>
+        <option value="auto" ${c.modo === 'auto' ? 'selected' : ''}>Responder solo (y avisarme de lo que respondió)</option>
+      </select>
+      <label class="flex" style="gap:8px;margin-bottom:10px"><input type="checkbox" id="waGrupos" ${c.grupos ? 'checked' : ''}> Leer también los grupos</label>
+      <div class="campo">Ignorar estos números (separados por coma)<input id="waIgn" class="mono" value="${esc(lista(c.ignorar))}" placeholder="+1 305 555 1234, …"></div>
+      <div id="waAuto" style="display:${c.modo === 'auto' ? 'block' : 'none'}">
+        <div class="campo">Responder solo a estos números (vacío = a todos, nunca a grupos)<input id="waCon" class="mono" value="${esc(lista(c.auto.contactos))}" placeholder="+1 305 555 1234, …"></div>
+        <div class="campo">Instrucciones para responder<textarea id="waIns" rows="3">${esc(c.auto.instrucciones || '')}</textarea></div>
+        <div class="tenue" style="font-size:12px">Máximo ${c.auto.maxHora || 3} respuestas automáticas por contacto y hora. Nunca responde solo a pagos, contraseñas, datos privados, citas o cosas urgentes: esas te las pregunta.</div>
+      </div>
+      <div style="text-align:right;margin-top:10px"><button class="btn pri" id="waGuardar">Guardar</button></div></div>`);
+    const num = s => String(s || '').split(',').map(x => x.trim()).filter(x => x.replace(/\D/g, '').length >= 6);
+    $('#waModo').onchange = e => { $('#waAuto').style.display = e.target.value === 'auto' ? 'block' : 'none'; };
+    $('#waGuardar').onclick = async () => {
+      await api('PATCH', '/whatsapp/config', { modo: $('#waModo').value, grupos: $('#waGrupos').checked, ignorar: num($('#waIgn').value), auto: { contactos: num($('#waCon').value), instrucciones: $('#waIns').value.trim() } });
+      aviso('Guardado');
+    };
   },
   // refresca el QR (WhatsApp lo cambia cada ~20 s) hasta que se vincula
   async waEsperar(w) {
@@ -138,7 +167,7 @@ VISTAS['ajustes/canales'] = {
       if (!$('#waCaja')) return;
       const r = await api('GET', '/whatsapp').catch(() => null); if (!r) continue;
       const img = $('#waCaja img');
-      if (r.conectado) { $('#waCaja').innerHTML = this.waHtml(r); aviso('✓ WhatsApp vinculado'); return; }
+      if (r.conectado) { $('#waCaja').innerHTML = this.waHtml(r); this.waAjustes(); aviso('✓ WhatsApp vinculado'); return; }
       if (r.qr && img) { if (img.src !== r.qr) img.src = r.qr; } else $('#waCaja').innerHTML = this.waHtml(r);
     }
   },
