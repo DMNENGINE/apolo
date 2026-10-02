@@ -1,7 +1,7 @@
 {
   "SDKVersion": 2,
   "UUID": "com.robotcompanion",
-  "Author": "Yosoy",
+  "Author": "DMNENGINE",
   "CodePath": "plugin.js",
   "Description": "Botones del Robot Companion: permitir/denegar permisos de Claude Code y ver el estado del robot.",
   "Name": "Robot Companion",

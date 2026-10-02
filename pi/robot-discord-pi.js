@@ -2,7 +2,7 @@
 // Usa el mismo bot-discord.js que la app; sus "ganchos" llaman al núcleo del PC por la LAN,
 // y lo que el PC quiere enviar (permisos, avisos, respuestas, tarjetas) llega por eventos en vivo.
 //   discord.json : token, ownerId, centralGuildId, mutedGuilds  (modo 600)
-//   pc.json      : { "url": "http://192.168.1.31:47900", "token": "<token del núcleo>" }  (modo 600)
+//   pc.json      : { "url": "http://<ip-del-pc>:47900", "token": "<token del núcleo>" }  (modo 600)
 const fs = require('fs');
 const path = require('path');
 const { createDiscord } = require('./bot-discord');

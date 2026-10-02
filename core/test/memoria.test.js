@@ -10,25 +10,25 @@ const nueva = () => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'))
 
 test('recordar, deduplicar y buscar sin acentos ni plurales', () => {
   const { mem } = nueva();
-  mem.recordar({ texto: 'Tiene un taller de camiones llamado Power Truck Services', tipo: 'perfil' });
+  mem.recordar({ texto: 'Tiene un taller de camiones llamado Ruedas Grandes', tipo: 'perfil' });
   mem.recordar({ texto: 'Prefiere respuestas cortas y en español', tipo: 'preferencia' });
   mem.recordar({ texto: 'Está construyendo un robot humanoide de 1.5 m con MuJoCo', tipo: 'proyecto' });
   const r = mem.recordar({ texto: 'Prefiere respuestas cortas, en español', tipo: 'preferencia' });
   assert.strictEqual(r.accion, 'actualizada');
   assert.strictEqual(mem.lista().length, 3);
   assert.match(mem.buscar('cómo va el robot humanoide')[0].texto, /MuJoCo/);
-  assert.match(mem.buscar('camion')[0].texto, /Power Truck/);
+  assert.match(mem.buscar('camion')[0].texto, /Ruedas Grandes/);
   assert.strictEqual(mem.buscar('zzzz').length, 0);
 });
 
 test('contexto: el perfil va siempre, lo demás solo si es relevante', async () => {
   const { mem } = nueva();
-  mem.recordar({ texto: 'Se llama Yosoy y vive en USA', tipo: 'perfil' });
-  mem.recordar({ texto: 'Su Raspberry Pi 5 está en 192.168.1.124', tipo: 'hecho' });
+  mem.recordar({ texto: 'Se llama Alex y vive en USA', tipo: 'perfil' });
+  mem.recordar({ texto: 'Su Raspberry Pi 5 está en 10.0.0.5', tipo: 'hecho' });
   mem.recordar({ texto: 'Le gusta el American Truck Simulator', tipo: 'preferencia' });
   const c = await mem.contexto('reinicia la raspberry');
-  assert.match(c, /Yosoy/); assert.match(c, /192\.168/); assert.doesNotMatch(c, /Truck Simulator/);
-  assert.match(await mem.contexto('hola'), /Yosoy/);
+  assert.match(c, /Alex/); assert.match(c, /10\.0\.0/); assert.doesNotMatch(c, /Truck Simulator/);
+  assert.match(await mem.contexto('hola'), /Alex/);
 });
 
 test('bloquea secretos, corrige con reemplaza y olvida', () => {
@@ -63,9 +63,9 @@ test('agente: la memoria entra en el system prompt de cualquier modelo', async (
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ modeloPorDefecto: 'f/m', proveedores: { f: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } } }));
   const n = require('../index').crearNucleo({ dir });
-  n.memoria.recordar({ texto: 'Tiene un Peterbilt 389 naranja', tipo: 'perfil' });
+  n.memoria.recordar({ texto: 'Tiene un Kenworth azul', tipo: 'perfil' });
   await n.enviar(n.sesiones.crear({ cwd: os.tmpdir() }), 'hola');
-  assert.match(cuerpos[0].messages[0].content, /Peterbilt 389 naranja/);
+  assert.match(cuerpos[0].messages[0].content, /Kenworth azul/);
   srv.close();
 });
 
@@ -98,6 +98,6 @@ test('semántica: encuentra por significado aunque no compartan palabras', async
 test('semántica: si los embeddings fallan, cae a la búsqueda léxica', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
   const mem = crearMemoria({ cfg: { dir }, embedder: falso(true) });
-  mem.recordar({ texto: 'Su Raspberry Pi 5 está en 192.168.1.124', tipo: 'hecho' });
-  assert.match((await mem.buscarH('la raspberry'))[0].texto, /192/);
+  mem.recordar({ texto: 'Su Raspberry Pi 5 está en 10.0.0.5', tipo: 'hecho' });
+  assert.match((await mem.buscarH('la raspberry'))[0].texto, /10.0.0.5/);
 });

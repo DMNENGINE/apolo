@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('bridge', {
+  usuario: (() => { try { return require('os').userInfo().username; } catch { return ''; } })(),
   onEvent: fn => ipcRenderer.on('event', (_e, ev) => fn(ev)),
   onExpired: fn => ipcRenderer.on('expired', (_e, id) => fn(id)),
   onDemo: fn => ipcRenderer.on('demo', () => fn()),

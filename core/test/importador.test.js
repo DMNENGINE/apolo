@@ -14,7 +14,7 @@ function nucleoFalso(t) {
   const prompts = [];
   n.generarJSON = async ({ prompt }) => {                     // el importador lo recibe por referencia al crearse: se sustituye abajo
     prompts.push(prompt);
-    return { datos: { hechos: [{ texto: 'Tiene un taller de camiones en Texas', tipo: 'perfil' }, { texto: 'Su clave es sk-abcdefghijklmnopqrstuvwx', tipo: 'hecho' }], identidad: 'Jarvis, irónico' } };
+    return { datos: { hechos: [{ texto: 'Tiene un taller de camiones en Ohio', tipo: 'perfil' }, { texto: 'Su clave es sk-abcdefghijklmnopqrstuvwx', tipo: 'hecho' }], identidad: 'Jarvis, irónico' } };
   };
   const { crearImportador } = require('../importador');
   n.importador = crearImportador({ cfg: n.cfg, memoria: n.memoria, generarJSON: n.generarJSON, personalidad: n.personalidad, tareas: n.tareas, proveedores: n.proveedores, modelo: () => 'x/y' });
@@ -26,7 +26,7 @@ const MIGRACION = {
   formato: 'robot-migracion/1', origen: 'openclaw', exportado: '2026-10-01T10:00:00Z',
   archivos: {
     'SOUL.md': '# Soy Jarvis\nIrónico pero leal. Token de Discord: ' + ['MTIzNDU2Nzg5MDEyMzQ1Njc4OQ', 'GaBcDe', 'abcdefghijklmnopqrstuvwxyz0123'].join('.'),
-    'USER.md': 'Se llama Yosoy. Taller de camiones en Texas.',
+    'USER.md': 'Se llama Alex. Taller de camiones en Ohio.',
     'MEMORY.md': 'Le gusta el ámbar. clave sk-abcdefghijklmnopqrstuvwx',
     'memory/2026-09-30.md': 'Hoy montamos el panel.',
     '../../fuera.md': 'intento de salir del backup',
@@ -34,7 +34,7 @@ const MIGRACION = {
   automatizaciones: [
     { nombre: 'Resumen de la mañana', cron: '0 8 * * 1-5', prompt: 'Resume mis correos', soloSiHayAlgo: true, activa: true, canal: 'discord' },
     { nombre: 'Sin horario', prompt: 'x' },
-    { nombre: 'Vigila la Pi', cadaMin: 30, prompt: 'comprueba 192.168.1.124', modelo: 'modelo/que-no-existe' },
+    { nombre: 'Vigila la Pi', cadaMin: 30, prompt: 'comprueba 10.0.0.5', modelo: 'modelo/que-no-existe' },
   ],
   agentes: [{ nombre: 'Investigador', descripcion: 'Busca en la web', instrucciones: 'Cita fuentes siempre.', modelo: 'gemma' }],
   skills: [{ nombre: 'ats-mods', descripcion: 'Mods de ATS', contenido: 'Pasos…' }],
@@ -47,7 +47,7 @@ test('migración completa: personalidad, recuerdos, tareas pausadas, agentes y s
   // personalidad
   const p = Object.fromEntries(n.personalidad.lista().map(x => [x.id, x.contenido]));
   assert.match(p.identidad, /Soy Jarvis/);
-  assert.match(p.contexto, /Se llama Yosoy/);
+  assert.match(p.contexto, /Se llama Alex/);
   assert.deepStrictEqual(r.personalidad, ['identidad', 'contexto']);
   // secretos tapados en todo lo guardado y en lo que ve el modelo
   assert.doesNotMatch(p.identidad, /MTIzNDU2/);

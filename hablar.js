@@ -9,7 +9,8 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 
-const GENERIC = /^(system32|windows|users?|yosoy|desktop|escritorio|documents|documentos|downloads|descargas|home|[a-z]:)$/i;
+const GENERIC = /^(system32|windows|users?|desktop|escritorio|documents|documentos|downloads|descargas|home|[a-z]:)$/i;
+const USUARIO = (() => { try { return os.userInfo().username.toLowerCase(); } catch { return ''; } })();
 const norm = p => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
 function createTalk({ dataDir, getHwnd, send, reply, onStop }) {
@@ -135,7 +136,7 @@ function createTalk({ dataDir, getHwnd, send, reply, onStop }) {
       const i = pendingNew.findIndex(p => p.dir === norm(ev.cwd) && Date.now() - p.t < 120_000);
       if (i >= 0) { s.origin = pendingNew[i].origin; pendingNew.splice(i, 1); }
       const b = path.basename(ev.cwd || '');
-      if (b && !GENERIC.test(b) && !cfg.proyectos[b]) { cfg.proyectos[b] = String(ev.cwd).replace(/\\/g, '/'); saveCfg(); }   // aprende proyectos
+      if (b && !GENERIC.test(b) && b.toLowerCase() !== USUARIO && !cfg.proyectos[b]) { cfg.proyectos[b] = String(ev.cwd).replace(/\\/g, '/'); saveCfg(); }   // aprende proyectos
     }
     if (e === 'UserPromptSubmit' || e === 'PreToolUse') s.busy = true;
     if (e === 'Stop' || e === 'StopFailure') {

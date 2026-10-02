@@ -118,7 +118,8 @@ setInterval(() => {
 
 // ---------- estado ----------
 // carpetas que no dicen nada del proyecto: la sesión se nombra por su primer mensaje
-const GENERIC = /^(system32|windows|users?|yosoy|desktop|escritorio|documents|documentos|downloads|descargas|home|~|[a-z]:)$/i;
+const GENERIC_RE = /^(system32|windows|users?|desktop|escritorio|documents|documentos|downloads|descargas|home|~|[a-z]:)$/i;
+const GENERIC = { test: c => GENERIC_RE.test(c) || (!!window.bridge?.usuario && String(c).toLowerCase() === window.bridge.usuario.toLowerCase()) };   // + la carpeta del usuario
 const sessions = new Map();      // session_id -> sesión
 const perms = [];                // permisos pendientes
 const DONE_MS = 8000;
@@ -636,7 +637,7 @@ function presentacion() {
   const E = (sid, cwd, hook_event_name, extra = {}, _usage) => { if (!ids.includes(sid)) ids.push(sid);
     onEvent({ hook_event_name, session_id: sid, cwd, _id: Math.random() * 1e9 | 0, _usage, ...extra }); };
   const A = 'show-a', B = 'show-b', C = 'show-c', N = 'nucleo:show';
-  const cA = 'D:/RobotCompanion', cB = 'D:/MobileLab', cC = 'D:/BritoHub', cN = 'D:/Flow';
+  const cA = 'D:/RobotCompanion', cB = 'D:/MapaCamaras', cC = 'D:/LigaFutbol', cN = 'D:/Flow';
   const boom = (n, cols, kind = 'burst') => { const [x, y] = center(); emit(x, y, n, cols, kind); };
   const G = (nombre, secs, msg) => { robot.setFps(60); robot.gesto(nombre, secs, msg); };
   const mantener = () => { hovering = true; cerrarTras = 600_000; clearTimeout(leaveTimer); leaveTimer = null; bridge.interactive(false); render(); };
@@ -668,17 +669,17 @@ function presentacion() {
   at(19500, () => E(B, cB, 'SessionStart'));
   at(19900, () => E(B, cB, 'UserPromptSubmit', { prompt: 'mapa de cámaras en vivo' }, { ctx: 91500, model: 'claude-sonnet-5-5' }));
   at(20400, () => E(C, cC, 'SessionStart'));
-  at(20800, () => E(C, cC, 'UserPromptSubmit', { prompt: 'ranking de la liga FIFA' }, { ctx: 142000, model: 'claude-opus-5-5' }));
+  at(20800, () => E(C, cC, 'UserPromptSubmit', { prompt: 'ranking de la liga' }, { ctx: 142000, model: 'claude-opus-5-5' }));
   at(21500, () => E(A, cA, 'PreToolUse', { tool_name: 'Grep', tool_input: { pattern: 'tema-oscuro' } }));
-  at(22200, () => E(B, cB, 'PreToolUse', { tool_name: 'Read', tool_input: { file_path: 'D:/MobileLab/cameras.geojson' } }));
+  at(22200, () => E(B, cB, 'PreToolUse', { tool_name: 'Read', tool_input: { file_path: 'D:/MapaCamaras/cameras.geojson' } }));
   at(22900, () => E(A, cA, 'PreToolUse', { tool_name: 'Task', tool_input: { subagent_type: 'Explore', description: 'buscar estilos' } }));
   at(23100, () => E(A, cA, 'SubagentStart', { agent_id: 'sx1', agent_type: 'Explore' }));
   at(23500, () => E(A, cA, 'PreToolUse', { tool_name: 'Task', tool_input: { subagent_type: 'Plan', description: 'plan de colores' } }));
   at(23700, () => E(A, cA, 'SubagentStart', { agent_id: 'sx2', agent_type: 'Plan' }));
   at(24300, () => E(A, cA, 'PreToolUse', { agent_id: 'sx1', tool_name: 'Read', tool_input: { file_path: 'D:/RobotCompanion/core/ui/estilo.css' } }));
-  at(25000, () => E(C, cC, 'PreToolUse', { tool_name: 'Edit', tool_input: { file_path: 'D:/BritoHub/src/ranking.js',
+  at(25000, () => E(C, cC, 'PreToolUse', { tool_name: 'Edit', tool_input: { file_path: 'D:/LigaFutbol/src/ranking.js',
     old_string: 'const puntos = victorias * 3;', new_string: 'const puntos = victorias * 3 + empates;\nconst racha = calcularRacha(partidos);\nif (racha >= 5) logro("🔥 En llamas");' } }, { ctx: 151000, model: 'claude-opus-5-5' }));
-  at(26500, () => E(B, cB, 'PreToolUse', { tool_name: 'Write', tool_input: { file_path: 'D:/MobileLab/mapa.js', content: 'const mapa = L.map("mapa").setView([40.4, -3.7], 12);\nfetch("cameras.geojson").then(r => r.json())\n  .then(d => L.geoJSON(d, { pointToLayer: punto }).addTo(mapa));' } }));
+  at(26500, () => E(B, cB, 'PreToolUse', { tool_name: 'Write', tool_input: { file_path: 'D:/MapaCamaras/mapa.js', content: 'const mapa = L.map("mapa").setView([40.4, -3.7], 12);\nfetch("cameras.geojson").then(r => r.json())\n  .then(d => L.geoJSON(d, { pointToLayer: punto }).addTo(mapa));' } }));
   // permiso peligroso → lo deniega
   at(28500, () => E(B, cB, 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'rm -rf ./datos' }, _peligro: 'borrado recursivo' }));
   at(29000, () => V('peligro'));
@@ -693,7 +694,7 @@ function presentacion() {
   // 39–50 s: Discord + tarjeta con respuesta ya escrita
   at(39000, () => notif({ kind: 'server', guild: 'BOT CENTRAL', channel: 'alertas', author: 'CONTROL-COMANDER', text: '🟢 Raspberry Pi 5: todos los servicios en línea' }));
   at(40500, () => { const c = { id: 990001, kind: 'dm', author: 'Cliente', prioridad: 'urgente', resumen: 'Pregunta si el camión estará listo el viernes',
-      text: 'oye, ¿el 389 va a estar listo para el viernes?', respuesta: '¡Sí! El viernes por la mañana lo tienes listo 🚛', canSend: true };
+      text: 'oye, ¿el camión va a estar listo para el viernes?', respuesta: '¡Sí! El viernes por la mañana lo tienes listo 🚛', canSend: true };
     cards.unshift(c); renderCards(); notif({ kind: 'dm', author: c.author, text: c.text, mention: true });
     robot.hud('URGENTE', 3, 'error'); sound.play('permiso'); V('cliente'); });
 

@@ -119,7 +119,7 @@ VISTAS.chat = {
           ['carpeta', 'Revisa qué hay en mi carpeta de descargas y dime qué puedo borrar'],
           ['reloj', 'Recuérdame mañana a las 9 revisar los pedidos del taller'],
           ['cerebro', '¿Qué sabes de mí?'],
-          ['latido', 'Cada 30 min comprueba si 192.168.1.124 responde y avísame solo si falla'],
+          ['latido', 'Cada 30 min comprueba si 10.0.0.5 responde y avísame solo si falla'],
         ].map(([i, t]) => `<button data-sug="${esc(t)}">${ic(i)}<span>${esc(t)}</span></button>`).join('')}</div></div>`;
       m.onclick = e => { const b = e.target.closest('[data-sug]'); if (b) this.enviar(b.dataset.sug); };
       montarRobot($('#robotChat'), 'vitrina', 60);
