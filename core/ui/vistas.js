@@ -59,7 +59,7 @@ VISTAS.inicio = {
   alEvento(e) { if (e.tipo === 'registro') { this.regs.unshift(e); this.regs = this.regs.slice(0, 8); this.pintarActividad(); } },
   salir() { clearInterval(this.t); desmontarRobot($('#robotInicio')); },
 };
-const ICONO_CANAL = { web: 'mundo', api: 'api', isla: 'isla', discord: 'discord', voz: 'micro', streamdeck: 'teclas', claudecode: 'terminal', telegram: 'enviar' };
+const ICONO_CANAL = { web: 'mundo', api: 'api', isla: 'isla', discord: 'discord', voz: 'micro', streamdeck: 'teclas', claudecode: 'terminal', telegram: 'enviar', whatsapp: 'enviar' };
 
 // ================= CHAT =================
 VISTAS.chat = {

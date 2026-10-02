@@ -34,11 +34,13 @@
   },
   "private": true,
   "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "discord.js": "^14.27.0",
     "electron": "^33.4.11",
     "imapflow": "^2.2.1",
     "mailparser": "^3.9.33",
     "nodemailer": "^10.0.13",
+    "qrcode": "^1.5.4",
     "sql.js": "^1.14.2",
     "three": "^0.160.0"
   }

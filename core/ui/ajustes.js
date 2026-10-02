@@ -77,7 +77,7 @@ VISTAS['ajustes/canales'] = {
   claves: 'discord isla voz stream deck telegram whatsapp',
   async pintar(v) {
     const l = await api('GET', '/canales');
-    const futuros = [['whatsapp', 'WhatsApp', 'Mensajes desde WhatsApp.']];
+    const wa = await api('GET', '/whatsapp').catch(() => null);
     const tg = await api('GET', '/telegram').catch(() => null);
     v.innerHTML = `<div class="pagina estrecha">${cabecera('Canales', 'Por dónde puedes hablar con el robot. Todos comparten memoria, permisos y modelos.', `<button class="btn" id="rec">${ic('recargar')}Actualizar</button>`)}
       <div class="seccion">Conectados <span class="n">${l.filter(c => c.estado === 'activo').length}</span></div>
@@ -85,14 +85,22 @@ VISTAS['ajustes/canales'] = {
         `<span class="chip ${c.estado === 'activo' ? 'ok' : c.estado === 'respaldo' ? 'aviso' : ''}"><span class="punto ${c.estado === 'activo' ? 'ok' : c.estado === 'respaldo' ? 'aviso' : ''}"></span>${esc(c.estado)}</span>`)).join('')}</div>
       <div class="seccion">Telegram</div>
       <div class="caja" id="tgCaja">${this.tgHtml(tg)}</div>
-      <div class="seccion">Próximamente</div>
-      <div class="caja">${futuros.map(([k, n, d]) => fila(`<span class="flex">${ic('enviar')}${n}</span>`, d, '<span class="chip">en camino</span>')).join('')}</div>
+      <div class="seccion">WhatsApp</div>
+      <div class="caja" id="waCaja">${this.waHtml(wa)}</div>
       <div class="seccion">Conectar otros agentes (MCP)</div>
       <p class="seccion-ayuda">Antigravity, Cursor, Claude Desktop, Claude Code… pueden usar al robot: avisarte, pedirte permiso por tus canales, la memoria y las tareas. Añade esto a su configuración MCP (cambia la ruta si instalaste en otra carpeta):</p>
       <div class="bloque-cod"><header><span>mcp_config.json</span><button class="btn fantasma mini" data-copiar>${ic('copiar')}Copiar</button></header><pre><code>${esc(JSON.stringify({ mcpServers: { 'robot-companion': { command: 'node', args: ['D:/RobotCompanion/core/mcp.js'], env: { ROBOT_MCP_ORIGEN: 'Antigravity' } } } }, null, 2))}</code></pre></div>
       <p class="tenue" style="font-size:12px;margin-top:14px">Desde cualquier canal: <code>gemma: mensaje</code> manda a un modelo concreto · <code>usa gpt</code> cambia el modelo por defecto de ese canal · <code>usa claude code</code> vuelve a Claude Code.</p></div>`;
     $('#rec').onclick = () => this.pintar(v);
     this.tgEnlazar(v, tg);
+    $('#waCaja').onclick = async e => {
+      const b = e.target.closest('button[data-wa]'); if (!b) return;
+      const a = b.dataset.wa; let r;
+      if (a === 'vincular') { b.disabled = true; b.textContent = 'Preparando…'; r = await api('POST', '/whatsapp/vincular').catch(er => ({ error: er.message })); if (r.error) return aviso(r.error, true); this.waEsperar(r); }
+      if (a === 'prueba') { await api('POST', '/whatsapp/prueba'); return aviso('Mensaje de prueba enviado a tu chat'); }
+      if (a === 'quitar') { if (!await modal({ titulo: 'Desvincular WhatsApp', cuerpo: 'Se cierra la sesión de APOLO en tu WhatsApp (como cerrar WhatsApp Web).', botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Desvincular', cls: 'mal', valor: true }] })) return; r = await api('DELETE', '/whatsapp'); }
+      if (r) $('#waCaja').innerHTML = this.waHtml(r);
+    };
     $('#tgCaja').onclick = async e => {
       const b = e.target.closest('button[data-tg]'); if (!b) return;
       const a = b.dataset.tg; let r;
@@ -109,6 +117,30 @@ VISTAS['ajustes/canales'] = {
       if (a === 'quitar') { if (!await modal({ titulo: 'Desconectar Telegram', cuerpo: 'El robot dejará de usar ese bot (el bot sigue existiendo en tu Telegram).', botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Desconectar', cls: 'mal', valor: true }] })) return; r = await api('DELETE', '/telegram'); }
       if (r) { $('#tgCaja').innerHTML = this.tgHtml(r); this.tgEnlazar(v, r); }
     };
+  },
+  // tarjeta de WhatsApp: aviso del riesgo → QR → conectado
+  waHtml(w) {
+    if (!w) return '<div class="tenue" style="padding:14px 16px">No disponible.</div>';
+    if (w.conectado) return fila(`<span class="flex">${ic('enviar')}+${esc(w.numero)}</span>`, '<span class="ok-txt">✓ Vinculado.</span> Escríbele en tu chat contigo mismo ("Tú" / "Mensaje para ti"). Solo lee ese chat.',
+      '<button class="btn mini" data-wa="prueba">Probar</button><button class="btn mini mal" data-wa="quitar">Desvincular</button>');
+    if (w.qr) return `<div style="display:flex;gap:18px;align-items:center;padding:14px 16px"><img src="${w.qr}" alt="QR" style="width:200px;height:200px;border-radius:8px;background:#fff;padding:6px">
+      <div style="line-height:1.7"><b>En tu móvil:</b><br>WhatsApp → <b>Ajustes</b> → <b>Dispositivos vinculados</b> → <b>Vincular un dispositivo</b> → escanea este código.<br><span class="tenue" id="waEsp">Esperando…</span></div></div>`;
+    return `<div style="padding:14px 16px;line-height:1.6">Háblale al robot desde WhatsApp y recibe permisos y avisos. Se vincula como <b>WhatsApp Web</b> escaneando un QR.<br>
+      <span class="mal-txt">⚠️ No es la API oficial de WhatsApp: va contra sus términos y existe un riesgo (bajo) de que bloqueen el número.</span> Te recomendamos <b>un número secundario</b>.<br>
+      <span class="tenue">Privacidad: APOLO solo lee y escribe en tu chat contigo mismo; nunca toca tus otras conversaciones.</span></div>
+      ${fila('Estado', esc(w.estado), '<button class="btn pri" data-wa="vincular">Vincular con QR</button>')}`;
+  },
+  // refresca el QR (WhatsApp lo cambia cada ~20 s) hasta que se vincula
+  async waEsperar(w) {
+    if ($('#waCaja')) $('#waCaja').innerHTML = this.waHtml(w);
+    for (let i = 0; i < 120; i++) {
+      await new Promise(ok => setTimeout(ok, 2500));
+      if (!$('#waCaja')) return;
+      const r = await api('GET', '/whatsapp').catch(() => null); if (!r) continue;
+      const img = $('#waCaja img');
+      if (r.conectado) { $('#waCaja').innerHTML = this.waHtml(r); aviso('✓ WhatsApp vinculado'); return; }
+      if (r.qr && img) { if (img.src !== r.qr) img.src = r.qr; } else $('#waCaja').innerHTML = this.waHtml(r);
+    }
   },
   // tarjeta de Telegram según el estado: sin bot → pasos con @BotFather; bot sin enlazar → enlace; enlazado → listo
   tgHtml(t) {

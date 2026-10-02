@@ -13,6 +13,7 @@ for (const k of Object.keys(process.env)) if (/^(CLAUDE_CODE_|CLAUDECODE$|CLAUDE
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, shell, globalShortcut, clipboard, safeStorage } = require('electron');
 const { crearConectores } = require('./conectores');
 const { crearTelegram } = require('./telegram');
+const { crearWhatsapp } = require('./whatsapp');
 const http = require('http');
 const fs = require('fs');
 const os = require('os');
@@ -48,16 +49,17 @@ let lastMove = Date.now();
 const isAway = () => Date.now() - lastMove > AWAY_MS;
 let discord = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, replyTo() { return false; }, stop() { } };
 let telegram = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, iniciar() { }, detener() { } };
-// al móvil: Discord y Telegram a la vez (cada uno ignora lo suyo si no está configurado)
+let whatsapp = { enabled: false, status: 'sin vincular', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { } };
+// al móvil: Discord, Telegram y WhatsApp a la vez (cada uno ignora lo suyo si no está configurado)
 const movil = {
-  sendAviso: (...a) => { discord.sendAviso(...a); telegram.sendAviso(...a); },
-  sendPerm: p => { discord.sendPerm(p); telegram.sendPerm(p); },
-  resolvePerm: (...a) => { discord.resolvePerm(...a); telegram.resolvePerm(...a); },
-  sendCard: c => { discord.sendCard(c); telegram.sendCard(c); },
-  reply: md => { discord.reply(md); telegram.reply(md); },
+  sendAviso: (...a) => { discord.sendAviso(...a); telegram.sendAviso(...a); whatsapp.sendAviso(...a); },
+  sendPerm: p => { discord.sendPerm(p); telegram.sendPerm(p); whatsapp.sendPerm(p); },
+  resolvePerm: (...a) => { discord.resolvePerm(...a); telegram.resolvePerm(...a); whatsapp.resolvePerm(...a); },
+  sendCard: c => { discord.sendCard(c); telegram.sendCard(c); whatsapp.sendCard(c); },
+  reply: md => { discord.reply(md); telegram.reply(md); whatsapp.reply(md); },
 };
-const esRemoto = o => o === 'discord' || o === 'telegram';
-const responderA = (o, md) => (o === 'telegram' ? telegram : discord).reply(md);
+const esRemoto = o => o === 'discord' || o === 'telegram' || o === 'whatsapp';
+const responderA = (o, md) => ({ telegram, whatsapp }[o] || discord).reply(md);
 const HOOK_EVENTS = [
   ['SessionStart', 10], ['SessionEnd', 10], ['UserPromptSubmit', 10], ['PreToolUse', 10], ['PostToolUse', 10],
   ['PostToolUseFailure', 10], ['PermissionRequest', 120], ['Notification', 10], ['Stop', 10], ['StopFailure', 10],
@@ -568,6 +570,7 @@ async function startNucleo() {
     nucleo.canales.registrar('isla', { nombre: 'Isla de escritorio', tipo: 'isla', estado: 'activo', detalle: `Destino: ${puente.destino('isla') || 'Claude Code'}` });
     nucleo.canales.registrar('discord', { nombre: 'Discord', tipo: 'discord', estado: /conectado/i.test(discord.status) ? 'activo' : 'inactivo', detalle: `${discord.status} · destino: ${puente.destino('discord') || 'Claude Code'}` });
     nucleo.canales.registrar('telegram', { nombre: 'Telegram', tipo: 'telegram', estado: telegram.enabled && telegram.status === 'conectado' ? 'activo' : 'inactivo', detalle: `${telegram.status} · destino: ${puente.destino('telegram') || 'automático'}` });
+    nucleo.canales.registrar('whatsapp', { nombre: 'WhatsApp', tipo: 'whatsapp', estado: whatsapp.enabled ? 'activo' : 'inactivo', detalle: `${whatsapp.status} · destino: ${puente.destino('whatsapp') || 'automático'}` });
     nucleo.canales.registrar('voz', { nombre: 'Voz', tipo: 'voz', estado: 'activo', detalle: whisperReady ? 'Whisper cargado · Ctrl+Alt+Espacio' : 'Whisper se carga al hablar · Ctrl+Alt+Espacio' });
     nucleo.canales.registrar('streamdeck', { nombre: 'Stream Deck', tipo: 'streamdeck', estado: fs.existsSync(path.join(process.env.APPDATA || '', 'Elgato', 'StreamDeck', 'Plugins', 'com.robotcompanion.sdPlugin')) ? 'activo' : 'inactivo', detalle: 'Permitir / Denegar / Estado' });
     nucleo.canales.registrar('gemini', { nombre: 'Gemini CLI (hooks)', tipo: 'claudecode', estado: geminiHooksInstalled() ? 'activo' : 'inactivo', detalle: geminiHooksInstalled() ? 'Hooks instalados: permisos y actividad en la isla' : cliInstalado.gemini ? 'Instálalos desde la bandeja' : 'Gemini CLI no está instalado (npm i -g @google/gemini-cli)' });
@@ -837,6 +840,16 @@ app.whenReady().then(() => {
       const e = new Error('ruta'); e.status = 404; throw e;
     } };
     telegram.iniciar();
+    whatsapp = crearWhatsapp({ dir: path.join(app.getPath('userData'), 'whatsapp-auth'), decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
+      onTalk: t => handleText(t, 'whatsapp'), onEstado: e => console.log('[whatsapp]', e) });
+    nucleo.extensiones.whatsapp = { http: async (M, p) => {
+      if (M === 'GET') return whatsapp.estado();
+      if (M === 'POST' && p[2] === 'vincular') return whatsapp.vincular();
+      if (M === 'POST' && p[2] === 'prueba') { await whatsapp.prueba(); return whatsapp.estado(); }
+      if (M === 'DELETE') return whatsapp.desvincular();
+      const e = new Error('ruta'); e.status = 404; throw e;
+    } };
+    whatsapp.arrancar();
   } catch (e) { console.error('[conectores]', e.message); }
   cerebro = createCerebro({
     nucleo,

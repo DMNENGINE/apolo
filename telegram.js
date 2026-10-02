@@ -142,6 +142,7 @@ function crearTelegram({ almacen, decide, cardAction, onTalk, onEstado = () => {
   function iniciar() {
     if (!token || vivo) return;
     vivo = true; ctl = new AbortController(); setEstado(chat() ? 'conectando' : 'esperando enlace');
+    llamar('getMe').then(() => { if (vivo) setEstado(chat() ? 'conectado' : 'esperando enlace'); }).catch(e => { if (e.codigo === 401) setEstado('token no válido'); });
     llamar('setMyCommands', { commands: [{ command: 'ayuda', description: 'Qué puedo hacer' }, { command: 'estado', description: '¿Estás encendido?' }, { command: 'nueva', description: 'Nueva conversación' }] }).catch(() => { });
     bucle();
   }

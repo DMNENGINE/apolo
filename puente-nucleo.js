@@ -44,7 +44,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
   let st = { destino: {}, sesion: {} };       // por canal: modelo elegido ("usa X") y sesión del núcleo
   try { st = { ...st, ...JSON.parse(fs.readFileSync(fDest, 'utf8')) }; } catch { }
   const guardar = () => fs.writeFileSync(fDest, JSON.stringify(st, null, 2));
-  const canal = origin => (origin === 'discord' || origin === 'telegram' ? origin : 'isla');   // voz comparte con la isla
+  const canal = origin => (['discord', 'telegram', 'whatsapp'].includes(origin) ? origin : 'isla');   // voz comparte con la isla
   const sid = s => `nucleo:${s.id}`;
   const origen = new Map();                                                 // sesión del núcleo -> origin del último mensaje
 
@@ -95,7 +95,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
   // motores externos con puente (Antigravity): el encargo sale por el evento 'motor'; la respuesta vuelve por MCP
   function aMotor(motor, texto, origin) {
     if (!nucleo.motores?.[motor]) return { ok: false, msg: `❌ ${motor} no está conectado. En Antigravity pídele al agente: "arranca el puente del robot" (comando en el panel → Canales).` };
-    nucleo.bus.emit('motor', { motor, texto, origen: origin === 'discord' ? 'Discord' : origin === 'telegram' ? 'Telegram' : origin === 'voz' ? 'voz' : 'la isla', t: Date.now() });
+    nucleo.bus.emit('motor', { motor, texto, origen: origin === 'discord' ? 'Discord' : origin === 'telegram' ? 'Telegram' : origin === 'whatsapp' ? 'WhatsApp' : origin === 'voz' ? 'voz' : 'la isla', t: Date.now() });
     nucleo.registro.add('info', motor, `encargo: ${texto.slice(0, 120)}`);
     return { ok: true, msg: `📨 Encargado a **${motor}**. Te aviso cuando termine.` };
   }
