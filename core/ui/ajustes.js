@@ -285,7 +285,7 @@ VISTAS['ajustes/modelos'] = {
       titulo: k ? `Proveedor · ${k}` : 'Añadir proveedor',
       cuerpo: `${k ? '' : `<div class="campo">Nombre (sin espacios)<input id="pn" placeholder="groq"></div><div class="campo">Tipo ${seg('tipo', [['openai', 'Compatible OpenAI'], ['anthropic', 'Anthropic'], ['gemini', 'Gemini']], 'openai')}</div>`}
         <div class="campo">URL base<input id="pu" class="mono" value="${esc(p?.baseUrl || '')}" placeholder="https://api.groq.com/openai/v1"></div>
-        ${p?.local ? '' : `<div class="campo">API key<input id="pk" type="password" autocomplete="off" placeholder="${p?.tieneKey ? '•••••••• guardada — escribe para cambiarla' : 'pega tu clave'}"></div>`}
+        ${p?.local ? '' : `<div class="campo">API key<input id="pk" type="password" autocomplete="off" placeholder="${p?.tieneKey ? '•••••••• guardada — escribe para cambiarla' : 'pega tu clave'}"></div>${k ? enlaceClave(k, p) : ''}`}
         <small class="tenue">Groq, DeepSeek, Mistral, LM Studio, vLLM, Together… cualquiera con API tipo OpenAI funciona.</small>`,
       botones: [...(k && !['openai', 'anthropic', 'gemini', 'openrouter', 'ollama', 'claudecode'].includes(k) ? [{ txt: 'Eliminar', cls: 'mal', valor: 'borrar' }] : []), { txt: 'Cancelar', valor: null }, {
         txt: 'Guardar', cls: 'pri', valor: m => {
@@ -372,6 +372,29 @@ VISTAS['ajustes/aprobaciones'] = {
 };
 
 // ---------- Claves ----------
+// dónde se consigue la clave de cada proveedor (por nombre o por el dominio de su URL base)
+const DONDE_CLAVE = [
+  [/openrouter/, 'https://openrouter.ai/keys', 'OpenRouter', 'Una sola clave para cientos de modelos.'],
+  [/openai/, 'https://platform.openai.com/api-keys', 'OpenAI', 'Se paga por uso aparte del plan de ChatGPT (para tu plan usa "Conectar ChatGPT").'],
+  [/anthropic/, 'https://console.anthropic.com/settings/keys', 'Anthropic', 'Se paga por uso aparte del plan de Claude.'],
+  [/gemini|generativelanguage|google/, 'https://aistudio.google.com/apikey', 'Google AI Studio', 'Gratis con límites diarios.'],
+  [/groq/, 'https://console.groq.com/keys', 'Groq', 'Gratis con límites; muy rápido.'],
+  [/deepseek/, 'https://platform.deepseek.com/api_keys', 'DeepSeek', ''],
+  [/mistral/, 'https://console.mistral.ai/api-keys', 'Mistral', ''],
+  [/together/, 'https://api.together.ai/settings/api-keys', 'Together AI', ''],
+  [/x\.ai|grok|xai/, 'https://console.x.ai', 'xAI (Grok)', ''],
+  [/perplexity/, 'https://www.perplexity.ai/settings/api', 'Perplexity', ''],
+  [/cerebras/, 'https://cloud.cerebras.ai', 'Cerebras', ''],
+  [/fireworks/, 'https://fireworks.ai/account/api-keys', 'Fireworks', ''],
+];
+function dondeClave(nombre, p = {}) {
+  const t = `${nombre} ${p.baseUrl || ''}`.toLowerCase();
+  const d = DONDE_CLAVE.find(([re]) => re.test(t));
+  return d ? { url: d[1], sitio: d[2], nota: d[3] } : null;
+}
+// el enlace listo para tocar, debajo del campo de la clave
+const enlaceClave = (nombre, p) => { const d = dondeClave(nombre, p); return d ? `<div class="tenue" style="font-size:12.5px;margin-top:8px">🔑 Consíguela en <a href="${d.url}" target="_blank" rel="noopener"><b>${esc(d.sitio)}</b> → ${esc(d.url.replace(/^https:\/\//, ''))}</a>${d.nota ? `<br>${esc(d.nota)}` : ''}</div>` : ''; };
+
 VISTAS['ajustes/claves'] = {
   claves: 'api key secreto token openai anthropic gemini',
   async pintar(v) {
@@ -380,14 +403,14 @@ VISTAS['ajustes/claves'] = {
     v.innerHTML = `<div class="pagina">${cabecera('Claves de API', 'Se guardan solo en este equipo (config del núcleo) y nunca se envían al navegador. También puedes usar variables de entorno.')}
       <div class="caja tabla-env"><table class="tabla"><tr><th>Proveedor</th><th>Estado</th><th>Origen</th><th>Variable de entorno</th><th></th></tr>
         ${conKey.map(([k, p]) => `<tr data-k="${esc(k)}"><td><span class="flex">${avatar(k + '/')}<b>${esc(k)}</b></span></td>
-          <td>${p.tieneKey ? '<span class="chip ok">configurada</span>' : '<span class="chip">sin clave</span>'}</td><td class="suave">${p.tieneKey ? (p.keyDeEntorno ? 'entorno' : 'config') : '—'}</td>
+          <td>${p.tieneKey ? '<span class="chip ok">configurada</span>' : `<span class="chip">sin clave</span>${dondeClave(k, p) ? ` <a href="${dondeClave(k, p).url}" target="_blank" rel="noopener" style="font-size:12px">conseguir</a>` : ''}`}</td><td class="suave">${p.tieneKey ? (p.keyDeEntorno ? 'entorno' : 'config') : '—'}</td>
           <td class="mono tenue">${esc(p.env || '—')}</td><td class="der" style="white-space:nowrap"><button class="btn mini" data-x="poner">${p.tieneKey ? 'Cambiar' : 'Añadir'}</button>${p.tieneKey && !p.keyDeEntorno ? ` <button class="btn mini mal" data-x="quitar">Quitar</button>` : ''}</td></tr>`).join('')}</table></div>
       <p class="tenue" style="font-size:12px;margin-top:12px">${ic('candado')} Las contraseñas y claves también se bloquean en la memoria del robot: nunca las guarda.</p></div>`;
     v.onclick = async e => {
       const b = e.target.closest('button[data-x]'); if (!b) return;
       const k = b.closest('[data-k]').dataset.k;
       if (b.dataset.x === 'quitar') { if (await confirmar('Quitar clave', `Se borrará la clave de ${k}.`, true) && await guardarConfig({ proveedores: { [k]: { apiKey: '' } } }, 'Clave quitada')) this.pintar(v); return; }
-      const key = await modal({ titulo: `Clave de ${k}`, cuerpo: `<div class="campo">API key<input id="kk" type="password" autocomplete="off" placeholder="pega la clave"></div>`, botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Guardar', cls: 'pri', valor: m => $('#kk', m).value.trim() || false }] });
+      const key = await modal({ titulo: `Clave de ${k}`, cuerpo: `<div class="campo">API key<input id="kk" type="password" autocomplete="off" placeholder="pega la clave"></div>${enlaceClave(k, E.config.proveedores[k])}`, botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Guardar', cls: 'pri', valor: m => $('#kk', m).value.trim() || false }] });
       if (key && await guardarConfig({ proveedores: { [k]: { apiKey: key } } }, 'Clave guardada')) this.pintar(v);
     };
   },
