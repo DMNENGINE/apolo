@@ -18,7 +18,7 @@ Tú mandas. Cada acción delicada te pide permiso desde la isla flotante, Discor
 - 🌐 **Usa el navegador** (extensión para Chrome/Edge/Brave) con permiso por sitio; nunca toca contraseñas ni tarjetas.
 - 🖥️ **Ve la pantalla y usa ratón y teclado** con permiso por encargo, borde rojo visible y botón de pánico.
 - 🗣️ **Voz neural** y órdenes por micrófono (Whisper) o por texto.
-- 🔌 **Integraciones**: panel web, servidor MCP, bot de Discord (también en Raspberry Pi), Stream Deck y hooks de Gemini CLI.
+- 🔌 **Integraciones**: Telegram y Discord (permisos con botones desde el móvil), correo (Gmail, Outlook y más), GitHub, Hugging Face, ElevenLabs, panel web, servidor MCP, Stream Deck y hooks de Gemini CLI.
 - 🤖 **Personalidad**: más de 20 gestos animados.
 
 ## 🚀 Instalación

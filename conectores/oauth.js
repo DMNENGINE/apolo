@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const PROVEEDORES = {
   google: {
     nombre: 'Gmail', auth: 'https://accounts.google.com/o/oauth2/v2/auth', token: 'https://oauth2.googleapis.com/token',
-    escopos: 'openid email https://mail.google.com/', extra: { access_type: 'offline', prompt: 'consent' },
+    escopos: 'openid email https://mail.google.com/', extra: { access_type: 'offline', prompt: 'select_account consent' },   // siempre deja elegir la cuenta
     imap: { host: 'imap.gmail.com', port: 993, secure: true }, smtp: { host: 'smtp.gmail.com', port: 465, secure: true },
     env: ['APOLO_GOOGLE_CLIENT_ID', 'APOLO_GOOGLE_CLIENT_SECRET'],
   },

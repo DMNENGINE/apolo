@@ -30,7 +30,7 @@ You stay in control. Every risky action asks first, from the floating island, Di
 | 🌐 **Browser agent** | Chrome/Edge/Brave extension with per-site permissions. It never touches password or card fields. |
 | 🖥️ **Computer use** | Sees the screen and uses mouse and keyboard with per-task consent, a visible red border and a panic stop (move the mouse to take back control). |
 | 🗣️ **Voice** | Neural voice replies and speech input (Whisper), or plain text. |
-| 🔌 **Integrations** | Web control panel, MCP server, Discord bot (it can run on a Raspberry Pi), Stream Deck plugin, Gemini CLI hooks. |
+| 🔌 **Integrations** | Telegram and Discord (permissions with buttons from your phone), email (Gmail, Outlook and more), GitHub, Hugging Face, ElevenLabs, web control panel, MCP server, Stream Deck plugin, Gemini CLI hooks. |
 | 🤖 **Personality** | 20+ animated gestures: it waves, winks, sneezes, gets dizzy, tells the time, and falls asleep. |
 
 <p align="center">
@@ -114,7 +114,7 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 - [x] One-line installer
 - [ ] Signed `.exe` release
-- [ ] Telegram channel
+- [x] Telegram channel
 - [ ] Gmail / Calendar / GitHub as sources for the daily briefing
 - [ ] macOS and Linux support
 - [ ] Physical robot eye (GC9A01 round display)

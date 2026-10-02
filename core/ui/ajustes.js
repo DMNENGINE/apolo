@@ -77,18 +77,61 @@ VISTAS['ajustes/canales'] = {
   claves: 'discord isla voz stream deck telegram whatsapp',
   async pintar(v) {
     const l = await api('GET', '/canales');
-    const futuros = [['telegram', 'Telegram', 'Bot oficial: háblale desde el móvil.'], ['whatsapp', 'WhatsApp', 'Mensajes desde WhatsApp.'], ['correo', 'Correo', 'Lee y redacta correos.']];
+    const futuros = [['whatsapp', 'WhatsApp', 'Mensajes desde WhatsApp.']];
+    const tg = await api('GET', '/telegram').catch(() => null);
     v.innerHTML = `<div class="pagina estrecha">${cabecera('Canales', 'Por dónde puedes hablar con el robot. Todos comparten memoria, permisos y modelos.', `<button class="btn" id="rec">${ic('recargar')}Actualizar</button>`)}
       <div class="seccion">Conectados <span class="n">${l.filter(c => c.estado === 'activo').length}</span></div>
       <div class="caja">${l.map(c => fila(`<span class="flex">${ic(ICONO_CANAL[c.tipo] || 'enlace')}${esc(c.nombre)}</span>`, esc(c.detalle || ''),
         `<span class="chip ${c.estado === 'activo' ? 'ok' : c.estado === 'respaldo' ? 'aviso' : ''}"><span class="punto ${c.estado === 'activo' ? 'ok' : c.estado === 'respaldo' ? 'aviso' : ''}"></span>${esc(c.estado)}</span>`)).join('')}</div>
+      <div class="seccion">Telegram</div>
+      <div class="caja" id="tgCaja">${this.tgHtml(tg)}</div>
       <div class="seccion">Próximamente</div>
-      <div class="caja">${futuros.map(([k, n, d]) => fila(`<span class="flex">${ic(k === 'correo' ? 'archivo' : 'enviar')}${n}</span>`, d, '<span class="chip">en camino</span>')).join('')}</div>
+      <div class="caja">${futuros.map(([k, n, d]) => fila(`<span class="flex">${ic('enviar')}${n}</span>`, d, '<span class="chip">en camino</span>')).join('')}</div>
       <div class="seccion">Conectar otros agentes (MCP)</div>
       <p class="seccion-ayuda">Antigravity, Cursor, Claude Desktop, Claude Code… pueden usar al robot: avisarte, pedirte permiso por tus canales, la memoria y las tareas. Añade esto a su configuración MCP (cambia la ruta si instalaste en otra carpeta):</p>
       <div class="bloque-cod"><header><span>mcp_config.json</span><button class="btn fantasma mini" data-copiar>${ic('copiar')}Copiar</button></header><pre><code>${esc(JSON.stringify({ mcpServers: { 'robot-companion': { command: 'node', args: ['D:/RobotCompanion/core/mcp.js'], env: { ROBOT_MCP_ORIGEN: 'Antigravity' } } } }, null, 2))}</code></pre></div>
       <p class="tenue" style="font-size:12px;margin-top:14px">Desde cualquier canal: <code>gemma: mensaje</code> manda a un modelo concreto · <code>usa gpt</code> cambia el modelo por defecto de ese canal · <code>usa claude code</code> vuelve a Claude Code.</p></div>`;
     $('#rec').onclick = () => this.pintar(v);
+    this.tgEnlazar(v, tg);
+    $('#tgCaja').onclick = async e => {
+      const b = e.target.closest('button[data-tg]'); if (!b) return;
+      const a = b.dataset.tg; let r;
+      if (a === 'conectar') {
+        const t = $('#tgTok').value.trim(); if (!t) return aviso('Pega el token que te dio @BotFather', true);
+        b.disabled = true; b.textContent = 'Comprobando…';
+        r = await api('PUT', '/telegram', { token: t }).catch(er => ({ error: er.message }));
+        if (r.error) { b.disabled = false; b.textContent = 'Conectar'; return aviso(r.error, true); }
+        aviso('✓ Bot @' + r.bot + ' conectado. Ahora enlaza tu chat.');
+        if (r.enlace) window.open(r.enlace, '_blank', 'noopener');
+      }
+      if (a === 'enlace') { r = await api('POST', '/telegram/enlace'); if (r.enlace) window.open(r.enlace, '_blank', 'noopener'); }
+      if (a === 'prueba') { await api('POST', '/telegram/prueba'); return aviso('Mensaje de prueba enviado'); }
+      if (a === 'quitar') { if (!await modal({ titulo: 'Desconectar Telegram', cuerpo: 'El robot dejará de usar ese bot (el bot sigue existiendo en tu Telegram).', botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Desconectar', cls: 'mal', valor: true }] })) return; r = await api('DELETE', '/telegram'); }
+      if (r) { $('#tgCaja').innerHTML = this.tgHtml(r); this.tgEnlazar(v, r); }
+    };
+  },
+  // tarjeta de Telegram según el estado: sin bot → pasos con @BotFather; bot sin enlazar → enlace; enlazado → listo
+  tgHtml(t) {
+    if (!t) return '<div class="tenue" style="padding:14px 16px">No disponible.</div>';
+    if (!t.configurado) return `<div style="padding:14px 16px;line-height:1.6">
+        <b>1.</b> Abre <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> en Telegram y escribe <code>/newbot</code>.<br>
+        <b>2.</b> Ponle un nombre (ej. <i>Mi Robot</i>) y un usuario que acabe en <code>bot</code> (ej. <i>mirobot123_bot</i>).<br>
+        <b>3.</b> Te dará un <b>token</b> (algo como <code>123456789:AAH…</code>). Pégalo aquí:</div>
+      ${fila('Token del bot', 'Se guarda cifrado en este equipo. Tu bot solo hablará contigo.', '<input id="tgTok" class="mono" type="password" autocomplete="off" placeholder="123456789:AAH…"><button class="btn pri" data-tg="conectar">Conectar</button>')}`;
+    if (!t.enlazado) return fila(`<span class="flex">${ic('enviar')}@${esc(t.bot)}</span>`, `<b>Último paso:</b> abre el enlace y pulsa <b>Iniciar</b> en Telegram para ligar el bot a tu chat. <span id="tgEsp" class="tenue">Esperando…</span>`,
+        `<a class="btn pri" href="${esc(t.enlace || '#')}" target="_blank" rel="noopener">Abrir Telegram</a><button class="btn mini mal" data-tg="quitar">Quitar</button>`);
+    return fila(`<span class="flex">${ic('enviar')}@${esc(t.bot)}</span>`, `<span class="ok-txt">✓ Enlazado${t.usuario ? ' con ' + esc(t.usuario) : ''}</span> · ${esc(t.estado)}. Háblale desde el móvil; aquí te llegan permisos y avisos cuando no estás en el PC.`,
+      '<button class="btn mini" data-tg="prueba">Probar</button><button class="btn mini" data-tg="enlace">Enlazar otro chat</button><button class="btn mini mal" data-tg="quitar">Desconectar</button>');
+  },
+  // mientras falta el enlace, mira cada 3 s si ya pulsaste "Iniciar" en Telegram
+  async tgEnlazar(v, t) {
+    if (!t || !t.configurado || t.enlazado) return;
+    for (let i = 0; i < 200; i++) {
+      await new Promise(ok => setTimeout(ok, 3000));
+      if (!document.getElementById('tgEsp')) return;
+      const r = await api('GET', '/telegram').catch(() => null);
+      if (r?.enlazado) { $('#tgCaja').innerHTML = this.tgHtml(r); aviso('✓ Telegram enlazado'); return; }
+    }
   },
 };
 

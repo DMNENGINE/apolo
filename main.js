@@ -12,6 +12,7 @@
 for (const k of Object.keys(process.env)) if (/^(CLAUDE_CODE_|CLAUDECODE$|CLAUDE_PID$|CLAUDE_EFFORT$)/.test(k)) delete process.env[k];
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, shell, globalShortcut, clipboard, safeStorage } = require('electron');
 const { crearConectores } = require('./conectores');
+const { crearTelegram } = require('./telegram');
 const http = require('http');
 const fs = require('fs');
 const os = require('os');
@@ -46,6 +47,17 @@ const DISCORD_GRACE_MS = 20_000;      // si estás, solo va a Discord si no cont
 let lastMove = Date.now();
 const isAway = () => Date.now() - lastMove > AWAY_MS;
 let discord = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, replyTo() { return false; }, stop() { } };
+let telegram = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, iniciar() { }, detener() { } };
+// al móvil: Discord y Telegram a la vez (cada uno ignora lo suyo si no está configurado)
+const movil = {
+  sendAviso: (...a) => { discord.sendAviso(...a); telegram.sendAviso(...a); },
+  sendPerm: p => { discord.sendPerm(p); telegram.sendPerm(p); },
+  resolvePerm: (...a) => { discord.resolvePerm(...a); telegram.resolvePerm(...a); },
+  sendCard: c => { discord.sendCard(c); telegram.sendCard(c); },
+  reply: md => { discord.reply(md); telegram.reply(md); },
+};
+const esRemoto = o => o === 'discord' || o === 'telegram';
+const responderA = (o, md) => (o === 'telegram' ? telegram : discord).reply(md);
 const HOOK_EVENTS = [
   ['SessionStart', 10], ['SessionEnd', 10], ['UserPromptSubmit', 10], ['PreToolUse', 10], ['PostToolUse', 10],
   ['PostToolUseFailure', 10], ['PermissionRequest', 120], ['Notification', 10], ['Stop', 10], ['StopFailure', 10],
@@ -227,7 +239,7 @@ function decide(id, behavior, via = '?') {
   if (p.nucleoId) {                                            // permiso del núcleo multi-modelo (sus reglas las guarda él)
     nucleo.permisos.resolver(p.nucleoId, behavior);
     if (win && !win.isDestroyed()) win.webContents.send('decided', id, behavior);
-    discord.resolvePerm(id, behavior, via);
+    movil.resolvePerm(id, behavior, via);
     return true;
   }
   if (behavior === 'always' && !esPeligroso(p.ev.tool_name, p.ev.tool_input)) {
@@ -237,7 +249,7 @@ function decide(id, behavior, via = '?') {
   const decision = behavior === 'deny' ? { behavior: 'deny', message: `Denegado desde ${nombreCompanero()}` } : { behavior: 'allow' };
   p.res.end(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } }));
   if (win && !win.isDestroyed()) win.webContents.send('decided', id, behavior);
-  discord.resolvePerm(id, behavior, via);
+  movil.resolvePerm(id, behavior, via);
   return true;
 }
 ipcMain.on('decision', (_e, id, behavior) => decide(id, behavior, 'isla'));
@@ -320,12 +332,12 @@ function scanUsage() {
   const week = usage.ev.reduce((n, [, k]) => n + k, 0);
   for (const hit of usage.hits.splice(0)) {
     const at = usage.ev.reduce((n, [t, k]) => n + (t > hit - 5 * 3600_000 && t <= hit ? k : 0), 0);
-    if (at > 0) { limits.ventana5h = at; fs.writeFileSync(LIMITS(), JSON.stringify(limits, null, 2)); discord.sendAviso(`⛔ Llegaste al límite de la ventana de 5 h del plan (~${Math.round(at / 1e6)}M tokens). Lo apunto para avisarte antes la próxima vez.`, 'red'); }
+    if (at > 0) { limits.ventana5h = at; fs.writeFileSync(LIMITS(), JSON.stringify(limits, null, 2)); movil.sendAviso(`⛔ Llegaste al límite de la ventana de 5 h del plan (~${Math.round(at / 1e6)}M tokens). Lo apunto para avisarte antes la próxima vez.`, 'red'); }
   }
   const p5 = limits.ventana5h ? h5 / limits.ventana5h : 0, pW = limits.semanal ? week / limits.semanal : 0;
   const near = Math.max(p5, pW);
   if (cerebro) cerebro.setPaused(near >= limits.pausarAl);
-  if (near >= limits.avisarAl && !usage.warned) { usage.warned = true; discord.sendAviso(`⚠️ Llevas el ${Math.round(near * 100)}% del límite del plan (${p5 >= pW ? 'ventana de 5 h' : 'semana'}). El cerebro del robot se pausa al ${Math.round(limits.pausarAl * 100)}%.`, 'amber'); }
+  if (near >= limits.avisarAl && !usage.warned) { usage.warned = true; movil.sendAviso(`⚠️ Llevas el ${Math.round(near * 100)}% del límite del plan (${p5 >= pW ? 'ventana de 5 h' : 'semana'}). El cerebro del robot se pausa al ${Math.round(limits.pausarAl * 100)}%.`, 'amber'); }
   if (near < limits.avisarAl * 0.8) usage.warned = false;
   if (win && !win.isDestroyed()) win.webContents.send('usage', { tokens: usage.tokens, nuevo: usage.nuevo, cache: usage.cache, out: usage.out, msgs: usage.msgs, h5, week, p5, pW, paused: cerebro ? cerebro.paused : false });
 }
@@ -368,9 +380,9 @@ async function handleText(text, origin) {
   const r = await cerebro.command(text);
   if (win && !win.isDestroyed()) win.webContents.send('thinking', false);
   if (!r) return talk.talk(text, origin);
-  if (origin === 'discord') discord.reply(r.texto);
+  if (esRemoto(origin)) responderA(origin, r.texto);
   else if (win && !win.isDestroyed()) win.webContents.send('answer', r);
-  return { ok: true, msg: origin === 'discord' ? r.texto : '🧠 Listo (mira la isla).' };
+  return { ok: true, msg: esRemoto(origin) ? r.texto : '🧠 Listo (mira la isla).' };
 }
 // ---------- acciones de las tarjetas (isla o Discord) ----------
 async function cardAction(id, action, text) {
@@ -452,7 +464,7 @@ function startServer() {
       res.writeHead(ok ? 200 : 404); return res.end();
     }
     if (req.method === 'POST' && req.url === '/test-discord') {     // aviso de prueba al DM
-      discord.sendAviso('🤖 **Prueba:** así te llegarán los avisos del Robot Companion.', 'blue');
+      movil.sendAviso('🤖 **Prueba:** así te llegarán los avisos del Robot Companion.', 'blue');
       res.writeHead(200); return res.end();
     }
     if (req.method === 'POST' && req.url.startsWith('/mover')) {     // mover la isla: ?a=otro (fuera del principal) | ?a=casa
@@ -487,7 +499,7 @@ function startServer() {
         win.webContents.send('event', ev);
         res.writeHead(200, { 'content-type': 'application/json' });
         // sin respuesta en 105 s -> vacío: Claude Code pregunta en la terminal
-        const timer = setTimeout(() => { pending.delete(ev._id); res.end(); win && win.webContents.send('expired', ev._id); discord.resolvePerm(ev._id, 'expired', 'tiempo'); }, 105_000);
+        const timer = setTimeout(() => { pending.delete(ev._id); res.end(); win && win.webContents.send('expired', ev._id); movil.resolvePerm(ev._id, 'expired', 'tiempo'); }, 105_000);
         pending.set(ev._id, { res, timer, ev });
         // al móvil: ya si no estás en la PC, o si nadie contesta en 20 s
         permToDiscord(ev);
@@ -495,8 +507,8 @@ function startServer() {
       } else {
         win.webContents.send('event', ev);
         res.end();
-        if (isAway() && ev.hook_event_name === 'Stop') discord.sendAviso(`✅ Claude terminó en **${path.basename(ev.cwd || '') || 'una sesión'}**`, 'green');
-        if (isAway() && ev.hook_event_name === 'StopFailure') discord.sendAviso(`❌ Claude terminó con error en **${path.basename(ev.cwd || '') || 'una sesión'}**`, 'red');
+        if (isAway() && ev.hook_event_name === 'Stop') movil.sendAviso(`✅ Claude terminó en **${path.basename(ev.cwd || '') || 'una sesión'}**`, 'green');
+        if (isAway() && ev.hook_event_name === 'StopFailure') movil.sendAviso(`❌ Claude terminó con error en **${path.basename(ev.cwd || '') || 'una sesión'}**`, 'red');
       }
     });
   });
@@ -505,7 +517,7 @@ function startServer() {
 }
 // al móvil: ya si no estás en la PC, o si nadie contesta en 20 s
 function permToDiscord(ev) {
-  const toDiscord = () => pending.has(ev._id) && discord.sendPerm({
+  const toDiscord = () => pending.has(ev._id) && movil.sendPerm({
     id: ev._id, tool: ev._nucleo ? `${ev.tool_name} · ${ev._nucleo}` : ev.tool_name, peligro: ev._peligro, session: path.basename(ev.cwd || '') || '—',
     detail: String(ev.tool_input?.command || ev.tool_input?.file_path || ev.tool_input?.url || JSON.stringify(ev.tool_input || {})),
   });
@@ -546,14 +558,16 @@ async function startNucleo() {
     },
     reply: (origin, texto, modelo, extra = {}) => {
       const titulo = extra.tarea ? modelo : `🤖 ${modelo}`;          // en tareas, "modelo" ya es el título
-      if (origin === 'discord' || isAway()) discord.reply(`**${titulo}**\n${texto}`);   // si no estás en la PC, también al móvil
-      if (origin !== 'discord' && win && !win.isDestroyed()) win.webContents.send('answer', { titulo, texto, voz: origin === 'voz' || extra.tarea ? texto.slice(0, 400) : undefined });
+      if (esRemoto(origin)) responderA(origin, `**${titulo}**\n${texto}`);
+      else if (isAway()) movil.reply(`**${titulo}**\n${texto}`);       // si no estás en la PC, también al móvil
+      if (!esRemoto(origin) && win && !win.isDestroyed()) win.webContents.send('answer', { titulo, texto, voz: origin === 'voz' || extra.tarea ? texto.slice(0, 400) : undefined });
     },
   });
   // canales del robot visibles en el panel
   const canalesRobot = () => {
     nucleo.canales.registrar('isla', { nombre: 'Isla de escritorio', tipo: 'isla', estado: 'activo', detalle: `Destino: ${puente.destino('isla') || 'Claude Code'}` });
     nucleo.canales.registrar('discord', { nombre: 'Discord', tipo: 'discord', estado: /conectado/i.test(discord.status) ? 'activo' : 'inactivo', detalle: `${discord.status} · destino: ${puente.destino('discord') || 'Claude Code'}` });
+    nucleo.canales.registrar('telegram', { nombre: 'Telegram', tipo: 'telegram', estado: telegram.enabled && telegram.status === 'conectado' ? 'activo' : 'inactivo', detalle: `${telegram.status} · destino: ${puente.destino('telegram') || 'automático'}` });
     nucleo.canales.registrar('voz', { nombre: 'Voz', tipo: 'voz', estado: 'activo', detalle: whisperReady ? 'Whisper cargado · Ctrl+Alt+Espacio' : 'Whisper se carga al hablar · Ctrl+Alt+Espacio' });
     nucleo.canales.registrar('streamdeck', { nombre: 'Stream Deck', tipo: 'streamdeck', estado: fs.existsSync(path.join(process.env.APPDATA || '', 'Elgato', 'StreamDeck', 'Plugins', 'com.robotcompanion.sdPlugin')) ? 'activo' : 'inactivo', detalle: 'Permitir / Denegar / Estado' });
     nucleo.canales.registrar('gemini', { nombre: 'Gemini CLI (hooks)', tipo: 'claudecode', estado: geminiHooksInstalled() ? 'activo' : 'inactivo', detalle: geminiHooksInstalled() ? 'Hooks instalados: permisos y actividad en la isla' : cliInstalado.gemini ? 'Instálalos desde la bandeja' : 'Gemini CLI no está instalado (npm i -g @google/gemini-cli)' });
@@ -564,7 +578,7 @@ async function startNucleo() {
   // avisos de agentes externos (MCP: Antigravity, Cursor…) → isla con voz + Discord si urgente o no estás
   nucleo.bus.on('aviso-externo', a => {
     if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: `📣 ${a.origen}`, texto: a.texto, voz: a.texto.slice(0, 300) });
-    if (a.urgente || isAway()) discord.sendAviso(`📣 **${a.origen}:** ${a.texto.slice(0, 1800)}`, a.urgente ? 'red' : 'blue');
+    if (a.urgente || isAway()) movil.sendAviso(`📣 **${a.origen}:** ${a.texto.slice(0, 1800)}`, a.urgente ? 'red' : 'blue');
   });
   // control del ratón/teclado: borde rojo en todos los monitores, aviso en la isla y en Discord si no estás
   const panicoControl = via => {
@@ -578,13 +592,13 @@ async function startNucleo() {
     else if (!nucleo.control.estado().length) overlayControl.ocultar();
     const texto = c.activo ? `🖱️ Tomo el control del ratón y teclado: ${c.motivo}` : `✋ Control devuelto: ${c.razon || 'terminado'}`;
     if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: '🤖 Control del PC', texto });
-    if (isAway()) discord.sendAviso(texto, c.activo ? 'red' : 'blue');
+    if (isAway()) movil.sendAviso(texto, c.activo ? 'red' : 'blue');
   });
   nucleo.bus.on('permiso-resuelto', ({ id: nid }) => {          // contestado por otra vía (API, tiempo agotado)
     for (const [id, p] of pending) if (p.nucleoId === nid) {
       pending.delete(id);
       if (win && !win.isDestroyed()) win.webContents.send('expired', id);
-      discord.resolvePerm(id, 'expired', 'núcleo');
+      movil.resolvePerm(id, 'expired', 'núcleo');
     }
   });
 }
@@ -695,7 +709,7 @@ function buildTray() {
     { label: 'Reconectar Discord', click: startDiscord },
     { label: '☀️ Resumen del día ahora', click: () => runBriefing() },
     { label: `🧠 Cerebro: ${cerebro && cerebro.paused ? 'en pausa (cerca del límite del plan)' : 'activo'}`, enabled: false },
-    { label: 'Enviarme un aviso de prueba', click: () => discord.sendAviso('🤖 **Prueba:** así te llegarán los avisos del Robot Companion.', 'blue') },
+    { label: 'Enviarme un aviso de prueba', click: () => movil.sendAviso('🤖 **Prueba:** así te llegarán los avisos del Robot Companion.', 'blue') },
     { label: `Avisos de DMs: ${dmsStatus}`, enabled: false },
     {
       label: `Reglas "Permitir siempre" (${rules.length})`, submenu: rules.length ? [
@@ -731,7 +745,7 @@ async function runBriefing() {
   if (win && !win.isDestroyed()) win.webContents.send('thinking', true);
   const r = await cerebro.briefing();
   if (win && !win.isDestroyed()) { win.webContents.send('thinking', false); win.webContents.send('answer', { ...r, titulo: '☀️ Resumen del día' }); }
-  discord.reply(`☀️ **Resumen del día**\n${r.texto}`);
+  movil.reply(`☀️ **Resumen del día**\n${r.texto}`);
 }
 // ---------- Discord ----------
 function ensureDiscordCfg() {
@@ -812,6 +826,17 @@ app.whenReady().then(() => {
       },
     });
     nucleo.extensiones.conectores = conectores;
+    telegram = crearTelegram({ almacen: conectores.almacen, decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
+      onTalk: t => handleText(t, 'telegram'), onEstado: e => console.log('[telegram]', e) });
+    nucleo.extensiones.telegram = { http: async (M, p, b) => {
+      if (M === 'GET') return telegram.estado();
+      if (M === 'PUT') return telegram.conectar(b.token);
+      if (M === 'POST' && p[2] === 'enlace') return telegram.nuevoEnlace();
+      if (M === 'POST' && p[2] === 'prueba') { await telegram.sendAviso('🤖 **Prueba:** así te llegarán los avisos.'); return telegram.estado(); }
+      if (M === 'DELETE') return telegram.desconectar();
+      const e = new Error('ruta'); e.status = 404; throw e;
+    } };
+    telegram.iniciar();
   } catch (e) { console.error('[conectores]', e.message); }
   cerebro = createCerebro({
     nucleo,
@@ -819,7 +844,7 @@ app.whenReady().then(() => {
     onCard: c => win && !win.isDestroyed() && win.webContents.send('card', c),
     notifyUrgent: c => {
       if (win && !win.isDestroyed()) win.webContents.send('urgent', c);
-      if (isAway() || (c.extra || []).includes('dm')) discord.sendCard(c);
+      if (isAway() || (c.extra || []).includes('dm')) movil.sendCard(c);
     },
     getSessions: () => talk ? talk.recent() : [],
   });
@@ -828,7 +853,7 @@ app.whenReady().then(() => {
     dataDir: app.getPath('userData'),
     getHwnd: sid => { const w = sessionWin.get(sid); return w && w !== 'buscando' ? w.hwnd : null; },
     reply: (origin, md, plain) => {
-      if (origin === 'discord') discord.reply(md);
+      if (esRemoto(origin)) responderA(origin, md);
       else if (win && !win.isDestroyed()) win.webContents.send('say', plain);
     },
   });
