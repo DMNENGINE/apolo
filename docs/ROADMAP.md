@@ -151,6 +151,8 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 ## FASE 9 — Seguridad y confianza (argumento de venta)
 
+> 2026-10-02: hecho auditoría propia (docs/seguridad/auditoria-2026-10.md), bóveda DPAPI, auditoría encadenada, kill switch global, SECURITY.md con modelo de amenazas. Pendiente: sandbox de SO para terceros, comparativa con datos verificados de OpenClaw, bug bounty.
+
 - Modelo de amenazas público en `SECURITY.md`; bug bounty pequeño.
 - Bóveda de secretos (DPAPI/Keychain), nunca en texto plano ni en prompts.
 - Sandboxing opcional de shell (Windows Sandbox / contenedor) para skills de terceros.

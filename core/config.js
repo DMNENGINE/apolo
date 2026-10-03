@@ -2,6 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { crearBoveda, REF } = require('./boveda');
+const MARCADORES = new Set(['ollama', 'lm-studio']);   // "claves" de servidores locales: no son secretos
 
 function carpetaDatos() {
   if (process.env.NUCLEO_HOME) return process.env.NUCLEO_HOME;
@@ -65,19 +67,35 @@ const POR_DEFECTO = {
     sugerir: true, umbralSugerir: 6, mejoraSemanal: false },   // taller: sugerir skill tras turnos largos; propuesta de mejora semanal (lunes 10:00)
 };
 
-function cargarConfig(dir = carpetaDatos()) {
+// opciones.boveda: bóveda inyectable (tests); por defecto core/boveda.js (DPAPI en Windows)
+function cargarConfig(dir = carpetaDatos(), opciones = {}) {
   fs.mkdirSync(dir, { recursive: true });
   const f = path.join(dir, 'config.json');
   let guardada = {};
   try { guardada = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { }
+  // FASE 9: las API keys en claro de config.json se mudan a la bóveda; en el disco queda solo "apiKeyRef": "boveda:proveedor:<id>"
+  const boveda = opciones.boveda || crearBoveda({ dir });
+  let bovedaError = '', migradas = 0;
+  for (const [k, v] of Object.entries(guardada.proveedores || {})) {
+    if (!v || typeof v.apiKey !== 'string' || !v.apiKey || MARCADORES.has(v.apiKey) || v.local) continue;
+    try { boveda.guardar(`proveedor:${k}`, v.apiKey); v.apiKey = ''; v.apiKeyRef = `boveda:proveedor:${k}`; migradas++; }
+    catch (e) { bovedaError = e.message; break; }                 // sin bóveda (p. ej. PowerShell bloqueado) → se queda como estaba
+  }
+  if (migradas) { try { fs.writeFileSync(f, JSON.stringify(guardada, null, 2)); } catch { } }
   const cfg = { ...POR_DEFECTO, ...guardada, permisos: { ...POR_DEFECTO.permisos, ...guardada.permisos }, alias: { ...POR_DEFECTO.alias, ...guardada.alias }, memoria: { ...POR_DEFECTO.memoria, ...guardada.memoria }, compactar: { ...POR_DEFECTO.compactar, ...guardada.compactar }, skills: { ...POR_DEFECTO.skills, ...guardada.skills }, proveedores: { ...POR_DEFECTO.proveedores } };
   for (const [k, v] of Object.entries(guardada.proveedores || {})) cfg.proveedores[k] = { ...POR_DEFECTO.proveedores[k], ...v };
   // migraciones de proveedores que cambiaron de API (se conserva la clave)
   const pp = cfg.proveedores.perplexity;
   if (pp && pp.tipo === 'openai' && /api\.perplexity\.ai\/?$/.test(pp.baseUrl || '')) cfg.proveedores.perplexity = { ...POR_DEFECTO.proveedores.perplexity, apiKey: pp.apiKey };
   if (!fs.existsSync(f)) fs.writeFileSync(f, JSON.stringify(POR_DEFECTO, null, 2));
-  for (const p of Object.values(cfg.proveedores)) if (!p.apiKey && p.env && process.env[p.env]) p.apiKey = process.env[p.env];
+  for (const p of Object.values(cfg.proveedores)) {
+    const m = typeof p.apiKeyRef === 'string' && p.apiKeyRef.match(REF);
+    if (m && !p.apiKey) p.apiKey = boveda.leer(m[1]) || '';
+  }
+  for (const p of Object.values(cfg.proveedores)) if (!p.apiKey && p.env && process.env[p.env]) { p.apiKey = process.env[p.env]; require('./seguridad').registrarSecreto(p.apiKey); }
   cfg.dir = dir;
+  Object.defineProperty(cfg, 'boveda', { value: boveda, enumerable: false, configurable: true });
+  if (bovedaError || boveda.error()) Object.defineProperty(cfg, 'bovedaError', { value: bovedaError || boveda.error(), enumerable: false, configurable: true });
   return cfg;
 }
 

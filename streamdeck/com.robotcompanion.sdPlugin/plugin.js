@@ -76,6 +76,9 @@ ws.on('message', async raw => {
   else if (event === 'keyUp') {
     const held = Date.now() - (downAt.get(context) || Date.now()); downAt.delete(context);
     if (action === A.status) { await req('POST', '/poke'); return; }
+    if (action === A.deny && held >= 2000) {                   // Denegar mantenido 2 s = PÁNICO global (para todo hasta reanudar)
+      const r = await req('POST', '/panico'); send({ event: r && r.code === 200 ? 'showOk' : 'showAlert', context }); poll(); return;
+    }
     const p = state && state.perm;
     if (!p) { send({ event: 'showAlert', context }); return; }
     if (action === A.allow && p.peligro && held < 1000) { send({ event: 'showAlert', context }); return; }   // peligroso: hay que mantener

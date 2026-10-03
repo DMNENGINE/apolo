@@ -321,6 +321,16 @@ async function cargarAgentes() {
 // ---------- vistas ----------
 const VISTAS = {};
 
+// FASE 9 · kill switch: el móvil puede PARAR todo (reanudar solo desde el escritorio)
+async function pintarPanico() {
+  const c = document.getElementById('panico'); if (!c) return;
+  let st = { activo: false }; try { st = await api('GET', '/panico'); } catch { }
+  c.innerHTML = st.activo
+    ? `<div style="padding:12px;border-radius:12px;background:#c33;color:#fff;font-weight:700;text-align:center">🛑 ${tr('PÁNICO: todo parado')} (${esc(st.origen || '')})<br><small style="font-weight:400">${tr('Reanuda desde el escritorio')}</small></div>`
+    : `<button id="btPanico" style="width:100%;padding:12px;border-radius:12px;border:1px solid #c33;background:transparent;color:#f55;font-weight:700">🛑 ${tr('Parar TODO')}</button>`;
+  const b = document.getElementById('btPanico');
+  if (b) b.onclick = async () => { if (!confirm(tr('¿Parar TODO ahora?'))) return; vibrar(40); try { await api('POST', '/panico', {}); toast(tr('PÁNICO: todo parado')); } catch (e) { toast(e.message, true); } pintarPanico(); };
+}
 VISTAS.inicio = c => {
   c.innerHTML = `<div id="alerta"></div>
     <div class="rapidos">
@@ -330,7 +340,9 @@ VISTAS.inicio = c => {
       <button data-ir="wrapped"><span class="bola">${ic('estrella')}</span>${tr('Wrapped')}</button></div>
     <div class="sec">${tr('Ahora mismo')}<span class="n" id="nAg">0</span></div><div id="agentes"></div>
     <div class="sec" id="secTar" hidden>${tr('Tarjetas')}<span class="n" id="nTar">0</span></div><div id="tarjetas"></div>
-    <div class="sec">${tr('Tu semana')}</div><div id="semana"></div>`;
+    <div class="sec">${tr('Tu semana')}</div><div id="semana"></div>
+    <div id="panico" style="margin:18px 0 8px"></div>`;
+  pintarPanico();
   c.querySelector('.rapidos').onclick = e => {
     const b = e.target.closest('[data-ir]'); if (!b) return; vibrar(8);
     const d = b.dataset.ir;

@@ -37,7 +37,7 @@ function entorno() {
   const consejoFalso = { historial: () => [{ creado: ahora.getTime() - 2 * DIA, acuerdo: 80, pregunta: 'pregunta privada' }] };
   const suenoFalso = { informes: () => [{ inicio: ahora.getTime() - DIA, fusionados: [{ borrados: [1, 2] }], nuevos: [{}], frase: 'Esta noche aprendí algo PRIVADO de ti.' }] };
   const wr = crearWrapped({ cfg, sesiones, tareas, turno: turnoFalso, consejo: consejoFalso, sueno: suenoFalso, memoria, personalidad: { nombre: () => 'APOLO' } });
-  return { dir, wr, ahora: ahora.getTime() + 3 * 3600_000 };
+  return { dir, wr, ahora: Math.max(ahora.getTime() + 3 * 3600_000, Date.now() + 60_000) };   // nunca antes de la hora real: las sesiones se crean con Date.now()
 }
 
 test('métricas de la semana: horas, racha, modelo favorito, herramientas, ahorro explicado y logro', () => {

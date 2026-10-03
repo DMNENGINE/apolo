@@ -44,12 +44,17 @@
 //   POST /v1/voz/transcribir (audio binario) → {texto}   (bus 'transcribir-audio' → main.js → Whisper)
 //   STREAM (core/stream): GET /v1/stream · PATCH config · POST secretos|conectar|desconectar|callar|panico|reanudar|clave|silenciar|decir|gesto|alerta|simular|comentar|encuesta
 //   overlay OBS sin token: GET /stream/overlay?clave= · /stream/eventos?clave= (SSE) · /stream/audio/:id?clave=
+//   FASE 9 (seguridad): GET /v1/panico · POST /v1/panico {origen} · POST /v1/panico/reanudar   (kill switch global, core/panico.js)
+//   GET /v1/auditoria?q&tipo&quien&decision&desde&limite · GET /v1/auditoria/verificar · GET /v1/auditoria/exportar (jsonl)
+//   Defensa: Host debe ser localhost / IP literal / cfg.red.urlMovil / cfg.red.hosts (anti DNS rebinding); peticiones que cambian algo
+//   con un Origin ajeno o sec-fetch-site cross-site → 403 (anti CSRF, también para /v1/movil/canjear que no lleva token).
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { crearNucleo, version } = require('./index');
 const admin = require('./admin');
+const seg = require('./seguridad');
 
 // panel web (core/ui): archivos estáticos sin token; la API sí lo pide
 const UI = path.join(__dirname, 'ui');
@@ -79,6 +84,7 @@ function iniciar(opciones = {}) {
   const fTok = path.join(n.cfg.dir, 'token');
   let token; try { token = fs.readFileSync(fTok, 'utf8').trim(); } catch { }
   if (!token) { token = crypto.randomBytes(24).toString('hex'); fs.writeFileSync(fTok, token, { mode: 0o600 }); }
+  seg.registrarSecreto(token);                                  // nunca en registros ni en salidas de herramientas
 
   const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(obj)); };
   const sse = res => { res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' }); return e => res.write(`data: ${JSON.stringify(e)}\n\n`); };
@@ -109,7 +115,11 @@ function iniciar(opciones = {}) {
       const total = local(ip) || permitidos.has(ip);
       const lanMovil = !total && movil.activo() && MV.ipPrivada(ip);   // móvil de la LAN: solo /m/ y token de dispositivo
       if (!total && !lanMovil) { res.writeHead(403); return res.end(); }
-      const u = new URL(req.url, 'http://x'); const p = u.pathname.split('/').filter(Boolean); const M = req.method;
+      const M = req.method;
+      // FASE 9: DNS rebinding (una web cuyo dominio pasa a apuntar a 127.0.0.1) y CSRF desde páginas web
+      if (!seg.hostPermitido(req.headers.host, [seg.hostDeUrl(n.cfg.red?.urlMovil), ...(n.cfg.red?.hosts || [])])) { res.writeHead(421, { 'content-type': 'text/plain' }); return res.end('host no permitido'); }
+      if (M !== 'GET' && M !== 'HEAD' && (!seg.origenPermitido(req.headers.origin, req.headers.host) || req.headers['sec-fetch-site'] === 'cross-site')) return json(res, 403, { error: 'origen no permitido' });
+      const u = new URL(req.url, 'http://x'); const p = u.pathname.split('/').filter(Boolean);
       if (M === 'GET' && u.pathname === '/m') { res.writeHead(301, { location: '/m/' + u.search }); return res.end(); }
       if (p[0] === 'stream' && total) return n.stream.publico(req, res, u);   // overlay de OBS: ?clave= (nunca el token)
       if (M === 'GET' && p[0] !== 'v1') {
@@ -151,12 +161,19 @@ function iniciar(opciones = {}) {
       if (M === 'GET' && p[1] === 'estado') return json(res, 200, { version, nombre: n.personalidad.nombre(), proveedores: n.proveedores.disponibles(), modeloPorDefecto: n.cfg.modeloPorDefecto, permisos: n.permisos.pendientes() });
       if (p[1] === 'config') {
         if (M === 'GET') return json(res, 200, admin.configPublica(n.cfg));
-        if (M === 'PATCH') { const c = admin.guardarConfig(n.cfg, await leer(req)); n.proveedores.reset(); return json(res, 200, c); }
+        if (M === 'PATCH') {
+          const b = await leer(req), antes = n.cfg.permisos.modo;
+          const c = admin.guardarConfig(n.cfg, b); n.proveedores.reset();
+          if (n.cfg.permisos.modo !== antes) n.bus.emit('config-seguridad', { resumen: `modo de permisos: ${antes} → ${n.cfg.permisos.modo}` });
+          if (b.proveedores) for (const [k, v] of Object.entries(b.proveedores)) if (v && typeof v.apiKey === 'string') n.bus.emit('config-seguridad', { resumen: `clave de ${k} ${v.apiKey ? 'cambiada' : 'quitada'}` });
+          return json(res, 200, c);
+        }
       }
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram
         try {
           let cuerpo = ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {};
-          if (disp) cuerpo = { texto: cuerpo.texto };              // móvil (solo POST /v1/turno): el encargo, sin carpeta ni modelo
+          if (disp) cuerpo = p[1] === 'panico' ? { origen: `movil:${disp.nombre}` } : { texto: cuerpo.texto };   // móvil: pánico, o el encargo del turno sin carpeta ni modelo
+          else if (p[1] === 'panico') cuerpo = { origen: String(cuerpo.origen || req.headers['x-cliente'] || 'panel').slice(0, 40), quien: String(cuerpo.quien || req.headers['x-cliente'] || 'panel').slice(0, 40) };
           const r = await n.extensiones[p[1]].http(M, p, cuerpo, Object.fromEntries(u.searchParams));
           if (r?.__archivo) {                                  // la extensión devuelve un archivo (p. ej. el vídeo del turno de noche, el zip de la exportación)
             res.writeHead(200, { 'content-type': TIPOS[path.extname(r.__archivo)] || { '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.zip': 'application/zip' }[path.extname(r.__archivo)] || 'application/octet-stream', 'content-length': fs.statSync(r.__archivo).size,
@@ -247,7 +264,7 @@ function iniciar(opciones = {}) {
       if (p[1] === 'uso' && M === 'GET') return json(res, 200, admin.uso(n.sesiones, +u.searchParams.get('dias') || 30));
       if (p[1] === 'reglas') {
         if (M === 'GET') return json(res, 200, n.permisos.reglas());
-        if (M === 'DELETE' && p[2] !== undefined) return json(res, n.permisos.borrarRegla(+p[2]) ? 200 : 404, {});
+        if (M === 'DELETE' && p[2] !== undefined) { const r = n.permisos.reglas()[+p[2]]; const ok = n.permisos.borrarRegla(+p[2]); if (ok) n.bus.emit('config-seguridad', { resumen: `regla borrada: ${r?.herramienta} ${r?.prefijo}` }); return json(res, ok ? 200 : 404, {}); }
       }
       if (p[1] === 'importar') {                                   // migración desde OpenClaw u otro asistente (robot-migracion/1)
         if (M === 'GET') return json(res, 200, n.importador.historial());
@@ -256,7 +273,7 @@ function iniciar(opciones = {}) {
       if (p[1] === 'control') {
         if (!p[2] && M === 'GET') return json(res, 200, n.control.estado());
         if (p[2] === 'soltar' && M === 'POST') {                  // botón de pánico desde el panel, la isla o el Stream Deck
-          const est = n.control.estado(); n.control.soltarTodo('el usuario lo detuvo');
+          const est = n.control.estado(); n.control.soltarTodo('el usuario lo detuvo');   // solo el control; el pánico global es POST /v1/panico
           for (const c of est) n.agente.cancelar(c.sesion);
           return json(res, 200, { ok: true, soltados: est.length });
         }
@@ -295,7 +312,8 @@ function iniciar(opciones = {}) {
       if (p[1] === 'permisos' && p[2] && M === 'POST') {
         const { decision } = await leer(req);
         if (!['allow', 'always', 'deny'].includes(decision)) return json(res, 400, { error: 'decision' });
-        return json(res, n.permisos.resolver(p[2], decision) ? 200 : 404, {});
+        const quien = disp ? `movil:${disp.nombre}` : String(req.headers['x-cliente'] || 'panel').slice(0, 40);
+        return json(res, n.permisos.resolver(p[2], decision, undefined, quien) ? 200 : 404, {});
       }
       if (p[1] === 'skills') {                                    // motor de skills (core/skills)
         const sk = n.skills, err = (e, c = 400) => json(res, e.status || c, { error: e.message });

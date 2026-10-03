@@ -21,7 +21,7 @@ const html = (motivo, principal, grabando) => grabando ? `<!doctype html><meta c
 </style><div class="b"></div>${principal ? `<div class="t">🤖 El robot está usando tu ratón y teclado${motivo ? ` · ${motivo.replace(/[<&>]/g, '')}` : ''}
   <small>Mueve el ratón, pulsa cualquier tecla o Ctrl+Alt+Esc para recuperar el control</small></div>` : ''}`;
 
-function crearOverlay({ alPanico }) {
+function crearOverlay({ alPanico, atajoPropio = true }) {   // atajoPropio=false: main.js ya tiene Ctrl+Alt+Esc registrado siempre (pánico global)
   let ventanas = [];
   function mostrar(motivo, { grabando = false } = {}) {
     ocultar();
@@ -39,12 +39,12 @@ function crearOverlay({ alPanico }) {
       w.once('ready-to-show', () => w.showInactive());
       ventanas.push(w);
     }
-    try { globalShortcut.register('Control+Alt+Escape', () => alPanico('Ctrl+Alt+Esc', { grabando })); } catch { }
+    if (atajoPropio) try { globalShortcut.register('Control+Alt+Escape', () => alPanico('Ctrl+Alt+Esc', { grabando })); } catch { }
   }
   function ocultar() {
     for (const w of ventanas) if (!w.isDestroyed()) w.destroy();
     ventanas = [];
-    try { globalShortcut.unregister('Control+Alt+Escape'); } catch { }
+    if (atajoPropio) try { globalShortcut.unregister('Control+Alt+Escape'); } catch { }
   }
   return { mostrar, ocultar };
 }

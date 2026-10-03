@@ -201,7 +201,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
         if (d === 'always' && v.peligro) d = 'allow';                 // lo peligroso nunca se convierte en regla
         const via = String(r.reg.canales.get(a.id)?.nombre || a.id);
         // la app/núcleo avisa después con permisoResuelto (y eso lo quita de "vistos" y edita el mensaje del canal)
-        const ok = typeof anfitrion.resolverPermiso === 'function' ? !!await anfitrion.resolverPermiso(v.id, d, via) : permisos.resolver(v.id, d, d === 'deny' ? `denegado desde ${via}` : via);
+        const ok = typeof anfitrion.resolverPermiso === 'function' ? !!await anfitrion.resolverPermiso(v.id, d, via) : permisos.resolver(v.id, d, d === 'deny' ? `denegado desde ${via}` : via, `plugin:${nombre}/${via}`);
         if (!ok) r.reg.permisosVistos.delete(String(a.permiso));
         return ok;
       }
@@ -247,6 +247,13 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
       }
       case 'shell': {
         if (!await exigir(nombre, 'shell', `ejecutar: ${String(a.comando).slice(0, 300)}`)) throw denegado('shell');
+        // FASE 9: declarar "shell" no da carta blanca: lo peligroso/ofuscado se pregunta SIEMPRE, uno a uno
+        const pel = require('../../shared/peligro')('Bash', { command: String(a.comando || '') });
+        if (pel) {
+          if (cfg.permisos?.modo === 'solo-lectura') throw denegado('shell');
+          const r2 = await permisos.pedirExterno({ resumen: `El plugin "${nombre}" quiere ejecutar: ${String(a.comando).slice(0, 600)}`, peligro: pel, origen: `plugin ${nombre}` });
+          if (!r2?.ok) throw denegado('shell peligroso');
+        }
         return shell(String(a.comando || ''), Math.min(+a.timeoutSeg || 60, 600));
       }
       default: throw new Error(`método desconocido ${metodo}`);
@@ -254,7 +261,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   }
   const shell = (comando, seg) => new Promise(ok => {
     const [bin, args] = process.platform === 'win32' ? ['powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', comando]] : ['bash', ['-lc', comando]];
-    const p = spawn(bin, args, { windowsHide: true }); let out = '';
+    const p = spawn(bin, args, { windowsHide: true, env: require('../seguridad').envLimpio(process.env) }); let out = '';   // sin claves ni tokens del entorno
     p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
     const t = setTimeout(() => p.kill(), seg * 1000);
     p.on('close', code => { clearTimeout(t); ok({ salida: out.slice(-20_000), codigo: code }); });

@@ -22,7 +22,7 @@ const turnoMod = require('./turno');
 const grafoMod = require('./grafo');
 
 function crearNucleo(opciones = {}) {
-  const cfg = cargarConfig(opciones.dir);
+  const cfg = cargarConfig(opciones.dir, { boveda: opciones.boveda });
   const bus = new EventEmitter(); bus.setMaxListeners(100);
   const proveedores = crearProveedores(cfg);
   const permisos = crearPermisos({ cfg, bus });
@@ -115,6 +115,14 @@ function crearNucleo(opciones = {}) {
   } };
   nucleo.extensiones.privacidad = { http: (...a) => privacidad.http(...a) };
   nucleo.extensiones.wrapped = { http: (...a) => wrapped.http(...a) };
+  // FASE 9: registro de auditoría encadenado + kill switch global
+  const auditoria = require('./auditoria').crearAuditoria({ cfg, bus, boveda: cfg.boveda });
+  permisos.ponerAuditoria(auditoria);
+  nucleo.auditoria = auditoria; nucleo.extensiones.auditoria = { http: (...a) => auditoria.http(...a) };
+  const panico = require('./panico').crearPanico({ nucleo });
+  nucleo.panico = panico; nucleo.extensiones.panico = { http: (...a) => panico.http(...a) };
+  tareas.ponerPausa(() => panico.activo());
+  bus.on('config-seguridad', e => auditoria.registrar({ tipo: 'seguridad', resumen: e.resumen, quien: e.quien || 'panel' }));
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }

@@ -124,7 +124,9 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
     try { return fs.readFileSync(fHist, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(x => x && x.t >= desde && x.t <= hasta); } catch { return []; }
   }
 
+  let pausa = () => false;                                 // kill switch (core/panico.js): mientras dure, no arranca nada
   function tick(ahora = Date.now()) {
+    if (pausa()) return;
     sync();
     let cambio = false;
     for (const t of lista) {
@@ -141,6 +143,7 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
 
   let timer = null;
   return {
+    ponerPausa: fn => { pausa = typeof fn === "function" ? fn : () => false; },
     crear, borrar, pausar, ejecutar, tick, describir, historial,
     registrarInterna: (nombre, fn) => internas.set(nombre, fn),
     lista: () => { sync(); return lista; },

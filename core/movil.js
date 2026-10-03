@@ -51,7 +51,7 @@ function ipsLan() {
 // '*' = un segmento cualquiera; '**' = el resto. /v1/movil/** lo filtra después movil.http según quién llama.
 const ALCANCE = [
   ['GET', 'estado'], ['GET', 'sesiones'], ['POST', 'sesiones'], ['GET', 'sesiones/*'], ['POST', 'sesiones/*/mensajes'], ['POST', 'sesiones/*/cancelar'],
-  ['GET', 'eventos'], ['GET', 'agentes'], ['GET', 'turno'], ['POST', 'turno'], ['GET', 'wrapped'], ['POST', 'voz/transcribir'],
+  ['GET', 'eventos'], ['GET', 'agentes'], ['GET', 'turno'], ['POST', 'turno'], ['GET', 'wrapped'], ['POST', 'voz/transcribir'], ['GET', 'panico'], ['POST', 'panico'],   // pánico: el móvil lo activa; reanudar solo desde el escritorio
   ['*', 'movil/**'],
 ].map(([m, r]) => [m, r.split('/')]);
 function alcance(M, p) {                 // p = ['v1', …]
@@ -242,7 +242,7 @@ function crearMovil({ nucleo: n, fetch: fetchPush = globalThis.fetch, ahora = ()
       else throw err('acción peligrosa: confirma con tu huella o tu PIN', 428);
       if (decision === 'always') decision = 'allow';
     }
-    const ok = id.startsWith('n-') ? n.permisos.resolver(id.slice(2), decision)
+    const ok = id.startsWith('n-') ? n.permisos.resolver(id.slice(2), decision, undefined, `movil:${d.nombre}`)
       : !!n.nodos?.permisosExternos?.resolver?.(+id.slice(2), decision === 'deny' ? 'deny' : 'allow', `móvil ${d.nombre}`);
     n.registro?.add(p.peligro ? 'aviso' : 'info', 'móvil', `${d.nombre}: ${decision} · ${String(p.resumen).slice(0, 120)}`);
     return { ok };

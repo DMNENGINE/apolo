@@ -158,7 +158,9 @@ test('panel: estáticos sin token, config sin claves, PATCH de config', async (t
   assert.ok(!JSON.stringify(c).includes('sk-secreta-123'));
   assert.strictEqual(c.alias.rapido, 'falso/m1');
   const disco = JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8'));
-  assert.strictEqual(disco.proveedores.openai.apiKey, 'sk-secreta-123');
+  assert.ok(!JSON.stringify(disco).includes('sk-secreta-123'), 'FASE 9: la clave va a la bóveda, no a config.json');
+  assert.strictEqual(disco.proveedores.openai.apiKeyRef, 'boveda:proveedor:openai');
+  assert.strictEqual(d.nucleo.cfg.boveda.leer('proveedor:openai'), 'sk-secreta-123');
   assert.strictEqual(disco.proveedores.falso.baseUrl, 'http://127.0.0.1:9/v1');   // conserva lo que no se tocó
   const uso = await (await fetch(base + '/v1/uso', { headers: h })).json();
   assert.strictEqual(uso.dias, 30);

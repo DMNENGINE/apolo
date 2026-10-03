@@ -621,6 +621,11 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add
 $('voz').innerHTML = ICO.voz; $('mic').innerHTML = ICO.mic; $('askGo').innerHTML = ICO.enviar;
 $('snd').innerHTML = sound.muted ? ICO.mudo : ICO.sonido;
 $('snd').addEventListener('click', () => { $('snd').innerHTML = sound.toggle() ? ICO.mudo : ICO.sonido; });
+// FASE 9 · kill switch: STOP = pánico global; mientras dure, el botón dice REANUDAR y la cabecera lo avisa
+let panicoOn = false;
+const pintarPanico = s => { panicoOn = !!(s && s.activo); const b = $('panic'); if (!b) return; b.textContent = panicoOn ? 'REANUDAR' : 'STOP'; b.style.color = panicoOn ? '#4dff88' : '#ff4d4d'; if (panicoOn) $('h2').textContent = '🛑 PÁNICO — todo parado'; };
+if (window.bridge && bridge.onPanico) { bridge.onPanico(pintarPanico); bridge.panicoEstado().then(pintarPanico).catch(() => { }); }
+$('panic') && $('panic').addEventListener('click', () => { if (!window.bridge || !bridge.panico) return; if (panicoOn || confirm('¿Parar TODO? (turnos, control del PC, tareas, permisos)')) bridge.panico(!panicoOn); });
 setTimeout(() => {                                        // saludo al arrancar
   robot.greet(tr('¡HOLA! 👋')); sound.play('hola'); say(tr('Hola, estoy listo'));
   const [x, y] = center(); emit(x, y, 36, COLORS.listo, 'burst'); emit(0, 0, 40, ['#ffffff', '#7fe3ff', '#b58cff'], 'star');

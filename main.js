@@ -249,7 +249,7 @@ function decide(id, behavior, via = '?') {
   clearTimeout(p.timer); pending.delete(id);
   ojoRefrescar();
   if (p.nucleoId) {                                            // permiso del núcleo multi-modelo (sus reglas las guarda él)
-    nucleo.permisos.resolver(p.nucleoId, behavior);
+    nucleo.permisos.resolver(p.nucleoId, behavior, undefined, via);   // via = isla | discord | telegram | streamdeck… (auditoría)
     if (win && !win.isDestroyed()) win.webContents.send('decided', id, behavior);
     movil.resolvePerm(id, behavior, via);
     return true;
@@ -500,6 +500,10 @@ function startServer() {
       moverIsla(/a=casa/.test(req.url) ? 'casa' : 'otro');
       res.writeHead(200); return res.end();
     }
+    if (req.method === 'POST' && req.url === '/panico') {           // Stream Deck: Denegar mantenido 2 s = pánico global (FASE 9)
+      const ok = !!nucleo?.panico; if (ok) nucleo.panico.activar('streamdeck');
+      res.writeHead(ok ? 200 : 503); return res.end();
+    }
     if (req.method === 'POST' && req.url === '/poke') {             // botón de estado del Stream Deck
       if (win && !win.isDestroyed()) win.webContents.send('poke');
       res.writeHead(200); return res.end();
@@ -728,7 +732,19 @@ async function startNucleo() {
     nucleo.control.soltarTodo(`el usuario lo detuvo (${via})`);
     for (const c of est) nucleo.agente.cancelar(c.sesion);
   };
-  overlayControl = crearOverlay({ alPanico: panicoControl });
+  overlayControl = crearOverlay({ alPanico: panicoControl, atajoPropio: false });
+  // FASE 9 · kill switch global: Ctrl+Alt+Esc SIEMPRE (si se graba una demo, solo la para). core/panico.js hace el resto.
+  try { globalShortcut.register('Control+Alt+Escape', () => (nucleo.demo?.grabando?.() ? panicoControl('Ctrl+Alt+Esc', { grabando: true }) : nucleo.panico.activar('Ctrl+Alt+Esc'))); } catch { }
+  const avisarPanico = () => { if (win && !win.isDestroyed()) win.webContents.send('panico', nucleo.panico.estado()); };
+  nucleo.bus.on('panico', e => {                                // deniega también los permisos de los hooks (Claude Code, Gemini CLI…)
+    for (const [id, p] of [...pending]) if (!p.nucleoId) decide(id, 'deny', 'pánico');
+    avisarPanico();
+    if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: `🛑 ${tr('PÁNICO')}`, texto: `${tr('Todo parado')} (${e.origen}). ${tr('Pulsa Reanudar en la isla o el panel.')}` });
+    movil.sendAviso(`🛑 **${tr('PÁNICO')}** (${e.origen}): ${tr('todo parado hasta reanudar.')}`, 'red');
+  });
+  nucleo.bus.on('panico-fin', avisarPanico);
+  ipcMain.on('panico', (_e, on) => (on ? nucleo.panico.activar('isla') : nucleo.panico.reanudar('isla')));
+  ipcMain.handle('panico-estado', () => nucleo.panico.estado());
   // FASE 3: grabando una demostración → borde rojo discontinuo + etiqueta "GRABANDO" (indicador SIEMPRE visible)
   nucleo.bus.on('evento', e => {
     if (e.tipo !== 'demo') return;
@@ -848,6 +864,7 @@ function buildTray() {
     { type: 'separator' },
     { label: `🤖 ${tr('Núcleo')}: ${tr('isla')} → ${(puente && puente.destino('isla')) || 'Claude Code'} · Discord → ${(puente && puente.destino('discord')) || 'Claude Code'}`, enabled: false },
     { label: `🖥️ ${tr('Abrir panel de control')}`, click: () => abrirPanel() },
+    nucleo?.panico?.activo() ? { label: `▶ ${tr('Reanudar (salir del pánico)')}`, click: () => nucleo.panico.reanudar('bandeja') } : { label: `🛑 ${tr('Pánico: parar todo')}  Ctrl+Alt+Esc`, click: () => nucleo?.panico?.activar('bandeja') },
     { label: `✨ ${tr('Asistente de bienvenida')}`, click: () => abrirPanel('/bienvenida') },
     { label: `💬 ${tr('Conectar ChatGPT (tu plan, sin API key)')}`, click: () => abrirPanel('/ajustes/modelos') },
     { label: `🧩 ${tr('Copiar token para la extensión del navegador')}`, click: () => { try { clipboard.writeText(fs.readFileSync(path.join(nucleo.cfg.dir, 'token'), 'utf8').trim()); } catch { } } },

@@ -4,6 +4,7 @@ const fs = require('fs');
 const { HERRAMIENTAS, porNombre } = require('./herramientas');
 const { vista } = require('./compactar');
 const { esCorreccion } = require('./skills/taller');
+const { redactar } = require('./seguridad');
 
 // cfg.idioma ('es'|'en'|…): idioma por defecto de las respuestas
 const IDIOMAS = { es: 'español', en: 'inglés (English)', pt: 'portugués', fr: 'francés', it: 'italiano', de: 'alemán', ca: 'catalán', gl: 'gallego', eu: 'euskera', nl: 'neerlandés', ru: 'ruso', zh: 'chino', ja: 'japonés', ko: 'coreano', ar: 'árabe' };
@@ -144,8 +145,11 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           if (!p.ok) return `DENEGADO: ${p.motivo}`;
           try {
             const out = await h.ejecutar(c.args || {}, { cwd: s.cwd, signal: ctl.signal, sesion: s, tareas: tareas(), memoria, personalidad, cfg, subagentes: subagentes?.(), control: control?.(), navegador: navegador?.(), skills, consejo: consejo?.(), turno: turnoNoche?.() });
-            return out && typeof out === 'object' ? { texto: String(out.texto || ''), imagenes: out.imagenes || [] } : String(out);   // {texto, imagenes} = resultado con capturas
-          } catch (e) { return `error: ${e.message}`; }
+            // FASE 9: las claves conocidas (bóveda, token del daemon) nunca vuelven al modelo aunque una herramienta las imprima
+            const r = out && typeof out === 'object' ? { texto: redactar(String(out.texto || ''), { patrones: false }), imagenes: out.imagenes || [] } : redactar(String(out), { patrones: false });   // {texto, imagenes} = resultado con capturas
+            permisos.resultado?.(p.auditId, !/^(error|DENEGADO)\b/.test(typeof r === 'string' ? r : r.texto), typeof r === 'string' ? r : r.texto);
+            return r;
+          } catch (e) { permisos.resultado?.(p.auditId, false, e.message); return `error: ${e.message}`; }
         };
         // los "delegar" de una misma respuesta arrancan a la vez (subagentes en paralelo); el resto va en orden
         const enParalelo = new Map(r.toolCalls.filter(c => c.name === 'delegar' && disponibles.has('delegar')).map(c => [c.id, correr(c)]));

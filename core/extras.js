@@ -2,6 +2,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { redactar } = require('./seguridad');
 
 // ---------- personalidad: archivos .md que entran en el system prompt ----------
 const PERSONALIDAD = {
@@ -57,7 +58,7 @@ function crearPersonalidad(cfg, bus) {
 function crearRegistro(bus) {
   const lineas = [];
   const add = (nivel, origen, texto) => {
-    const l = { t: Date.now(), nivel, origen, texto: String(texto).slice(0, 500) };
+    const l = { t: Date.now(), nivel, origen: redactar(String(origen)).slice(0, 120), texto: redactar(String(texto)).slice(0, 500) };   // FASE 9: sin secretos en los registros
     lineas.push(l); if (lineas.length > 1000) lineas.shift();
     bus.emit('registro', l);
   };
@@ -80,10 +81,10 @@ function crearHistorialPermisos(cfg, bus) {
   const f = path.join(cfg.dir, 'permisos_historial.jsonl');
   const pedidos = new Map();
   bus.on('permiso', r => pedidos.set(r.id, r));
-  bus.on('permiso-resuelto', ({ id, decision, motivo }) => {
+  bus.on('permiso-resuelto', ({ id, decision, motivo, quien }) => {
     const r = pedidos.get(id); pedidos.delete(id);
     if (!r) return;
-    fs.appendFileSync(f, JSON.stringify({ t: Date.now(), id, herramienta: r.herramienta, resumen: r.resumen, peligro: r.peligro, sesion: r.sesion, decision, motivo: motivo || '', espera: Date.now() - r.creado }) + '\n');
+    fs.appendFileSync(f, JSON.stringify({ t: Date.now(), id, herramienta: r.herramienta, resumen: redactar(String(r.resumen || '')), peligro: r.peligro, sesion: r.sesion, decision, quien: quien || '', motivo: motivo || '', espera: Date.now() - r.creado }) + '\n');
   });
   return {
     lista() {

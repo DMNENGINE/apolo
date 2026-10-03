@@ -6,8 +6,8 @@ const path = require('path');
 function configPublica(cfg) {
   const proveedores = {};
   for (const [k, p] of Object.entries(cfg.proveedores)) {
-    const { apiKey, ...resto } = p;
-    proveedores[k] = { ...resto, tieneKey: !!apiKey && apiKey !== 'ollama', keyDeEntorno: !!(p.env && process.env[p.env]) };
+    const { apiKey, apiKeyRef, ...resto } = p;
+    proveedores[k] = { ...resto, tieneKey: !!apiKey && apiKey !== 'ollama', keyDeEntorno: !!(p.env && process.env[p.env]), enBoveda: !!apiKeyRef };
   }
   return { herramientasOff: cfg.herramientasOff || [], modeloPorDefecto: cfg.modeloPorDefecto, alias: cfg.alias, permisos: cfg.permisos, maxPasos: cfg.maxPasos, puerto: cfg.puerto, carpeta: cfg.carpeta || '', proveedores, dir: cfg.dir,
     idioma: cfg.idioma || '', bienvenida: cfg.bienvenida === true };      // idioma '' = automático (el del sistema); bienvenida = asistente de primer arranque hecho
@@ -43,7 +43,16 @@ function guardarConfig(cfg, cambios) {
       const d = disco.proveedores[k] || (disco.proveedores[k] = {});
       if (!d.tipo) d.tipo = p.tipo;
       if (typeof v.baseUrl === 'string' && /^https?:\/\//.test(v.baseUrl)) p.baseUrl = d.baseUrl = v.baseUrl.trim().replace(/\/+$/, '');
-      if (typeof v.apiKey === 'string') p.apiKey = d.apiKey = v.apiKey.trim();     // '' = quitar la clave
+      if (typeof v.apiKey === 'string') {                     // FASE 9: a la bóveda (DPAPI); en config.json solo la referencia
+        const clave = v.apiKey.trim(); p.apiKey = clave;
+        if (cfg.boveda && clave && !p.local && !['ollama', 'lm-studio'].includes(clave)) {
+          try { cfg.boveda.guardar(`proveedor:${k}`, clave); d.apiKey = ''; d.apiKeyRef = p.apiKeyRef = `boveda:proveedor:${k}`; }
+          catch { d.apiKey = clave; }                              // sin bóveda: como antes
+        } else {
+          d.apiKey = clave;
+          if (!clave) { try { cfg.boveda?.borrar(`proveedor:${k}`); } catch { } delete d.apiKeyRef; delete p.apiKeyRef; }   // '' = quitar la clave
+        }
+      }
       if (typeof v.local === 'boolean') p.local = d.local = v.local;
     }
   }

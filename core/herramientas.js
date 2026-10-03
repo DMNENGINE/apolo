@@ -350,7 +350,7 @@ const HERRAMIENTAS = [
         '.ps1': [win ? 'powershell.exe' : 'pwsh', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', f, ...args]], '.sh': ['bash', [f, ...args]] }[ext];
       if (!cmd) return ok(`error: tipo de script no soportado (${ext || 'sin extensión'})`);
       const p = spawn(cmd[0], cmd[1], { cwd: s.dir, windowsHide: true,               // ELECTRON_RUN_AS_NODE: dentro de la app, execPath es Electron
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PYTHONIOENCODING: 'utf-8', SKILL_DIR: s.dir, APOLO_CWD: ctx.cwd || '' } });
+        env: require('./seguridad').envLimpio(process.env, { ELECTRON_RUN_AS_NODE: '1', PYTHONIOENCODING: 'utf-8', SKILL_DIR: s.dir, APOLO_CWD: ctx.cwd || '' }) });   // FASE 9: sin claves ni tokens del entorno
       let out = '';
       p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
       const t = setTimeout(() => { p.kill(); out += '\n[cancelado por tiempo]'; }, Math.min(a.timeoutSeg || 120, 600) * 1000);

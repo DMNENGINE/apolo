@@ -125,7 +125,7 @@ test('permiso peligroso desde el móvil: exige PIN (y bloquea tras 5 fallos) o p
   const m = await montar();
   try {
     const { tok } = await emparejar(m, '4321');
-    const cab = { 'x-dispositivo': tok, origin: ORIGEN };
+    const cab = { 'x-dispositivo': tok, origin: ORIGEN, host: new URL(ORIGEN).host };   // el móvil real: Host = Origin (FASE 9 exige mismo origen)
     // permiso normal: sin prueba
     const p1 = m.n.permisos.pedirExterno({ resumen: 'leer README', origen: 'test' });
     let l = (await m.pet('GET', '/v1/movil/permisos', { cab })).j.permisos;

@@ -123,7 +123,7 @@ function crearNodos({ nucleo }) {
   }
   // resolver uno del núcleo o uno externo (Claude Code); "via" = nombre del nodo
   function resolverP(p, decision, via) {
-    if (!p.externo) return permisos.resolver(p.id, decision, decision === 'deny' ? `denegado desde ${via}` : undefined);
+    if (!p.externo) return permisos.resolver(p.id, decision, decision === 'deny' ? `denegado desde ${via}` : undefined, `nodo:${via}`);
     try { return !!api.permisosExternos?.resolver?.(p.id, decision, via); } catch { return false; } finally { refrescar(); }
   }
 
@@ -194,6 +194,12 @@ function crearNodos({ nucleo }) {
   }
   // pánico (doble pulsación): deniega todo lo pendiente, suelta el control del PC y cancela los turnos en marcha
   function panico(origen) {
+    if (nucleo.panico?.activar) {                              // FASE 9: kill switch unificado (core/panico.js) — hace todo lo de abajo y más
+      for (const p of externos()) resolverP(p, 'deny', 'pánico');
+      nucleo.panico.activar(origen);
+      difundir({ tipo: 'flash', estado: 'error', msg: 'PANICO: TODO PARADO', segundos: 3 });
+      return true;
+    }
     for (const p of permisos.pendientes()) permisos.resolver(p.id, 'deny', 'pánico');
     for (const p of externos()) resolverP(p, 'deny', 'pánico');
     try { nucleo.control?.soltarTodo?.('pánico desde el ojo'); } catch { }
@@ -385,6 +391,9 @@ function crearNodos({ nucleo }) {
     srv.on('upgrade', (req, socket, head) => {
       const ip = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
       if (!ipPermitida(ip, opc())) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); reg('aviso', 'nodos', `conexión rechazada de ${ip}`); return; }
+      // FASE 9 (cross-site WebSocket hijacking): un ESP32 no manda Origin; una web cualquiera sí → solo el simulador local (file:// = "null" o localhost)
+      const og = String(req.headers.origin || '');
+      if (og && og !== 'null' && !/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(og)) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); reg('aviso', 'nodos', `conexión web rechazada (origen ${og.slice(0, 80)})`); return; }
       const sock = ws.aceptar(req, socket, head, { maxBytes: 1024 * 1024 });
       if (sock) alConectar(sock, ip);
     });
