@@ -194,3 +194,69 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 8. Fase 3 manos fase 3
 9. macOS/Linux + instaladores
 10. Fase 9 seguridad → **lanzamiento**
+
+---
+
+# PLAN v0.2 → v1.0 (2026-10-03)
+
+> Las 10 fases de arriba están cubiertas (v0.2.0). Ahora toca: **probar en real, lanzar, crecer la comunidad y llegar a v1.0** en Windows + macOS + Linux.
+
+## Etapa A — Cerrar v0.2 (esta semana)
+- [ ] WhatsApp y Discord como plugins (en curso) · sandbox de Windows para skills de terceros
+- [ ] Push + `git tag v0.2.0` → release automática con el `.exe`
+- [ ] **Pruebas reales pendientes** (contigo delante): manos en Bloc de notas + pánico · grabar demostración · OBS overlay + Twitch · Meet real + audio de Discord · móvil: QR, PIN, escritorio remoto · Slack/Matrix/Signal · plugin Telegram con flag · sueño de memoria con tu memoria real (con copia)
+- [ ] Arreglar lo que salga de esas pruebas → v0.2.1
+
+## Etapa B — Lanzamiento 🔥 (semana 2)
+- [ ] Grabar el vídeo (docs/lanzamiento/guion-video.md) + 15 shorts
+- [ ] Landing web (lanzamiento/web) en GitHub Pages con dominio, GIFs reales y botón de descarga
+- [ ] Discord de comunidad (servidor propio APOLO, no BOT CENTRAL) con canales de ayuda, skills y showcase
+- [ ] Beta cerrada 20–50 personas (makers + usuarios de OpenClaw) → formulario de feedback dentro de la app
+- [ ] Día D: Show HN, Product Hunt, Reddit (r/LocalLLaMA, r/selfhosted, r/ClaudeAI, r/3Dprinting), X, TikTok
+- [ ] Telemetría **opt-in** anónima + informe de errores (para saber qué falla en PCs ajenos)
+
+## Etapa C — Calidad de producto (semanas 2–4)
+- [ ] Tests E2E de la app Electron real (Playwright para Electron): arranque, isla, permisos, panel
+- [ ] Prueba de resistencia 24 h (fugas de memoria, CPU/GPU en reposo, reconexiones)
+- [ ] Textos del servidor traducidos (herramientas, errores, avisos) + portugués y francés
+- [ ] STT ligero y preciso (pendiente desde el principio): probar Moonshine / Parakeet / whisper.cpp turbo
+- [ ] Voz en tiempo real con interrupción (barge-in) en isla, ojo y móvil
+- [ ] Certificado de firma de código Windows (quita el aviso de SmartScreen)
+
+## Etapa D — macOS y Linux (semanas 3–6)
+- [ ] Capa so/: capturas (ScreenCaptureKit / X11-Wayland), manos (CGEvent / ydotool), TTS, notificaciones, grabación de audio
+- [ ] Builds .dmg firmado y notarizado + AppImage/deb; CI que los publique
+- [ ] Hooks de Claude Code/Gemini/Codex con rutas por SO
+
+## Etapa E — Ecosistema
+- [ ] Publicar `@apolo/sdk` en npm + plantillas `npm create apolo-plugin` / skill
+- [ ] **APOLO Hub**: web pública del marketplace con valoraciones, autores verificados (firma ed25519) y escaneo automático en CI de cada envío
+- [ ] Guía de contribución, issues "good first issue", programa de autores de skills
+- [ ] API pública documentada (OpenAPI) para integrar APOLO en otras apps
+
+## Etapa F — Ganchos virales que faltan
+- [ ] **Modo gemelo**: aprende cómo escribes y redacta como tú (siempre con aprobación)
+- [ ] **Logros** desbloqueables con gestos del robot + Wrapped mensual automático
+- [ ] **Skins y personajes**: el orbe mandala, el casco y los de la comunidad (voces, gestos, colores) en el Hub
+- [ ] **Desafío "APOLO hace mi día"** (formato para creadores) + compartir time-lapses en 1 clic
+- [ ] Llamadas de teléfono (Twilio/SIP): te llama si algo urgente pasa
+
+## Etapa G — El cuerpo 🔥🔥
+- [ ] Carcasa del ojo en Blender → STL para la Ender 3 V2 → montar el ojo real y probar firmware (pines, micro, SPI)
+- [ ] Casco físico con pantalla en el visor
+- [ ] **Mismo cerebro, cuerpo nuevo**: APOLO controla el simulador MuJoCo del humanoide y luego el robot real (proyecto robot-inmoov-propio)
+
+## Etapa H — Seguridad de verdad
+- [ ] Sandbox de Windows (esta semana) y equivalentes en mac/Linux
+- [ ] Pentest externo + bug bounty pequeño
+- [ ] SBOM y builds reproducibles; firma de releases
+- [ ] Comparativa con OpenClaw rellenada con su documentación pública
+
+## Etapa I — Inteligencia
+- [ ] **Benchmark público APOLO vs OpenClaw**: 30 tareas reales, mismos modelos, resultados en la web
+- [ ] Enrutador automático aprendido (qué modelo para qué, según tus resultados)
+- [ ] Memoria de procedimientos: skills que nacen solas de lo que repites
+- [ ] Multiusuario/familia: perfiles, permisos por persona
+
+## v1.0 = cuando
+Windows + macOS + Linux firmados · 0 fallos graves abiertos · 1.000 usuarios activos · 100 skills en el Hub · el ojo montado por la comunidad.
