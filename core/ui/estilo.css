@@ -1019,3 +1019,13 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .gm-conf input, .gm-conf select { margin: 6px 6px 0 0; max-width: 100%; }
 .gm-conf #gmCerrar { width: 420px; }
 .gm-avisos { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+/* Modo Gamer · Rendimiento (fase 2) */
+.gm-medir { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.gm-medir .gm-campo { margin-top: 0; }
+.gm-vivo { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 14px; border-radius: var(--radio); border: 1px solid color-mix(in srgb, var(--acento, #2bdc7c) 45%, var(--borde)); }
+.gm-vivo > div:first-child { display: flex; flex-direction: column; }
+.gm-vivo b { font-size: 46px; font-weight: 800; letter-spacing: -1px; line-height: 1.05; }
+.gm-vivo b em { font-size: 16px; font-style: normal; color: var(--txt-3); }
+.gm-vivo small { color: var(--txt-3); }
+.gm-error { color: var(--mal); margin: 10px 0 0; overflow-wrap: anywhere; }
+.gm-hist { border-bottom: 1px solid var(--borde); padding: 6px 0; }

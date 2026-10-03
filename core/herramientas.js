@@ -454,7 +454,7 @@ const HERRAMIENTAS = [
   },
 ];
 
-// ETAPA J: modo_gamer (ejecucion), gamer_revisar (lectura), gamer_limpiar (escritura) → core/gamer
+// ETAPA J: modo_gamer (ejecucion), gamer_revisar (lectura), gamer_limpiar (escritura), gamer_medir (ejecucion, PresentMon) → core/gamer
 HERRAMIENTAS.push(...require('./gamer').HERRAMIENTAS);
 
 const porNombre = Object.fromEntries(HERRAMIENTAS.map(h => [h.nombre, h]));

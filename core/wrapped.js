@@ -286,4 +286,4 @@ async function abrirCDP(navegador, ancho, alto) {
   return { cdp, evaluar, esperar, cerrar() { try { ws.close(); } catch { } try { nav.kill(); } catch { } setTimeout(() => { try { fs.rmSync(perfil, { recursive: true, force: true }); } catch { } }, 800).unref?.(); } };
 }
 
-module.exports = { crearWrapped, categoria, MINUTOS };
+module.exports = { crearWrapped, categoria, MINUTOS, abrirCDP };

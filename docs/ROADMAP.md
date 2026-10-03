@@ -280,9 +280,11 @@ Windows + macOS + Linux firmados · 0 fallos graves abiertos · 1.000 usuarios a
 - [ ] Arranque de Windows: lista de programas al inicio con impacto real y desactivar con 1 clic (reversible)
 
 **Medir de verdad** (el gancho viral: "APOLO me subió 23 fps y aquí está la prueba"):
-- [ ] FPS, 1 % low y frametimes con **PresentMon** (herramienta open source de Intel) + temperaturas/uso de CPU/GPU (LibreHardwareMonitor)
-- [ ] Benchmark antes/después del modo gamer en el mismo juego → tarjeta para compartir estilo Wrapped
-- [ ] Alerta de **thermal throttling** ("tu GPU está a 88 °C y está bajando reloj: limpia el polvo")
+- [x] FPS, 1 % low y frametimes con **PresentMon** (herramienta open source de Intel) + temperaturas/uso de CPU/GPU (nvidia-smi + contadores WMI sin admin; LibreHardwareMonitor descartado: necesita admin) — fase 2, core/gamer/presentmon.js + sensores.js
+- [x] Benchmark antes/después del modo gamer en el mismo juego → tarjeta para compartir estilo Wrapped (core/gamer/bench.js + core/ui/gamer-tarjeta.js)
+- [x] Alerta de **thermal throttling** ("tu GPU está a 88 °C y está bajando reloj: limpia el polvo")
+- [x] Auto-activación opcional al detectar un juego a pantalla completa (cfg.gamer.auto, apagada por defecto)
+- PresentMon usa ETW: necesita **admin** o estar en el grupo "Usuarios del registro de rendimiento" (SID S-1-5-32-559, una vez + cerrar sesión). Alternativa en el panel: "Medir como administrador" (UAC por captura)
 - [ ] Overlay propio opcional (FPS + temps) con el robot en una esquina
 
 **Extras para gamers**:

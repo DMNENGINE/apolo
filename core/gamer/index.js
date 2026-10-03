@@ -6,6 +6,9 @@ const fs = require('fs');
 const path = require('path');
 const { crearLimpieza } = require('./limpieza');
 const { crearRevision } = require('./revision');
+const { crearPresentMon } = require('./presentmon');
+const { crearSensores } = require('./sensores');
+const { crearRendimiento } = require('./bench');
 
 // procesos que NUNCA se pausan ni se tocan (sistema + el propio APOLO)
 const LISTA_NEGRA = new Set(['system', 'idle', 'registry', 'smss', 'csrss', 'wininit', 'winlogon', 'services', 'lsass', 'svchost', 'dwm', 'explorer', 'msmpeng',
@@ -17,12 +20,15 @@ const prohibido = (p, propios = []) => LISTA_NEGRA.has(norm(p.nombre)) || propio
 const MAXIMO = { guid: 'e9a42b02-d5df-448d-aa00-03f14749eb61', re: /ultimate performance|m.{1,2}ximo rendimiento/i };
 const ALTO = { guid: '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c', re: /high performance|alto rendimiento/i };
 const INSTANCIAS = new WeakMap();
+// auto-activación: lo que se pone a pantalla completa y NO es un juego (navegadores, vídeo, presentaciones, llamadas…)
+const NO_JUEGOS = new Set(['chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi', 'vlc', 'mpc-hc', 'mpc-hc64', 'mpv', 'wmplayer', 'video.ui', 'powerpnt', 'applicationframehost',
+  'zoom', 'teams', 'ms-teams', 'obs64', 'discord', 'spotify', 'netflix', 'mstsc', 'code', 'windowsterminal', 'photos', 'microsoft.photos']);
 const err = (m, status = 400) => Object.assign(new Error(m), { status });
 
-function crearGamer({ cfg, bus, permisos, so = require('../escritorio/so'), entorno, propios = [process.pid, process.ppid] } = {}) {
+function crearGamer({ cfg, bus, permisos, so = require('../escritorio/so'), entorno, propios = [process.pid, process.ppid], presentmon, sensores, retardoAutoMs = 10_000, rendimiento = {} } = {}) {
   const dir = path.join(cfg.dir, 'gamer');
   const fSes = path.join(dir, 'sesion.json'), fUlt = path.join(dir, 'ultima.json');
-  const conf = () => ({ cerrar: [], modo: 'suspender', acciones: {}, ...(cfg.gamer || {}) });
+  const conf = () => ({ cerrar: [], modo: 'suspender', acciones: {}, auto: false, presentmonAdmin: false, ...(cfg.gamer || {}) });
   const activa = nombre => conf().acciones[nombre] !== false;           // todas activas salvo que se apaguen en cfg.gamer.acciones
   const limpieza = crearLimpieza({ entorno });
   const revision = crearRevision({ so });
@@ -96,10 +102,10 @@ function crearGamer({ cfg, bus, permisos, so = require('../escritorio/so'), ento
   };
   const ORDEN = ['plan', 'noMolestar', 'pausar', 'prioridad', 'apolo'];
 
-  const activar = (juego = null) => enCola(async () => {
+  const activar = (juego = null, { auto = false } = {}) => enCola(async () => {
     if (sesion?.activo) return estado();
     juego = juego ? String(juego).slice(0, 120) : null;
-    sesion = { activo: true, juego, desde: new Date().toISOString(), cambios: [] };
+    sesion = { activo: true, juego, desde: new Date().toISOString(), cambios: [], ...(auto ? { auto: true } : {}) };
     guardar();
     for (const tipo of ORDEN) {
       if (!activa(tipo)) continue;
@@ -141,13 +147,15 @@ function crearGamer({ cfg, bus, permisos, so = require('../escritorio/so'), ento
     return desactivar({ motivo: 'restaurar tras cierre' });
   }
 
-  const estado = () => ({ activo: !!sesion?.activo, juego: sesion?.juego || null, desde: sesion?.desde || null, cambios: sesion?.cambios || [] });
+  const estado = () => ({ activo: !!sesion?.activo, juego: sesion?.juego || null, desde: sesion?.desde || null, cambios: sesion?.cambios || [], auto: !!sesion?.auto });
   const ultima = () => leer(fUlt);
 
   function configurar(b = {}) {                                     // cfg.gamer {cerrar[], modo, acciones{}} → config.json
     const g = { ...conf() };
     if (Array.isArray(b.cerrar)) g.cerrar = [...new Set(b.cerrar.map(x => String(x).trim()).filter(x => x && !LISTA_NEGRA.has(norm(x))))].slice(0, 50);
     if (b.modo === 'cerrar' || b.modo === 'suspender') g.modo = b.modo;
+    if (typeof b.auto === 'boolean') g.auto = b.auto;
+    if (typeof b.presentmonAdmin === 'boolean') g.presentmonAdmin = b.presentmonAdmin;
     if (b.acciones && typeof b.acciones === 'object') for (const k of ORDEN) if (typeof b.acciones[k] === 'boolean') g.acciones = { ...g.acciones, [k]: b.acciones[k] };
     cfg.gamer = g;
     const f = path.join(cfg.dir, 'config.json');
@@ -156,9 +164,58 @@ function crearGamer({ cfg, bus, permisos, so = require('../escritorio/so'), ento
     return g;
   }
 
+  // ---------- fase 2: medir de verdad (PresentMon + sensores) ----------
+  const pm = presentmon || crearPresentMon({ cfg });
+  const sens = sensores || crearSensores();
+  const rend = crearRendimiento({ cfg, gamer: { activar: j => activar(j), estado: () => estado() }, so, presentmon: pm, sensores: sens, prohibido: p => prohibido(p, propios), ...rendimiento });
+
+  // auto-activación (cfg.gamer.auto, apagada por defecto): juego a pantalla completa → activa; al salir (tras retardoAutoMs sin volver) → desactiva
+  // Solo deshace lo que activó ella misma (sesion.auto); si lo encendiste a mano, se queda.
+  let tSalida = null;
+  function autoPantalla(e) {
+    rend.fijarPantalla(e);
+    if (!e || !conf().auto) return;
+    if (e.completa) {
+      clearTimeout(tSalida); tSalida = null;
+      const p = norm(e.proceso);
+      if (!p || NO_JUEGOS.has(p) || LISTA_NEGRA.has(p) || sesion?.activo) return;
+      activar(e.proceso, { auto: true }).catch(() => { });
+    } else if (sesion?.activo && sesion.auto && !tSalida) {
+      tSalida = setTimeout(() => {
+        tSalida = null;
+        if (sesion?.activo && sesion.auto && !rend.ocupado()) desactivar({ motivo: 'auto: el juego salió de pantalla completa' }).catch(() => { });
+      }, retardoAutoMs);
+      tSalida.unref?.();
+    }
+  }
+  bus?.on?.('pantalla-completa', autoPantalla);
+
+  // POST que lanzan una medición larga: responde enseguida (el panel sigue /rendimiento); los errores de arranque (ocupado, sin PresentMon) sí se devuelven
+  async function lanzar(fn) {
+    const pr = fn(); pr.catch(() => { });
+    await Promise.race([pr, new Promise(ok => setImmediate(ok))]);
+    return { ok: true, vivo: rend.estadoVivo() };
+  }
+
   // API /v1/gamer (daemon → extensiones)
   async function http(M, p, b = {}, q = {}) {
     const sub = p[2] || '';
+    if (sub === 'rendimiento' && M === 'GET') return { presentmon: pm.buscar(), vivo: rend.estadoVivo(), historial: rend.historial(), config: { auto: conf().auto, presentmonAdmin: conf().presentmonAdmin } };
+    if (sub === 'sensores' && M === 'GET') return sens.leer();
+    if (sub === 'presentmon' && p[3] === 'release' && M === 'GET') return pm.release();
+    if (sub === 'presentmon' && p[3] === 'descargar' && M === 'POST') {
+      if (b.confirmar !== true) throw err('confirma la descarga (confirmar: true)');
+      return pm.descargar();
+    }
+    if (sub === 'medir' && M === 'POST') return lanzar(() => rend.medir({ segundos: b.segundos, juego: b.juego, admin: b.admin ?? conf().presentmonAdmin }));
+    if (sub === 'bench' && M === 'POST' && !p[3]) return lanzar(() => rend.benchmark({ segundos: b.segundos, juego: b.juego, admin: b.admin ?? conf().presentmonAdmin }));
+    if (sub === 'cancelar' && M === 'POST') return { cancelado: rend.cancelar() };
+    if (sub === 'bench' && M === 'GET' && !p[3]) return { historial: rend.historial(+q.n || 30) };
+    if (sub === 'bench' && p[3] && !p[4] && M === 'GET') return rend.leer(p[3]);
+    if (sub === 'bench' && p[3] && p[4] === 'png' && (M === 'GET' || M === 'POST')) {
+      const f = await rend.tarjeta(p[3], { idioma: b.idioma || q.idioma });
+      return { __archivo: f, nombre: path.basename(f) };
+    }
     if (!sub && M === 'GET') {
       const out = { estado: estado(), config: conf(), acciones: Object.fromEntries(ORDEN.map(k => [k, ACCIONES[k].titulo])), ultima: ultima() };
       if (q.revision !== '0') { try { out.revision = await revision.revisar(); } catch (e) { out.revision = { error: e.message }; } }
@@ -177,7 +234,7 @@ function crearGamer({ cfg, bus, permisos, so = require('../escritorio/so'), ento
     throw err('ruta', 404);
   }
 
-  const api = { activar, desactivar, restaurarPendiente, estado, ultima, configurar, http, revisar: () => revision.revisar(), limpieza, ACCIONES };
+  const api = { activar, desactivar, restaurarPendiente, estado, ultima, configurar, http, revisar: () => revision.revisar(), limpieza, ACCIONES, presentmon: pm, sensores: sens, rendimiento: rend, autoPantalla };
   INSTANCIAS.set(cfg, api);
   return api;
 }
@@ -230,6 +287,29 @@ const HERRAMIENTAS = [
       return `Liberados ${kb(r.liberados)} (${r.borrados} archivos; ${r.saltados} en uso se saltaron).`;
     },
   },
+  {
+    nombre: 'gamer_medir', riesgo: 'ejecucion',
+    descripcion: 'Mide el rendimiento REAL del juego con PresentMon durante N segundos: FPS medio, 1 % low, 0,1 % low, frametime medio/p99, % de tirones, ' +
+      'temperatura/uso/reloj de GPU (NVIDIA) y uso/frecuencia de CPU con aviso de thermal throttling. antesDespues=true hace el benchmark: mide sin Modo Gamer, ' +
+      'lo activa y mide otra vez (el Modo Gamer queda activo). juego = proceso (p. ej. "eurotrucks2.exe") o pid; si falta, el último juego a pantalla completa.',
+    parametros: { type: 'object', properties: { segundos: { type: 'number' }, juego: { type: 'string' }, antesDespues: { type: 'boolean' } } },
+    resumen: a => `${a.antesDespues ? 'antes/después' : 'medir'} ${a.segundos || 60} s${a.juego ? ` · ${a.juego}` : ''}`,
+    ejecutar: async (a, ctx) => {
+      const G = inst(ctx); if (!G) return 'error: el Modo Gamer no está disponible aquí';
+      const f = m => `${m.fps} FPS medio · 1 % low ${m.low1} · 0,1 % low ${m.low01} · frametime ${m.ftMedio} ms (p99 ${m.ftP99} ms) · tirones ${m.tirones} %` +
+        (m.sensores?.gpu ? ` · GPU ${m.sensores.gpu.tempMax} °C máx, ${m.sensores.gpu.usoMedio} % uso` : '') + (m.sensores?.cpu ? ` · CPU ${m.sensores.cpu.usoMedio} %` : '');
+      try {
+        if (a.antesDespues) {
+          const r = await G.rendimiento.benchmark({ segundos: a.segundos, juego: a.juego });
+          return [`Benchmark ${r.juego} (${r.segundos} s + ${r.segundos} s, PresentMon):`, `ANTES: ${f(r.antes)}`, `CON MODO GAMER: ${f(r.despues)}`,
+            `Diferencia: ${r.delta.fps >= 0 ? '+' : ''}${r.delta.fps} FPS (${r.delta.pct} %), 1 % low ${r.delta.low1 >= 0 ? '+' : ''}${r.delta.low1}`,
+            ...r.alertas.map(x => `⚠ ${x}`), `Tarjeta para compartir: GET /v1/gamer/bench/${r.id}/png`].join('\n');
+        }
+        const r = await G.rendimiento.medir({ segundos: a.segundos, juego: a.juego });
+        return [`${r.juego} (${r.segundos} s, PresentMon${r.gamerActivo ? ', Modo Gamer activo' : ''}): ${f(r.medida)}`, ...(r.medida.sensores?.alertas || []).map(x => `⚠ ${x}`)].join('\n');
+      } catch (e) { return `error: ${e.message}`; }
+    },
+  },
 ];
 
-module.exports = { crearGamer, HERRAMIENTAS, LISTA_NEGRA, prohibido, inst };
+module.exports = { crearGamer, HERRAMIENTAS, LISTA_NEGRA, NO_JUEGOS, prohibido, inst };
