@@ -192,7 +192,7 @@ test('nodos: una web no puede abrir el WebSocket del ojo (Origin ajeno)', async 
   const puerto = await nodos.iniciar(0); t.after(() => nodos.cerrar());
   const subir = origin => new Promise(ok => {
     const r = http.request({ host: '127.0.0.1', port: puerto, headers: { connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', ...(origin ? { origin } : {}) } });
-    r.on('upgrade', (res, sock) => { sock.destroy(); ok(101); }); r.on('response', res => ok(res.statusCode)); r.on('error', () => ok('cerrado')); r.end();
+    r.on('upgrade', (res, sock) => { sock.destroy(); ok(101); }); r.on('response', res => ok(res.statusCode)); r.on('error', () => ok('cerrado')); r.on('close', () => ok('cerrado')); r.end();   // en Linux/CI el corte llega sin 'error'
   });
   assert.notStrictEqual(await subir('https://evil.com'), 101);
   assert.strictEqual(await subir(null), 101, 'el ESP32 (sin Origin) sí');
