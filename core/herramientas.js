@@ -455,6 +455,9 @@ const HERRAMIENTAS = [
   },
 ];
 
+// ETAPA J: modo_gamer (ejecucion), gamer_revisar (lectura), gamer_limpiar (escritura) → core/gamer
+HERRAMIENTAS.push(...require('./gamer').HERRAMIENTAS);
+
 const porNombre = Object.fromEntries(HERRAMIENTAS.map(h => [h.nombre, h]));
 // herramientas de fuera del núcleo (conectores de la app: correo, GitHub…). h.disponible() = si se ofrecen al modelo ahora
 function registrar(lista) {

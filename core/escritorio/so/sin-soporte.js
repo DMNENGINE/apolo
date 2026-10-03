@@ -25,5 +25,8 @@ module.exports = function sinSoporte(plataforma, pendiente = 'docs/portabilidad.
     escribirEnTerminal: falla('Escribir en la terminal de una sesión'),
     abrirTerminal: () => { throw Object.assign(new Error(msg('Abrir una terminal nueva')), { codigo: 'SO_NO_SOPORTADO' }); },
     voz: { escuchar: falla('El reconocimiento de voz del sistema'), hablar: null },
+    // Modo Gamer (core/gamer): de momento solo Windows
+    ...Object.fromEntries(['gamerPlanes', 'gamerPonerPlan', 'gamerProcesos', 'gamerSuspender', 'gamerReanudar', 'gamerCerrar', 'gamerPrioridad', 'gamerPonerPrioridad',
+      'gamerLeerRegistro', 'gamerNoMolestar', 'gamerPonerNoMolestar', 'gamerMonitores', 'gamerInicio'].map(f => [f, falla(`El Modo Gamer (${f})`)])),
   };
 };
