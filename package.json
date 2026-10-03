@@ -87,7 +87,7 @@
         "provider": "github",
         "owner": "DMNENGINE",
         "repo": "apolo",
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ],
     "win": {

@@ -1,7 +1,12 @@
 name: Release
 
-# Al subir un tag v* (p. ej. v0.2.0, igual que "version" en package.json) construye el instalador
-# y lo publica en GitHub Releases junto con latest.yml (lo que lee electron-updater para avisar de la actualización).
+# Al subir un tag v* (p. ej. v0.2.0, igual que "version" en package.json):
+#   1) crear      → crea UNA release en borrador con las notas de CHANGELOG.md (si ya existe, la reutiliza)
+#   2) windows    → construye el instalador y electron-builder SUBE los archivos a ese borrador
+#                   (package.json build.publish.releaseType = "draft"); así nunca crea una segunda release
+#   3) mac-linux  → (opcional) igual, al mismo borrador
+#   4) publicar   → si windows salió bien, publica el borrador y lo marca como "latest"
+# Antes, electron-builder creaba la release mientras subía varios archivos a la vez y salían dos v0.2.0 (archivos repartidos).
 on:
   push:
     tags: ['v*']
@@ -9,8 +14,38 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
+  crear:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag == package.json version
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "El tag ${GITHUB_REF_NAME} no coincide con package.json ($v)"; exit 1; }
+      - name: Notas desde CHANGELOG.md
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" 'index($0, "## [" v "]") == 1 {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > notas.md
+          [ -s notas.md ] || echo "Versión ${v}." > notas.md
+          printf '\n---\n**Windows:** descarga `APOLO-Setup-%s.exe`. El instalador aún no está firmado: en SmartScreen pulsa *Más información → Ejecutar de todos modos*.\n\n🌐 https://dmnengine.github.io/apolo/\n' "$v" >> notas.md
+      - name: Release en borrador (una sola)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "La release ya existe: se reutiliza"
+            gh release edit "$GITHUB_REF_NAME" --notes-file notas.md
+          else
+            gh release create "$GITHUB_REF_NAME" --draft --title "${GITHUB_REF_NAME#v}" --notes-file notas.md --verify-tag
+          fi
+
   windows:
+    needs: crear
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,16 +53,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Tag == package.json version
-        shell: bash
-        run: |
-          v=$(node -p "require('./package.json').version")
-          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "El tag ${GITHUB_REF_NAME} no coincide con package.json ($v)"; exit 1; }
       - run: npm ci
       - name: Core tests
         working-directory: core
         run: npm test
-      - name: Build + publish (NSIS)
+      - name: Build + subir al borrador (NSIS)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Firma de código (opcional): secretos CSC_LINK (.pfx en base64) y CSC_KEY_PASSWORD.
@@ -39,6 +69,7 @@ jobs:
   # macOS (dmg) y Linux (AppImage) ya están configurados en package.json, pero el control del escritorio
   # aún es solo Windows (ver docs/portabilidad.md). Actívalos con la variable de repositorio APOLO_BUILD_MAC_LINUX=true.
   mac-linux:
+    needs: crear
     if: vars.APOLO_BUILD_MAC_LINUX == 'true'
     strategy:
       fail-fast: false
@@ -56,8 +87,26 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Build + publish
+      - name: Build + subir al borrador
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder ${{ matrix.target }} --publish always
+
+  publicar:
+    needs: [windows, mac-linux]
+    # mac-linux puede saltarse (variable apagada) o fallar: lo que manda es que Windows saliera bien
+    if: always() && needs.windows.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar archivos y publicar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          n=$(gh release list --limit 50 --json tagName -q "[.[] | select(.tagName==\"$GITHUB_REF_NAME\")] | length")
+          [ "$n" = "1" ] || { echo "Hay $n releases con el tag $GITHUB_REF_NAME: revisa antes de publicar"; exit 1; }
+          assets=$(gh release view "$GITHUB_REF_NAME" --json assets -q '[.assets[].name] | join(" ")')
+          echo "Archivos: $assets"
+          for a in latest.yml ".exe" ".exe.blockmap"; do echo "$assets" | grep -q -- "$a" || { echo "Falta $a en la release"; exit 1; }; done
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
