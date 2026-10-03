@@ -7,17 +7,18 @@ on:
 
 jobs:
   core:
-    name: Core tests (${{ matrix.os }})
+    name: Core tests (${{ matrix.os }}, Node ${{ matrix.node }})
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
+        node: [20, 22]   # 20 = el Node de Electron 33 (la app real); 22 = el de las releases
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
       # el núcleo no tiene dependencias: no hace falta npm install.
       # Los tests que necesitan Windows (DPAPI, tar.exe, PowerShell) se saltan solos en Linux con { skip: '…' }.
       - name: Core tests
