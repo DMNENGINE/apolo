@@ -21,6 +21,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const esPeligroso = require('./shared/peligro.js');
+const { decidirDiscord, whatsappComoPlugin: waComoPlugin } = require('./shared/canales-flags');
 const { createDiscord } = require('./bot-discord.js');
 const { createTalk } = require('./hablar.js');
 let talk = null;
@@ -59,14 +60,15 @@ let discord = { enabled: false, status: 'sin configurar', sendPerm() { }, resolv
 let telegram = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, iniciar() { }, detener() { },
   estado: () => ({ configurado: false, estado: 'arrancando', bot: null, enlazado: false, usuario: '', enlace: null }) };
 let whatsapp = { enabled: false, status: 'sin vincular', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { } };
-// canales de plugins del SDK (Slack, Matrix, Signal…); telegram queda fuera porque tiene su adaptador propio
+// canales de plugins del SDK (Slack, Matrix, Signal…); telegram, whatsapp y discord quedan fuera: tienen su adaptador propio
+const CON_ADAPTADOR = ['telegram', 'whatsapp', 'discord'];
 const canalesPlugin = {
   P: () => (typeof nucleo !== 'undefined' && nucleo && nucleo.plugins) || null,
   err: e => console.error('[plugins] canal:', e.message),
-  sendAviso(t) { const P = this.P(); if (P) P.difundir(t, { excluir: 'telegram' }).catch(this.err); },
-  sendPerm(p) { const P = this.P(); if (P) P.mostrarPermiso(p, { excluir: 'telegram' }).catch(this.err); },
+  sendAviso(t) { const P = this.P(); if (P) P.difundir(t, { excluir: CON_ADAPTADOR }).catch(this.err); },
+  sendPerm(p) { const P = this.P(); if (P) P.mostrarPermiso(p, { excluir: CON_ADAPTADOR }).catch(this.err); },
   resolvePerm(id, b, via) { const P = this.P(); if (P) P.permisoResuelto(id, b, via); },
-  sendCard(c) { const P = this.P(); if (P) P.mostrarTarjeta(c, { excluir: 'telegram' }).catch(this.err); },
+  sendCard(c) { const P = this.P(); if (P) P.mostrarTarjeta(c, { excluir: CON_ADAPTADOR }).catch(this.err); },
   reply(md) { this.sendAviso(md); },
 };
 // al móvil: Discord, Telegram, WhatsApp y los canales plugin a la vez (cada uno ignora lo suyo si no está configurado)
@@ -645,8 +647,8 @@ async function telegramComoPlugin() {
   const P = nucleo.plugins, alm = conectores.almacen;
   P.ponerSecretos({ leer: n => alm.secreto(n) || '', guardar: (n, v) => alm.guardarSecreto(n, v),
     permitir: ({ plugin, nombre, origen }) => plugin === 'telegram' && nombre === 'tg:token' && esNuestroTg(origen) });   // el de la app, sin preguntar
-  P.mediar({ resolverPermiso: (id, b, via) => decide(id, b, via), accionTarjeta: (id, a) => cardAction(id, a), transcribir: ruta => transcribirArchivo(ruta),
-    recibir: ({ plugin, texto }) => (plugin === 'telegram' ? handleText(texto, 'telegram') : undefined) });
+  P.mediar({ resolverPermiso: (id, b, via) => decide(id, b, via), accionTarjeta: (id, a, t) => cardAction(id, a, t), transcribir: ruta => transcribirArchivo(ruta),
+    recibir: ({ plugin, texto }) => (CON_ADAPTADOR.includes(plugin) ? handleText(texto, plugin) : undefined), ajeno: ajenoPlugin });
   // el enlace de telegram.js (chat, bot) pasa al plugin la 1.ª vez por su config (solo en memoria)
   const viejo = alm.config().telegram || {};
   nucleo.cfg.plugins = nucleo.cfg.plugins || {};
@@ -669,6 +671,100 @@ async function apagarPluginTelegram() {
   const P = nucleo.plugins; await esperarPlugin(P, 'telegram');
   const ya = P.lista().find(x => x.nombre === 'telegram');
   if (ya && ya.activo) { console.log('[telegram] desactivo el plugin telegram (cfg.plugins.telegramComoPlugin está apagado)'); await P.activar('telegram', false); }
+}
+
+// ---------- WhatsApp y Discord como plugins del SDK (cfg.plugins.whatsappComoPlugin / discordComoPlugin, false por defecto) ----------
+// Mismo patrón que Telegram: instalar/actualizar desde plugins/<n>, activar, y un adaptador con la interfaz de whatsapp.js /
+// bot-discord.js para movil y responderA. Si el plugin falla o se rompe → whatsapp.js. Discord: NUNCA con el modo Pi ni el bot local.
+const DIR_PLUGIN = n => fuera(path.join(__dirname, 'plugins', n));
+const esNuestro = (n, o) => !!o && o.tipo === 'local' && path.resolve(String(o.fuente || '')).toLowerCase() === path.resolve(DIR_PLUGIN(n)).toLowerCase();
+async function activarNuestro(n) {
+  const P = nucleo.plugins;
+  await esperarPlugin(P, n);
+  const version = JSON.parse(fs.readFileSync(path.join(DIR_PLUGIN(n), 'apolo-plugin.json'), 'utf8')).version;
+  const ya = P.lista().find(x => x.nombre === n);
+  if (!ya || (esNuestro(n, ya.origen) && ya.version !== version)) await P.instalar(DIR_PLUGIN(n), { reemplazar: true });
+  if (P.activo(n)) await P.recargar(n); else await P.activar(n, true);
+  if (!P.activo(n)) throw new Error('no arrancó');
+}
+async function apagarPlugin(n) {
+  const P = nucleo.plugins; await esperarPlugin(P, n);
+  const ya = P.lista().find(x => x.nombre === n);
+  if (ya && ya.activo) { console.log(`[${n}] desactivo el plugin ${n} (su flag está apagado)`); await P.activar(n, false); }
+}
+// lo común de los canales con adaptador: estado por el bus y envío por el gestor SOLO a ese plugin
+function adaptadorCanal(n) {
+  const P = nucleo.plugins, err = e => console.error(`[${n}] plugin:`, e.message);
+  let estado = 'conectando';
+  nucleo.bus.on('evento', e => { if (e && e.tipo === 'plugins' && e.nombre === n && e.accion === 'canal') { estado = e.detalle || e.estado; console.log(`[${n}]`, estado); } });
+  return {
+    plugin: true, acc: (a, d) => P.accionCanal(n, n, a, d),
+    get enabled() { return P.activo(n) && estado === 'conectado'; }, get status() { return P.activo(n) ? estado : 'plugin parado'; },
+    sendPerm: p => { P.mostrarPermiso(p, { plugin: n }).catch(err); },
+    resolvePerm: (id, b, via) => P.permisoResuelto(id, b, via),
+    sendCard: c => { P.mostrarTarjeta(c, { plugin: n }).catch(err); },
+    sendAviso: t => P.enviarCanal(n, n, t).catch(err),
+    reply: md => P.enviarCanal(n, n, md).catch(err),
+    replyTo() { return false; }, stop() { },
+  };
+}
+const DIR_WA_APP = () => path.join(app.getPath('userData'), 'whatsapp-auth');
+const DIR_WA_PLUGIN = () => path.join(nucleo.cfg.dir, 'plugins-datos', 'whatsapp', 'auth');
+function usarWhatsappJs() {
+  whatsapp = crearWhatsapp({ dir: DIR_WA_APP(), decide: (id, b, via) => decide(id, b, via), cardAction: (id, a, t) => cardAction(id, a, t),
+    onTalk: t => handleText(t, 'whatsapp'), transcribir: transcribirArchivo, onAjeno: a => mensajeWhatsapp(a).catch(e => console.error('[whatsapp]', e.message)), onEstado: e => console.log('[whatsapp]', e) });
+  whatsapp.arrancar();
+}
+function adaptadorWhatsappPlugin() {
+  const b = adaptadorCanal('whatsapp');
+  let conf = null;
+  b.acc('config').then(c => { conf = c; }).catch(() => { });
+  return Object.assign(b, {
+    arrancar() { },
+    config: () => conf || { modo: 'apagado', grupos: false, ignorar: [], auto: { contactos: [], instrucciones: '', maxHora: 3 } },
+    ponerConfig: async c => (conf = await b.acc('ponerConfig', c)),
+    // "usar la sesión actual": hay sesión de whatsapp.js y el plugin todavía no está vinculado
+    estado: async () => { const r = await b.acc('estado'); r.sesionApp = !r.vinculado && fs.existsSync(path.join(DIR_WA_APP(), 'creds.json')); return r; },
+    vincular: () => b.acc('vincular'), desvincular: () => b.acc('desvincular'),
+    prueba: () => b.acc('prueba'),
+    enviarA: (jid, texto, o = {}) => b.acc('enviarA', { jid, texto, automatico: !!o.automatico }),
+  });
+}
+async function whatsappComoPlugin() {
+  // la config de "mensajes que te llegan" (whatsapp.json) pasa al plugin la 1.ª vez (solo en memoria)
+  let conf = {}; try { conf = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'whatsapp.json'), 'utf8')); } catch { }
+  nucleo.cfg.plugins = nucleo.cfg.plugins || {};
+  if (!nucleo.cfg.plugins.whatsapp) nucleo.cfg.plugins.whatsapp = { conf };
+  await activarNuestro('whatsapp');
+  whatsapp = adaptadorWhatsappPlugin();
+  console.log('[whatsapp] usando el plugin del SDK (plugins/whatsapp)');
+  nucleo.bus.on('evento', e => {
+    if (!e || e.tipo !== 'plugins' || e.nombre !== 'whatsapp' || !['roto', 'desactivado', 'borrado'].includes(e.accion) || !whatsapp.plugin) return;
+    console.error(`[whatsapp] el plugin quedó ${e.accion} → vuelvo a whatsapp.js`); usarWhatsappJs();
+  });
+}
+// copia la sesión de whatsapp.js al almacén del plugin (solo con confirmación del panel; la original no se toca)
+async function migrarSesionWhatsapp(b = {}) {
+  if (!whatsapp.plugin) { const e = new Error('WhatsApp no está en modo plugin'); e.status = 409; throw e; }
+  if (b.confirmar !== true) { const e = new Error('falta confirmar'); e.status = 400; throw e; }
+  if (!fs.existsSync(path.join(DIR_WA_APP(), 'creds.json'))) { const e = new Error('no hay sesión de WhatsApp en la app'); e.status = 404; throw e; }
+  await whatsapp.acc('parar');
+  fs.rmSync(DIR_WA_PLUGIN(), { recursive: true, force: true });
+  fs.cpSync(DIR_WA_APP(), DIR_WA_PLUGIN(), { recursive: true });
+  console.log('[whatsapp] sesión de la app copiada al plugin');
+  return whatsapp.acc('vincular');
+}
+// mensajes de OTRAS personas que llegan por el plugin de WhatsApp → modo avisar/auto de siempre (la app decide)
+function ajenoPlugin({ plugin, datos }) {
+  if (plugin !== 'whatsapp' || !datos || !datos.jid) return;
+  const a = { jid: String(datos.jid), nombre: String(datos.nombre || ''), numero: String(datos.numero || ''), texto: String(datos.texto || '').slice(0, 4000), grupo: !!datos.grupo,
+    historial: Array.isArray(datos.historial) ? datos.historial.slice(-8).map(h => ({ de: String(h.de || ''), texto: String(h.texto || '').slice(0, 500), t: +h.t || 0 })) : [], auto: !!datos.auto };
+  mensajeWhatsapp(a).catch(e => console.error('[whatsapp]', e.message));
+}
+async function discordComoPlugin() {
+  await activarNuestro('discord');
+  discord = adaptadorCanal('discord');
+  console.log('[discord] usando el plugin del SDK (plugins/discord)');
 }
 
 // panel web del núcleo: el token va en el #hash (no viaja al servidor) y el panel lo guarda y lo borra de la URL
@@ -986,9 +1082,27 @@ function discordRemoto() {
   nucleo.bus.on('remoto-conexion', e => console.log('[discord] Pi', e.conectados ? 'conectada' : 'desconectada'));
   return api;
 }
+let discordVigilado = false;
 function startDiscord() {
   try { discord.stop(); } catch { }
   let dcfg = {}; try { dcfg = JSON.parse(fs.readFileSync(DISCORD_CFG(), 'utf8')); } catch { }
+  const dec = decidirDiscord(nucleo && nucleo.cfg.plugins, dcfg);
+  if (nucleo) {                                                // el plugin lee config.bloqueado y el panel lo enseña
+    nucleo.cfg.plugins = nucleo.cfg.plugins || {};
+    nucleo.cfg.plugins.discord = { ...(nucleo.cfg.plugins.discord || {}), bloqueado: dec.bloqueado };
+    if (dec.aviso) console.warn('[discord]', dec.aviso);
+    if (!discordVigilado) {                                    // activado a mano desde el panel sin poder: se vuelve a apagar
+      discordVigilado = true;
+      nucleo.bus.on('evento', e => {
+        if (!e || e.tipo !== 'plugins' || e.nombre !== 'discord' || e.accion !== 'activado') return;
+        let d = {}; try { d = JSON.parse(fs.readFileSync(DISCORD_CFG(), 'utf8')); } catch { }
+        const x = decidirDiscord(nucleo.cfg.plugins, d);
+        if (!x.plugin) { console.warn('[discord] el plugin no puede correr a la vez que', x.actual === 'pi' ? 'el modo Pi' : x.actual === 'local' ? 'el bot local' : 'sin su flag'); nucleo.plugins.activar('discord', false).catch(() => { }); }
+      });
+    }
+    if (dec.plugin) { discordComoPlugin().catch(e => console.error('[discord] el plugin no arrancó:', e.message)); return; }
+    apagarPlugin('discord').catch(e => console.error('[discord]', e.message));
+  }
   if (dcfg.modo === 'pi' && nucleo) { discord = discordRemoto(); console.log('[discord] modo Pi: el bot corre en la Raspberry'); return; }
   discord = createDiscord(DISCORD_CFG(), {
     decide: (id, b, via) => decide(id, b, via),
@@ -1070,13 +1184,14 @@ app.whenReady().then(() => {
       const e = new Error('ruta'); e.status = 404; throw e;
     } };
     // la app media SIEMPRE los canales plugin: así los permisos de Claude Code (hooks) y los del núcleo les llegan con el id de la app
-    nucleo.plugins.mediar({ resolverPermiso: (id, b, via) => decide(id, b, via), accionTarjeta: (id, a) => cardAction(id, a), transcribir: ruta => transcribirArchivo(ruta),
-      recibir: ({ plugin, texto }) => (plugin === 'telegram' ? handleText(texto, 'telegram') : undefined) });
+    nucleo.plugins.mediar({ resolverPermiso: (id, b, via) => decide(id, b, via), accionTarjeta: (id, a, t) => cardAction(id, a, t), transcribir: ruta => transcribirArchivo(ruta),
+      recibir: ({ plugin, texto }) => (CON_ADAPTADOR.includes(plugin) ? handleText(texto, plugin) : undefined), ajeno: ajenoPlugin });
     if (nucleo.cfg.plugins && nucleo.cfg.plugins.telegramComoPlugin) telegramComoPlugin().catch(e => { console.error('[telegram] el plugin no arrancó:', e.message, '→ telegram.js'); usarTelegramJs(); });
     else { usarTelegramJs(); apagarPluginTelegram().catch(e => console.error('[telegram]', e.message)); }
-    whatsapp = crearWhatsapp({ dir: path.join(app.getPath('userData'), 'whatsapp-auth'), decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
-      onTalk: t => handleText(t, 'whatsapp'), transcribir: transcribirArchivo, onAjeno: a => mensajeWhatsapp(a).catch(e => console.error('[whatsapp]', e.message)), onEstado: e => console.log('[whatsapp]', e) });
+    if (waComoPlugin(nucleo.cfg.plugins)) whatsappComoPlugin().catch(e => { console.error('[whatsapp] el plugin no arrancó:', e.message, '→ whatsapp.js'); usarWhatsappJs(); });
+    else { usarWhatsappJs(); apagarPlugin('whatsapp').catch(e => console.error('[whatsapp]', e.message)); }
     nucleo.extensiones.whatsapp = { http: async (M, p, b) => {
+      if (M === 'POST' && p[2] === 'migrar') return migrarSesionWhatsapp(b);
       if (M === 'GET' && p[2] === 'config') return whatsapp.config();
       if (M === 'PATCH' && p[2] === 'config') return whatsapp.ponerConfig(b);
       if (M === 'GET') return whatsapp.estado();
@@ -1085,7 +1200,6 @@ app.whenReady().then(() => {
       if (M === 'DELETE') return whatsapp.desvincular();
       const e = new Error('ruta'); e.status = 404; throw e;
     } };
-    whatsapp.arrancar();
   } catch (e) { console.error('[conectores]', e.message); }
   cerebro = createCerebro({
     nucleo,

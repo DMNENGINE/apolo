@@ -212,7 +212,14 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
         if (!['enviar', 'descartar', 'ruido', 'urgente', 'normal'].includes(acc)) throw new Error('acción de tarjeta no válida');
         if (typeof anfitrion.accionTarjeta !== 'function') throw new Error('no hay tarjetas en este equipo');
         if (['enviar', 'descartar', 'ruido'].includes(acc)) r.reg.tarjetasVistas.delete(String(a.tarjeta));
-        return String(await anfitrion.accionTarjeta(v.id, acc) || '');
+        return String(await anfitrion.accionTarjeta(v.id, acc, a.texto ? String(a.texto).slice(0, 4000) : undefined) || '');
+      }
+      case 'canal.ajeno': {                                           // mensaje de OTRA persona (WhatsApp…): solo a la app, nunca al bus
+        if (!r.reg.canales.has(a.id)) throw new Error(`canal "${a.id}" no registrado`);
+        if (!await exigir(nombre, 'conversaciones', 'pasar a la app mensajes de otras personas')) throw denegado('conversaciones');
+        if (typeof anfitrion.ajeno !== 'function') return false;
+        await anfitrion.ajeno({ plugin: nombre, canal: a.id, datos: sinFunciones(a.datos || {}) });
+        return true;
       }
       case 'canal.transcribir': {                                     // nota de voz descargada en SU almacén → Whisper de la app
         if (!r.reg.canales.has(a.id)) throw new Error(`canal "${a.id}" no registrado`);
@@ -344,7 +351,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   const canalesCon = (prop, filtro = {}) => {
     const out = [];
     for (const [nombre, r] of vivos) {
-      if (r.estado !== 'activo' || (filtro.plugin && filtro.plugin !== nombre) || (filtro.excluir && filtro.excluir === nombre)) continue;
+      if (r.estado !== 'activo' || (filtro.plugin && filtro.plugin !== nombre) || (filtro.excluir && [].concat(filtro.excluir).includes(nombre))) continue;
       for (const c of r.reg.canales.values()) if ((!prop || c[prop]) && (!filtro.canal || filtro.canal === c.id)) out.push({ nombre, r, c });
     }
     return out;

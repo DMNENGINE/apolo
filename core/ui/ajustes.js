@@ -115,6 +115,10 @@ VISTAS['ajustes/canales'] = {
       const b = e.target.closest('button[data-wa]'); if (!b) return;
       const a = b.dataset.wa; let r;
       if (a === 'vincular') { b.disabled = true; b.textContent = tr('Preparando…'); r = await api('POST', '/whatsapp/vincular').catch(er => ({ error: er.message })); if (r.error) return aviso(r.error, true); this.waEsperar(r); }
+      if (a === 'migrar') {
+        if (!await modal({ titulo: tr('Usar la sesión actual'), cuerpo: tr('Se copia la sesión de WhatsApp que ya tiene la app al almacén del plugin (la original no se borra). No hace falta volver a escanear el QR. Si luego vuelves a la versión de la app, puede que tengas que vincular de nuevo.'), botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Copiar y usar', cls: 'pri', valor: true }] })) return;
+        b.disabled = true; r = await api('POST', '/whatsapp/migrar', { confirmar: true }).catch(er => ({ error: er.message })); if (r.error) return aviso(r.error, true); this.waEsperar(r);
+      }
       if (a === 'prueba') { await api('POST', '/whatsapp/prueba'); return aviso('Mensaje de prueba enviado a tu chat'); }
       if (a === 'quitar') { if (!await modal({ titulo: 'Desvincular WhatsApp', cuerpo: tr('Se cierra la sesión de APOLO en tu WhatsApp (como cerrar WhatsApp Web).'), botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Desvincular', cls: 'mal', valor: true }] })) return; r = await api('DELETE', '/whatsapp'); }
       if (r) { $('#waCaja').innerHTML = this.waHtml(r); this.waAjustes(); }
@@ -147,7 +151,7 @@ VISTAS['ajustes/canales'] = {
     return `<div style="padding:14px 16px;line-height:1.6">${tr('Háblale al robot desde WhatsApp y recibe permisos y avisos. Se vincula como <b>WhatsApp Web</b> escaneando un QR.')}<br>
       <span class="mal-txt">${tr('⚠️ No es la API oficial de WhatsApp: va contra sus términos y existe un riesgo (bajo) de que bloqueen el número.')}</span> ${tr('Te recomendamos <b>un número secundario</b>.')}<br>
       <span class="tenue">${tr('Privacidad: APOLO solo lee y escribe en tu chat contigo mismo; nunca toca tus otras conversaciones.')}</span></div>
-      ${fila('Estado', esc(tr(w.estado)), `<button class="btn pri" data-wa="vincular">${tr('Vincular con QR')}</button>`)}`;
+      ${fila('Estado', esc(tr(w.estado)) + (w.plugin ? ' <span class="tenue">· ' + tr('plugin') + '</span>' : ''), `${w.sesionApp ? `<button class="btn" data-wa="migrar">${tr('Usar la sesión actual')}</button>` : ''}<button class="btn pri" data-wa="vincular">${tr(w.sesionApp ? 'Vincular de nuevo' : 'Vincular con QR')}</button>`)}`;
   },
   // "Mensajes que te llegan": apagado / avisar y sugerir respuesta / responder solo
   async waAjustes() {

@@ -109,7 +109,9 @@ export interface CanalRegistrado {
   /** resolver un permiso que se mostró en ESTE canal (cualquier otro se rechaza) */
   decidir(permiso: string, decision: 'allow' | 'always' | 'deny'): Promise<boolean>;
   /** acción sobre una tarjeta mostrada en este canal: enviar | descartar | ruido | urgente | normal */
-  tarjeta(tarjeta: string, accion: string): Promise<string>;
+  tarjeta(tarjeta: string, accion: string, texto?: string): Promise<string>;
+  /** Mensaje de otra persona → solo a la app (permiso "conversaciones"); la app decide si responder. */
+  ajeno(datos: Record<string, unknown>): Promise<boolean>;
   /** audio guardado dentro de apolo.almacen.ruta → texto (Whisper de la app) */
   transcribir(ruta: string): Promise<{ texto: string; error: string }>;
 }

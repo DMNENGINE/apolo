@@ -1,0 +1,16 @@
+{
+  "nombre": "discord",
+  "version": "1.0.0",
+  "descripcion": "Bot de Discord propio (sin Raspberry Pi): mensajes directos contigo, permisos con botones (los peligrosos piden un segundo paso), tarjetas, avisos y notas de voz. Opcional: categoría privada en tu servidor.",
+  "autor": "DMN / APOLO",
+  "licencia": "MIT",
+  "entrada": "index.js",
+  "apoloSdk": "^1.0.0",
+  "permisos": ["red:discord.com", "red:gateway.discord.gg", "red:*.discord.gg", "red:cdn.discordapp.com", "red:media.discordapp.net", "conversaciones"],
+  "secretos": ["discord:token"],
+  "aporta": {
+    "canales": [
+      { "nombre": "discord", "permisos": true, "descripcion": "Tu bot de Discord (DMs contigo)" }
+    ]
+  }
+}

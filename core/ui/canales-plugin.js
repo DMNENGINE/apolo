@@ -1,4 +1,5 @@
-// Configuración → Canales: tarjetas de los canales que son plugins del SDK (Slack, Matrix, Signal). Globales CP_.
+// Configuración → Canales: tarjetas de los canales que son plugins del SDK (Slack, Matrix, Signal, y WhatsApp/Discord con su flag).
+// WhatsApp y Discord tienen implementación propia en la app: el flag cfg.plugins.<x>ComoPlugin elige (se aplica al reiniciar). Globales CP_.
 // Flujo: instalar (del repo) → activar → configurar → vincular → probar. Los secretos (tokens, contraseña) se escriben en
 // campos de contraseña, viajan una sola vez al plugin (POST /v1/plugins/:n/canales/:id/conectar) y él los guarda cifrados;
 // el panel NUNCA los recibe de vuelta: solo ve "configurado".
@@ -34,23 +35,49 @@ const CP_DEF = {
     ],
     pasos: 'Instala signal-cli, registra un número para el robot y arráncalo con <code>signal-cli -a +NUM daemon --http 127.0.0.1:8080</code>.',
   },
+  whatsapp: {
+    titulo: 'WhatsApp', doc: 'docs/plugins.md', flag: 'whatsappComoPlugin', soloFlag: true,
+    intro: 'Usa WhatsApp como <b>plugin aislado</b> (su propio proceso, solo los dominios de WhatsApp, la sesión en su almacén). Hace lo mismo que el WhatsApp de la app; la vinculación (QR o «usar la sesión actual») sigue en la tarjeta <b>WhatsApp</b> de arriba.',
+  },
+  discord: {
+    titulo: 'Discord', doc: 'docs/canales/discord.md', flag: 'discordComoPlugin',
+    intro: 'Tu propio bot de Discord <b>sin Raspberry Pi</b>: te habla por mensaje directo (y, si quieres, en una categoría privada de tu servidor). Nunca corre a la vez que el bot de la Pi o el de la app.',
+    campos: [
+      { id: 'token', txt: 'Token del bot', secreto: true, ph: 'MTA…' },
+      { id: 'dueno', txt: 'Tu id de usuario (opcional)', ph: '746608470056370267' },
+      { id: 'servidor', txt: 'Id de tu servidor para la categoría (opcional)', ph: '' },
+    ],
+    pasos: 'discord.com/developers → New Application → Bot → Reset Token. Si dejas vacío tu id, se usa el dueño de la app o un código por DM. Guía en <code>docs/canales/discord.md</code>.',
+  },
 };
 const CP_editando = {};
 
 async function CP_pintar(caja) {
   if (!caja) return;
   const pl = await api('GET', '/plugins').catch(() => ({ plugins: [] }));
+  CP_cfg = await api('GET', '/config').catch(() => ({}));
   const nombres = Object.keys(CP_DEF);
   const estados = await Promise.all(nombres.map(async n => {
     const p = (pl.plugins || []).find(x => x.nombre === n);
     const e = p && p.activo && p.estado === 'activo' ? await api('POST', `/plugins/${n}/canales/${n}/estado`, {}).catch(er => ({ error: er.message })) : null;
     return { n, p, e };
   }));
-  caja.innerHTML = estados.map(({ n, p, e }) => `<div class="seccion" id="canal-${n}">${CP_DEF[n].titulo} <span class="tenue" style="font-size:11px">· ${tr('plugin')}</span></div>
-    <div class="caja" data-cp="${n}">${CP_html(n, p, e)}</div>`).join('');
+  caja.innerHTML = estados.map(({ n, p, e }) => `<div class="seccion" id="canal-${CP_DEF[n].flag ? n + '-plugin' : n}">${CP_DEF[n].titulo} <span class="tenue" style="font-size:11px">· ${tr('plugin')}</span></div>
+    <div class="caja" data-cp="${n}">${CP_flag(n, p) + CP_html(n, p, e)}</div>`).join('');
   caja.onclick = e => { const b = e.target.closest('button[data-cpa]'); if (b) CP_accion(caja, b.closest('[data-cp]').dataset.cp, b.dataset.cpa, b); };
   const ancla = (location.hash.match(/^#\/ajustes\/canales\/(\w+)/) || [])[1];
   if (ancla && CP_DEF[ancla]) setTimeout(() => document.getElementById('canal-' + ancla)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+}
+
+let CP_cfg = {};
+// fila del flag (WhatsApp/Discord): se guarda en config.json y la app lo aplica al reiniciarse
+function CP_flag(n, p) {
+  const d = CP_DEF[n]; if (!d.flag) return '';
+  const on = !!(CP_cfg.plugins && CP_cfg.plugins[d.flag]), bloq = n === 'discord' && CP_cfg.plugins && CP_cfg.plugins.discordBloqueado;
+  const est = p ? (p.activo && p.estado === 'activo' ? tr('plugin activo') : tr('plugin instalado, parado')) : tr('plugin no instalado');
+  return fila(tr('Usar el plugin'), (on ? tr('Activado: la app usa el plugin.') : tr('Apagado: la app usa su implementación de siempre.')) + ' <span class="tenue">' + esc(est) + ' · ' + tr('se aplica al reiniciar la app') + '</span>'
+      + (bloq ? '<br><span class="mal-txt">' + esc(tr('No arranca: {x}.', { x: tr(bloq) })) + '</span>' : ''),
+    `<button class="btn mini ${on ? 'mal' : 'pri'}" data-cpa="flag">${tr(on ? 'Apagar' : 'Activar')}</button>`);
 }
 
 const CP_chip = t => `<span class="chip ${t === 'conectado' ? 'ok' : /reintentando|no válido|no responde/.test(t || '') ? 'aviso' : ''}"><span class="punto ${t === 'conectado' ? 'ok' : ''}"></span>${esc(tr(t || ''))}</span>`;
@@ -58,6 +85,7 @@ const CP_chip = t => `<span class="chip ${t === 'conectado' ? 'ok' : /reintentan
 function CP_html(n, p, e) {
   const d = CP_DEF[n], btn = (a, txt, cls = '') => `<button class="btn mini ${cls}" data-cpa="${a}">${tr(txt)}</button>`;
   const intro = `<div style="padding:14px 16px;line-height:1.6">${tr(d.intro)} <span class="tenue">${tr('Guía:')} <code>${d.doc}</code></span></div>`;
+  if (d.flag && (d.soloFlag || !(CP_cfg.plugins && CP_cfg.plugins[d.flag]) || (n === 'discord' && CP_cfg.plugins.discordBloqueado))) return intro;
   if (!p) return intro + fila('Estado', 'No instalado.', `<button class="btn pri" data-cpa="instalar">${tr('Instalar')}</button>`);
   if (p.roto) return intro + fila('Estado', esc(tr('Roto:') + ' ' + p.roto), btn('activar', 'Reactivar'));
   if (!p.activo || p.estado !== 'activo') {
@@ -77,10 +105,13 @@ function CP_html(n, p, e) {
     : tr('<b>Último paso:</b> en Slack, abre un mensaje directo con la app y mándale este código:') + ` <code style="font-size:15px">${esc(e.codigo || '')}</code>`;
   if (n === 'matrix') que = e.enlazado ? tr('Enlazado con {x}', { x: esc(e.dueno || '') }) + ` · ${esc(e.cuenta || '')}`
     : tr('<b>Último paso:</b> acepta en tu cliente de Matrix la invitación de {x} a la sala «APOLO».', { x: esc(e.cuenta || '') });
+  if (n === 'discord') que = (e.enlazado ? tr('Enlazado con tu usuario {x}', { x: esc(e.dueno || '') }) + (e.categoria ? ' · ' + tr('categoría «🤖 APOLO» lista') : '')
+    : tr('<b>Último paso:</b> mándale por mensaje directo al bot este código:') + ` <code style="font-size:15px">${esc(e.codigo || '')}</code>`)
+    + (e.invitar ? ` · <a href="${esc(e.invitar)}" target="_blank" rel="noopener">${tr('Invitar el bot a tu servidor')}</a>` : '');
   if (n === 'signal') que = e.enlazado ? tr('Enlazado con {x}', { x: esc(e.dueno || '') })
     : tr('<b>Último paso:</b> escríbele cualquier cosa al número {x} desde tu Signal.', { x: esc(e.cuenta || '') });
   return fila(`<span class="flex">${ic('enviar')}${d.titulo}</span>`, `${e.enlazado ? '<span class="ok-txt">✓</span> ' : ''}${que}`, CP_chip(e.estado))
-    + fila('', '', `${btn('prueba', 'Probar')}${n === 'slack' ? btn('enlace', 'Nuevo código') : ''}${btn('editar', 'Cambiar datos')}${btn('desconectar', 'Desconectar', 'mal')}`);
+    + fila('', '', `${btn('prueba', 'Probar')}${n === 'slack' || n === 'discord' ? btn('enlace', 'Nuevo código') : ''}${n === 'discord' && e.servidor ? btn('categoria', 'Crear categoría') : ''}${btn('editar', 'Cambiar datos')}${btn('desconectar', 'Desconectar', 'mal')}`);
 }
 
 async function CP_accion(caja, n, a, b) {
@@ -113,6 +144,13 @@ async function CP_accion(caja, n, a, b) {
     }
     if (a === 'prueba') { await canal('prueba'); return aviso('Mensaje de prueba enviado'); }
     if (a === 'enlace') await canal('enlace');
+    if (a === 'categoria') { await canal('categoria'); aviso('Categoría lista'); }
+    if (a === 'flag') {
+      const f = CP_DEF[n].flag, on = !(CP_cfg.plugins && CP_cfg.plugins[f]);
+      if (on && !await modal({ titulo: tr('Usar {x} como plugin', { x: CP_DEF[n].titulo }), cuerpo: tr('La app usará el plugin en vez de su implementación propia a partir del próximo reinicio. Si el plugin falla, vuelve sola a la de siempre.'), botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Activar', cls: 'pri', valor: true }] })) return;
+      await api('PATCH', '/config', { plugins: { [f]: on } });
+      aviso(tr('Guardado. Reinicia la app para aplicarlo.'));
+    }
     if (a === 'desconectar') {
       if (!await modal({ titulo: tr('Desconectar {x}', { x: CP_DEF[n].titulo }), cuerpo: tr('El robot dejará de usar este canal y borrará sus credenciales de este equipo.'), botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Desconectar', cls: 'mal', valor: true }] })) return;
       await canal('desconectar');

@@ -1,0 +1,12 @@
+{
+  "name": "apolo-plugin-whatsapp",
+  "version": "1.0.0",
+  "description": "Plugin de APOLO: canal de WhatsApp (Baileys, solo tu chat contigo mismo)",
+  "main": "index.js",
+  "keywords": ["apolo-plugin"],
+  "license": "MIT",
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "qrcode": "^1.5.4"
+  }
+}

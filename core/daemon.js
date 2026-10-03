@@ -29,7 +29,7 @@
 //   GET  /v1/plugins · GET /v1/plugins/:nombre (con logs) · POST /v1/plugins/instalar {fuente, reemplazar?, dev?} → {plugin} | {opciones}
 //   PATCH /v1/plugins/:nombre {activo, forzar?} · POST /v1/plugins/:nombre/recargar|escanear · DEL /v1/plugins/:nombre
 //   POST /v1/plugins/comandos/:cmd {texto} → {texto}   (comandos /x que aportan los plugins)
-//   POST /v1/plugins/oficial/:slack|matrix|signal (instala el canal del repo) · POST /v1/plugins/:nombre/canales/:id/:accion {datos} → acciones del canal
+//   POST /v1/plugins/oficial/:slack|matrix|signal|whatsapp|discord (instala el canal del repo) · POST /v1/plugins/:nombre/canales/:id/:accion {datos} → acciones del canal
 //   GET  /v1/consejo · POST /v1/consejo {pregunta, miembros?, rondas?} → SSE (fase inicio|miembro|respuesta|ronda|votando|veredicto|fin)
 //   GET  /v1/consejo/:id · POST /v1/consejo/:id/cancelar
 //   /v1/turno (core/turno.js http): GET · POST {texto,cwd,modelo} · POST empezar|parar · PATCH orden {ids} · PATCH config · DEL :id
@@ -62,7 +62,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { crearNucleo, version } = require('./index');
-const CANALES_OFICIALES = ['slack', 'matrix', 'signal'];             // plugins de canal del repo (plugins/<n>) que el panel instala
+const CANALES_OFICIALES = ['slack', 'matrix', 'signal', 'whatsapp', 'discord'];             // plugins de canal del repo (plugins/<n>) que el panel instala
 const admin = require('./admin');
 const seg = require('./seguridad');
 

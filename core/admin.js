@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // copia de la config apta para el navegador: las API keys nunca salen, solo si están puestas
+const FLAGS_PLUGINS = ['telegramComoPlugin', 'whatsappComoPlugin', 'discordComoPlugin'];   // se aplican al reiniciar la app
 function configPublica(cfg) {
   const proveedores = {};
   for (const [k, p] of Object.entries(cfg.proveedores)) {
@@ -10,7 +11,9 @@ function configPublica(cfg) {
     proveedores[k] = { ...resto, tieneKey: !!apiKey && apiKey !== 'ollama', keyDeEntorno: !!(p.env && process.env[p.env]), enBoveda: !!apiKeyRef };
   }
   return { herramientasOff: cfg.herramientasOff || [], modeloPorDefecto: cfg.modeloPorDefecto, alias: cfg.alias, permisos: cfg.permisos, maxPasos: cfg.maxPasos, puerto: cfg.puerto, carpeta: cfg.carpeta || '', proveedores, dir: cfg.dir,
-    idioma: cfg.idioma || '', bienvenida: cfg.bienvenida === true };      // idioma '' = automático (el del sistema); bienvenida = asistente de primer arranque hecho
+    idioma: cfg.idioma || '', bienvenida: cfg.bienvenida === true,
+    // canales como plugins (flags de la app) y por qué el de Discord no puede arrancar (modo Pi / bot local), si es el caso
+    plugins: { ...Object.fromEntries(FLAGS_PLUGINS.map(k => [k, !!(cfg.plugins && cfg.plugins[k])])), discordBloqueado: (cfg.plugins && cfg.plugins.discord && cfg.plugins.discord.bloqueado) || '' } };      // idioma '' = automático (el del sistema); bienvenida = asistente de primer arranque hecho
 }
 
 // aplica cambios del panel a la config en memoria y en config.json
@@ -54,6 +57,12 @@ function guardarConfig(cfg, cambios) {
         }
       }
       if (typeof v.local === 'boolean') p.local = d.local = v.local;
+    }
+  }
+  if (cambios.plugins && typeof cambios.plugins === 'object') {
+    for (const k of FLAGS_PLUGINS) if (typeof cambios.plugins[k] === 'boolean') {
+      cfg.plugins = cfg.plugins || {}; cfg.plugins[k] = cambios.plugins[k];
+      disco.plugins = { ...(disco.plugins || {}), [k]: cambios.plugins[k] };
     }
   }
   fs.writeFileSync(f, JSON.stringify(disco, null, 2));

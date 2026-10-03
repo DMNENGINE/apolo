@@ -106,7 +106,9 @@ function crearApi(a) {
         estado: (estado, detalle = '') => llamar('canal.estado', { id, estado: String(estado), detalle: String(detalle) }),
         // solo permisos/tarjetas que el núcleo mostró en ESTE canal (permiso(p) / tarjeta(t)); lo demás se rechaza
         decidir: (permiso, decision) => llamar('canal.decidir', { id, permiso: String(permiso), decision: String(decision) }),
-        tarjeta: (tarjeta, accion) => llamar('canal.tarjeta', { id, tarjeta: String(tarjeta), accion: String(accion) }, 120_000),
+        tarjeta: (tarjeta, accion, txt) => llamar('canal.tarjeta', { id, tarjeta: String(tarjeta), accion: String(accion), ...(txt ? { texto: String(txt) } : {}) }, 120_000),
+        // mensaje de otra persona → SOLO a la app (modo avisar/auto); necesita "conversaciones". La app decide si se responde.
+        ajeno: datos => llamar('canal.ajeno', { id, datos: datos || {} }),
         // audio guardado en tu almacén (apolo.almacen.ruta) → { texto, error }
         transcribir: ruta => llamar('canal.transcribir', { id, ruta: String(ruta) }, 300_000),
       });

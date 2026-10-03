@@ -24,6 +24,26 @@
       "licencia": "MIT"
     },
     {
+      "nombre": "whatsapp",
+      "tipo": "plugin",
+      "descripcion": "Canal de WhatsApp vinculado como WhatsApp Web (QR, Baileys). Solo tu chat contigo mismo: permisos 1/2/3 (los peligrosos con CONFIRMO), tarjetas R/D y notas de voz. Los mensajes de otras personas solo van a la app si activas avisar/auto. No es la API oficial.",
+      "fuente": "DMNENGINE/apolo/plugins/whatsapp",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["canales", "whatsapp", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT"
+    },
+    {
+      "nombre": "discord",
+      "tipo": "plugin",
+      "descripcion": "Bot de Discord propio sin discord.js ni Raspberry Pi: mensajes directos contigo, permisos con botones (los peligrosos con segundo paso), tarjetas, avisos, notas de voz y categoría privada opcional en tu servidor. Guía en docs/canales/discord.md.",
+      "fuente": "DMNENGINE/apolo/plugins/discord",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["canales", "discord", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT"
+    },
+    {
       "nombre": "matrix",
       "tipo": "plugin",
       "descripcion": "Canal de Matrix (Element…): una cuenta de bot en una sala privada contigo. Permisos con reacciones o 1/2/3. Sin cifrado de extremo a extremo en la v1. Guía en docs/canales/matrix.md.",
