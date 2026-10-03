@@ -40,13 +40,13 @@ async function servidor(t, { espera = 300, hijoTrabajaPara = null } = {}) {
 }
 
 test('delegar: dos subagentes en paralelo, informes en orden y el padre responde', async t => {
-  const { n, recibidos } = await servidor(t);
+  const { n, recibidos } = await servidor(t, { espera: 600 });   // en serie serían ≥ 1200 ms: margen amplio aunque la máquina vaya cargada
   const s = n.sesiones.crear({ cwd: os.tmpdir() });
   const t0 = Date.now();
   const final = await n.enviar(s, 'revisa el sistema');
   const ms = Date.now() - t0;
   assert.strictEqual(final, 'todo revisado');
-  assert.ok(ms < 550, `tardó ${ms} ms: no fueron en paralelo`);
+  assert.ok(ms < 1000, `tardó ${ms} ms: no fueron en paralelo`);
   const tools = s.mensajes.filter(m => m.role === 'tool');
   assert.deepStrictEqual(tools.map(m => m.toolCallId), ['d1', 'd2']);
   assert.match(tools[0].content, /subagente "logs" terminó[\s\S]*informe: revisa los logs/);

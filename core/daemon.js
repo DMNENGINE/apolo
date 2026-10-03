@@ -36,6 +36,8 @@
 //   FASE 4 (memoria v2): GET /v1/sueno · POST /v1/sueno (soñar ya) · GET /v1/sueno/:id · POST /v1/sueno/:id/deshacer · PATCH /v1/sueno/config {hora, activo}
 //   GET /v1/grafo · GET /v1/grafo/:entidad · GET /v1/linea?desde&hasta&q&tipos · GET /v1/privacidad · POST /v1/privacidad/exportar (zip) · POST /v1/privacidad/borrar {codigo?, frase?}
 //   GET /v1/wrapped?periodo=semana|mes|año&privado · POST /v1/wrapped/video · GET /v1/wrapped/video (mp4) · POST /v1/wrapped/png {carta?} (png o zip)
+//   FASE 6 dashboards (core/dashboards.js): GET /v1/dashboards · POST {titulo, widgets, fijado?, confirmo?} · GET|PATCH|DEL /v1/dashboards/:id
+//   GET /v1/dashboards/:id/datos[?forzar=1&widget=] → {widgets:{id:{datos, error, t, proximo}}} (caché por widget)
 //   GET  /v1/nodos · POST /v1/nodos/emparejar {codigo} · POST /v1/nodos/activar {activo} · PATCH|DEL /v1/nodos/:id
 //   POST /v1/nodos/:id/gesto {gesto|estado} · POST /v1/nodos/:id/foto → {ruta}   (ojo de escritorio ESP32: core/nodos)
 //   APP MÓVIL (core/movil.js, PWA en /m/): POST /v1/movil/canjear {codigo,pin,nombre} (sin token) → token de dispositivo (header x-dispositivo)

@@ -123,6 +123,12 @@ function crearNucleo(opciones = {}) {
   nucleo.panico = panico; nucleo.extensiones.panico = { http: (...a) => panico.http(...a) };
   tareas.ponerPausa(() => panico.activo());
   bus.on('config-seguridad', e => auditoria.registrar({ tipo: 'seguridad', resumen: e.resumen, quien: e.quien || 'panel' }));
+  // FASE 6: dashboards generados por el agente (core/dashboards.js) → /v1/dashboards
+  const dashMod = require('./dashboards');
+  const dashboards = dashMod.crearDashboards({ cfg, bus, permisos, nucleo: () => nucleo, generarJSON: generarJSONvivo,
+    modelo: () => cfg.dashboards?.modeloAgente || modeloCerebro(), fetch: opciones.fetchDashboards, ejecutarComando: opciones.comandoDashboards });
+  require('./herramientas').registrar(dashMod.HERRAMIENTAS);
+  nucleo.dashboards = dashboards; nucleo.extensiones.dashboards = { http: (...a) => dashboards.http(...a) };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }

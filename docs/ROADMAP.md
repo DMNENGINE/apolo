@@ -116,7 +116,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 - 🔥 **Consejo de modelos**: una pregunta → Claude, GPT, Gemini y un local responden en paralelo → debaten → votan. Se ve en vivo en Mission Control. Contenido viral garantizado ("puse a 4 IAs a pelear").
 - **Turno de noche** 🔥: le dejas una cola de encargos, trabaja mientras duermes (subagentes + worktrees git), y por la mañana te da un vídeo-resumen de 60 s con su voz.
 - Worktrees por tarea de código, PR automático para revisar.
-- Dashboards generados por el agente (widgets en el panel a partir de datos: correo, GitHub, uso…).
+- ✅ Dashboards generados por el agente (core/dashboards.js + panel #/dashboards, fijables en Inicio; fuentes nucleo/http/herramienta/comando/agente).
 - Reuniones: une a Meet/Zoom/Discord voz, transcribe, resume, saca tareas.
 
 ---
