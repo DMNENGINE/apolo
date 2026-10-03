@@ -381,6 +381,7 @@ function crearNodos({ nucleo }) {
   }
 
   // ---------- servidor ----------
+  const crudos = new Set();                                                // sockets WebSocket abiertos (identificados o no)
   function iniciar(puerto) {
     if (srv) return Promise.resolve(puertoReal);
     const o = opc();
@@ -389,6 +390,7 @@ function crearNodos({ nucleo }) {
       res.writeHead(426, { 'content-type': 'text/plain; charset=utf-8', upgrade: 'websocket' }); res.end('Nodos de APOLO: conecta por WebSocket\n');
     });
     srv.on('upgrade', (req, socket, head) => {
+      crudos.add(socket); socket.on('close', () => crudos.delete(socket));    // server.close() no espera a los sockets ya "subidos": hay que destruirlos a mano
       const ip = String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
       if (!ipPermitida(ip, opc())) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); reg('aviso', 'nodos', `conexión rechazada de ${ip}`); return; }
       // FASE 9 (cross-site WebSocket hijacking): un ESP32 no manda Origin; una web cualquiera sí → solo el simulador local (file:// = "null" o localhost)
@@ -408,8 +410,9 @@ function crearNodos({ nucleo }) {
     for (const c of conexiones.values()) c.ws.cerrar(1001, 'el núcleo se apaga');
     for (const p of pendientes.values()) p.c.ws.cerrar(1001, 'el núcleo se apaga');
     conexiones.clear(); pendientes.clear();
+    for (const so of crudos) so.destroy(); crudos.clear();                  // sin esto, close() se queda colgado en Node 22
     const s = srv; srv = null; puertoReal = null;
-    return new Promise(ok => (s ? s.close(() => ok()) : ok()));
+    return new Promise(ok => (s ? (s.closeAllConnections?.(), s.close(() => ok())) : ok()));
   }
   function apagarOyentes() { for (const [ev, f] of Object.entries(oyentes)) bus.off(ev, f); }
   const activo = () => datos.activo ?? !!cfg.nodos?.activo;

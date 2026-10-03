@@ -190,12 +190,9 @@ test('nodos: una web no puede abrir el WebSocket del ojo (Origin ajeno)', async 
   const n = nucleoDe(dir);
   const nodos = require('../nodos').crearNodos({ nucleo: n });
   const puerto = await nodos.iniciar(0); t.after(() => nodos.cerrar());
-  const subir = origin => new Promise(ok0 => {
-    // el timer mantiene vivo el event loop: en el CI el rechazo a veces no llega ni como respuesta ni como error
-    const to = setTimeout(() => { r.destroy(); ok0('sin respuesta'); }, 3000);
-    const ok = v => { clearTimeout(to); ok0(v); };
+  const subir = origin => new Promise(ok => {
     const r = http.request({ host: '127.0.0.1', port: puerto, headers: { connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', ...(origin ? { origin } : {}) } });
-    r.on('upgrade', (res, sock) => { sock.destroy(); ok(101); }); r.on('response', res => ok(res.statusCode)); r.on('error', () => ok('cerrado')); r.on('close', () => ok('cerrado')); r.end();   // en Linux/CI el corte llega sin 'error'
+    r.on('upgrade', (res, sock) => { sock.destroy(); ok(101); }); r.on('response', res => ok(res.statusCode)); r.on('error', () => ok('cerrado')); r.end();
   });
   assert.notStrictEqual(await subir('https://evil.com'), 101);
   assert.strictEqual(await subir(null), 101, 'el ESP32 (sin Origin) sí');
