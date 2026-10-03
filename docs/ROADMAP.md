@@ -111,13 +111,13 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 ---
 
-## FASE 6 — Multi-agente y trabajo pesado 🟡 (consejo ✅ · turno de noche ✅ · faltan worktrees sueltos, dashboards, reuniones)
+## FASE 6 — Multi-agente y trabajo pesado 🟡 (consejo ✅ · turno de noche ✅ · dashboards ✅ · reuniones ✅ · faltan worktrees sueltos)
 
 - 🔥 **Consejo de modelos**: una pregunta → Claude, GPT, Gemini y un local responden en paralelo → debaten → votan. Se ve en vivo en Mission Control. Contenido viral garantizado ("puse a 4 IAs a pelear").
 - **Turno de noche** 🔥: le dejas una cola de encargos, trabaja mientras duermes (subagentes + worktrees git), y por la mañana te da un vídeo-resumen de 60 s con su voz.
 - Worktrees por tarea de código, PR automático para revisar.
 - ✅ Dashboards generados por el agente (core/dashboards.js + panel #/dashboards, fijables en Inicio; fuentes nucleo/http/herramienta/comando/agente).
-- Reuniones: une a Meet/Zoom/Discord voz, transcribe, resume, saca tareas.
+- ✅ Reuniones (core/reuniones.js + panel #/reuniones): subtítulos en vivo de Meet/Teams/Zoom web vía la extensión, o audio local mic+sistema (WASAPI, grabar.ps1) → Whisper; resumen con decisiones/tareas/preguntas, tareas y recordatorios, envío al móvil, export .md. Falta probar con una reunión real.
 
 ---
 

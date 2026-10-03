@@ -36,6 +36,8 @@
 //   FASE 4 (memoria v2): GET /v1/sueno · POST /v1/sueno (soñar ya) · GET /v1/sueno/:id · POST /v1/sueno/:id/deshacer · PATCH /v1/sueno/config {hora, activo}
 //   GET /v1/grafo · GET /v1/grafo/:entidad · GET /v1/linea?desde&hasta&q&tipos · GET /v1/privacidad · POST /v1/privacidad/exportar (zip) · POST /v1/privacidad/borrar {codigo?, frase?}
 //   GET /v1/wrapped?periodo=semana|mes|año&privado · POST /v1/wrapped/video · GET /v1/wrapped/video (mp4) · POST /v1/wrapped/png {carta?} (png o zip)
+//   FASE 6 reuniones (core/reuniones.js): GET /v1/reuniones[?q=] · POST {fuente:'navegador'|'audio', titulo} · POST /parar · GET|PATCH /config
+//   GET|PATCH|DEL /v1/reuniones/:id · POST :id/resumir|tareas {indices}|enviar · GET :id/exportar · POST /v1/navegador/reunion (extensión)
 //   FASE 6 dashboards (core/dashboards.js): GET /v1/dashboards · POST {titulo, widgets, fijado?, confirmo?} · GET|PATCH|DEL /v1/dashboards/:id
 //   GET /v1/dashboards/:id/datos[?forzar=1&widget=] → {widgets:{id:{datos, error, t, proximo}}} (caché por widget)
 //   GET  /v1/nodos · POST /v1/nodos/emparejar {codigo} · POST /v1/nodos/activar {activo} · PATCH|DEL /v1/nodos/:id
@@ -253,6 +255,7 @@ function iniciar(opciones = {}) {
         if (p[2] === 'esperar' && M === 'GET') return n.navegador.esperar(req, res, { instancia: String(req.headers['x-instancia'] || '').slice(0, 40), navegador: String(req.headers['x-navegador'] || '').slice(0, 60), version: String(req.headers['x-version'] || '').slice(0, 20) });
         if (p[2] === 'resultado' && p[3] && M === 'POST') { let b; try { b = await leer(req, 12e6); } catch (e) { return json(res, 400, { error: e.message }); } return json(res, 200, { ok: n.navegador.resultado(p[3], b) }); }
         if (p[2] === 'detener' && M === 'POST') return json(res, 200, { ok: n.navegador.detener() });
+        if (p[2] === 'reunion' && M === 'POST') { let b; try { b = await leer(req, 2e6); } catch (e) { return json(res, 400, { error: e.message }); } try { return json(res, 200, n.reuniones ? await n.reuniones.desdeExtension(b) : { ok: false }); } catch (e) { return json(res, e.status || 500, { error: e.message }); } }   // subtítulos de reuniones (core/reuniones.js)
         if (p[2] === 'nombre' && M === 'GET') return json(res, 200, { nombre: n.personalidad.nombre() });
       }
       if (p[1] === 'identidad') {                                   // nombre del compañero

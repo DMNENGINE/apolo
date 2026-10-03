@@ -691,6 +691,14 @@ async function startNucleo() {
   nucleo.bus.on('transcribir-audio', ({ ruta, responder }) => {
     transcribirArchivo(ruta).then(r => responder(r && r.error && !r.text ? r.error : null, (r && r.text) || ''), e => responder(e));
   });
+  // reuniones (core/reuniones.js): REC en la isla mientras graba, tarjeta con el resumen al terminar, "enviar al móvil"
+  nucleo.bus.on('reunion', e => {
+    if (!win || win.isDestroyed()) return;
+    if (e.accion === 'empezada' || e.accion === 'parada') win.webContents.send('reunion', { grabando: e.accion === 'empezada', titulo: e.titulo, fuente: e.fuente });
+    if (e.accion === 'resumida' && e.resumen) win.webContents.send('answer', { titulo: `📋 ${tr('Reunión')}: ${e.titulo}`,
+      texto: [e.resumen.resumen, ...e.resumen.tareas.map(t => `• ${t.quien ? t.quien + ': ' : ''}${t.que}`)].join('\n') });
+  });
+  nucleo.bus.on('reunion-enviar', ({ texto }) => movil.reply(texto));
   try { const d = await iniciarDaemon({ nucleo }); console.log(`[núcleo] API en :${d.puerto}${(nucleo.cfg.red?.permitidos || []).length ? ` (LAN solo: ${nucleo.cfg.red.permitidos.join(", ")})` : " (solo este equipo)"} · modelo por defecto ${nucleo.cfg.modeloPorDefecto}`); }
   catch (e) { console.error('[núcleo] sin API HTTP:', e.message); }
   try { conectarOjo(); } catch (e) { console.error('[ojo]', e.message); }   // nucleo.nodos lo crea iniciarDaemon

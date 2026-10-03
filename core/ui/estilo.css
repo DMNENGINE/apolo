@@ -959,3 +959,50 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
   .db-kpi-v { font-size: 24px; }
   .db-form { grid-template-columns: 1fr; }
 }
+
+/* ---------- Reuniones (ui/reuniones.js) ---------- */
+.rn-modos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; align-items: stretch; }
+.rn-modo { margin: 0; height: 100%; justify-content: flex-start; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px; text-align: left; cursor: pointer; color: var(--txt); font: inherit; }
+.rn-modo:hover:not(:disabled) { border-color: var(--acento); }
+.rn-modo:disabled { opacity: .45; cursor: default; }
+.rn-modo .i { width: 22px; height: 22px; color: var(--acento); }
+.rn-modo small { color: var(--txt-3); font-size: 12px; line-height: 1.4; }
+.rn-regla { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.rn-regla small { display: block; font-size: 12px; margin-top: 2px; }
+.rn-busca { display: flex; align-items: center; gap: 8px; background: var(--capa-2); border: 1px solid var(--borde); border-radius: var(--radio-s, 8px); padding: 0 10px; margin: 8px 0 12px; }
+.rn-busca input { border: 0; background: transparent; flex: 1; padding: 8px 0; color: var(--txt); outline: none; min-width: 0; }
+.rn-busca .i { color: var(--txt-3); width: 15px; height: 15px; }
+.rn-lista { display: flex; flex-direction: column; gap: 10px; }
+.rn-item { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; color: var(--txt); text-decoration: none; }
+.rn-item:hover { border-color: var(--borde-2); background: var(--capa-2); }
+.rn-item-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rn-item-res { margin: 0; color: var(--txt-2); font-size: 13px; line-height: 1.45; }
+.rn-vacio { text-align: center; color: var(--txt-3); }
+.rn-vacio .i { width: 34px; height: 34px; color: var(--acento); }
+.rn-activa { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 14px; border-color: color-mix(in srgb, var(--mal) 55%, transparent); background: color-mix(in srgb, var(--mal) 6%, var(--capa)); }
+.rn-activa small { display: block; margin-top: 2px; }
+.rn-rec { width: 12px; height: 12px; border-radius: 50%; background: var(--mal); box-shadow: 0 0 10px var(--mal); animation: rnpul 1.4s ease-in-out infinite; flex: none; }
+@keyframes rnpul { 50% { opacity: .25; } }
+.rn-aviso { display: flex; align-items: center; gap: 8px; color: var(--aviso); font-size: 12.5px; margin: 8px 0; }
+.rn-aviso .btn { padding: 2px 10px; font-size: 12px; }
+.rn-legal { display: flex; gap: 10px; padding: 12px; border-radius: var(--radio-s, 8px); background: color-mix(in srgb, var(--aviso) 9%, transparent); border: 1px solid color-mix(in srgb, var(--aviso) 40%, transparent); margin-bottom: 12px; }
+.rn-legal .i { color: var(--aviso); flex: none; width: 20px; height: 20px; }
+.rn-legal p { margin: 4px 0 0; font-size: 12.5px; color: var(--txt-2); }
+.rn-det { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 14px; align-items: start; }
+.rn-txt { margin: 0; line-height: 1.55; }
+.rn-ul { margin: 0; padding-left: 18px; line-height: 1.55; color: var(--txt-2); }
+.rn-tareas { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.rn-tarea { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; }
+.rn-tarea input { margin-top: 3px; accent-color: var(--acento); }
+.rn-trans { display: flex; flex-direction: column; max-height: calc(100vh - 190px); min-height: 320px; }
+.rn-trans-cab { padding: 12px 14px 0; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--borde); }
+.rn-trans-cab .rn-busca { margin: 0 0 10px; }
+.rn-pt { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.rn-segs { overflow: auto; padding: 6px 14px 14px; }
+.rn-seg { display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--borde); }
+.rn-seg:last-child { border-bottom: 0; }
+.rn-seg p { margin: 2px 0 0; line-height: 1.5; font-size: 13.5px; }
+.rn-seg mark { background: color-mix(in srgb, var(--aviso) 35%, transparent); color: inherit; border-radius: 3px; }
+.rn-t { font-family: var(--mono); font-size: 11px; color: var(--txt-3); padding-top: 3px; }
+@media (max-width: 900px) { .rn-modos, .rn-det { grid-template-columns: 1fr; } .rn-trans { max-height: none; } .rn-activa { flex-wrap: wrap; } }
+.rn-modos > .rn-modo { margin: 0; }

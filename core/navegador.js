@@ -236,6 +236,7 @@ function crearNavegador({ cfg, bus, permisos, cancelarTurno }) {
     esperar, resultado, detener,
     estado: () => ({ conectado: conectado(), ...info, pendientes: enVuelo.size }),
     accion: (s, op, a) => acciones[op](s, a || {}),
+    orden, conectado,                                            // reuniones (core/reuniones.js): subtítulos en vivo vía la extensión
     dominioDe, protegido,
   };
 }

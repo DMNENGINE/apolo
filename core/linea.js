@@ -5,9 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const { normal } = require('./memoria');
 
-const TIPOS = ['sesion', 'tarea', 'turno', 'consejo', 'sueno', 'permiso', 'recuerdo'];
+const TIPOS = ['sesion', 'tarea', 'turno', 'consejo', 'sueno', 'permiso', 'recuerdo', 'reunion'];
 
-function crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria }) {
+function crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria, reuniones }) {
   const dirSes = path.join(cfg.dir, 'sesiones');
   const cache = new Map();                 // id → { mtime, mensajes resumidos }
   function mensajes(id) {
@@ -68,6 +68,11 @@ function crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPer
       if (!en(c.creado) || !coincide(nq, c.pregunta)) continue;
       ev.push({ t: c.creado, tipo: 'consejo', titulo: 'Consejo de modelos', detalle: String(c.pregunta || '').slice(0, 200), ruta: '#/consejo',
         extra: { acuerdo: c.acuerdo, miembros: (c.miembros || []).length, estado: c.estado } });
+    }
+    if (quiero.has('reunion') && reuniones?.()) for (const r of reuniones().lista({ limite: 300 })) {
+      if (!en(r.inicio) || !coincide(nq, r.titulo, r.resumen, (r.temas || []).join(' '))) continue;
+      ev.push({ t: r.inicio, fin: r.fin || r.inicio, tipo: 'reunion', titulo: `Reunión: ${r.titulo}`, detalle: r.resumen || `${r.segmentos} fragmentos`, ruta: `#/reuniones/${r.id}`,
+        extra: { fuente: r.fuente, tareas: r.tareas, hablantes: r.hablantes.length } });
     }
     if (quiero.has('sueno') && sueno) for (const s of sueno.informes(60)) {
       if (!en(s.inicio) || !coincide(nq, s.resumen, s.frase)) continue;

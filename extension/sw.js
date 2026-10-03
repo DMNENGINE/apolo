@@ -182,6 +182,33 @@ const OPS = {
     return enPagina(pestana, subirArchivo, [ref, nombre, mime, datos]);
   },
   async scroll({ pestana, cantidad }) { marcar(pestana); return enPagina(pestana, scrollPagina, [cantidad]); },
+  // notas de reuniones (core/reuniones.js): inyecta reunion.js en la pestaña de Meet/Teams/Zoom y lo arranca/para
+  async reunion({ accion, id, pestana }) {
+    const { reuniones = {} } = await chrome.storage.session.get('reuniones');
+    if (accion === 'empezar') {
+      let t = pestana != null ? await chrome.tabs.get(pestana) : null;
+      if (!t) {
+        const tabs = await chrome.tabs.query({}), [act] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        t = (act && ES_REUNION.test(act.url || '') && act) || tabs.find(x => ES_SALA.test(x.url || '')) || tabs.find(x => ES_REUNION.test(x.url || ''));
+      }
+      if (!t) throw new Error('no encuentro ninguna pestaña de Google Meet, Teams o Zoom abierta: entra en la reunión primero');
+      const r = await arrancarNotas(t.id, id);
+      reuniones[t.id] = id; await chrome.storage.session.set({ reuniones });
+      return { pestana: t.id, url: t.url, titulo: r.titulo || t.title, plataforma: r.plataforma, subtitulos: r.subtitulos };
+    }
+    const tabId = Number(Object.keys(reuniones).find(k => reuniones[k] === id));
+    if (accion === 'parar') {
+      if (tabId) { delete reuniones[tabId]; await chrome.storage.session.set({ reuniones }); await enPagina(tabId, () => window.__apoloReunion?.parar() || { ok: true }).catch(() => { }); }
+      return { ok: true };
+    }
+    if (accion === 'activar') {
+      if (!tabId) throw new Error('esa reunión no está abierta en este navegador');
+      const p = await enPagina(tabId, () => window.__apoloReunion?.boton() || { error: 'no encuentro el botón de subtítulos' });
+      await clicReal(tabId, p.x, p.y);
+      return { ok: true };
+    }
+    throw new Error(`acción de reunión desconocida: ${accion}`);
+  },
   async volver({ pestana }) {
     await chrome.tabs.goBack(pestana); await esperarCarga(pestana);
     const t = await chrome.tabs.get(pestana); return { titulo: t.title, url: t.url };
@@ -343,11 +370,42 @@ function marcarPagina(nombre) {
   window.__robotMarcaT = setTimeout(() => m.remove(), 10_000);
 }
 
+// ---------- reuniones ----------
+const ES_REUNION = /^https:\/\/(meet\.google\.com\/|teams\.(microsoft|live)\.com\/|([\w-]+\.)?zoom\.(us|com)\/(wc|j)\/)/i;
+const ES_SALA = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i;
+async function arrancarNotas(tabId, id) {
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['reunion.js'] });
+  return enPagina(tabId, (id, nombre) => window.__apoloReunion.empezar(id, nombre), [id, nombre]);
+}
+const postReunion = b => leerCfg().then(c => c.token && c.activo ? api(c, 'reunion', { method: 'POST', body: JSON.stringify(b) }) : null).catch(() => { });
+const detectadas = new Set();
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (info.status !== 'complete') return;
+  const { reuniones = {} } = await chrome.storage.session.get('reuniones');
+  if (reuniones[tabId]) {                                 // recargó o salió de la sala: reinyectar o cerrar la reunión
+    if (ES_REUNION.test(tab.url || '')) arrancarNotas(tabId, reuniones[tabId]).catch(() => { });
+    else { postReunion({ evento: 'fin', id: reuniones[tabId] }); delete reuniones[tabId]; chrome.storage.session.set({ reuniones }); }
+    return;
+  }
+  if (ES_SALA.test(tab.url || '') && !detectadas.has(`${tabId}:${tab.url}`)) {   // el núcleo decide (regla "siempre en Meet"); nunca empieza aquí
+    detectadas.add(`${tabId}:${tab.url}`);
+    postReunion({ evento: 'detectada', url: tab.url, pestana: tabId });
+  }
+});
+chrome.tabs.onRemoved.addListener(async tabId => {
+  const { reuniones = {} } = await chrome.storage.session.get('reuniones');
+  if (reuniones[tabId]) { postReunion({ evento: 'fin', id: reuniones[tabId] }); delete reuniones[tabId]; chrome.storage.session.set({ reuniones }); }
+});
+
 // ---------- eventos ----------
 chrome.runtime.onMessage.addListener((msg, _s, responder) => {
   if (msg && msg.tipo === 'detener') leerCfg().then(c => api(c, 'detener', { method: 'POST', body: '{}' })).catch(() => { });
   if (msg && msg.tipo === 'reconectar') { ultimoEstado = ''; bucle(); responder({ ok: true }); }
   if (msg && msg.tipo === 'nombre') responder({ nombre });
+  if (msg && msg.tipo === 'reunion-subs') postReunion({ id: msg.id, eventos: msg.eventos });
+  if (msg && msg.tipo === 'reunion-estado') postReunion({ evento: 'estado', id: msg.id, subtitulos: msg.subtitulos });
+  if (msg && msg.tipo === 'reunion-parar') postReunion({ evento: 'parar', id: msg.id });
+  if (msg && msg.tipo === 'reunion-activar' && _s.tab) clicReal(_s.tab.id, msg.x, msg.y).catch(() => { });   // clic REAL (isTrusted) en el botón CC
 });
 chrome.alarms.create('vivo', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(() => bucle());

@@ -175,7 +175,7 @@ MV_SUB.grafo = {
 };
 
 // ================= LÍNEA DE TIEMPO =================
-const MV_LT = { sesion: ['chat', 'Conversaciones'], tarea: ['reloj', 'Tareas'], turno: ['luna', 'Turnos de noche'], consejo: ['persona', 'Consejos'], sueno: ['cerebro', 'Sueños'], permiso: ['escudo', 'Permisos'], recuerdo: ['chispa', 'Recuerdos'] };
+const MV_LT = { sesion: ['chat', 'Conversaciones'], tarea: ['reloj', 'Tareas'], turno: ['luna', 'Turnos de noche'], consejo: ['persona', 'Consejos'], sueno: ['cerebro', 'Sueños'], permiso: ['escudo', 'Permisos'], recuerdo: ['chispa', 'Recuerdos'], reunion: ['reunion', 'Reuniones'] };
 MV_SUB.linea = {
   q: '', rango: '30', tipos: null, limite: 200,
   async pintar(v) {

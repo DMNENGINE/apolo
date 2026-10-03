@@ -92,7 +92,7 @@ function crearNucleo(opciones = {}) {
     horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
   tareas.registrarInterna('sueno', async () => { await sueno.dormir({ motivo: 'noche' }); return ''; });   // el aviso llega a la hora del briefing
   require('./herramientas').registrar([grafoMod.HERRAMIENTA]);
-  const linea = require('./linea').crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria });
+  const linea = require('./linea').crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria, reuniones: () => nucleo.reuniones });
   const privacidad = require('./privacidad').crearPrivacidad({ cfg, memoria, grafo, sesiones, personalidad, registro, bus });
   const wrapped = require('./wrapped').crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos });
   Object.assign(nucleo, { grafo, sueno, linea, privacidad, wrapped });
@@ -129,6 +129,12 @@ function crearNucleo(opciones = {}) {
     modelo: () => cfg.dashboards?.modeloAgente || modeloCerebro(), fetch: opciones.fetchDashboards, ejecutarComando: opciones.comandoDashboards });
   require('./herramientas').registrar(dashMod.HERRAMIENTAS);
   nucleo.dashboards = dashboards; nucleo.extensiones.dashboards = { http: (...a) => dashboards.http(...a) };
+  // FASE 6: reuniones (subtítulos de Meet/Teams/Zoom vía la extensión o audio local mic+sistema → whisper → resumen) → /v1/reuniones
+  const reunMod = require('./reuniones');
+  const reuniones = reunMod.crearReuniones({ cfg, bus, navegador, generarJSON: generarJSONvivo, modelo: modeloCerebro, tareas, memoria,
+    lanzarGrabadora: opciones.lanzarGrabadora, transcribir: opciones.transcribirReunion });
+  require('./herramientas').registrar(reunMod.HERRAMIENTAS);
+  nucleo.reuniones = reuniones; nucleo.extensiones.reuniones = { http: (...a) => reuniones.http(...a) };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }

@@ -626,6 +626,19 @@ let panicoOn = false;
 const pintarPanico = s => { panicoOn = !!(s && s.activo); const b = $('panic'); if (!b) return; b.textContent = panicoOn ? 'REANUDAR' : 'STOP'; b.style.color = panicoOn ? '#4dff88' : '#ff4d4d'; if (panicoOn) $('h2').textContent = '🛑 PÁNICO — todo parado'; };
 if (window.bridge && bridge.onPanico) { bridge.onPanico(pintarPanico); bridge.panicoEstado().then(pintarPanico).catch(() => { }); }
 $('panic') && $('panic').addEventListener('click', () => { if (!window.bridge || !bridge.panico) return; if (panicoOn || confirm('¿Parar TODO? (turnos, control del PC, tareas, permisos)')) bridge.panico(!panicoOn); });
+// reuniones: piloto REC rojo fijo en la isla mientras APOLO graba/toma notas (core/reuniones.js)
+if (window.bridge && bridge.onReunion) bridge.onReunion(r => {
+  let el = document.getElementById('rec');
+  if (!r || !r.grabando) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'rec';
+    el.style.cssText = 'position:fixed;top:6px;right:8px;z-index:99;display:flex;align-items:center;gap:5px;padding:2px 8px;border-radius:10px;background:rgba(40,0,0,.75);border:1px solid #ff4d4d;color:#ffb3b3;font:700 10px system-ui;letter-spacing:.06em;pointer-events:none';
+    el.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#ff3030;box-shadow:0 0 6px #ff3030;animation:recpul 1.4s ease-in-out infinite"></span>REC';
+    const st = document.createElement('style'); st.textContent = '@keyframes recpul{50%{opacity:.25}}'; document.head.appendChild(st);
+    document.body.appendChild(el);
+  }
+  el.title = `${tr('Tomando notas')}: ${r.titulo || ''}`;
+});
 setTimeout(() => {                                        // saludo al arrancar
   robot.greet(tr('¡HOLA! 👋')); sound.play('hola'); say(tr('Hola, estoy listo'));
   const [x, y] = center(); emit(x, y, 36, COLORS.listo, 'burst'); emit(0, 0, 40, ['#ffffff', '#7fe3ff', '#b58cff'], 'star');

@@ -36,4 +36,5 @@ contextBridge.exposeInMainWorld('bridge', {
   panico: on => ipcRenderer.send('panico', !!on),                       // kill switch global (FASE 9)
   panicoEstado: () => ipcRenderer.invoke('panico-estado'),
   onPanico: fn => ipcRenderer.on('panico', (_e, s) => fn(s)),
+  onReunion: fn => ipcRenderer.on('reunion', (_e, r) => fn(r)),                // REC mientras APOLO toma notas de una reunión
 });
