@@ -37,6 +37,10 @@ const SK_items = x => {
 const SK_GRAV = g => { const t = String(g || '').toLowerCase(); return /cr[ií]t|alta|high|grave|rojo/.test(t) ? 'mal' : /media|medium|amar|warn/.test(t) ? 'aviso' : ''; };
 const SK_PESO = g => (/cr[ií]t/i.test(g) ? -1 : { mal: 0, aviso: 1, '': 2 }[SK_GRAV(g)]);
 const SK_tono = slug => { let h = 0; for (const c of String(slug)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+// Etapa H: nivel de sandbox con que correrán sus scripts (lo calcula el núcleo: firma + escaneo + cfg.seguridad.sandbox)
+const SK_SB = { normal: ['', 'Sin sandbox'], restringido: ['aviso', 'Restringido'], aislado: ['ok', 'Aislado'], bloqueado: ['mal', 'Bloqueado'] };
+const SK_sb = s => { const d = s?.sandbox; if (!d || !SK_SB[d.nivel]) return ''; const [c, t] = SK_SB[d.nivel];
+  return `<span class="chip sk-sb ${c}" title="${esc(d.motivo + (d.avisos?.length ? ' · ' + d.avisos.join(' · ') : ''))}">${ic('escudo')}${tr(t)}</span>`; };
 const SK_siglas = n => String(n || '?').replace(/[-_]+/g, ' ').trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
 const SK_tipoFuente = f => {
   f = f.trim(); if (!f) return '';
@@ -196,7 +200,7 @@ VISTAS.skills = {
         ${sw(s.slug, s.activa, `title="${tr(s.activa ? 'Desactivar' : 'Activar')}"`)}</div>
       <p class="sk-desc">${esc(s.descripcion || tr('Sin descripción.'))}</p>
       <div class="sk-pie"><span class="chip sk-org ${oc}">${ic(oi)}${esc(org)}</span>
-        <span class="sk-sem ${cls}"><span class="punto ${cls}"></span>${txt}${hall && n !== 'verde' ? ` · ${hall}` : ''}</span>${typeof MK_firma === 'function' ? MK_firma(s.firma, true) : ''}
+        <span class="sk-sem ${cls}"><span class="punto ${cls}"></span>${txt}${hall && n !== 'verde' ? ` · ${hall}` : ''}</span>${typeof MK_firma === 'function' ? MK_firma(s.firma, true) : ''}${SK_sb(s)}
         <span class="sk-usos" title="${tr('{n} usos', { n: u.total })}${s.ultimoUso ? ' · ' + tr('último {x}', { x: esc(fecha(s.ultimoUso)) }) : ''}">${ic('latido')}${fmtK(u.semana ?? u.total)}${s.ultimoUso ? ` · ${hace(+new Date(s.ultimoUso))}` : ''}</span></div>
     </article>`;
   },
@@ -276,6 +280,11 @@ VISTAS.skills = {
       this.v.insertAdjacentHTML('beforeend', `<div class="sk-fondo" id="skFondo"></div><aside class="sk-cajon" id="skCajon" role="dialog" aria-label="${tr('Detalle de la skill')}"></aside>`);
       c = $('#skCajon'); $('#skFondo').onclick = () => this.cerrar();
       c.onclick = e => this.clicDetalle(e);
+      c.onchange = async e => {                                   // Etapa H: nivel de sandbox por skill
+        if (e.target.id !== 'skSandbox' || !this.det) return;
+        try { const r = await api('PATCH', `/skills/${encodeURIComponent(this.det.slug)}`, { sandbox: e.target.value }); if (r.skill) { this.det = { ...this.det, sandbox: r.skill.sandbox }; const i = this.lista.findIndex(x => x.slug === this.det.slug); if (i >= 0) this.lista[i] = { ...this.lista[i], sandbox: r.skill.sandbox }; } this.repintar(); this.pintarDetalle(); }
+        catch (x) { aviso(x.message, true); }
+      };
       requestAnimationFrame(() => { c.classList.add('abierto'); $('#skFondo')?.classList.add('abierto'); });
     }
     const s = this.lista.find(x => x.slug === slug);
@@ -337,7 +346,8 @@ VISTAS.skills = {
       ${n === 'rojo' && this.pest !== 'seg' ? `<button class="sk-alerta sk-alerta-btn" data-pest="seg">${ic('candado')}<span class="crece"><b>${tr('En cuarentena')}</b> · ${esc(s.escaneo?.resumen || tr('el escáner encontró patrones peligrosos'))}</span><span class="tenue">${tr('Ver informe')} ${ic('der')}</span></button>` : ''}
       <div class="sk-det-datos"><div><small>${tr('Estado')}</small><span class="flex">${sw('det', s.activa)}<b>${tr(s.activa ? 'Activa' : 'Inactiva')}</b></span></div>
         <div><small>${tr('Usos')}</small><b>${fmtK(u.total)}${u.semana != null ? ` <span class="tenue">· ${tr('{n} esta semana', { n: u.semana })}</span>` : ''}</b></div>
-        <div><small>${tr('Último uso')}</small><b>${s.ultimoUso ? esc(hace(+new Date(s.ultimoUso))) : tr('nunca')}</b></div></div>
+        <div><small>${tr('Último uso')}</small><b>${s.ultimoUso ? esc(hace(+new Date(s.ultimoUso))) : tr('nunca')}</b></div>
+        <div><small>${tr('Sandbox de sus scripts')}</small><span class="flex"><select id="skSandbox" title="${tr('auto: sin sandbox solo si está firmada por un autor de confianza y el escaneo es verde')}">${['auto', 'normal', 'restringido', 'aislado'].map(k => `<option value="${k}" ${(s.sandbox?.pedido || 'auto') === k ? 'selected' : ''}>${tr({ auto: 'Automático', normal: 'Normal (sin sandbox)', restringido: 'Restringido', aislado: 'Aislado (Windows Sandbox)' }[k])}</option>`).join('')}</select>${SK_sb(s)}</span></div></div>
       <div class="sk-det-acc"><button class="btn" data-acc="escanear">${ic('escudo')}${tr('Re-escanear')}</button><button class="btn" data-acc="actualizar">${ic('recargar')}${tr('Buscar actualización')}</button>
         ${s.externa ? `<span class="tenue sk-ext" title="${tr('Vive en la carpeta de {x}; se gestiona desde allí', { x: esc(org) })}">${ic('candado')}${tr('Externa: no se borra desde aquí')}</span>` : `<button class="btn mal" data-acc="eliminar" style="margin-left:auto">${ic('basura')}${tr('Eliminar')}</button>`}</div>
       <div class="pestanas sk-pest">${pest.map(([k, t, i, nn]) => `<button data-pest="${k}" class="${this.pest === k ? 'on' : ''}">${ic(i)}${t}${nn !== '' ? ` <span class="n">${nn}</span>` : ''}</button>`).join('')}</div>

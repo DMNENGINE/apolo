@@ -155,7 +155,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 - Modelo de amenazas público en `SECURITY.md`; bug bounty pequeño.
 - Bóveda de secretos (DPAPI/Keychain), nunca en texto plano ni en prompts.
-- Sandboxing opcional de shell (Windows Sandbox / contenedor) para skills de terceros.
+- Sandboxing opcional de shell (Windows Sandbox / contenedor) para skills de terceros. 2026-10-03: hecho por niveles (normal / restringido = Job Object + integridad baja / aislado = Windows Sandbox), ver docs/seguridad/sandbox.md; pendiente AppContainer, mac/linux y probar aislado en Windows Pro.
 - Registro de auditoría firmado: qué hizo, con qué permiso, quién aprobó.
 - Ventanas/sitios protegidos ampliables por el usuario. Kill switch global.
 - Comparativa honesta "APOLO vs OpenClaw" en seguridad.

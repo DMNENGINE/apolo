@@ -19,7 +19,8 @@
 //   GET  /v1/memoria?q= · POST /v1/memoria {texto,tipo} · DEL /v1/memoria/:id
 //   GET  /v1/tareas · POST /v1/tareas {nombre,cuando,accion,canal} · DEL /v1/tareas/:id · POST /v1/tareas/:id/ejecutar
 //   GET  /v1/skills · GET /v1/skills/:slug (con contenido) · POST /v1/skills/instalar {fuente} → {skill} | {opciones}
-//   PATCH /v1/skills/:slug {activa, forzar} · POST /v1/skills/:slug/escanear · POST /v1/skills/:slug/actualizar {aplicar} → {diff, aplicado}
+//   PATCH /v1/skills/:slug {activa, forzar} | {sandbox: auto|normal|restringido|aislado} · GET|PATCH /v1/sandbox {clave?, nivel} (Etapa H)
+//   · POST /v1/skills/:slug/escanear · POST /v1/skills/:slug/actualizar {aplicar} → {diff, aplicado}
 //   DEL  /v1/skills/:slug (no las externas)
 //   GET  /v1/skills/marketplace[?refrescar=1] → {entradas, fuentes, etiquetas, actualizado} · GET /v1/skills/marketplace/ficha?id= → {entrada, texto}
 //   taller: POST /v1/skills/crear {nombre,descripcion,instrucciones,scripts?,disparadores?,pruebas?} → {skill}
@@ -334,7 +335,8 @@ function iniciar(opciones = {}) {
       }
       if (p[1] === 'skills') {                                    // motor de skills (core/skills)
         const sk = n.skills, err = (e, c = 400) => json(res, e.status || c, { error: e.message });
-        if (!p[2] && M === 'GET') return json(res, 200, { skills: sk.lista() });
+        const conSb = x => (x && n.sandbox ? { ...x, sandbox: (d => ({ nivel: d.nivel, pedido: d.pedido, motivo: d.motivo, avisos: d.avisos }))(n.sandbox.elegir(x.slug, x)) } : x);   // Etapa H
+        if (!p[2] && M === 'GET') return json(res, 200, { skills: sk.lista().map(conSb) });
         // marketplace (core/skills/marketplace.js): catálogo agregado con caché de 6 h y ficha (SKILL.md / README)
         if (p[2] === 'marketplace' && M === 'GET') {
           try {
@@ -352,9 +354,10 @@ function iniciar(opciones = {}) {
         if (p[2] === 'crear' && !p[3] && M === 'POST') { try { return json(res, 201, { skill: sk.publica(await sk.taller.crear(await leer(req))) }); } catch (e) { return err(e); } }
         const s = p[2] && sk.obtener(decodeURIComponent(p[2]));
         if (!s) return json(res, 404, { error: 'skill' });
-        if (!p[3] && M === 'GET') return json(res, 200, s);
+        if (!p[3] && M === 'GET') return json(res, 200, conSb(s));
         if (!p[3] && M === 'PATCH') {
           const b = await leer(req);
+          if (typeof b.sandbox === 'string' && typeof b.activa !== 'boolean') { try { n.sandbox.ponerNivel(s.slug, b.sandbox); return json(res, 200, { skill: conSb(sk.obtener(s.slug)) }); } catch (e) { return err(e); } }   // Etapa H: nivel de sandbox
           if (typeof b.activa !== 'boolean') return json(res, 400, { error: 'activa' });
           try { return json(res, 200, (x => ({ ...x, skill: x }))(await sk.activar(s.slug, b.activa, { forzar: !!b.forzar }))); } catch (e) { return err(e); }
         }

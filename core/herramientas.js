@@ -352,14 +352,13 @@ const HERRAMIENTAS = [
       const cmd = { '.py': [win ? 'python' : 'python3', [f, ...args]], '.js': [process.execPath, [f, ...args]], '.mjs': [process.execPath, [f, ...args]], '.cjs': [process.execPath, [f, ...args]],
         '.ps1': [win ? 'powershell.exe' : 'pwsh', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', f, ...args]], '.sh': ['bash', [f, ...args]] }[ext];
       if (!cmd) return ok(`error: tipo de script no soportado (${ext || 'sin extensión'})`);
-      const p = spawn(cmd[0], cmd[1], { cwd: s.dir, windowsHide: true,               // ELECTRON_RUN_AS_NODE: dentro de la app, execPath es Electron
-        env: require('./seguridad').envLimpio(process.env, { ELECTRON_RUN_AS_NODE: '1', PYTHONIOENCODING: 'utf-8', SKILL_DIR: s.dir, APOLO_CWD: ctx.cwd || '' }) });   // FASE 9: sin claves ni tokens del entorno
-      let out = '';
-      p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
-      const t = setTimeout(() => { p.kill(); out += '\n[cancelado por tiempo]'; }, Math.min(a.timeoutSeg || 120, 600) * 1000);
-      ctx.signal?.addEventListener('abort', () => p.kill(), { once: true });
-      p.on('close', code => { clearTimeout(t); ok(recortar(`${out.trim()}\n[código de salida ${code}]`)); });
-      p.on('error', e => { clearTimeout(t); ok(`error: ${e.message}`); });
+      // Etapa H: el nivel de sandbox (normal / restringido / aislado) lo decide core/sandbox según firma, escaneo y cfg.seguridad.sandbox
+      const sb = ctx.sandbox || require('./sandbox').porDefecto(ctx.cfg);
+      const al = ctx.skills.almacen?.obtener?.(s.slug) || {};
+      sb.ejecutar({ clave: s.slug, meta: { firma: al.firma, escaneo: al.escaneo }, tipo: 'skill', bin: cmd[0], args: cmd[1], dirOrigen: s.dir, sesion: ctx.sesion, signal: ctx.signal,
+        timeoutSeg: Math.min(a.timeoutSeg || 120, 600),           // ELECTRON_RUN_AS_NODE: dentro de la app, execPath es Electron · FASE 9: sin claves ni tokens del entorno
+        env: require('./seguridad').envLimpio(process.env, { ELECTRON_RUN_AS_NODE: '1', PYTHONIOENCODING: 'utf-8', SKILL_DIR: s.dir, APOLO_CWD: ctx.cwd || '' }) })
+        .then(r => ok(recortar(`${String(r.salida).trim()}\n[código de salida ${r.codigo}]${r.nivel !== 'normal' || r.decision?.avisos?.length ? '\n' + r.nota : ''}`)));
     }),
   },
   {

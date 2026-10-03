@@ -43,7 +43,7 @@ function crearNucleo(opciones = {}) {
       const s = sesiones.crear({ modelo, canal: 'eval', titulo: 'eval de skill' });
       try { return await agente.enviar(s, texto); } finally { sesiones.borrar(s.id); }
     } });
-  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
+  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, sandbox: () => nucleo?.sandbox, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
   // atajo: enviar y emitir los eventos también al bus global
   const enviar = (s, texto, emitir) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); });
   subagentes = crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar: id => agente.cancelar(id) });
@@ -77,7 +77,7 @@ function crearNucleo(opciones = {}) {
     else if (!cfg.skills?.mejoraSemanal && ya) tareas.borrar(ya.id);
   } catch { }
   // plugins (core/plugins + core/sdk): cada uno en su proceso; el escáner es el mismo antivirus de las skills
-  const plugins = crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, sesiones, enviar, herramientas: require('./herramientas'),
+  const plugins = crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, sesiones, enviar, herramientas: require('./herramientas'), sandbox: () => nucleo?.sandbox,
     escaner: () => opciones.escaner || require('./skills/escaner').crearEscaner({ generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), modelo: modeloCerebro() }),
     tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github'),
     // secretos de los plugins (slack:bot, matrix:token…): por defecto en la bóveda (DPAPI); la app puede poner el suyo con ponerSecretos
@@ -122,6 +122,9 @@ function crearNucleo(opciones = {}) {
   const auditoria = require('./auditoria').crearAuditoria({ cfg, bus, boveda: cfg.boveda });
   permisos.ponerAuditoria(auditoria);
   nucleo.auditoria = auditoria; nucleo.extensiones.auditoria = { http: (...a) => auditoria.http(...a) };
+  // Etapa H: sandbox por niveles para scripts de skills y shell de plugins de terceros (core/sandbox)
+  const sandbox = require('./sandbox').crearSandbox({ cfg, auditoria });
+  nucleo.sandbox = sandbox; nucleo.extensiones.sandbox = { http: (...a) => sandbox.http(...a) };
   const panico = require('./panico').crearPanico({ nucleo });
   nucleo.panico = panico; nucleo.extensiones.panico = { http: (...a) => panico.http(...a) };
   tareas.ponerPausa(() => panico.activo());

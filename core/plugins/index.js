@@ -67,7 +67,7 @@ const sinFunciones = o => JSON.parse(JSON.stringify(o ?? null));
 // Secretos: el plugin pide por nombre lo declarado en "secretos" del manifest; los da el proveedor inyectado (secretos o
 //   ponerSecretos({ leer, guardar, permitir? })), p. ej. el almacén safeStorage de conectores. Fuera de su espacio "<nombre>:"
 //   hace falta que el proveedor lo permita o que el usuario lo apruebe una vez. Los valores nunca van al registro.
-function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, herramientas, escaner, sesiones, enviar, tokenGithub, secretos = null }) {
+function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, herramientas, escaner, sesiones, enviar, tokenGithub, secretos = null, sandbox: elSandbox = null }) {
   const base = path.join(cfg.dir, 'plugins'), datos = path.join(cfg.dir, 'plugins-datos'), fEstado = path.join(base, '_estado.json');
   const op = () => ({ timeoutMs: 60_000, activarMs: 20_000, proveedorMs: 300_000, maxReinicios: 3, backoffMs: 1000, dev: false, ...(cfg.gestorPlugins || {}) });
   fs.mkdirSync(base, { recursive: true });
@@ -262,19 +262,19 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
           const r2 = await permisos.pedirExterno({ resumen: `El plugin "${nombre}" quiere ejecutar: ${String(a.comando).slice(0, 600)}`, peligro: pel, origen: `plugin ${nombre}` });
           if (!r2?.ok) throw denegado('shell peligroso');
         }
-        return shell(String(a.comando || ''), Math.min(+a.timeoutSeg || 60, 600));
+        return shell(String(a.comando || ''), Math.min(+a.timeoutSeg || 60, 600), nombre);
       }
       default: throw new Error(`método desconocido ${metodo}`);
     }
   }
-  const shell = (comando, seg) => new Promise(ok => {
+  // Etapa H: el shell de un plugin pasa por core/sandbox (nivel según firma/escaneo/dev y cfg.seguridad.sandbox.porSkill['plugin:<nombre>'])
+  const shell = async (comando, seg, nombre) => {
     const [bin, args] = process.platform === 'win32' ? ['powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', comando]] : ['bash', ['-lc', comando]];
-    const p = spawn(bin, args, { windowsHide: true, env: require('../seguridad').envLimpio(process.env) }); let out = '';   // sin claves ni tokens del entorno
-    p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
-    const t = setTimeout(() => p.kill(), seg * 1000);
-    p.on('close', code => { clearTimeout(t); ok({ salida: out.slice(-20_000), codigo: code }); });
-    p.on('error', e => { clearTimeout(t); ok({ salida: e.message, codigo: -1 }); });
-  });
+    const e = estado[nombre] || {}, sb = (typeof elSandbox === 'function' ? elSandbox() : elSandbox) || require('../sandbox').porDefecto(cfg);
+    const r = await sb.ejecutar({ clave: `plugin:${nombre}`, meta: { firma: e.firma, escaneo: e.escaneo, dev: !!e.dev }, tipo: 'plugin', bin, args, timeoutSeg: seg,
+      env: require('../seguridad').envLimpio(process.env) });                  // sin claves ni tokens del entorno
+    return { salida: String(r.salida).slice(-20_000), codigo: r.codigo, sandbox: r.nivel };
+  };
   function registrarInterna(interna) {
     const [, nombre, clave] = interna.split(':');
     tareas.registrarInterna(interna, async () => {
