@@ -87,6 +87,19 @@ function crearSandbox({ cfg = {}, auditoria = null, plataforma = process.platfor
     const c = conf(), d = disponible();
     return { porDefecto: c.porDefecto, porSkill: c.porSkill, limites: { memoriaMB: c.memoriaMB, cpu: c.cpu, procesos: c.procesos }, disponible: d, vivos: vivos.size, plataforma };
   }
+  // rutas que el nivel restringido NO puede leer (etiqueta no-read-up; APOLO y el usuario las siguen leyendo)
+  function ponerProtegidos(lista) {
+    const limpia = [...new Set(lista.map(x => String(x).trim()).filter(Boolean))].slice(0, 50);
+    cfg.seguridad = cfg.seguridad || {}; cfg.seguridad.sandbox = { ...(cfg.seguridad.sandbox || {}), protegerLectura: limpia };
+    if (cfg.dir) {
+      const f = path.join(cfg.dir, 'config.json');
+      let disco = {}; try { disco = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { }
+      disco.seguridad = { ...(disco.seguridad || {}), sandbox: { ...(disco.seguridad?.sandbox || {}), protegerLectura: limpia } };
+      fs.writeFileSync(f, JSON.stringify(disco, null, 2));
+    }
+    try { auditoria?.registrar({ tipo: 'seguridad', resumen: `sandbox: lectura protegida → ${limpia.length} rutas`, quien: 'panel' }); } catch { }
+    return { ...estado(), protegerLectura: limpia };
+  }
   // cambia el nivel de una skill/plugin (clave) o el por defecto (clave = null) y lo guarda en config.json
   function ponerNivel(clave, nivel) {
     if (!PEDIDOS.includes(nivel)) throw Object.assign(new Error(`nivel no válido (${PEDIDOS.join(', ')})`), { status: 400 });
@@ -105,6 +118,7 @@ function crearSandbox({ cfg = {}, auditoria = null, plataforma = process.platfor
   }
   async function http(M, p, b = {}) {
     if (M === 'GET' && !p[2]) return estado();
+    if (M === 'PATCH' && !p[2] && Array.isArray(b.protegerLectura)) return ponerProtegidos(b.protegerLectura);
     if (M === 'PATCH' && !p[2]) return ponerNivel(b.clave || null, String(b.nivel || ''));
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
