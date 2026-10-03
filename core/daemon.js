@@ -41,6 +41,8 @@
 //   GET|PATCH|DEL /v1/reuniones/:id · POST :id/resumir|tareas {indices}|enviar · GET :id/exportar · POST /v1/navegador/reunion (extensión)
 //   FASE 6 dashboards (core/dashboards.js): GET /v1/dashboards · POST {titulo, widgets, fijado?, confirmo?} · GET|PATCH|DEL /v1/dashboards/:id
 //   GET /v1/dashboards/:id/datos[?forzar=1&widget=] → {widgets:{id:{datos, error, t, proximo}}} (caché por widget)
+//   ETAPA J Modo Gamer (core/gamer): GET /v1/gamer[?revision=0] (estado + revisión) · POST /v1/gamer/activar {juego?} · POST /v1/gamer/desactivar
+//   GET /v1/gamer/revision · GET /v1/gamer/limpieza (tamaños) · POST /v1/gamer/limpieza {ids} · PATCH /v1/gamer/config {cerrar[], modo, acciones{}}
 //   GET  /v1/nodos · POST /v1/nodos/emparejar {codigo} · POST /v1/nodos/activar {activo} · PATCH|DEL /v1/nodos/:id
 //   POST /v1/nodos/:id/gesto {gesto|estado} · POST /v1/nodos/:id/foto → {ruta}   (ojo de escritorio ESP32: core/nodos)
 //   APP MÓVIL (core/movil.js, PWA en /m/): POST /v1/movil/canjear {codigo,pin,nombre} (sin token) → token de dispositivo (header x-dispositivo)

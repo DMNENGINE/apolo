@@ -108,7 +108,7 @@ function cercania(p) {
 }
 setInterval(() => {
   const now = Date.now(), d = new Date();
-  if ((lastState !== 'reposo' && lastState !== 'dormido') || open || robot.ocupado() || now - lastActivity < 4000) return;
+  if (modoGamer || (lastState !== 'reposo' && lastState !== 'dormido') || open || robot.ocupado() || now - lastActivity < 4000) return;
   // en punto (y a la media) enseña la hora
   const marca = d.getHours() * 2 + (d.getMinutes() >= 30 ? 1 : 0);
   if ((d.getMinutes() === 0 || d.getMinutes() === 30) && marca !== ultimaHora) { ultimaHora = marca; hacerGesto('reloj', 6, ''); sound.play('blip'); return; }
@@ -392,6 +392,8 @@ async function startListen() {
 $('mic').addEventListener('click', startListen);
 if (bridge.onListenKey) bridge.onListenKey(startListen);
 if (bridge.onSay) bridge.onSay(t => { robot.hud(tr('RESPUESTA'), 4, 'listo'); say(String(t).replace(/[`*#>_]/g, '').slice(0, 400)); });
+var modoGamer = false;                                         // Modo Gamer activo → isla dormida (evento del núcleo {tipo:'gamer'})
+if (bridge.onGamer) bridge.onGamer(v => { modoGamer = !!v; if (!modoGamer) lastActivity = Date.now(); render(); });
 if (bridge.onPoke) bridge.onPoke(() => { const [x, y] = center(); robot.poke(); sound.play('poke'); emit(x, y, 14, COLORS.listo, 'burst'); lastActivity = Date.now(); render(); });
 bridge.onExpired(id => { const i = perms.findIndex(p => p.id === id); if (i >= 0) { perms.splice(i, 1); render(); } });
 
@@ -418,9 +420,9 @@ function render() {
   }
   let st = globalState();
   if (hovering) lastActivity = now;
-  if (st === 'reposo' && now - lastActivity > SLEEP_MS) st = 'dormido';
+  if (st === 'reposo' && (modoGamer || now - lastActivity > SLEEP_MS)) st = 'dormido';   // Modo Gamer: dormida a 6 fps y sin ruido
   if (st !== lastState) {
-    if (st === 'dormido') sound.play('bostezo');
+    if (st === 'dormido' && !modoGamer) sound.play('bostezo');
     else if (lastState === 'dormido') despertar();
     const bad = st === 'permiso' && perms[0]?.peligro;
     robot.setState(bad ? 'error' : st, st === 'permiso' ? (bad ? `${tr('PELIGRO')}: ${perms[0].tool}` : `${tr('¿PERMISO?')} ${perms[0]?.tool || ''}`) : '');

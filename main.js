@@ -1229,6 +1229,10 @@ app.whenReady().then(() => {
   const enviarNombre = () => { const n = nombreCompanero(); if (win && !win.isDestroyed()) win.webContents.send('nombre', n); if (tray) tray.setToolTip(n === 'Robot' ? 'Robot Companion' : `${n} · Robot Companion`); };
   win.webContents.on('did-finish-load', enviarNombre);
   nucleo.bus.on('evento', e => { if (e && e.tipo === 'identidad') enviarNombre(); });
+  // Modo Gamer (core/gamer): la isla se duerme (6 fps, sin gestos ni sonidos) mientras dure la partida
+  const enviarGamer = () => { if (win && !win.isDestroyed()) win.webContents.send('gamer', !!nucleo.gamer?.estado?.().activo); };
+  win.webContents.on('did-finish-load', enviarGamer);
+  nucleo.bus.on('evento', e => { if (e && e.tipo === 'gamer' && win && !win.isDestroyed()) win.webContents.send('gamer', !!e.activo); });
   enviarNombre();
   // idioma: a la isla al cargar y cada vez que cambie en el panel (PATCH /v1/config {idioma} cambia nucleo.cfg en memoria)
   let idiomaEnviado = '';

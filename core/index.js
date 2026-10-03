@@ -138,6 +138,10 @@ function crearNucleo(opciones = {}) {
     lanzarGrabadora: opciones.lanzarGrabadora, transcribir: opciones.transcribirReunion });
   require('./herramientas').registrar(reunMod.HERRAMIENTAS);
   nucleo.reuniones = reuniones; nucleo.extensiones.reuniones = { http: (...a) => reuniones.http(...a) };
+  // ETAPA J: Modo Gamer (core/gamer) → /v1/gamer; al arrancar deshace una sesión que quedara abierta (cierre a medias)
+  const gamer = require('./gamer').crearGamer({ cfg, bus, permisos, so: opciones.soGamer });
+  nucleo.gamer = gamer; nucleo.extensiones.gamer = { http: (...a) => gamer.http(...a) };
+  gamer.restaurarPendiente().catch(e => console.log(`[gamer] no se pudo restaurar: ${e.message}`));
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }

@@ -1006,3 +1006,15 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .rn-t { font-family: var(--mono); font-size: 11px; color: var(--txt-3); padding-top: 3px; }
 @media (max-width: 900px) { .rn-modos, .rn-det { grid-template-columns: 1fr; } .rn-trans { max-height: none; } .rn-activa { flex-wrap: wrap; } }
 .rn-modos > .rn-modo { margin: 0; }
+
+/* Modo Gamer (#/gamer) */
+.gm-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gm-cab > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gm-campo { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; max-width: 360px; }
+.gm-lista { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.gm-fila { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gm-fila small { overflow-wrap: anywhere; }
+.gm-conf { margin-top: 14px; }
+.gm-conf input, .gm-conf select { margin: 6px 6px 0 0; max-width: 100%; }
+.gm-conf #gmCerrar { width: 420px; }
+.gm-avisos { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
