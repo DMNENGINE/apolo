@@ -85,6 +85,18 @@ token de dispositivo (alcance limitado); el panel completo exige el token maestr
 
 No uses "Bypass" de Access para `/v1`. El túnel de Mobile Lab (`mobilelab.clipsfarmer.com`) es otro servicio: no lo reutilices tal cual.
 
+## Escritorio remoto
+
+Ver el PC en vivo y usar su ratón y teclado desde el móvil (botón **Escritorio remoto** en Inicio).
+
+- **Apagado por defecto.** Se concede por móvil en el PC: Configuración → Dispositivos → "Permitir escritorio remoto". El móvil no puede dárselo a sí mismo.
+- **Cada sesión se aprueba**: en el PC (diálogo; por defecto) o con el PIN/huella del móvil (`cfg.escritorio.remoto.aprobacion: 'pin'`).
+- **Ventanas protegidas** (`cfg.escritorio.bloqueadas`: bancos, gestores de contraseñas…) salen en negro y no se pueden tocar ni escribir en ellas.
+- Mientras dura: borde rojo y "Control remoto activo desde <móvil>" en todos los monitores. Si alguien toca el ratón o el teclado del PC, se corta. Ctrl+Alt+Esc / Parar TODO = pánico.
+- Límites: `maxMin` 30 y `inactividadMin` 5 (sin tocar nada). Todo queda en la auditoría (inicio, cada acción —del texto escrito solo su longitud— y fin).
+- Gestos: toque = clic · mantener = clic derecho · dos dedos = scroll · pellizco = zoom (con zoom, un dedo mueve la vista) · ⌨ = teclado del móvil · barra de teclas (Esc, Tab, Ctrl/Alt/⇧/⊞ fijables, flechas, Supr, Ctrl+C/V/Z, Alt+Tab, Alt+F4).
+- Rendimiento medido (monitor 2560×1440 → 1280–1688 px, JPEG 60): ~7–9 fps con ~150 KB/s cuando hay movimiento; ~1 fps y ~11 KB/s con la pantalla quieta (solo se envía lo que cambia). Por http en la LAN el tráfico NO va cifrado: fuera de casa usa HTTPS (túnel/Tailscale).
+
 ## Para desarrolladores
 
 - Archivos: `core/movil.js` (emparejar, tokens, alcance, WebAuthn, push), `core/qr.js` (codificador QR propio, modo byte, nivel M,

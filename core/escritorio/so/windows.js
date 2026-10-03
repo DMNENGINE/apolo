@@ -19,6 +19,8 @@ function ejecutarPantalla(args, { timeout = 20_000 } = {}) {
 
 const lanzarManos = () => spawn('powershell.exe', [...PS, script('manos.ps1')], { windowsHide: true });
 // grabadora de reuniones (grabar.ps1): WASAPI micrófono + loopback del sistema en trozos WAV 16 kHz; mismo protocolo JSON por líneas
+// escritorio remoto (flujo.ps1): captura continua con tapado de ventanas protegidas; binario por stdout, JSON por stdin
+const lanzarFlujo = (args = []) => spawn('powershell.exe', [...PS, script('flujo.ps1'), ...args], { windowsHide: true });
 const lanzarGrabadora = () => spawn('powershell.exe', [...PS, script('grabar.ps1')], { windowsHide: true });
 
 function escribirEnTerminal({ hwnd, archivo, timeout = 15_000 }) {
@@ -35,4 +37,4 @@ const voz = {
   hablar: null,
 };
 
-module.exports = { nombre: 'windows', soportado: true, ejecutarPantalla, lanzarManos, lanzarGrabadora, escribirEnTerminal, abrirTerminal, voz };
+module.exports = { nombre: 'windows', soportado: true, ejecutarPantalla, lanzarManos, lanzarFlujo, lanzarGrabadora, escribirEnTerminal, abrirTerminal, voz };

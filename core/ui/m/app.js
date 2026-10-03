@@ -242,7 +242,7 @@ function montarApp(recien = false) {
     addEventListener('scroll', () => $('#cab')?.classList.toggle('sombra', scrollY > 4), { passive: true });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && E.token) { cargarPermisos(); cargarAgentes(); } });
   }
-  api('GET', '/movil/yo').then(y => { E.yo = y; E.nombre = y.nombreAsistente || E.nombre; LS.set('nombre', E.nombre); pintarCab(); if (E.vista === 'ajustes') ruta(); }).catch(() => { });
+  api('GET', '/movil/yo').then(y => { E.yo = y; E.nombre = y.nombreAsistente || E.nombre; LS.set('nombre', E.nombre); pintarCab(); if (E.vista === 'ajustes') ruta(); if (E.vista === 'inicio') window.pintarEscBtn?.(); }).catch(() => { });
   cargarPermisos(); cargarAgentes();
   escucharEventos();
   ruta();
@@ -338,6 +338,7 @@ VISTAS.inicio = c => {
       <button data-ir="chat"><span class="bola">${ic('chat')}</span>${tr('Chat')}</button>
       <button data-ir="encargo"><span class="bola">${ic('luna')}</span>${tr('Encargo')}</button>
       <button data-ir="wrapped"><span class="bola">${ic('estrella')}</span>${tr('Wrapped')}</button></div>
+    <div id="escBtn"></div>
     <div class="sec">${tr('Ahora mismo')}<span class="n" id="nAg">0</span></div><div id="agentes"></div>
     <div class="sec" id="secTar" hidden>${tr('Tarjetas')}<span class="n" id="nTar">0</span></div><div id="tarjetas"></div>
     <div class="sec">${tr('Tu semana')}</div><div id="semana"></div>
@@ -351,7 +352,7 @@ VISTAS.inicio = c => {
     else if (d === 'encargo') hojaEncargo();
     else if (d === 'wrapped') abrirWrapped();
   };
-  pintarAlerta(); pintarAgentes(); pintarTarjetas(); pintarSemana();
+  pintarAlerta(); pintarAgentes(); pintarTarjetas(); pintarSemana(); window.pintarEscBtn?.();
 };
 function pintarAlerta() {
   const a = $('#alerta'); if (!a) return;

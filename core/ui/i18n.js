@@ -459,7 +459,24 @@
     'PIN incorrecto: dispositivo bloqueado': 'wrong PIN: device locked', 'el cerebro no está (abre la app de escritorio)': "the brain isn't running (open the desktop app)", 'audio vacío': 'empty audio', 'tiempo agotado': 'timed out', 'reto caducado o no válido': 'expired or invalid challenge',
     'firma de la passkey no válida': 'invalid passkey signature', 'falta la verificación de usuario (huella/cara)': 'user verification missing (fingerprint/face)',
   };
-  Object.assign(I18N_DIC.en, I18N_EN, I18N_EN_F4, I18N_EN_MOVIL);
+  // escritorio remoto (core/escritorio/remoto.js, m/escritorio.js, panel Dispositivos, main.js)
+  const I18N_EN_REMOTO = {
+    'Escritorio remoto': 'Remote desktop', 'Permitir escritorio remoto': 'Allow remote desktop', 'Esperando aprobación': 'Waiting for approval',
+    'Acepta en el PC la petición de escritorio remoto.': 'Accept the remote desktop request on the PC.', 'Escribe tu PIN para ver y controlar el PC': 'Enter your PIN to view and control the PC',
+    'Conectando…': 'Connecting…', 'Reconectando…': 'Reconnecting…', 'La sesión terminó': 'The session ended', 'Escritorio remoto terminado': 'Remote desktop ended', 'Teclado': 'Keyboard', 'Cerrar': 'Close',
+    'Otro móvil está usando el escritorio remoto': 'Another phone is using the remote desktop', 'pantalla bloqueada o aviso de UAC': 'screen locked or UAC prompt',
+    'Ver la pantalla y usar el ratón/teclado desde este móvil. Cada sesión se aprueba aquí.': 'View the screen and use the mouse/keyboard from this phone. Every session is approved here.',
+    'Pide ver y controlar este PC': 'Wants to view and control this PC', 'Control remoto activo · termina {x}': 'Remote control active · ends {x}', 'Cortar': 'Cut', 'Permitir': 'Allow', 'Rechazar': 'Reject',
+    'Escritorio remoto permitido: cada sesión pedirá tu aprobación aquí': 'Remote desktop allowed: every session will ask for your approval here', 'Escritorio remoto retirado': 'Remote desktop removed',
+    '{m} quiere ver y controlar este PC': '{m} wants to view and control this PC', 'Control remoto activo desde': 'Remote control active from', 'Escritorio remoto terminado:': 'Remote desktop ended:',
+    'Verá tu pantalla (las ventanas protegidas salen en negro) y podrá usar el ratón y el teclado. Si tocas el ratón o el teclado, se corta.': 'It will see your screen (protected windows are blacked out) and can use the mouse and keyboard. Touching the mouse or keyboard cuts it.',
+    'este móvil no tiene permiso de escritorio remoto: actívalo en el PC (Configuración → Dispositivos)': 'this phone has no remote desktop permission: enable it on the PC (Settings → Devices)',
+    'rechazado en el PC': 'rejected on the PC', 'nadie lo aprobó en el PC a tiempo': 'nobody approved it on the PC in time', 'no hay sesión remota activa (terminó o caducó)': 'no active remote session (it ended or expired)',
+    'ventana PROTEGIDA: no se puede tocar desde el móvil': 'PROTECTED window: it can’t be touched from the phone', 'la ventana activa está PROTEGIDA: no se escribe en ella desde el móvil': 'the active window is PROTECTED: no typing into it from the phone',
+    'el agente está usando el ratón y el teclado ahora mismo': 'the agent is using the mouse and keyboard right now', 'PÁNICO activo: reanuda desde el escritorio': 'PANIC active: resume from the desktop',
+    'confirma con tu huella o tu PIN': 'confirm with your fingerprint or PIN', 'tecla no válida': 'invalid key', 'aún no hay imagen del escritorio': 'no desktop image yet',
+  };
+  Object.assign(I18N_DIC.en, I18N_EN, I18N_EN_F4, I18N_EN_MOVIL, I18N_EN_REMOTO);
 
   if (typeof module !== 'undefined' && module.exports) module.exports = I18N;
   else {

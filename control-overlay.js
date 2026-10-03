@@ -3,7 +3,7 @@
 // y excluidas de las capturas (setContentProtection) para que el modelo no vea el borde en ver_pantalla.
 const { BrowserWindow, screen, globalShortcut } = require('electron');
 
-const html = (motivo, principal, grabando) => grabando ? `<!doctype html><meta charset="utf-8"><style>
+const html = (motivo, principal, grabando, remoto) => grabando ? `<!doctype html><meta charset="utf-8"><style>
   html,body{margin:0;height:100%;overflow:hidden;background:transparent;font:600 14px Segoe UI,system-ui,sans-serif}
   .b{position:fixed;inset:0;border:3px dashed #ff3b30;animation:l 1.2s steps(2) infinite}
   @keyframes l{50%{border-color:rgba(255,59,48,.35)}}
@@ -18,12 +18,13 @@ const html = (motivo, principal, grabando) => grabando ? `<!doctype html><meta c
   .t{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(20,0,0,.86);color:#fff;border:1px solid #ff3b30;
      border-radius:10px;padding:8px 16px;max-width:70%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.5)}
   .t small{display:block;font-weight:400;color:#ffb3ad;margin-top:3px}
-</style><div class="b"></div>${principal ? `<div class="t">🤖 El robot está usando tu ratón y teclado${motivo ? ` · ${motivo.replace(/[<&>]/g, '')}` : ''}
-  <small>Mueve el ratón, pulsa cualquier tecla o Ctrl+Alt+Esc para recuperar el control</small></div>` : ''}`;
+</style><div class="b"></div>${principal ? (remoto ? `<div class="t">📱 Control remoto activo desde ${String(motivo || 'el móvil').replace(/[<&>]/g, '')}
+  <small>Si tocas el ratón o el teclado se corta · Ctrl+Alt+Esc = pánico</small></div>` : `<div class="t">🤖 El robot está usando tu ratón y teclado${motivo ? ` · ${motivo.replace(/[<&>]/g, '')}` : ''}
+  <small>Mueve el ratón, pulsa cualquier tecla o Ctrl+Alt+Esc para recuperar el control</small></div>`) : ''}`;
 
 function crearOverlay({ alPanico, atajoPropio = true }) {   // atajoPropio=false: main.js ya tiene Ctrl+Alt+Esc registrado siempre (pánico global)
   let ventanas = [];
-  function mostrar(motivo, { grabando = false } = {}) {
+  function mostrar(motivo, { grabando = false, remoto = false } = {}) {   // remoto: escritorio remoto desde el móvil (motivo = nombre del móvil)
     ocultar();
     const prim = screen.getPrimaryDisplay().id;
     for (const d of screen.getAllDisplays()) {
@@ -35,7 +36,7 @@ function crearOverlay({ alPanico, atajoPropio = true }) {   // atajoPropio=false
       w.setAlwaysOnTop(true, 'screen-saver');
       w.setIgnoreMouseEvents(true);
       w.setContentProtection(true);
-      w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html(motivo, d.id === prim, grabando)));
+      w.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html(motivo, d.id === prim, grabando, remoto)));
       w.once('ready-to-show', () => w.showInactive());
       ventanas.push(w);
     }

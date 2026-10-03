@@ -4,6 +4,7 @@
 //   soportado                   true si esta plataforma ya tiene implementación real
 //   ejecutarPantalla(args, o)   → Promise<objeto JSON>  captura del monitor + elementos de la ventana activa (args estilo pantalla.ps1)
 //   lanzarManos()               → ChildProcess con el protocolo JSON por líneas de manos.ps1 (stdin órdenes, stdout respuestas/eventos)
+//   lanzarFlujo(args)          → ChildProcess de flujo.ps1 (escritorio remoto: fotogramas JPEG binarios por stdout, config por stdin)
 //   lanzarGrabadora()          → ChildProcess de grabar.ps1 (reuniones: mic + loopback en trozos WAV; JSON por líneas)
 //   escribirEnTerminal(o)       → Promise   escribir texto en la terminal de una sesión ({ hwnd, archivo })
 //   abrirTerminal(dir, args)    → abre una terminal nueva en dir ejecutando args (p. ej. ['claude', 'msg'])

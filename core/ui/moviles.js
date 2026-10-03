@@ -6,6 +6,7 @@ const MOVIL_UI = {
   async pintar(caja) {
     if (!caja) return;
     let d; try { d = await api('GET', '/movil'); } catch (e) { caja.innerHTML = `<p class="tenue">${esc(e.message)}</p>`; return; }
+    const er = await api('GET', '/escritorio').catch(() => null);          // escritorio remoto: sesión activa y solicitudes pendientes
     const chips = m => [m.bloqueado ? `<span class="chip mal">${tr('bloqueado')}</span>` : '', m.passkeys ? `<span class="chip ok">${tr('huella')}</span>` : '', m.push ? `<span class="chip ok">${tr('push')}</span>` : ''].join('');
     caja.innerHTML = `<div class="seccion">${tr('App móvil')}</div>
       <div class="caja">${fila('Acceso de móviles en la red local', d.activo
@@ -20,9 +21,15 @@ const MOVIL_UI = {
       <div class="caja" id="movLista">${d.dispositivos.length ? d.dispositivos.map(m => fila(`<span class="flex">${ic('movil')}${esc(m.nombre)}</span>`,
         esc([m.so, m.ip, tr('visto {x}', { x: hace(m.ultimo) })].filter(Boolean).join(' — ')),
         `${chips(m)}${m.push ? `<button class="btn fantasma mini" data-mov="push" data-id="${esc(m.id)}">${tr('Probar aviso')}</button>` : ''}
+         <span class="tenue" style="font-size:12px" title="${esc(tr('Ver la pantalla y usar el ratón/teclado desde este móvil. Cada sesión se aprueba aquí.'))}">${tr('Permitir escritorio remoto')}</span>${sw('esc:' + m.id, m.escritorio)}
          <button class="btn fantasma mini" data-mov="nombre" data-id="${esc(m.id)}">${tr('Renombrar')}</button>
          <button class="btn fantasma mini mal-txt" data-mov="revocar" data-id="${esc(m.id)}">${tr('Revocar')}</button>`)).join('')
         : `<p class="tenue" style="padding:12px 14px;margin:0">${tr('Ninguno todavía.')}</p>`}</div>
+      ${er && (er.sesion || er.solicitudes.length) ? `<div class="seccion">${tr('Escritorio remoto')}</div><div class="caja" id="movEsc">
+        ${er.solicitudes.map(q => fila(`<span class="flex">${ic('movil')}${esc(q.dispositivo)}</span>`, tr('Pide ver y controlar este PC'),
+          `<button class="btn fantasma mini mal-txt" data-esc="no" data-id="${esc(q.id)}">${tr('Rechazar')}</button><button class="btn pri mini" data-esc="si" data-id="${esc(q.id)}">${tr('Permitir')}</button>`)).join('')}
+        ${er.sesion ? fila(`<span class="flex">${ic('movil')}${esc(er.sesion.dispositivo)}</span>`, tr('Control remoto activo · termina {x}', { x: new Date(er.sesion.hasta).toLocaleTimeString() }) + (er.stats ? ` · ${er.stats.fps} fps · ${er.stats.kBps} KB/s` : ''),
+          `<button class="btn mal mini" data-esc="cortar">${tr('Cortar')}</button>`) : ''}</div>` : ''}
       <p class="tenue" style="font-size:12px;margin-top:10px">${tr('En http por la red local funcionan el chat, los permisos (lo peligroso con PIN), las tarjetas y el turno. La huella, los avisos push y la voz necesitan HTTPS: túnel de Cloudflare con Access o Tailscale (docs/movil.md).')}</p>`;
     $('[data-sw="movAct"]', caja).onclick = async e => {
       const on = e.currentTarget.getAttribute('aria-checked') !== 'true';
@@ -33,7 +40,20 @@ const MOVIL_UI = {
     $('#movUrlOk', caja).onclick = async () => {
       try { await api('PATCH', '/movil/config', { urlMovil: $('#movUrl', caja).value.trim() }); aviso('Guardado'); this.pintar(caja); } catch (e) { aviso(e.message, true); }
     };
+    const escCaja = $('#movEsc', caja);
+    if (escCaja) escCaja.onclick = async e => {
+      const b = e.target.closest('[data-esc]'); if (!b) return;
+      if (b.dataset.esc === 'cortar') await api('POST', '/escritorio/cortar', {}).catch(er => aviso(er.message, true));
+      else await api('POST', `/escritorio/solicitudes/${encodeURIComponent(b.dataset.id)}`, { aprobar: b.dataset.esc === 'si' }).catch(er => aviso(er.message, true));
+      this.pintar(caja);
+    };
     $('#movLista', caja).onclick = async e => {
+      const s = e.target.closest('[data-sw^="esc:"]');
+      if (s) {
+        const on = s.getAttribute('aria-checked') !== 'true', id = s.dataset.sw.slice(4);
+        try { await api('PATCH', `/movil/dispositivos/${encodeURIComponent(id)}`, { escritorio: on }); aviso(on ? 'Escritorio remoto permitido: cada sesión pedirá tu aprobación aquí' : 'Escritorio remoto retirado'); } catch (er) { aviso(er.message, true); }
+        return this.pintar(caja);
+      }
       const b = e.target.closest('[data-mov]'); if (!b) return;
       const id = encodeURIComponent(b.dataset.id), m = d.dispositivos.find(x => x.id === b.dataset.id);
       if (b.dataset.mov === 'push') { const r = await api('POST', `/movil/dispositivos/${id}/push-prueba`).catch(er => ({ error: er.message })); aviso(r.ok ? 'Aviso enviado' : (r.error || 'El servicio push no lo aceptó'), !r.ok); return; }

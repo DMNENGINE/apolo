@@ -1,8 +1,8 @@
 // Service worker de la app móvil: caché del "cascarón" (red primero, caché si no hay red), push y clic en notificaciones.
 // La API (/v1) NUNCA se cachea. Solo funciona en origen seguro (HTTPS o localhost); en http://IP-de-la-LAN el navegador no lo registra.
 'use strict';
-const CACHE = 'apolo-m-v1';
-const CASCARON = ['./', 'index.html', 'app.css', 'app.js', 'robot.js', 'manifest.webmanifest', 'icono-192.png', 'icono-512.png',
+const CACHE = 'apolo-m-v2';
+const CASCARON = ['./', 'index.html', 'app.css', 'app.js', 'escritorio.js', 'robot.js', 'manifest.webmanifest', 'icono-192.png', 'icono-512.png',
   '../i18n.js', '../robot3d.js', '../casco.glb', '../vendor/three.module.min.js', '../vendor/GLTFLoader.js', '../vendor/BufferGeometryUtils.js'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CASCARON)).catch(() => { }).then(() => self.skipWaiting())); });

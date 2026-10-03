@@ -41,7 +41,7 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null, ojos, r
         const l = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!l) continue;
         let j; try { j = JSON.parse(l.replace(/^﻿/, '')); } catch { continue; }
         if (j.evento === 'listo') avisarListo();
-        else if (j.evento === 'panico') panico(j.motivo);
+        else if (j.evento === 'panico') { panico(j.motivo); avisarOyentes(j); }   // también lo oye el escritorio remoto (remoto.js)
         else if (j.evento) avisarOyentes(j);
         else { esperas.get(j.id)?.(j); esperas.delete(j.id); }
       }

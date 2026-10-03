@@ -53,6 +53,7 @@ const ALCANCE = [
   ['GET', 'estado'], ['GET', 'sesiones'], ['POST', 'sesiones'], ['GET', 'sesiones/*'], ['POST', 'sesiones/*/mensajes'], ['POST', 'sesiones/*/cancelar'],
   ['GET', 'eventos'], ['GET', 'agentes'], ['GET', 'turno'], ['POST', 'turno'], ['GET', 'wrapped'], ['POST', 'voz/transcribir'], ['GET', 'panico'], ['POST', 'panico'],   // pánico: el móvil lo activa; reanudar solo desde el escritorio
   ['*', 'movil/**'],
+  ['*', 'escritorio/**'],               // escritorio remoto: además exige d.escritorio (permiso concedido desde el PC) → core/escritorio/remoto.js
 ].map(([m, r]) => [m, r.split('/')]);
 function alcance(M, p) {                 // p = ['v1', …]
   const s = p.slice(1);
@@ -118,7 +119,7 @@ function crearMovil({ nucleo: n, fetch: fetchPush = globalThis.fetch, ahora = ()
   }
 
   const publico = d => ({ id: d.id, nombre: d.nombre, creado: d.creado, ultimo: d.ultimo, ip: d.ip, so: d.so, idioma: d.idioma, bloqueado: !!d.bloqueado,
-    passkeys: (d.passkeys || []).length, push: !!d.push });
+    passkeys: (d.passkeys || []).length, push: !!d.push, escritorio: !!d.escritorio });
   const buscar = id => st.dispositivos.find(d => d.id === id);
 
   // ---------- emparejar ----------
@@ -226,6 +227,14 @@ function crearMovil({ nucleo: n, fetch: fetchPush = globalThis.fetch, ahora = ()
     return true;
   }
 
+  // prueba de identidad para el escritorio remoto (modo 'pin'): passkey con reto de uso 'escritorio' o el PIN
+  function probar(d, prueba, uso, ctx = {}) {
+    if (prueba?.tipo === 'passkey') return verificarAsercion(d, prueba, uso, ctx);
+    if (prueba?.tipo === 'pin') return comprobarPin(d, prueba.pin);
+    throw err('confirma con tu huella o tu PIN', 428);
+  }
+  const retoEscritorio = d => ({ reto: nuevoReto(d, 'escritorio'), credenciales: (d.passkeys || []).map(k => k.id) });
+
   // ---------- permisos (núcleo + hooks de Claude Code que main.js expone en nodos.permisosExternos) ----------
   function externos() { try { return n.nodos?.permisosExternos?.pendientes?.() || []; } catch { return []; } }
   function permisos() {
@@ -292,7 +301,15 @@ function crearMovil({ nucleo: n, fetch: fetchPush = globalThis.fetch, ahora = ()
       if (a === 'dispositivos' && x) {
         const dd = buscar(x); if (!dd) throw err('dispositivo', 404);
         if (!y && M === 'DELETE') return { ok: revocar(x) };
-        if (!y && M === 'PATCH') { if (typeof b.nombre === 'string' && b.nombre.trim()) dd.nombre = b.nombre.trim().slice(0, 40); guardar(); return publico(dd); }
+        if (!y && M === 'PATCH') {
+          if (typeof b.nombre === 'string' && b.nombre.trim()) dd.nombre = b.nombre.trim().slice(0, 40);
+          if (typeof b.escritorio === 'boolean' && b.escritorio !== !!dd.escritorio) {   // escritorio remoto: SOLO desde el PC (token maestro)
+            dd.escritorio = b.escritorio;
+            n.auditoria?.registrar({ tipo: 'seguridad', decision: b.escritorio ? 'conceder' : 'retirar', quien: 'panel', resumen: `escritorio remoto ${b.escritorio ? 'permitido' : 'retirado'} a ${dd.nombre}` });
+            n.bus.emit('evento', { tipo: 'movil', accion: 'escritorio', id: dd.id, valor: dd.escritorio });
+          }
+          guardar(); return publico(dd);
+        }
         if (y === 'push-prueba' && M === 'POST') return { ok: await enviarPush(dd, { titulo: 'APOLO', cuerpo: (TXT[dd.idioma] || TXT.es) === TXT.en ? 'Test notification ✔' : 'Notificación de prueba ✔', url: '/m/' }) };
       }
       throw err('ruta', 404);
@@ -333,7 +350,7 @@ function crearMovil({ nucleo: n, fetch: fetchPush = globalThis.fetch, ahora = ()
     throw err('fuera del alcance del móvil', 403);
   }
 
-  return Object.assign(api, { activo, ponerActivo, nuevoCodigo, canjear, autenticar, revocar, lista: () => st.dispositivos.map(publico), permisos, decidir, http, vapid, enviarPush, ipsLan });
+  return Object.assign(api, { activo, ponerActivo, nuevoCodigo, canjear, autenticar, revocar, lista: () => st.dispositivos.map(publico), permisos, decidir, probar, retoEscritorio, http, vapid, enviarPush, ipsLan });
 }
 
 module.exports = { crearMovil, ipPrivada, estaticoMovil, alcance, ipsLan, cifrarPush, jwtVapid };

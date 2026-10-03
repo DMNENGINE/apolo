@@ -766,10 +766,23 @@ async function startNucleo() {
   });
   nucleo.bus.on('control', c => {
     if (c.activo) overlayControl.mostrar(c.motivo);
-    else if (!nucleo.control.estado().length) overlayControl.ocultar();
+    else if (!nucleo.control.estado().length && !nucleo.remoto?.activa?.()) overlayControl.ocultar();
     const texto = c.activo ? `🖱️ ${tr('Tomo el control del ratón y teclado:')} ${c.motivo}` : `✋ ${tr('Control devuelto:')} ${c.razon || tr('terminado')}`;
     if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: `🤖 ${tr('Control del PC')}`, texto });
     if (isAway()) movil.sendAviso(texto, c.activo ? 'red' : 'blue');
+  });
+  // escritorio remoto desde el móvil (core/escritorio/remoto.js): cada sesión se aprueba AQUÍ + borde rojo con el nombre del móvil
+  nucleo.bus.on('escritorio-solicitud', q => {
+    dialog.showMessageBox({ type: 'warning', buttons: [tr('Rechazar'), tr('Permitir')], defaultId: 0, cancelId: 0, noLink: true, title: tr('Escritorio remoto'),
+      message: tr('{m} quiere ver y controlar este PC', { m: q.dispositivo }),
+      detail: tr('Verá tu pantalla (las ventanas protegidas salen en negro) y podrá usar el ratón y el teclado. Si tocas el ratón o el teclado, se corta.') })
+      .then(r => nucleo.remoto?.resolver(q.id, r.response === 1, 'PC')).catch(() => { });
+  });
+  nucleo.bus.on('escritorio-remoto', e => {
+    if (e.activo) overlayControl.mostrar(e.dispositivo, { remoto: true });
+    else if (!nucleo.control.estado().length) overlayControl.ocultar();
+    const texto = e.activo ? `📱 ${tr('Control remoto activo desde')} ${e.dispositivo}` : `✋ ${tr('Escritorio remoto terminado:')} ${e.razon || ''}`;
+    if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: `📱 ${tr('Escritorio remoto')}`, texto });
   });
   nucleo.bus.on('permiso-resuelto', ({ id: nid }) => {          // contestado por otra vía (API, tiempo agotado)
     for (const [id, p] of pending) if (p.nucleoId === nid) {

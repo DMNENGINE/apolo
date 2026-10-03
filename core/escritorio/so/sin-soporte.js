@@ -19,7 +19,7 @@ module.exports = function sinSoporte(plataforma, pendiente = 'docs/portabilidad.
   // grabadora de reuniones (mic + audio del sistema). Plan mac: ScreenCaptureKit (audio) + AVAudioEngine; linux: PipeWire/PulseAudio monitor (parec)
   const lanzarGrabadora = proceso('Grabar el audio de una reunión (micrófono + sistema)');
   return {
-    nombre, soportado: false,
+    nombre, soportado: false, lanzarFlujo: proceso('El escritorio remoto (ver la pantalla en vivo)'),
     ejecutarPantalla: falla('Ver la pantalla'),
     lanzarManos, lanzarGrabadora,
     escribirEnTerminal: falla('Escribir en la terminal de una sesión'),

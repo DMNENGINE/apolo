@@ -47,6 +47,9 @@
 //   móvil: GET|PATCH|DEL /v1/movil/yo · GET /v1/movil/permisos · POST /v1/movil/permisos/:id {decision, prueba} · POST /v1/movil/reto · /v1/movil/passkey/*
 //          POST|DEL /v1/movil/push · GET /v1/movil/tarjetas · POST /v1/movil/tarjetas/:id {accion}   (+ lo que deja movil.alcance: chat, eventos, agentes…)
 //   POST /v1/voz/transcribir (audio binario) → {texto}   (bus 'transcribir-audio' → main.js → Whisper)
+//   ESCRITORIO REMOTO (core/escritorio/remoto.js): móvil con d.escritorio → GET /v1/escritorio · POST /v1/escritorio/sesion {prueba?} (aprobación en el PC
+//          o PIN/passkey) · GET /v1/escritorio/flujo?monitor&ancho (binario, header x-escritorio) · POST /v1/escritorio/accion · DEL /v1/escritorio/sesion
+//          escritorio: GET /v1/escritorio · POST /v1/escritorio/solicitudes/:id {aprobar} · POST /v1/escritorio/cortar
 //   STREAM (core/stream): GET /v1/stream · PATCH config · POST secretos|conectar|desconectar|callar|panico|reanudar|clave|silenciar|decir|gesto|alerta|simular|comentar|encuesta
 //   overlay OBS sin token: GET /stream/overlay?clave= · /stream/eventos?clave= (SSE) · /stream/audio/:id?clave=
 //   FASE 9 (seguridad): GET /v1/panico · POST /v1/panico {origen} · POST /v1/panico/reanudar   (kill switch global, core/panico.js)
@@ -107,6 +110,8 @@ function iniciar(opciones = {}) {
   // app móvil: tokens de dispositivo con alcance limitado; cfg.red.moviles abre la LAN privada SOLO a /m/ y a esos tokens
   const MV = require('./movil');
   const movil = n.movil || (n.movil = MV.crearMovil({ nucleo: n }));
+  // escritorio remoto desde el móvil (core/escritorio/remoto.js): flujo de pantalla + ratón/teclado con permiso propio por dispositivo
+  if (!n.remoto) n.remoto = require('./escritorio/remoto').crearRemoto({ nucleo: n, ...(opciones.remoto || {}) });
   const ipCliente = opciones.ipCliente || ipDe;                 // las pruebas simulan IPs de la LAN
   const leerBinario = (req, max) => new Promise((ok, mal) => {
     const t = []; let l = 0;
@@ -146,6 +151,7 @@ function iniciar(opciones = {}) {
         try { return json(res, 200, await movil.http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {}, { maestro, dispositivo: disp, origen: String(req.headers.origin || ''), ip, puerto: srv.address()?.port })); }
         catch (e) { return json(res, e.status || 400, { error: e.message }); }
       }
+      if (p[1] === 'escritorio') return n.remoto.http(req, res, M, p, { maestro, disp, leer, json, origen: String(req.headers.origin || ''), q: Object.fromEntries(u.searchParams), sesionHdr: req.headers['x-escritorio'] });
       if (p[1] === 'voz' && p[2] === 'transcribir' && M === 'POST') {   // nota de voz (móvil / panel) → Whisper de la app de escritorio
         if (!n.bus.listenerCount('transcribir-audio')) return json(res, 501, { error: 'la transcripción necesita la app de escritorio (Whisper)' });
         const tipo = String(req.headers['content-type'] || '');
@@ -281,7 +287,8 @@ function iniciar(opciones = {}) {
         if (p[2] === 'soltar' && M === 'POST') {                  // botón de pánico desde el panel, la isla o el Stream Deck
           const est = n.control.estado(); n.control.soltarTodo('el usuario lo detuvo');   // solo el control; el pánico global es POST /v1/panico
           for (const c of est) n.agente.cancelar(c.sesion);
-          return json(res, 200, { ok: true, soltados: est.length });
+          const remota = n.remoto.cortar('el usuario lo detuvo');           // también la sesión de escritorio remoto
+          return json(res, 200, { ok: true, soltados: est.length + (remota ? 1 : 0) });
         }
       }
       if (p[1] === 'agentes' && M === 'GET') return json(res, 200, n.subagentes.lista());
