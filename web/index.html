@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>APOLO · Tu agente de IA, en tu PC, con el modelo que quieras</title>
+<meta name="description" content="APOLO es un agente de IA open source (MIT) para Windows con un robot 3D en tu escritorio: skills con antivirus, consejo de modelos, turno de noche, permisos desde el móvil y un ojo físico de 25 $. Funciona con Claude, ChatGPT, Gemini u Ollama en local.">
+<meta name="theme-color" content="#050708">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="img/favicon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="alternate" hreflang="es" href="https://dmnengine.github.io/apolo/?lang=es">
+<link rel="alternate" hreflang="en" href="https://dmnengine.github.io/apolo/?lang=en">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="APOLO">
+<meta property="og:title" content="APOLO · Tu agente. En tu PC. Con el modelo que quieras.">
+<meta property="og:description" content="Agente de IA open source con un robot 3D en tu escritorio. Skills con antivirus, consejo de modelos, turno de noche y un ojo físico de 25 $.">
+<meta property="og:url" content="https://dmnengine.github.io/apolo/">
+<meta property="og:image" content="https://dmnengine.github.io/apolo/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="El casco 3D de APOLO con el visor verde y el titular: Tu agente. En tu PC. Con el modelo que quieras.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@DEMON_CUBA">
+<meta name="twitter:title" content="APOLO · Tu agente. En tu PC. Con el modelo que quieras.">
+<meta name="twitter:description" content="Agente de IA open source (MIT) con un robot 3D en tu escritorio. Claude, ChatGPT, Gemini u Ollama en local.">
+<meta name="twitter:image" content="https://dmnengine.github.io/apolo/og.png">
+<link rel="preload" href="vendor/three.module.min.js" as="script" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main" data-i="skip">Saltar al contenido</a>
+
+<header class="nav" id="top">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top" aria-label="APOLO"><img src="img/favicon-64.png" alt="" width="28" height="28"><span>APOLO</span></a>
+    <nav class="nav-links" aria-label="Secciones">
+      <a href="#funciones" data-i="nav1">Funciones</a>
+      <a href="#seguridad" data-i="nav2">Seguridad</a>
+      <a href="#comparativa" data-i="nav3">Comparativa</a>
+      <a href="#modelos" data-i="nav4">Modelos</a>
+      <a href="#faq" data-i="nav5">FAQ</a>
+    </nav>
+    <div class="nav-act">
+      <div class="lang" role="group" aria-label="Idioma / Language">
+        <button type="button" data-lang="es" aria-pressed="true">ES</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="btn btn-ghost btn-sm gh" href="https://github.com/DMNENGINE/apolo" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.27 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg><span>GitHub</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO ============ -->
+<section class="hero" data-gesto="saludo">
+  <div class="wrap hero-in">
+    <div class="hero-txt">
+      <p class="eyebrow"><span class="dot"></span><span data-i="eyebrow">Open source · MIT · v0.2.0 beta</span></p>
+      <h1 data-i="h1">Tu agente. <span class="nw">En tu PC.</span> <em>Con el modelo que quieras.</em></h1>
+      <p class="lead" data-i="lead">APOLO es un robot 3D que vive en tu escritorio y dirige a tus agentes de IA: Claude Code, ChatGPT, Gemini u Ollama en local. Instala skills con antivirus, trabaja mientras duermes y te pide permiso antes de cualquier cosa arriesgada.</p>
+      <div class="cta">
+        <a class="btn btn-pri" href="https://github.com/DMNENGINE/apolo/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg><span data-i="dl">Descargar para Windows</span></a>
+        <a class="btn btn-ghost" href="https://github.com/DMNENGINE/apolo" rel="noopener"><span data-i="gh">Ver en GitHub</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+      <div class="install">
+        <span class="install-lbl" data-i="ps">o con PowerShell</span>
+        <div class="cmd">
+          <code id="cmd">irm https://raw.githubusercontent.com/DMNENGINE/apolo/main/install.ps1 | iex</code>
+          <button type="button" class="copy" data-copy="cmd" aria-label="Copiar comando" data-ilabel="copyl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span data-i="copy">Copiar</span></button>
+        </div>
+      </div>
+      <p class="fine" data-i="fine">Windows 10/11 · instala por usuario, sin admin · el instalador aún no está firmado: en SmartScreen pulsa «Más información → Ejecutar de todos modos».</p>
+    </div>
+
+    <div class="hero-bot">
+      <div class="bot-slot">
+        <div class="bot" id="bot" role="img" aria-label="El robot APOLO: un casco 3D con un visor verde que te sigue con la mirada" data-ilabel="botl">
+          <img class="poster" id="poster" src="img/poster.webp" alt="" width="640" height="640" fetchpriority="high">
+          <canvas id="botc" aria-hidden="true"></canvas>
+        </div>
+      </div>
+      <!-- recreación fiel de la tarjeta de permiso de la isla -->
+      <div class="perm" id="perm" aria-live="polite">
+        <div class="perm-h"><span class="perm-ic">!</span><b>Bash</b><span class="perm-src">Claude Code</span></div>
+        <code>npm publish --access public</code>
+        <div class="perm-b">
+          <button type="button" class="pb ok" data-act="si" data-i="allow">Permitir</button>
+          <button type="button" class="pb al" data-act="si" data-i="always">Siempre</button>
+          <button type="button" class="pb no" data-act="no" data-i="deny">Denegar</button>
+        </div>
+        <p class="perm-note" data-i="permnote">Pruébalo: así te pide permiso.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <p class="works" data-i="works">Funciona con</p>
+    <ul class="logos-row" aria-label="Modelos compatibles">
+      <li><img src="logos/claude-color.svg" alt="Claude" width="28" height="28"></li>
+      <li><img class="mono" src="logos/openai.svg" alt="OpenAI / ChatGPT" width="28" height="28"></li>
+      <li><img src="logos/gemini-color.svg" alt="Gemini" width="28" height="28"></li>
+      <li><img class="mono" src="logos/ollama.svg" alt="Ollama" width="28" height="28"></li>
+      <li><img src="logos/qwen-color.svg" alt="Qwen" width="28" height="28"></li>
+      <li><img src="logos/openrouter-color.svg" alt="OpenRouter" width="28" height="28"></li>
+      <li><img class="mono" src="logos/groq.svg" alt="Groq" width="28" height="28"></li>
+      <li><img src="logos/deepseek-color.svg" alt="DeepSeek" width="28" height="28"></li>
+      <li><img src="logos/mistral-color.svg" alt="Mistral" width="28" height="28"></li>
+      <li><img class="mono" src="logos/lmstudio.svg" alt="LM Studio" width="28" height="28"></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ ISLA / PERMISOS ============ -->
+<section class="sec" id="funciones" data-gesto="mirar">
+  <div class="wrap split">
+    <div class="txt">
+      <p class="kick" data-i="k0">La isla</p>
+      <h2 data-i="t0">Todo lo que hacen tus agentes, en lo alto de tu pantalla.</h2>
+      <p data-i="p0">Sesiones en vivo, subagentes, archivos que se escriben, uso de tu plan y contexto por sesión. Cuando algo es arriesgado, el casco se pone ámbar y te pregunta. Permitir, Siempre o Denegar: desde la isla, el Stream Deck, Discord, Telegram, WhatsApp, el móvil o el ojo.</p>
+      <ul class="ticks">
+        <li data-i="l0a">Usa el plan que ya pagas: Claude Code y Codex por su propia CLI, sin API key.</li>
+        <li data-i="l0b">El uso se muestra en % de tu plan, nunca en dólares.</li>
+        <li data-i="l0c">Lo peligroso pide confirmación doble. Siempre.</li>
+      </ul>
+    </div>
+    <figure class="media frame">
+      <img src="img/isla.webp" alt="La isla flotante de APOLO: el casco con un aviso ámbar y una tarjeta de Bash con Permitir, Siempre y Denegar" data-ialt="a0" width="570" height="380" loading="lazy">
+      <figcaption data-i="c0">Captura real de la isla.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ SKILLS + ANTIVIRUS ============ -->
+<section class="sec" data-gesto="sorpresa">
+  <div class="wrap split rev">
+    <div class="txt">
+      <p class="kick" data-i="k1">Skills universales + antivirus</p>
+      <h2 data-i="t1">Cualquier skill, con cualquier modelo. Y escaneada antes de tocar nada.</h2>
+      <p data-i="p1">Instala skills <code>SKILL.md</code> de Claude Code, Codex, Cursor o <code>AGENTS.md</code> desde una carpeta, un .zip o GitHub. Cada skill nueva entra <b>desactivada y en cuarentena</b>: un escáner estático y otro con modelo buscan inyección de prompts, robo de credenciales, <code>curl | sh</code>, ofuscación y persistencia, y te lo explican en cristiano.</p>
+      <div class="verdicts" aria-label="Veredictos">
+        <span class="v v-ok" data-i="v1">Limpia</span><span class="v v-warn" data-i="v2">Revisar</span><span class="v v-bad" data-i="v3">Cuarentena</span>
+      </div>
+      <p class="sub" data-i="p1b">Firmas ed25519 para skills y plugins, marketplace en el panel y un taller que crea skills a partir de una conversación.</p>
+    </div>
+    <figure class="media frame tall">
+      <img src="img/skills-escaner.webp" alt="Informe del escáner: una skill en cuarentena con hallazgos curl-pipe-shell, lectura de claves SSH y exfiltración" data-ialt="a1" width="616" height="900" loading="lazy">
+      <figcaption data-i="c1">Captura real: una skill trampa, pillada.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ CONSEJO ============ -->
+<section class="sec" data-gesto="pensativo">
+  <div class="wrap split">
+    <div class="txt">
+      <p class="kick" data-i="k2">Consejo de modelos</p>
+      <h2 data-i="t2">¿Dudas? Que debatan ellos.</h2>
+      <p data-i="p2">Haz la misma pregunta a varios modelos a la vez, por ejemplo uno local, Claude y ChatGPT. Responden en paralelo, leen lo que han dicho los demás, se corrigen y un moderador te da el veredicto con el nivel de acuerdo. En directo, en Mission Control.</p>
+      <ul class="ticks">
+        <li data-i="l2a">Un miembro que falla no se sustituye a escondidas por otro.</li>
+        <li data-i="l2b">Rondas de debate configurables (0, 1 o 2).</li>
+      </ul>
+    </div>
+    <figure class="media frame clip">
+      <img src="img/consejo.webp" alt="Consejo con gemma4 y qwen3.6 debatiendo PLA o PETG y un veredicto con 100 % de acuerdo" data-ialt="a2" width="1090" height="1136" loading="lazy">
+      <figcaption data-i="c2">Captura real: gemma4 + qwen3.6, 100 % de acuerdo en 1 min 37 s.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ TURNO DE NOCHE ============ -->
+<section class="sec night" data-gesto="bostezo">
+  <div class="wrap">
+    <div class="txt center">
+      <p class="kick" data-i="k3">Turno de noche</p>
+      <h2 data-i="t3">Déjale encargos antes de dormir. Por la mañana, el informe.</h2>
+      <p data-i="p3">Cada encargo se ejecuta en su propio <b>git worktree y rama</b>, y nunca hace push. Lo arriesgado no te despierta: se deniega y se apunta. Al desayunar tienes lo hecho, lo pendiente, lo que necesita tu decisión y un vídeo vertical de ~60 s de la noche.</p>
+    </div>
+    <figure class="media frame wide">
+      <img src="img/turno.webp" alt="Cola del turno de noche con un encargo hecho, otro esperando permiso, y el informe de la mañana" data-ialt="a3" width="1090" height="470" loading="lazy">
+      <figcaption data-i="c3">Captura real (rutas locales difuminadas).</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ WRAPPED ============ -->
+<section class="sec" data-gesto="corazon">
+  <div class="wrap split rev">
+    <div class="txt">
+      <p class="kick" data-i="k4">APOLO Wrapped</p>
+      <h2 data-i="t4">Tu semana con tu agente, en tarjetas para presumir.</h2>
+      <p data-i="p4">Horas de agente, rachas, modelo favorito, lo que más hiciste y el tiempo que te ahorró. Semanal o mensual, exportable a PNG o vídeo. Privado por defecto: nunca incluye el texto de tus mensajes.</p>
+    </div>
+    <div class="media cards" aria-label="Tarjetas de Wrapped">
+      <img src="img/wrapped-1.webp" alt="Portada de APOLO Wrapped" data-ialt="a4a" width="360" height="640" loading="lazy">
+      <img src="img/wrapped-2.webp" alt="Tarjeta: horas trabajadas y horas ahorradas" data-ialt="a4b" width="360" height="640" loading="lazy">
+      <img src="img/wrapped-3.webp" alt="Tarjeta: racha de 7 días seguidos" data-ialt="a4c" width="360" height="640" loading="lazy">
+      <img src="img/wrapped-4.webp" alt="Tarjeta: búho nocturno, tu hora pico" data-ialt="a4d" width="360" height="640" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<!-- ============ MANOS + PÁNICO ============ -->
+<section class="sec" data-gesto="mirar">
+  <div class="wrap split">
+    <div class="txt">
+      <p class="kick"><span data-i="k5">Manos + pánico</span> <span class="beta">beta</span></p>
+      <h2 data-i="t5">Usa tu ratón y tu teclado. Si lo tocas tú, se para.</h2>
+      <p data-i="p5">Con tu consentimiento por tarea, APOLO ve la pantalla y maneja ratón y teclado, con un borde rojo mientras tiene el control. Comprueba cada acción, guarda una línea de tiempo de lo que hizo y aprende macros viéndote. Mueve el ratón y suelta el control al instante.</p>
+      <p class="keys"><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Esc</kbd> <span data-i="p5k">un único botón de pánico: lo para todo, en todas partes.</span></p>
+      <p class="sub" data-i="p5b">Ventanas de banca, carteras y gestores de contraseñas: prohibidas para la pantalla y el navegador.</p>
+    </div>
+    <div class="media hands" id="hands" aria-hidden="true">
+      <div class="win" id="hwin">
+        <div class="win-bar"><span class="win-ttl" data-i="hw">compra.txt · Bloc de notas</span><span class="win-dots"><i></i><i></i><i></i></span></div>
+        <div class="win-menu"><span data-i="hm1">Archivo</span><span data-i="hm2">Editar</span><span data-i="hm3">Ver</span></div>
+        <pre class="win-body" id="htxt"></pre>
+        <div class="ctl-badge" id="hbadge"><span class="rec"></span><span data-i="hb">APOLO tiene el control</span></div>
+        <svg class="cursor" id="hcur" viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z"/></svg>
+      </div>
+      <div class="panic" id="hpanic"><b data-i="hp1">Control devuelto</b><span data-i="hp2">Has movido el ratón: APOLO se ha parado.</span></div>
+      <p class="recre" data-i="recre">Recreación animada</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MÓVIL ============ -->
+<section class="sec" data-gesto="guino">
+  <div class="wrap">
+    <div class="txt center">
+      <p class="kick"><span data-i="k6">Móvil + escritorio remoto</span> <span class="beta">beta</span></p>
+      <h2 data-i="t6">Apruébale cosas desde el sofá. O maneja tu PC desde allí.</h2>
+      <p data-i="p6">App web (PWA) que se empareja con un QR. Cada dispositivo tiene su token con alcance limitado; lo peligroso pide PIN o passkey. El escritorio remoto está apagado por defecto y se aprueba desde el PC.</p>
+    </div>
+    <div class="phones">
+      <figure class="phone"><img src="img/movil-peligro.webp" alt="Móvil: aviso de acción peligrosa rm -rf con botón Confirmar con mi PIN" data-ialt="a6a" width="390" height="844" loading="lazy"><figcaption data-i="c6a">Acción peligrosa</figcaption></figure>
+      <figure class="phone mid"><img src="img/movil-pin.webp" alt="Móvil: teclado para escribir el PIN" data-ialt="a6b" width="390" height="844" loading="lazy"><figcaption data-i="c6b">PIN para confirmar</figcaption></figure>
+      <figure class="phone"><img src="img/movil-remoto.webp" alt="Móvil: escritorio remoto del PC con teclas especiales" data-ialt="a6c" width="390" height="844" loading="lazy"><figcaption data-i="c6c">Escritorio remoto</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============ OJO ============ -->
+<section class="sec" data-gesto="feliz">
+  <div class="wrap split rev">
+    <div class="txt">
+      <p class="kick"><span data-i="k7">El ojo de 25 $</span> <span class="beta">beta</span></p>
+      <h2 data-i="t7">Tiene cuerpo: un ojo para tu mesa que te imprimes.</h2>
+      <p data-i="p7">Un ESP32-S3 y una pantalla redonda GC9A01. Muestra el humor del robot, aprueba con un toque y deniega manteniendo pulsado. Firmware, guía de cableado y simulador incluidos; la carcasa imprimible aún está en camino.</p>
+      <ul class="spec">
+        <li><b>~25 $</b><span data-i="s7a">lista de la compra</span></li>
+        <li><b>18</b><span data-i="s7b">estados y gestos</span></li>
+        <li><b>1 toque</b><span data-i="s7c">para aprobar</span></li>
+      </ul>
+    </div>
+    <div class="media eye-wrap">
+      <div class="eye" id="eye" role="img" aria-label="Pantalla redonda del ojo mostrando sus gestos" data-ilabel="eyel"></div>
+      <p class="eye-name"><span id="eyename">reposo</span> · <span class="muted" id="eyekind">estado</span></p>
+      <div class="eye-dots" id="eyedots" aria-hidden="true"></div>
+      <p class="recre" data-i="c7">Fotogramas reales del simulador (= firmware)</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STREAM ============ -->
+<section class="sec" data-gesto="celebrar">
+  <div class="wrap">
+    <div class="txt center">
+      <p class="kick"><span data-i="k8">Co-host de streaming</span> <span class="beta">beta</span></p>
+      <h2 data-i="t8">Hasta de co-host en tus directos.</h2>
+      <p data-i="p8">Lee el chat de Twitch y YouTube, lo filtra, reacciona en un overlay de OBS con el robot 3D, lanza encuestas, celebra raids y contesta en voz alta. Con su botón de pánico, claro.</p>
+    </div>
+    <figure class="media frame wide">
+      <img src="img/stream.webp" alt="Overlay de OBS: encuesta, alerta de raid y el robot respondiendo a un mensaje del chat" data-ialt="a8" width="1280" height="720" loading="lazy">
+      <figcaption data-i="c8">Captura real del overlay (fondo de prueba).</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ GAMER ============ -->
+<section class="sec" data-gesto="remolino">
+  <div class="wrap split">
+    <div class="txt">
+      <p class="kick"><span data-i="k9">Modo Gamer</span> <span class="beta">beta</span></p>
+      <h2 data-i="t9">Sin placebo. Medido con PresentMon.</h2>
+      <p data-i="p9">Solo optimizaciones reales y reversibles: plan de energía, modo juego, pausar lo que roba recursos y prioridad al juego. Todo se deshace al salir, aunque APOLO se cierre a medias. Nada de «limpiadores de RAM» ni de apagar Defender.</p>
+      <ul class="ticks">
+        <li data-i="l9a">FPS, 1 % low, 0,1 % low y frametimes con PresentMon, la herramienta open source de Intel.</li>
+        <li data-i="l9b">Benchmark antes/después en el mismo juego, con tarjeta para compartir.</li>
+        <li data-i="l9c">Revisa lo que sí importa: monitor a 60 Hz cuando admite 144, HAGS, arranque. Y avisa del thermal throttling.</li>
+      </ul>
+      <p class="honest" data-i="p9h">No te prometemos FPS: te enseñamos el antes y el después, con datos.</p>
+    </div>
+    <figure class="media frame">
+      <img src="img/gamer.webp" alt="Panel del Modo Gamer: revisión de monitores, HAGS, modo juego, programas de inicio y medición con PresentMon 2.6.0" data-ialt="a9" width="962" height="812" loading="lazy">
+      <figcaption data-i="c9">Captura real del panel (revisión de un PC real).</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ REUNIONES ============ -->
+<section class="sec" data-gesto="si">
+  <div class="wrap split rev">
+    <div class="txt">
+      <p class="kick" data-i="k10">Reuniones</p>
+      <h2 data-i="t10">Escucha la reunión. Te deja las tareas hechas.</h2>
+      <p data-i="p10">Lee los subtítulos de Google Meet, Teams o Zoom en el navegador, o graba el audio local (micro + sistema). Al terminar: transcripción, resumen, decisiones, preguntas abiertas y tareas con fecha, guardadas en su memoria.</p>
+    </div>
+    <figure class="media frame">
+      <img src="img/reuniones.webp" alt="Detalle de una reunión con resumen, decisiones, tareas y transcripción por persona" data-ialt="a10" width="1150" height="640" loading="lazy">
+      <figcaption data-i="c10">Captura real del panel.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ SEGURIDAD ============ -->
+<section class="sec" id="seguridad" data-gesto="permiso">
+  <div class="wrap">
+    <div class="txt center">
+      <p class="kick" data-i="k11">Seguridad</p>
+      <h2 data-i="t11">Un agente con llaves de tu PC tiene que ser aburrido de seguro.</h2>
+    </div>
+    <div class="grid3">
+      <article class="card"><h3 data-i="g1">Bóveda de secretos</h3><p data-i="g1p">Las claves de API se cifran con DPAPI de Windows y nunca se vuelven a mostrar. La memoria se niega a guardar claves o contraseñas.</p></article>
+      <article class="card"><h3 data-i="g2">Sandbox por niveles</h3><p data-i="g2p">Skills y plugins de terceros corren en procesos aislados con permisos declarados y sin tus claves en el entorno. Solo lo firmado y limpio sube de nivel.</p></article>
+      <article class="card"><h3 data-i="g3">Auditoría encadenada</h3><p data-i="g3p">Cada aprobación y acción queda en un registro encadenado con SHA-256: quién aprobó, qué y con qué resultado. Si alguien lo toca, se nota.</p></article>
+      <article class="card"><h3 data-i="g4">Un solo botón de pánico</h3><p data-i="g4p">Atajo, isla, Stream Deck, móvil u ojo: deniega todo, cancela tareas y suelta el control hasta que tú reanudes.</p></article>
+      <article class="card"><h3 data-i="g5">Solo en tu PC</h3><p data-i="g5p">La API escucha en 127.0.0.1 con token, comprueba Host y Origin, y el acceso desde el móvil por la red local es opcional y limitado.</p></article>
+      <article class="card"><h3 data-i="g6">Pregunta antes</h3><p data-i="g6p">Leer es libre; escribir, ejecutar o controlar pregunta. «Permitir siempre» nunca vale para comandos encadenados o envueltos.</p></article>
+    </div>
+    <div class="audit" aria-label="Ejemplo del formato del registro de auditoría">
+      <div class="audit-h"><span>auditoria.jsonl</span><span class="ok-pill" data-i="chain">cadena verificada ✓</span></div>
+      <pre><span class="m">#1041</span> permiso  shell  "npm test"            <span class="g">permitido</span>  isla      prev <span class="m">9c2e…41f0</span>
+<span class="m">#1042</span> permiso  shell  "npm publish"         <span class="r">denegado</span>   móvil+PIN prev <span class="m">a3f9…07bd</span>
+<span class="m">#1043</span> pánico   todos  Ctrl+Alt+Esc          <span class="r">parado</span>     teclado   prev <span class="m">5be1…c2a9</span></pre>
+      <p class="recre" data-i="recre2">Recreación del formato</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ COMPARATIVA ============ -->
+<section class="sec" id="comparativa" data-gesto="duda">
+  <div class="wrap">
+    <div class="txt center">
+      <p class="kick" data-i="k12">Comparativa honesta</p>
+      <h2 data-i="t12">APOLO y OpenClaw</h2>
+      <p data-i="p12">OpenClaw es un gran proyecto y llega a más plataformas y canales. Esto es lo que hemos podido comprobar; de OpenClaw solo ponemos lo que dice su documentación.</p>
+    </div>
+    <div class="tbl-wrap" tabindex="0" role="region" aria-label="Tabla comparativa" data-ilabel="tbll">
+      <table class="tbl">
+        <thead><tr><th scope="col"></th><th scope="col">APOLO</th><th scope="col">OpenClaw <small data-i="sd">según su documentación</small></th></tr></thead>
+        <tbody>
+          <tr><th scope="row" data-i="r1">Licencia</th><td>MIT</td><td>MIT</td></tr>
+          <tr><th scope="row" data-i="r2">Sistemas</th><td data-i="r2a">Windows 10/11 (macOS y Linux en el roadmap)</td><td data-i="r2b">macOS, Linux y Windows (WSL2 y nativo); apps para iOS y Android</td></tr>
+          <tr><th scope="row" data-i="r3">Canales</th><td data-i="r3a">Discord, Telegram, WhatsApp, Slack, Matrix, Signal, email y app móvil</td><td data-i="r3b">Discord, iMessage, Slack, Teams, Telegram, WhatsApp y «20+ más»</td></tr>
+          <tr><th scope="row" data-i="r4">Modelos</th><td data-i="r4a">Hospedados y locales (Ollama, LM Studio…)</td><td data-i="r4b">Hospedados y locales</td></tr>
+          <tr><th scope="row" data-i="r5">Skills de terceros</th><td data-i="r5a">SKILL.md universal; cuarentena + antivirus + firmas ed25519</td><td data-i="r5b">Marketplace ClawHub + plugin SDK</td></tr>
+          <tr><th scope="row" data-i="r6">Sandbox</th><td data-i="r6a">Por niveles para skills y plugins de terceros</td><td data-i="r6b">«Las herramientas corren en el host en la sesión principal salvo que configures sandboxing» (Docker)</td></tr>
+          <tr><th scope="row" data-i="r7">Avatar 3D en el escritorio</th><td><span class="yes" data-i="yes">Sí</span></td><td class="na" data-i="nm">No lo menciona</td></tr>
+          <tr><th scope="row" data-i="r8">Ojo físico (ESP32)</th><td><span class="yes" data-i="yes2">Sí</span> <span class="beta">beta</span></td><td class="na" data-i="nm2">No lo menciona</td></tr>
+          <tr><th scope="row" data-i="r9">Importar desde OpenClaw</th><td data-i="r9a">Sí: SOUL.md, USER.md, MEMORY.md, automatizaciones, agentes y skills</td><td class="na">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" data-i="cmpnote">Fuente de OpenClaw: README de github.com/openclaw/openclaw, consultado el 3 de octubre de 2026. ¿Algo ha cambiado? Abre un issue y lo corregimos.</p>
+  </div>
+</section>
+
+<!-- ============ MODELOS ============ -->
+<section class="sec" id="modelos" data-gesto="guino">
+  <div class="wrap">
+    <div class="txt center">
+      <p class="kick" data-i="k13">Modelos</p>
+      <h2 data-i="t13">El modelo lo eliges tú. También por canal.</h2>
+      <p data-i="p13">Escribe <code>proveedor/modelo</code> (por ejemplo <code>ollama/qwen3.6</code>). Un router automático manda el código a Claude Code y lo demás a tu modelo por defecto.</p>
+    </div>
+    <div class="models">
+      <div class="model"><img src="logos/claude-color.svg" alt="" width="32" height="32"><div><b>Claude Code</b><span data-i="m1">hooks + CLI · tu plan</span></div></div>
+      <div class="model"><img class="mono" src="logos/openai.svg" alt="" width="32" height="32"><div><b>ChatGPT / Codex</b><span data-i="m2">CLI codex · tu plan</span></div></div>
+      <div class="model"><img class="mono" src="logos/ollama.svg" alt="" width="32" height="32"><div><b>Ollama</b><span data-i="m3">Qwen, Gemma, Llama… · gratis, local</span></div></div>
+      <div class="model"><img src="logos/gemini-color.svg" alt="" width="32" height="32"><div><b>Google Gemini</b><span data-i="m4">API o Gemini CLI</span></div></div>
+      <div class="model"><img class="mono" src="logos/anthropic.svg" alt="" width="32" height="32"><div><b>Anthropic API</b><span data-i="m5">API key · por token</span></div></div>
+      <div class="model"><img src="logos/openrouter-color.svg" alt="" width="32" height="32"><div><b>OpenRouter, Groq…</b><span data-i="m6">cualquier servidor compatible con OpenAI</span></div></div>
+    </div>
+    <ul class="logos-row small" aria-label="Más proveedores compatibles con OpenAI">
+      <li><img class="mono" src="logos/groq.svg" alt="Groq" width="24" height="24"></li>
+      <li><img src="logos/deepseek-color.svg" alt="DeepSeek" width="24" height="24"></li>
+      <li><img src="logos/mistral-color.svg" alt="Mistral" width="24" height="24"></li>
+      <li><img src="logos/qwen-color.svg" alt="Qwen" width="24" height="24"></li>
+      <li><img src="logos/kimi-color.svg" alt="Kimi" width="24" height="24"></li>
+      <li><img class="mono" src="logos/grok.svg" alt="Grok" width="24" height="24"></li>
+      <li><img src="logos/together-color.svg" alt="Together AI" width="24" height="24"></li>
+      <li><img src="logos/fireworks-color.svg" alt="Fireworks" width="24" height="24"></li>
+      <li><img src="logos/cerebras-color.svg" alt="Cerebras" width="24" height="24"></li>
+      <li><img src="logos/perplexity-color.svg" alt="Perplexity" width="24" height="24"></li>
+      <li><img src="logos/huggingface-color.svg" alt="Hugging Face" width="24" height="24"></li>
+      <li><img class="mono" src="logos/lmstudio.svg" alt="LM Studio" width="24" height="24"></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section class="sec" id="faq" data-gesto="duda">
+  <div class="wrap narrow">
+    <div class="txt center"><p class="kick">FAQ</p><h2 data-i="t14">Preguntas frecuentes</h2></div>
+    <div class="faq">
+      <details><summary data-i="q1">¿Es gratis?</summary><p data-i="a1x">Sí. APOLO es open source con licencia MIT. Pagas solo el modelo que elijas: tu plan de Claude o ChatGPT, una API por token, o nada si usas Ollama en local.</p></details>
+      <details><summary data-i="q2">¿Necesito una API key?</summary><p data-i="a2x">No. Puede usar Claude Code y Codex con el plan que ya pagas, a través de sus propias CLI, u Ollama en tu PC. Las API keys son opcionales.</p></details>
+      <details><summary data-i="q3">¿Funciona sin internet?</summary><p data-i="a3x">Con Ollama, el agente, los embeddings de la memoria y el enrutado corren en tu PC. Los canales externos (Discord, Telegram…) necesitan conexión, claro.</p></details>
+      <details><summary data-i="q4">¿Mac o Linux?</summary><p data-i="a4x">De momento solo Windows 10/11. El núcleo ya funciona en macOS y Linux; el control del escritorio es lo que falta. Está en el roadmap.</p></details>
+      <details><summary data-i="q5">Windows dice «Windows protegió su PC». ¿Es normal?</summary><p data-i="a5x">Sí: el instalador aún no está firmado con un certificado de código. Pulsa «Más información → Ejecutar de todos modos», o instálalo desde el código fuente si lo prefieres.</p></details>
+      <details><summary data-i="q6">¿Qué datos envía?</summary><p data-i="a6x">Ninguno a nosotros: no hay telemetría. Tus datos viven en <code>%APPDATA%\robot-companion</code> y puedes exportarlo o borrarlo todo desde el panel. Lo que mandes a un modelo en la nube lo procesa ese proveedor.</p></details>
+      <details><summary data-i="q7">¿Puedo traer mis cosas de OpenClaw?</summary><p data-i="a7x">Sí: importa archivos de memoria (SOUL.md, USER.md, MEMORY.md…), automatizaciones, agentes y skills en un paso, y las skills pasan por el antivirus.</p></details>
+      <details><summary data-i="q8">¿Cómo contribuyo?</summary><p data-i="a8x">Issues y PRs bienvenidos. Lee CONTRIBUTING.md; los tests del núcleo no necesitan dependencias (<code>cd core &amp;&amp; npm test</code>).</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section class="sec final" data-gesto="celebrar">
+  <div class="wrap center">
+    <h2 data-i="t15">APOLO. Open source. Con el modelo que tú quieras.</h2>
+    <div class="cta center">
+      <a class="btn btn-pri" href="https://github.com/DMNENGINE/apolo/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg><span data-i="dl2">Descargar para Windows</span></a>
+      <a class="btn btn-ghost" href="https://github.com/DMNENGINE/apolo" rel="noopener"><span data-i="star">Dale una estrella en GitHub</span></a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="foot-brand"><img src="img/favicon-64.png" alt="" width="24" height="24"><b>APOLO</b><span data-i="lic">Licencia MIT · © DMNENGINE</span></div>
+    <nav class="foot-links" aria-label="Enlaces">
+      <a href="https://github.com/DMNENGINE/apolo" rel="noopener">GitHub</a>
+      <a href="https://github.com/DMNENGINE/apolo/releases" rel="noopener">Releases</a>
+      <a href="https://github.com/DMNENGINE/apolo/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+      <a href="https://github.com/DMNENGINE/apolo/blob/main/docs/ROADMAP.md" rel="noopener">Roadmap</a>
+      <a href="https://github.com/DMNENGINE/apolo/blob/main/SECURITY.md" rel="noopener" data-i="sec">Seguridad</a>
+      <a href="https://github.com/DMNENGINE/apolo/blob/main/LICENSE" rel="noopener">MIT</a>
+    </nav>
+    <p class="foot-fine" data-i="ffine">Logos de proveedores: LobeHub Icons (MIT). Las marcas pertenecen a sus dueños. APOLO no está afiliado a Anthropic, OpenAI, Google ni OpenClaw.</p>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+<script type="module" src="hero.js"></script>
+</body>
+</html>
