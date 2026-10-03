@@ -45,18 +45,19 @@ function entornoHijo({ lectura, escritura, shell, node }) {
   const [ma, mi] = version.split('.').map(Number);
   const nuevo = ma > 22 || (ma === 22 && mi >= 13);
   const execArgv = [];
-  if (ma >= 20 && !electron) {
-    execArgv.push(nuevo ? '--permission' : '--experimental-permission');
-    if (nuevo) { lectura.forEach(d => execArgv.push('--allow-fs-read=' + d)); escritura.forEach(d => execArgv.push('--allow-fs-write=' + d)); }
-    else execArgv.push('--allow-fs-read=' + lectura.join(','), '--allow-fs-write=' + escritura.join(','));
+  // modelo de permisos de Node SOLO en 22.13+ (estable). En 20–22.12 es experimental y el propio require() del plugin
+  // choca con él ("Access to this API has been restricted"): ahí el plugin va en su proceso, sin claves, pero sin límite de archivos
+  const sandbox = nuevo && !electron;
+  if (sandbox) {
+    execArgv.push('--permission');
+    lectura.forEach(d => execArgv.push('--allow-fs-read=' + d)); escritura.forEach(d => execArgv.push('--allow-fs-write=' + d));
     if (shell) execArgv.push('--allow-child-process');
-    if (ma > 20 || mi >= 11) execArgv.push('--disable-warning=ExperimentalWarning');
   }
   execArgv.push('--max-old-space-size=512');
   const env = { APOLO_PLUGIN: '1' };
   for (const k of ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'windir', 'ComSpec', 'TEMP', 'TMP', 'LANG', 'TZ']) if (process.env[k]) env[k] = process.env[k];
   if (electron) env.ELECTRON_RUN_AS_NODE = '1';
-  return { execPath, execArgv, env, sandbox: ma >= 20 && !electron };
+  return { execPath, execArgv, env, sandbox };
 }
 const resumenArgs = a => { const v = Object.values(a || {}).find(x => typeof x === 'string' || typeof x === 'number'); return v === undefined ? '' : String(v).slice(0, 120); };
 const sinFunciones = o => JSON.parse(JSON.stringify(o ?? null));
@@ -399,10 +400,10 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
     const lectura = [SDK_DIR, dir, alm], escritura = [alm];
     for (const p of man.permisos) if (p.startsWith('archivos:')) { const ru = path.resolve(p.slice(9)); lectura.push(ru); escritura.push(ru); }
     const { execPath, execArgv, env, sandbox } = entornoHijo({ lectura, escritura, shell: man.permisos.includes('shell'), node: op().node });
-    if (!sandbox) anotar(nombre, 'aviso', 'sin modelo de permisos de Node (instala Node 20+ o pon cfg.gestorPlugins.node): el plugin corre sin límite de archivos');
+    if (!sandbox) anotar(nombre, 'aviso', 'sin modelo de permisos de Node (instala Node 22.13+ o pon cfg.gestorPlugins.node): el plugin corre sin límite de archivos');
     const proc = fork(path.join(SDK_DIR, 'ejecutor.js'), [], { cwd: alm, env, execPath, execArgv, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true });
     r.proc = proc;
-    proc.stdout?.on('data', d => anotar(nombre, 'info', d)); proc.stderr?.on('data', d => anotar(nombre, 'error', d));
+    proc.stdout?.on('data', d => anotar(nombre, 'info', d)); proc.stderr?.on('data', d => { anotar(nombre, 'error', d); if (process.env.APOLO_DEBUG_PLUGINS) process.stderr.write(`[plugin ${nombre}] ${d}`); });
     proc.on('message', m => alMensaje(nombre, proc, m));
     proc.on('exit', (code, sig) => alSalir(nombre, proc, code, sig));
     proc.on('error', e => anotar(nombre, 'error', e.message));

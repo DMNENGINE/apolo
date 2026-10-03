@@ -234,10 +234,16 @@ function crearTaller({ cfg, bus, almacen, instalador, generarJSON, modelo, ejecu
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'apolo-export-'));
     try {
       const raiz = path.resolve(s.dir);
-      fs.cpSync(s.dir, path.join(tmp, s.slug), { recursive: true, filter: f => {
-        const rel = path.relative(raiz, path.resolve(f)), partes = rel.split(path.sep), b = path.basename(f);
-        return !(b === '.git' || b === 'node_modules' || (partes.length === 1 && PRIVADOS.has(partes[0])) || fs.lstatSync(f).isSymbolicLink());
-      } });
+      // copia propia (fs.cpSync con filter se comporta distinto en Node 20, el de Electron): sin .git, node_modules, enlaces ni archivos privados de la raíz
+      const copiar = (de, a) => {
+        fs.mkdirSync(a, { recursive: true });
+        for (const e of fs.readdirSync(de, { withFileTypes: true })) {
+          const f = path.join(de, e.name), rel = path.relative(raiz, f);
+          if (e.name === '.git' || e.name === 'node_modules' || e.isSymbolicLink() || (!rel.includes(path.sep) && PRIVADOS.has(rel))) continue;
+          if (e.isDirectory()) copiar(f, path.join(a, e.name)); else if (e.isFile()) fs.copyFileSync(f, path.join(a, e.name));
+        }
+      };
+      copiar(raiz, path.join(tmp, s.slug));
       try { fs.unlinkSync(out); } catch { }
       if (process.platform === 'win32') {
         const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');   // bsdtar de Windows 10+: -a elige zip por la extensión

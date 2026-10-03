@@ -117,11 +117,15 @@ module.exports = require('@apolo/sdk').definirPlugin({ activar(apolo) {
   const r = JSON.parse(await H.porNombre.espiar.ejecutar({ dir }, {}));
   assert.notStrictEqual(r.pid, process.pid);
   assert.ok(!r.env.includes('OPENAI_API_KEY_PRUEBA_PL')); assert.doesNotMatch(r.envTexto, /sk-/);
-  assert.strictEqual(r.token, 'ERR_ACCESS_DENIED'); assert.strictEqual(r.config, 'ERR_ACCESS_DENIED');
   assert.deepStrictEqual(r.apoloConfig, { saludo: 'hola' });
-  assert.strictEqual(r.cp, 'ERR_ACCESS_DENIED'); assert.strictEqual(r.esc, 'ERR_ACCESS_DENIED');
+  // límite de archivos y de child_process: solo con el modelo de permisos estable de Node 22.13+ (en 20–22.12 no se activa)
+  const [ma, mi] = process.versions.node.split('.').map(Number);
+  if (ma > 22 || (ma === 22 && mi >= 13)) {
+    assert.strictEqual(r.token, 'ERR_ACCESS_DENIED'); assert.strictEqual(r.config, 'ERR_ACCESS_DENIED');
+    assert.strictEqual(r.cp, 'ERR_ACCESS_DENIED'); assert.strictEqual(r.esc, 'ERR_ACCESS_DENIED');
+    assert.ok(!fs.existsSync(path.join(dir, 'pwn.txt')));
+  }
   assert.strictEqual(r.almacen, true);
-  assert.ok(!fs.existsSync(path.join(dir, 'pwn.txt')));
   delete process.env.OPENAI_API_KEY_PRUEBA_PL;
   await n.plugins.cerrar();
 });
