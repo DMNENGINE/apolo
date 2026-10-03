@@ -16,6 +16,8 @@ const SK_ORIGEN = o => {
   if (/claude/.test(t)) return ['Claude Code', 'terminal', 'cc'];
   if (/codex/.test(t)) return ['Codex', 'api', 'cx'];
   if (/openclaw|import/.test(t)) return [tr('Importada OpenClaw'), 'enlace', 'oc'];
+  if (/cursor/.test(t)) return ['Cursor', 'archivo', 'cx'];
+  if (/agents/.test(t)) return ['AGENTS.md', 'archivo', 'cx'];
   return [tr('Instalada'), 'pieza', 'in'];
 };
 // usos: número, {total, semana} o lista de fechas → {total, semana|null}
@@ -52,12 +54,16 @@ function SK_paleta() {
 }
 
 VISTAS.skills = {
-  lista: [], filtro: 'todas', q: '', abierta: null, det: null, pest: 'doc', cola: null,
+  lista: [], filtro: 'todas', q: '', abierta: null, det: null, pest: 'doc', cola: null, modo: 'inst',
   async pintar(v, sub) {
     this.v = v; this.abierta = null; this.det = null;
+    if (sub === 'explorar') { this.modo = 'exp'; sub = null; }
     const r = await api('GET', '/skills');
     this.lista = SK_cache = r.skills || [];
     v.innerHTML = `<div class="pagina sk-pag">${cabecera('Skills', 'Oficios que APOLO sabe hacer. Instala desde GitHub, una carpeta o un .zip; cada skill pasa por el escáner antes de poder usarse.', `<button class="btn" id="skRecargar">${ic('recargar')}${tr('Recargar')}</button>`)}
+      <div class="pestanas sk-modo">${[['inst', 'Instaladas', 'pieza'], ['exp', 'Explorar', 'mundo']].map(([k, t, i]) => `<button data-modo="${k}" class="${this.modo === k ? 'on' : ''}">${ic(i)}${tr(t)}</button>`).join('')}</div>
+      <div id="mkExplorar" hidden></div>
+      <div class="sk-inst">
       <div class="rejilla k" id="skKpis"></div>
       <div class="caja sk-instalar" id="skInstalar">
         <div class="sk-ins-fila">
@@ -72,10 +78,20 @@ VISTAS.skills = {
       </div>
       <div class="sk-barra">${seg('skFiltro', [['todas', 'Todas'], ['activas', 'Activas'], ['cuarentena', 'Cuarentena'], ['externas', 'Externas']], this.filtro)}
         <div class="sk-busca">${ic('buscar')}<input id="skQ" placeholder="${tr('Buscar skills…')}" value="${esc(this.q)}"></div></div>
-      <div id="skLista"></div></div>`;
+      <div id="skLista"></div></div></div>`;
     this.enlazar(v);
     this.repintar();
+    this.ponerModo(this.modo);
     if (sub) this.abrir(decodeURIComponent(sub));
+  },
+  // pestañas Instaladas / Explorar (marketplace en ui/mercado.js)
+  ponerModo(m) {
+    if (!this.v) return;
+    this.modo = m;
+    $$('[data-modo]', this.v).forEach(b => b.classList.toggle('on', b.dataset.modo === m));
+    $('.sk-inst', this.v).hidden = m !== 'inst';
+    const c = $('#mkExplorar', this.v); c.hidden = m !== 'exp';
+    if (m === 'exp' && typeof MK !== 'undefined') MK.pintar(c);
   },
   salir() {
     clearTimeout(this.cola); document.removeEventListener('keydown', this.tecla); this.v = null;
@@ -104,6 +120,9 @@ VISTAS.skills = {
       this.filtro = b.dataset.v; $$('button', b.parentElement).forEach(x => x.classList.toggle('on', x === b)); this.repintar();
     };
     v.onclick = e => {
+      const mo = e.target.closest('[data-modo]');
+      if (mo) { this.ponerModo(mo.dataset.modo); return; }
+      if (e.target.closest('#mkExplorar')) return;      // el marketplace tiene su propio manejador
       const rel = e.target.closest('[data-rellenar]');
       if (rel) { inp.value = rel.dataset.rellenar; inp.oninput(); inp.focus(); return; }
       const s = e.target.closest('.sk-tarjeta [data-sw]');
@@ -177,7 +196,7 @@ VISTAS.skills = {
         ${sw(s.slug, s.activa, `title="${tr(s.activa ? 'Desactivar' : 'Activar')}"`)}</div>
       <p class="sk-desc">${esc(s.descripcion || tr('Sin descripción.'))}</p>
       <div class="sk-pie"><span class="chip sk-org ${oc}">${ic(oi)}${esc(org)}</span>
-        <span class="sk-sem ${cls}"><span class="punto ${cls}"></span>${txt}${hall && n !== 'verde' ? ` · ${hall}` : ''}</span>
+        <span class="sk-sem ${cls}"><span class="punto ${cls}"></span>${txt}${hall && n !== 'verde' ? ` · ${hall}` : ''}</span>${typeof MK_firma === 'function' ? MK_firma(s.firma, true) : ''}
         <span class="sk-usos" title="${tr('{n} usos', { n: u.total })}${s.ultimoUso ? ' · ' + tr('último {x}', { x: esc(fecha(s.ultimoUso)) }) : ''}">${ic('latido')}${fmtK(u.semana ?? u.total)}${s.ultimoUso ? ` · ${hace(+new Date(s.ultimoUso))}` : ''}</span></div>
     </article>`;
   },
@@ -312,7 +331,7 @@ VISTAS.skills = {
         ${perm.length ? `<div class="caja sk-permisos">${perm.map(p => `<div>${ic('llave')}<code>${esc(p)}</code></div>`).join('')}</div>` : `<div class="caja">${vacio('llave', 'No declara permisos especiales.')}</div>`}`;
     }
     c.innerHTML = `<div class="sk-det-cab"><span class="sk-ico grande" style="--h:${SK_tono(s.slug)}">${esc(SK_siglas(s.nombre || s.slug))}</span>
-        <div class="crece"><h2>${esc(s.nombre || s.slug)}</h2><div class="flex"><span class="chip sk-org ${oc}">${ic(oi)}${esc(org)}</span>${s.version ? `<span class="chip">v${esc(String(s.version).replace(/^v/, ''))}</span>` : ''}<span class="sk-sem ${cls}"><span class="punto ${cls}"></span>${txt}</span></div></div>
+        <div class="crece"><h2>${esc(s.nombre || s.slug)}</h2><div class="flex"><span class="chip sk-org ${oc}">${ic(oi)}${esc(org)}</span>${s.version ? `<span class="chip">v${esc(String(s.version).replace(/^v/, ''))}</span>` : ''}<span class="sk-sem ${cls}"><span class="punto ${cls}"></span>${txt}</span>${typeof MK_firma === 'function' ? MK_firma(s.firma) : ''}</div></div>
         <button class="btn fantasma icono" data-acc="cerrar" title="${tr('Cerrar (Esc)')}">${ic('x')}</button></div>
       <p class="sk-det-desc">${esc(s.descripcion || '')}</p>
       ${n === 'rojo' && this.pest !== 'seg' ? `<button class="sk-alerta sk-alerta-btn" data-pest="seg">${ic('candado')}<span class="crece"><b>${tr('En cuarentena')}</b> · ${esc(s.escaneo?.resumen || tr('el escáner encontró patrones peligrosos'))}</span><span class="tenue">${tr('Ver informe')} ${ic('der')}</span></button>` : ''}

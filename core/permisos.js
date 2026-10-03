@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const esPeligroso = require('../shared/peligro');
 const seg = require('./seguridad');
+const { crearExfil } = require('./exfil');
 
 const ALIAS = { shell: 'Bash', escribir_archivo: 'Write', editar_archivo: 'Edit' };   // para reutilizar peligro.js
 const RUTAS = new Set(['leer_archivo', 'listar', 'escribir_archivo', 'editar_archivo']);
@@ -18,6 +19,7 @@ function crearPermisos({ cfg, bus }) {
   let n = 0;
   let bloqueo = () => '';                      // kill switch (core/panico.js): mientras devuelva un motivo, todo lo que no sea lectura se deniega
   let auditoria = null;                       // core/auditoria.js (se engancha después)
+  const exfil = crearExfil({ cfg });           // anti-exfiltración (el agente le cuenta los turnos y lo leído)
 
   function clave(h, args, cwd) {
     if (h.clavePermiso) return { herramienta: h.nombre, prefijo: h.clavePermiso(args) };   // p. ej. scripts de skills: por skill/script
@@ -37,6 +39,23 @@ function crearPermisos({ cfg, bus }) {
     const sensible = (rutaAbs && (seg.rutaSensible(rutaAbs, { dirNucleo: cfg.dir }) || (/^(escribir|editar)_/.test(h.nombre) && dentro(rutaAbs, cfg.dir) && !dentro(rutaAbs, path.join(cfg.dir, 'turno', 'worktrees')) && 'datos internos de APOLO')))
       || (h.nombre === 'web' && seg.urlPrivada(args.url) && 'red local / este equipo') || '';
     if (sensible && riesgo === 'lectura') riesgo = 'escritura';
+    // anti-exfiltración (core/exfil.js): enviar datos a un dominio nuevo se pregunta aunque sea "lectura" y aunque el modo sea auto
+    const ex = exfil.evaluar({ h, args, sesion });
+    if (ex && !reglas.some(r => coincide(r, { herramienta: 'exfil', prefijo: ex.dominio }))) {
+      const mb = bloqueo(); if (mb) return { ok: false, motivo: mb };
+      const resumen = `ENVIAR DATOS a ${ex.dominio} (primera vez): ${ex.motivo} · ${ex.url}`;
+      if (ex.modo === 'bloquear') {
+        auditoria?.registrar({ tipo: 'accion', sesion: sesion.id, herramienta: h.nombre, resumen, riesgo: 'exfil', decision: 'deny', quien: 'anti-exfiltración', resultado: 'bloqueado' });
+        return { ok: false, motivo: `anti-exfiltración: ${ex.motivo} a ${ex.dominio}, bloqueado por configuración (seguridad.exfil = bloquear)` };
+      }
+      const k = { herramienta: 'exfil', prefijo: ex.dominio };
+      if (sesion.turnoNoche) {
+        bus.emit('turno-permiso', { sesion: sesion.id, herramienta: h.nombre, resumen, clave: k, peligro: 'anti-exfiltración' });
+        return { ok: false, motivo: 'TURNO DE NOCHE: enviar datos a un dominio nuevo necesita permiso del usuario; queda pendiente para la mañana. No lo intentes por otra vía.' };
+      }
+      const r = await esperar({ sesion: sesion.id, herramienta: h.nombre, resumen, args, peligro: '', exfil: true }, k, 'exfil', ex);
+      if (!r.ok || riesgo === 'lectura') return r;
+    }
     if (riesgo === 'lectura') return { ok: true };
     const motivoBloqueo = bloqueo();
     if (motivoBloqueo) { auditoria?.registrar({ tipo: 'accion', sesion: sesion.id, herramienta: h.nombre, resumen: h.resumen(args), riesgo, decision: 'deny', quien: 'pánico', resultado: 'bloqueado' }); return { ok: false, motivo: motivoBloqueo }; }
@@ -60,11 +79,15 @@ function crearPermisos({ cfg, bus }) {
       return { ok: false, motivo: 'TURNO DE NOCHE: esto necesita un permiso nuevo del usuario y queda pendiente para la mañana. No lo intentes por otra vía: sigue con lo que puedas hacer sin ello y apúntalo en tu informe.' };
     }
 
+    return esperar({ sesion: sesion.id, herramienta: h.nombre, resumen: h.resumen(args), args, peligro }, k, riesgo);
+  }
+  // crea la petición pendiente y espera la respuesta del usuario (10 min → deny)
+  function esperar(datos, k, riesgo, exf = null) {
     const id = `p${Date.now().toString(36)}${(++n).toString(36)}`;
-    const req = { id, sesion: sesion.id, herramienta: h.nombre, resumen: h.resumen(args), args, peligro, creado: Date.now() };
+    const req = { id, ...datos, creado: Date.now() };
     return new Promise(ok => {
       const t = setTimeout(() => resolver(id, 'deny', 'sin respuesta en 10 min'), 600_000);
-      pendientes.set(id, { req, ok, t, k, riesgo });
+      pendientes.set(id, { req, ok, t, k, riesgo, exf });
       bus.emit('permiso', req);
     });
   }
@@ -78,6 +101,7 @@ function crearPermisos({ cfg, bus }) {
       reglas.push(p.k); fs.writeFileSync(f, JSON.stringify(reglas, null, 2));
     }
     const ok = decision === 'allow' || decision === 'always';
+    if (ok && p.exf) exfil.marcarVisitado(p.exf.dominio, p.exf.turno);   // aprobado una vez: conocido desde el turno siguiente
     bus.emit('permiso-resuelto', { id, decision, motivo, quien: String(quien).slice(0, 60) });
     const aid = auditoria?.registrar({ tipo: p.req.herramienta === 'externo' ? 'externo' : 'accion', sesion: p.req.sesion, herramienta: p.req.herramienta, origen: p.req.origen, resumen: p.req.resumen,
       riesgo: p.riesgo || '', peligro: p.req.peligro || undefined, decision, quien: String(quien).slice(0, 60), motivo: ok ? undefined : (motivo || 'denegado por el usuario') });
@@ -99,7 +123,7 @@ function crearPermisos({ cfg, bus }) {
   function borrarRegla(i) { if (!reglas[i]) return false; reglas.splice(i, 1); fs.writeFileSync(f, JSON.stringify(reglas, null, 2)); return true; }
   // pánico: deniega todo lo pendiente
   function denegarTodo(motivo = 'pánico', quien = 'pánico') { let c = 0; for (const id of [...pendientes.keys()]) if (resolver(id, 'deny', motivo, quien)) c++; return c; }
-  return { pedir, pedirExterno, resolver, borrarRegla, denegarTodo, ponerBloqueo: fn => { bloqueo = typeof fn === 'function' ? fn : () => ''; }, ponerAuditoria: a => { auditoria = a; },
+  return { pedir, pedirExterno, resolver, exfil, borrarRegla, denegarTodo, ponerBloqueo: fn => { bloqueo = typeof fn === 'function' ? fn : () => ''; }, ponerAuditoria: a => { auditoria = a; },
     resultado: (aid, ok, texto) => { if (aid && auditoria) auditoria.resultado(aid, ok, texto); }, pendientes: () => [...pendientes.values()].map(p => p.req), reglas: () => reglas };
 }
 

@@ -479,7 +479,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
       nombre, version: man?.version || e.version || '', descripcion: man?.descripcion || '', autor: man?.autor || '', licencia: man?.licencia || '',
       apoloSdk: man?.apoloSdk || '', permisos: man?.permisos || [],
       aporta: man ? { herramientas: man.aporta.herramientas, canales: n(man.aporta.canales), proveedores: n(man.aporta.proveedores), comandos: n(man.aporta.comandos), vistas: man.aporta.vistas, gestos: n(man.aporta.gestos), voces: n(man.aporta.voces) } : null,
-      activo: !!e.activo, estado: r.estado, roto: e.roto || null, reinicios: r.reinicios, escaneo: e.escaneo || null, origen: e.origen || null, dev: !!e.dev, ruta: dirDe(nombre), fecha: e.fecha || null,
+      activo: !!e.activo, estado: r.estado, roto: e.roto || null, reinicios: r.reinicios, escaneo: e.escaneo || null, firma: e.firma || null, origen: e.origen || null, dev: !!e.dev, ruta: dirDe(nombre), fecha: e.fecha || null,
       registrados: { herramientas: [...r.reg.herramientas.keys()], comandos: [...r.reg.comandos.keys()], proveedores: [...r.reg.proveedores.keys()], canales: [...r.reg.canales.keys()] },
       ...(error ? { error } : {}),
     };
@@ -498,6 +498,14 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
       r = { nivel: ['verde', 'amarillo', 'rojo'].includes(r?.nivel) ? r.nivel : 'amarillo', hallazgos: Array.isArray(r?.hallazgos) ? r.hallazgos.slice(0, 200) : [], resumen: String(r?.resumen || ''), explicacion: String(r?.explicacion || '') };
     } catch (x) { r = { nivel: 'amarillo', hallazgos: [], resumen: `no se pudo escanear: ${x.message}`, explicacion: '', error: true }; }
     r.fecha = Date.now();
+    // firma ed25519 (core/skills/firmar.js): inválida = cuarentena roja
+    let firma; try { firma = require('../skills/firmar').verificar(dirDe(nombre), cfg.skills?.autoresConfianza); } catch (x) { firma = { estado: 'invalida', motivo: x.message }; }
+    firma.fecha = Date.now();
+    if (firma.estado === 'invalida') {
+      r.nivel = 'rojo'; r.hallazgos.unshift({ archivo: 'FIRMA.json', linea: 0, regla: 'firma inválida', gravedad: 'crítica', texto: firma.motivo });
+      r.resumen = `FIRMA INVÁLIDA: ${firma.motivo}. ${r.resumen}`.trim();
+    }
+    estado[nombre].firma = firma;
     estado[nombre].escaneo = r; guardar();
     if (r.nivel === 'rojo' && estado[nombre].activo) { estado[nombre].activo = false; guardar(); await detener(nombre); }
     avisar('escaneado', nombre, { nivel: r.nivel });

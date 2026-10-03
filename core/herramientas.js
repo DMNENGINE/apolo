@@ -73,12 +73,15 @@ const HERRAMIENTAS = [
   },
   {
     nombre: 'web', riesgo: 'lectura',
-    descripcion: 'Descarga una página web y devuelve su texto.',
-    parametros: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
-    resumen: a => a.url,
+    // enviar datos (POST/PUT…, URLs largas o con texto leído) a un dominio nuevo pide permiso: core/exfil.js
+    descripcion: 'Descarga una página web y devuelve su texto. Opcional: metodo (POST, PUT…) y cuerpo para llamar a una API.',
+    parametros: { type: 'object', properties: { url: { type: 'string' }, metodo: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, cuerpo: { type: 'string' } }, required: ['url'] },
+    resumen: a => `${a.metodo && a.metodo.toUpperCase() !== 'GET' ? a.metodo.toUpperCase() + ' ' : ''}${a.url}`,
     ejecutar: async (a, ctx) => {
       if (!/^https?:\/\//i.test(a.url)) return 'error: solo http(s)';
-      const r = await fetch(a.url, { signal: ctx.signal, headers: { 'user-agent': 'RobotCompanion/0.1' } });
+      const metodo = String(a.metodo || 'GET').toUpperCase(), cuerpo = a.cuerpo != null && !/^(GET|HEAD)$/.test(metodo) ? String(a.cuerpo) : undefined;
+      const r = await fetch(a.url, { method: metodo, body: cuerpo, signal: ctx.signal,
+        headers: { 'user-agent': 'RobotCompanion/0.1', ...(cuerpo !== undefined ? { 'content-type': /^\s*[[{]/.test(cuerpo) ? 'application/json' : 'text/plain; charset=utf-8' } : {}) } });
       const html = await r.text();
       const txt = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '').replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();

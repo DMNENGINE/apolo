@@ -1,0 +1,45 @@
+{
+  "formato": "apolo-marketplace/1",
+  "nombre": "Marketplace de APOLO",
+  "actualizado": "2026-10-02",
+  "entradas": [
+    {
+      "nombre": "clima",
+      "tipo": "plugin",
+      "descripcion": "El tiempo actual y la previsión de 3 días de cualquier ciudad (Open-Meteo, sin clave). Añade la herramienta clima y el comando /clima.",
+      "fuente": "DMNENGINE/apolo/plugins/clima",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["tiempo", "utilidades", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT"
+    },
+    {
+      "nombre": "pdf",
+      "descripcion": "Leer, rellenar, unir, dividir y crear PDFs (formularios, tablas, OCR).",
+      "fuente": "anthropics/skills/skills/pdf",
+      "autor": "Anthropic",
+      "etiquetas": ["documentos", "recomendada"]
+    },
+    {
+      "nombre": "skill-creator",
+      "descripcion": "Crea y mejora skills nuevas con pruebas y evaluación: el compañero perfecto del taller de skills de APOLO.",
+      "fuente": "anthropics/skills/skills/skill-creator",
+      "autor": "Anthropic",
+      "etiquetas": ["desarrollo", "recomendada"]
+    },
+    {
+      "nombre": "frontend-design",
+      "descripcion": "Interfaces web con diseño cuidado y personalidad (evita el aspecto genérico de IA).",
+      "fuente": "anthropics/skills/skills/frontend-design",
+      "autor": "Anthropic",
+      "etiquetas": ["web", "diseño", "recomendada"]
+    },
+    {
+      "nombre": "webapp-testing",
+      "descripcion": "Prueba aplicaciones web locales con Playwright: capturas, registros del navegador y comprobaciones.",
+      "fuente": "anthropics/skills/skills/webapp-testing",
+      "autor": "Anthropic",
+      "etiquetas": ["web", "pruebas"]
+    }
+  ]
+}

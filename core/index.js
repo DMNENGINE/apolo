@@ -38,7 +38,7 @@ function crearNucleo(opciones = {}) {
   let tareas = null, subagentes = null, control = null, navegador = null, nucleo = null, consejo = null, turno = null;
   const modeloCerebro = () => { const m = nucleo?.cerebro?.leer?.()?.modelo; return m && m.includes('/') ? m : cfg.modeloPorDefecto; };
   const skills = crearSkills({ cfg, bus, generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), embedder, modelo: modeloCerebro, escaner: opciones.escaner,
-    tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github'),
+    tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github'), fetchMarketplace: opciones.fetchMarketplace,
     ejecutarEval: async ({ modelo, texto }) => {                 // evals del taller: sesión efímera (canal 'eval', solo lectura) que se borra al acabar
       const s = sesiones.crear({ modelo, canal: 'eval', titulo: 'eval de skill' });
       try { return await agente.enviar(s, texto); } finally { sesiones.borrar(s.id); }

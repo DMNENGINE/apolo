@@ -2,12 +2,13 @@
 //   Propias:   <cfg.dir>/skills/<slug>/SKILL.md (+ scripts/ references/ assets/) + instalado.json
 //              instalado.json = { origen, sha, hash, version, fecha, activa, escaneo, usos, ultimoUso }
 //   Externas:  solo lectura, de ~/.claude/skills, ~/.codex/skills, <cwd>/.claude/skills y cfg.skills.rutasExtra
-//              (cfg.skills.rutas sustituye la lista por defecto). Su estado (activa, usos, escaneo) va en <dir>/skills/_externas.json.
+//              (cfg.skills.rutas sustituye la lista por defecto). También <cwd>/.cursor/rules/*.mdc y <cwd>/AGENTS.md
+//              (cfg.skills.reglasProyecto=false lo apaga; cfg.skills.cwdReglas cambia la carpeta), espejadas en <dir>/skills/_reglas/. Su estado (activa, usos, escaneo) va en <dir>/skills/_externas.json.
 // Migra los .md sueltos de la importación antigua (<dir>/skills/*.md) a carpetas <slug>/SKILL.md (desactivadas).
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { leerSkill, componerSkillMd, slugDe } = require('./formato');
+const { leerSkill, componerSkillMd, parsearSkillMd, slugDe } = require('./formato');
 
 const leerJSON = (f, def) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return def; } };
 
@@ -76,11 +77,44 @@ function crearAlmacen({ cfg, bus }) {
         out.push(armar(s, slug, d, { origen: { tipo: 'externa', fuente: d, etiqueta }, activa: cfg.skills?.externasActivas === true, ...est[clave], clave }, true));
       }
     }
+    // reglas de proyecto del cwd: .cursor/rules/*.mdc y AGENTS.md (solo lectura; espejo como SKILL.md en _reglas/ para índice y escáner)
+    for (const r of reglasProyecto()) {
+      let slug = r.slug; if (usados.has(slug)) slug = `${slug}-${r.etiqueta}`; if (usados.has(slug)) continue;
+      const d = espejo(r, slug), s = d && leerSkill(d); if (!s) continue;
+      usados.add(slug);
+      const clave = `${r.etiqueta}:${r.archivo}`;
+      out.push(armar(s, slug, d, { origen: { tipo: 'externa', fuente: r.archivo, etiqueta: r.etiqueta }, activa: cfg.skills?.externasActivas === true, ...est[clave], clave }, true));
+    }
     return out;
+  }
+  function reglasProyecto() {
+    if (cfg.skills?.reglasProyecto === false) return [];
+    const cwd = cfg.skills?.cwdReglas || process.cwd(), out = [];
+    const dr = path.join(cwd, '.cursor', 'rules');
+    let es = []; try { es = fs.readdirSync(dr).filter(f => /\.mdc$/i.test(f)).sort(); } catch { }
+    for (const f of es.slice(0, 100)) out.push({ archivo: path.join(dr, f), etiqueta: 'cursor', slug: slugDe(f.replace(/\.mdc$/i, '')) || 'regla', nombre: f.replace(/\.mdc$/i, '') });
+    const ag = path.join(cwd, 'AGENTS.md');
+    if (fs.existsSync(ag)) out.push({ archivo: ag, etiqueta: 'agents', slug: `agents-md-${slugDe(path.basename(cwd)) || 'proyecto'}`.slice(0, 64), nombre: `AGENTS.md (${path.basename(cwd)})`, proyecto: path.basename(cwd) });
+    return out;
+  }
+  // escribe <dir>/skills/_reglas/<slug>/SKILL.md solo si el original cambió
+  function espejo(r, slug) {
+    try {
+      const st = fs.statSync(r.archivo); if (!st.isFile() || st.size > 512 * 1024) return null;
+      const d = path.join(dir, '_reglas', slug), f = path.join(d, 'SKILL.md');
+      try { if (fs.statSync(f).mtimeMs >= st.mtimeMs) return d; } catch { }
+      const { datos, cuerpo } = parsearSkillMd(fs.readFileSync(r.archivo, 'utf8'));
+      const primera = cuerpo.split('\n').map(l => l.replace(/^#+\s*/, '').trim()).find(Boolean) || '';
+      const desc = r.etiqueta === 'agents' ? `Instrucciones del proyecto ${r.proyecto} para agentes (AGENTS.md): úsalas al trabajar en ese proyecto. ${primera}`
+        : `${datos.description || primera || `Regla de Cursor ${r.nombre}`}${datos.globs ? ` (archivos: ${Array.isArray(datos.globs) ? datos.globs.join(', ') : datos.globs})` : ''}${datos.alwaysApply === true ? ' (aplicar siempre)' : ''}`;
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(f, componerSkillMd({ name: r.nombre, description: String(desc).replace(/\s+/g, ' ').trim().slice(0, 1000) }, cuerpo));
+      return d;
+    } catch { return null; }
   }
   function armar(s, slug, d, inst, externa) {
     return { slug, nombre: s.nombre, descripcion: s.descripcion, activa: !!inst.activa, origen: inst.origen || { tipo: 'local' }, externa,
-      version: inst.version || s.apolo.version || '', escaneo: inst.escaneo || null, usos: inst.usos || 0, ultimoUso: inst.ultimoUso || null,
+      version: inst.version || s.apolo.version || '', escaneo: inst.escaneo || null, firma: inst.firma || null, usos: inst.usos || 0, ultimoUso: inst.ultimoUso || null,
       permisos: s.apolo.permisos, archivos: s.archivos, dir: d, sha: inst.sha || null, fecha: inst.fecha || null, clave: inst.clave,
       disparadores: s.apolo.disparadores, modelos: s.apolo.modelos, canales: s.apolo.canales, allowedTools: s.allowedTools, licencia: s.licencia, autor: s.apolo.autor,
       borrador: !!inst.borrador, evals: inst.evals || null, mejorada: inst.mejorada || null };

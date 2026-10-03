@@ -814,3 +814,23 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mq-ok svg { width: 46px; height: 46px; color: var(--acento); stroke-width: 2.2; }
 .mq-ok b { font-size: 17px; }
 @media (max-width: 640px) { .mq { flex-direction: column; } }
+
+/* ---- Skills → Explorar (marketplace, ui/mercado.js) ---- */
+.sk-modo { margin: 4px 0 16px; }
+.mk-barra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
+.mk-barra .mk-busca { margin-left: 0; width: 340px; }
+.mk-barra .btn:last-child { margin-left: auto; }
+.mk-etiquetas { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+.mk-etiquetas .chip-btn.on { color: var(--txt); border-color: var(--acento); background: color-mix(in srgb, var(--acento) 12%, transparent); }
+.mk-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.mk-fuente { font-size: 11px; color: var(--txt-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mk-tarjeta .sk-pie { flex-wrap: nowrap; }
+.mk-fuentes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0 0; font-size: 12px; }
+.mk-fuentes a.chip { text-decoration: none; }
+.mk-nota { margin-left: auto; display: inline-flex; gap: 5px; align-items: center; }
+.mk-ficha-datos { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
+.mk-ficha-datos small { display: block; color: var(--txt-3); font-size: 11px; }
+.mk-ficha-datos a { display: inline-flex; gap: 5px; align-items: center; }
+.mk-md { max-height: 55vh; overflow: auto; border: 1px solid var(--borde); border-radius: var(--radio); padding: 12px 16px; background: var(--capa-2); }
+.mk-firma { cursor: help; }
+@media (max-width: 720px) { .mk-barra .mk-busca { width: 100%; } .mk-nota { margin-left: 0; } }

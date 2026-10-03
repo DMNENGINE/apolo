@@ -124,7 +124,7 @@ function crearTaller({ cfg, bus, almacen, instalador, generarJSON, modelo, ejecu
     if (!aplicar || !diff) return out;
     if (s.externa) throw new Error('es una skill externa (de otra app): copia la propuesta a mano en su carpeta');
     const v = guardarVersion(s, true);
-    fs.writeFileSync(path.join(s.dir, 'SKILL.md'), r.propuesta);
+    fs.writeFileSync(path.join(s.dir, 'SKILL.md'), r.propuesta); fs.rmSync(path.join(s.dir, 'FIRMA.json'), { force: true });   // cambio local: ya no es la versión firmada por su autor
     try { fs.unlinkSync(fPend); } catch { }
     almacen.escribirInstalado(s.slug, { mejorada: Date.now() });
     const escaneo = await reescanear(s.slug);
@@ -158,7 +158,7 @@ function crearTaller({ cfg, bus, almacen, instalador, generarJSON, modelo, ejecu
     const f = path.join(datosDe(s), '_versiones', `${version}.md`);
     if (!fs.existsSync(f)) throw Object.assign(new Error(`no existe la versión ${version}`), { status: 404 });
     const guardada = guardarVersion(s, false);
-    fs.copyFileSync(f, path.join(s.dir, 'SKILL.md'));
+    fs.copyFileSync(f, path.join(s.dir, 'SKILL.md')); fs.rmSync(path.join(s.dir, 'FIRMA.json'), { force: true });
     almacen.escribirInstalado(s.slug, { restaurada: Date.now() });
     const escaneo = await reescanear(s.slug);
     avisar('restaurada', s.slug, { version });

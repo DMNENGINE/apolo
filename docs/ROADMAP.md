@@ -30,7 +30,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 ---
 
-## FASE 1 — Motor de skills universal 🔥 ✅ (falta firma ed25519 y marketplace en panel)
+## FASE 1 — Motor de skills universal 🔥 ✅ (2026-10-02: marketplace en panel, firma ed25519, .cursor/rules + AGENTS.md; falta activar por canal/modelo)
 
 **Gancho:** "Instala cualquier skill de Claude, Codex o Cursor… y úsala con Llama, Gemini o GPT gratis."
 

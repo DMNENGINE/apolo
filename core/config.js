@@ -64,7 +64,12 @@ const POR_DEFECTO = {
   // skills (core/skills): rutasExtra = más carpetas de skills externas (solo lectura); externasActivas = las de ~/.claude/skills,
   // ~/.codex/skills… entran activas; autoInyectar = a modelos locales pequeños se les mete la skill si la confianza ≥ umbralInyectar
   skills: { rutasExtra: [], externasActivas: false, autoInyectar: true, umbralInyectar: 0.85, presupuestoLocal: 1500, presupuestoNube: 5000, usarTokenGithub: true,
-    sugerir: true, umbralSugerir: 6, mejoraSemanal: false },   // taller: sugerir skill tras turnos largos; propuesta de mejora semanal (lunes 10:00)
+    sugerir: true, umbralSugerir: 6, mejoraSemanal: false,     // taller: sugerir skill tras turnos largos; propuesta de mejora semanal (lunes 10:00)
+    // marketplace (docs/marketplace.md): catalogos = URLs de índices JSON (por defecto el de APOLO); marketplaceAnthropic = anthropics/skills
+    // autoresConfianza = [{nombre, clavePublica}] para la firma ed25519 (core/skills/firmar.js); reglasProyecto = leer .cursor/rules y AGENTS.md del cwd
+    autoresConfianza: [], marketplaceAnthropic: true, reglasProyecto: true },
+  // seguridad.exfil: 'preguntar' | 'bloquear' | 'off' (core/exfil.js: enviar datos a un dominio nuevo)
+  seguridad: { exfil: 'preguntar' },
 };
 
 // opciones.boveda: bóveda inyectable (tests); por defecto core/boveda.js (DPAPI en Windows)

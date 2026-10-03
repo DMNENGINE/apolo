@@ -80,6 +80,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
     const ctl = new AbortController(); enCurso.set(s.id, ctl);
     const ev = (tipo, datos) => emitir({ tipo, sesion: s.id, ...datos });
     const turno = { herramientas: 0, errores: 0, nombres: new Set(), skills: new Set() };   // para el taller (sugerir skill / registrar fallos)
+    permisos.exfil?.nuevoTurno(s);                     // anti-exfiltración: lo leído cuenta solo dentro de este turno
     const taller = skills?.taller;
     // ¿el usuario corrige justo después de un turno que usó una skill? → se apunta como fallo de esa skill
     if (taller && s.ultimaSkill) {
@@ -158,6 +159,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           const res = enParalelo.has(c.id) ? await enParalelo.get(c.id) : await correr(c);
           const resultado = typeof res === 'string' ? res : res.texto;
           const fallo = /^(error|DENEGADO)\b/.test(resultado);
+          if (!fallo) permisos.exfil?.registrarLectura(s, c.name, resultado);
           turno.herramientas++; turno.nombres.add(c.name); if (fallo) turno.errores++;
           if (c.name === 'usar_skill' && !fallo) { const sl = skills?.almacen?.obtener(String(c.args?.nombre || ''))?.slug; if (sl) turno.skills.add(sl); }
           const imagenes = typeof res === 'string' || !res.imagenes.length ? undefined : res.imagenes.map(i => ({ mime: i.mime, ruta: i.ruta }));

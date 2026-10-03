@@ -21,6 +21,7 @@
 //   GET  /v1/skills · GET /v1/skills/:slug (con contenido) · POST /v1/skills/instalar {fuente} → {skill} | {opciones}
 //   PATCH /v1/skills/:slug {activa, forzar} · POST /v1/skills/:slug/escanear · POST /v1/skills/:slug/actualizar {aplicar} → {diff, aplicado}
 //   DEL  /v1/skills/:slug (no las externas)
+//   GET  /v1/skills/marketplace[?refrescar=1] → {entradas, fuentes, etiquetas, actualizado} · GET /v1/skills/marketplace/ficha?id= → {entrada, texto}
 //   taller: POST /v1/skills/crear {nombre,descripcion,instrucciones,scripts?,disparadores?,pruebas?} → {skill}
 //   POST /v1/skills/:slug/mejorar {aplicar?, propuesta?} → {diff, propuesta, cambios, aplicado} · GET /v1/skills/:slug/aprendizaje
 //   POST /v1/skills/:slug/evaluar {modelos[]} → {resultados:[{modelo,aciertos,total,detalles}]} · POST /v1/skills/:slug/exportar {destino?} → {ruta}
@@ -318,6 +319,15 @@ function iniciar(opciones = {}) {
       if (p[1] === 'skills') {                                    // motor de skills (core/skills)
         const sk = n.skills, err = (e, c = 400) => json(res, e.status || c, { error: e.message });
         if (!p[2] && M === 'GET') return json(res, 200, { skills: sk.lista() });
+        // marketplace (core/skills/marketplace.js): catálogo agregado con caché de 6 h y ficha (SKILL.md / README)
+        if (p[2] === 'marketplace' && M === 'GET') {
+          try {
+            if (p[3] === 'ficha') return json(res, 200, await sk.ficha(String(u.searchParams.get('id') || '')));
+            const c = await sk.catalogo({ refrescar: u.searchParams.get('refrescar') === '1' });
+            const plug = new Set((n.plugins?.lista?.() || []).map(x => x.nombre));
+            return json(res, 200, { ...c, entradas: c.entradas.map(e => (e.tipo === 'plugin' && plug.has(e.nombre) ? { ...e, instalada: e.nombre } : e)) });
+          } catch (e) { return err(e, 502); }
+        }
         if (p[2] === 'instalar' && !p[3] && M === 'POST') {
           const { fuente } = await leer(req);
           if (!fuente) return json(res, 400, { error: 'fuente' });

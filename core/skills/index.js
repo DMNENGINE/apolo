@@ -9,8 +9,10 @@ const { crearAlmacen } = require('./almacen');
 const { crearInstalador } = require('./instalar');
 const { crearIndice } = require('./indice');
 const { crearTaller } = require('./taller');
+const { crearMarketplace } = require('./marketplace');
+const { slugDe } = require('./formato');
 
-function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, tokenGithub, ejecutarEval }) {
+function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, tokenGithub, ejecutarEval, fetchMarketplace }) {
   const almacen = crearAlmacen({ cfg, bus });
   const elEscaner = () => {
     if (escaner) return escaner;
@@ -20,10 +22,21 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
   const instalador = crearInstalador({ almacen, cfg, escaner: elEscaner, tokenGithub });
   const indice = crearIndice({ cfg, almacen, embedder });
   const taller = crearTaller({ cfg, bus, almacen, instalador, generarJSON, modelo, ejecutar: ejecutarEval });
+  const marketplace = crearMarketplace({ cfg, fetch: fetchMarketplace || ((...a) => globalThis.fetch(...a)), tokenGithub });
+  // catálogo con "instalada": misma fuente de origen (GitHub owner/repo/ruta) o mismo slug
+  async function catalogo(o) {
+    const c = await marketplace.catalogo(o), L = almacen.lista().filter(s => !s.externa);
+    const norm = f => String(f || '').toLowerCase().replace(/^https?:\/\/github\.com\//, '').replace(/\/(tree|blob)\/[^/]+/, '').replace(/@.*$/, '').replace(/\/+$/, '');
+    return { ...c, entradas: c.entradas.map(e => {
+      if (e.tipo !== 'skill') return e;
+      const s = L.find(x => (x.origen?.fuente && norm(x.origen.fuente) === norm(e.fuente)) || x.slug === slugDe(e.nombre));
+      return s ? { ...e, instalada: s.slug } : e;
+    }) };
+  }
 
   // vista pública (API / panel)
   const publica = s => s && ({ slug: s.slug, nombre: s.nombre, descripcion: s.descripcion, activa: s.activa, origen: s.origen, externa: s.externa,
-    version: s.version, escaneo: s.escaneo, usos: s.usos, ultimoUso: s.ultimoUso, permisos: s.permisos, archivos: s.archivos,
+    version: s.version, escaneo: s.escaneo, firma: s.firma, usos: s.usos, ultimoUso: s.ultimoUso, permisos: s.permisos, archivos: s.archivos,
     disparadores: s.disparadores, modelos: s.modelos, canales: s.canales, licencia: s.licencia, autor: s.autor, sha: s.sha, fecha: s.fecha, borrador: s.borrador, evals: s.evals, mejorada: s.mejorada });
 
   // para las herramientas: la skill debe existir y estar activa
@@ -50,7 +63,7 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
   }
 
   return {
-    almacen, instalador, indice, taller, activa, rutaDentro, motivoPreguntar, publica,
+    almacen, instalador, indice, taller, marketplace, catalogo, ficha: id => marketplace.ficha(id), activa, rutaDentro, motivoPreguntar, publica,
     lista: () => almacen.lista().map(publica),
     obtener: slug => { const s = almacen.obtener(slug); if (!s) return null; const c = almacen.contenido(s.slug); return { ...publica(s), contenido: c?.contenido || '' }; },
     instalar: (fuente, o) => instalador.instalar(fuente, o).then(r => (r.skill ? { skill: publica(r.skill) } : r)),
