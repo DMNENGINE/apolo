@@ -32,7 +32,7 @@ jobs:
           v="${GITHUB_REF_NAME#v}"
           awk -v v="$v" 'index($0, "## [" v "]") == 1 {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > notas.md
           [ -s notas.md ] || echo "Versión ${v}." > notas.md
-          printf '\n---\n**Windows:** descarga `APOLO-Setup-%s.exe`. El instalador aún no está firmado: en SmartScreen pulsa *Más información → Ejecutar de todos modos*.\n\n🌐 https://dmnengine.github.io/apolo/\n' "$v" >> notas.md
+          printf '\n---\n**Windows:** descarga `APOLO-Setup-%s.exe`. El instalador aún no está firmado: en SmartScreen pulsa *Más información → Ejecutar de todos modos*.\n\n🌐 https://apolocompanion.com/\n' "$v" >> notas.md
       - name: Release en borrador (una sola)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,6 +10,7 @@
   <img alt="Status" src="https://img.shields.io/badge/status-beta-orange.svg">
 </p>
 
+<p align="center">🌐 <a href="https://apolocompanion.com"><b>apolocompanion.com</b></a></p>
 <p align="center"><b>English</b> · <a href="README.es.md">Español</a></p>
 
 <h3 align="center">A 3D robot on your desktop that runs, watches and approves every AI agent you use — on the plan you already pay for, or 100% local.</h3>
