@@ -8,3 +8,4 @@ __pycache__/
 /lanzamiento/
 docs/media/banner.html
 instalado.json
+/dist/

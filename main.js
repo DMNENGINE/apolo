@@ -37,9 +37,13 @@ const idiomaApp = () => I18N.normal((nucleo && nucleo.cfg && nucleo.cfg.idioma) 
 const tr = (k, v) => { I18N.poner(idiomaApp()); return I18N.tr(k, v); };
 const nombreCompanero = () => { try { return nucleo ? nucleo.personalidad.nombre() : 'Robot'; } catch { return 'Robot'; } };
 
-const PORT = 47823;
+const PORT = +process.env.APOLO_PUERTO || 47823;          // APOLO_PUERTO: solo pruebas (el hook usa 47823)
 const WIN_W = 900, WIN_H = 640;
-const HOOK_JS = path.join(__dirname, 'hook', 'hook.js').replace(/\\/g, '/');
+const { fuera } = require('./core/rutas');                 // app instalada: lo que usan procesos externos está en app.asar.unpacked
+const HOOK_JS = fuera(path.join(__dirname, 'hook', 'hook.js')).replace(/\\/g, '/');
+// sin Node.js en el PATH (instalación .exe) el hook corre con el propio APOLO.exe en modo node (hook/hook.cmd)
+const HOOK_EJEC = () => (app.isPackaged && !tieneCLI('node') ? `"${HOOK_JS.replace(/hook\.js$/, 'hook.cmd')}"` : `node "${HOOK_JS}"`);
+const ES_HOOK = /(RobotCompanion|APOLO|app\.asar\.unpacked)\/hook\/hook\.(js|cmd)/i;   // copia de desarrollo, one-liner o .exe
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const SETTINGS = path.join(CLAUDE_DIR, 'settings.json');
 const TOKEN_FILE = path.join(CLAUDE_DIR, 'robot-companion.token');
@@ -206,7 +210,7 @@ function otroMonitor(excluir) {
   return otros.sort((a, b) => (b.bounds.width * b.bounds.height) - (a.bounds.width * a.bounds.height) || (b.bounds.width >= b.bounds.height) - (a.bounds.width >= a.bounds.height))[0];
 }
 function vigilarPantallaCompleta() {
-  const p = require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'tools', 'pantalla-completa.ps1')], { windowsHide: true });
+  const p = require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(__dirname, 'tools', 'pantalla-completa.ps1'))], { windowsHide: true });
   let buf = '';
   p.stdout.setEncoding('utf8');
   p.stdout.on('data', d => {
@@ -434,7 +438,7 @@ const { spawn } = require('child_process');
 let whisper = null, whisperReady = false, whisperWait = null, whisperBuf = '';
 function startWhisper() {
   try {
-    whisper = spawn('python', [path.join(__dirname, 'tools', 'whisper_srv.py')], { windowsHide: true, env: { ...process.env, HF_HUB_DISABLE_SYMLINKS_WARNING: '1', PYTHONIOENCODING: 'utf-8' } });
+    whisper = spawn('python', [fuera(path.join(__dirname, 'tools', 'whisper_srv.py'))], { windowsHide: true, env: { ...process.env, HF_HUB_DISABLE_SYMLINKS_WARNING: '1', PYTHONIOENCODING: 'utf-8' } });
   } catch { return; }
   whisper.stdout.setEncoding('utf8');
   whisper.stdout.on('data', d => {
@@ -472,7 +476,7 @@ function transcribirArchivo(ruta) {
 const listenWhisper = () =>
   new Promise(ok => { whisperWait = ok; whisper.stdin.write('listen\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', conf: 0 }); } }, 30000); });
 const listenWindows = () => new Promise(ok => execFile('powershell.exe',
-  ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'tools', 'listen.ps1')],
+  ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(__dirname, 'tools', 'listen.ps1'))],
   { windowsHide: true, timeout: 15000 }, (err, out) => { try { ok(JSON.parse(String(out).trim())); } catch { ok({ text: '', conf: 0, error: err ? err.message : 'sin respuesta' }); } }));
 
 // ---------- servidor de eventos ----------
@@ -601,7 +605,7 @@ function ojoPermiso(ev) { ojoBus('nodo-permiso', { id: ev._id, resumen: `${ev.to
 // ---------- Telegram: telegram.js (por defecto) o el plugin del SDK plugins/telegram (cfg.plugins.telegramComoPlugin = true) ----------
 // El plugin corre en su proceso (solo api.telegram.org); el token sale del almacén cifrado (conectores) por el proveedor de secretos;
 // los permisos que resuelve son SOLO los que se le mostraron. Si no arranca o se rompe → vuelta a telegram.js.
-const DIR_PLUGIN_TG = path.join(__dirname, 'plugins', 'telegram');
+const DIR_PLUGIN_TG = fuera(path.join(__dirname, 'plugins', 'telegram'));
 const esNuestroTg = o => !!o && o.tipo === 'local' && path.resolve(String(o.fuente || '')).toLowerCase() === path.resolve(DIR_PLUGIN_TG).toLowerCase();
 function usarTelegramJs() {
   try { telegram.detener && telegram.detener(); } catch { }
@@ -779,7 +783,7 @@ function stateForDevices() {
 }
 
 // ---------- instalar / quitar hooks en ~/.claude/settings.json ----------
-const isOurs = h => typeof h.command === 'string' && h.command.includes('RobotCompanion/hook/hook.js');
+const isOurs = h => typeof h.command === 'string' && ES_HOOK.test(h.command);
 function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
 function backup() {
   if (fs.existsSync(SETTINGS)) {
@@ -801,7 +805,7 @@ function installHooks() {
   const s = stripOurs(readSettings());
   s.hooks = s.hooks || {};
   for (const [ev, timeout] of HOOK_EVENTS) {
-    (s.hooks[ev] = s.hooks[ev] || []).push({ hooks: [{ type: 'command', command: `node "${HOOK_JS}" ${ev}`, timeout }] });
+    (s.hooks[ev] = s.hooks[ev] || []).push({ hooks: [{ type: 'command', command: `${HOOK_EJEC()} ${ev}`, timeout }] });
   }
   const b = backup();
   fs.mkdirSync(path.dirname(SETTINGS), { recursive: true });
@@ -813,18 +817,18 @@ function removeHooks() {
   fs.writeFileSync(SETTINGS, JSON.stringify(stripOurs(readSettings()), null, 2));
   dialog.showMessageBox({ message: tr('Hooks quitados.'), detail: `${tr('Copia de seguridad:')} ${b}` });
 }
-const hooksInstalled = () => JSON.stringify(readSettings()).includes('RobotCompanion/hook/hook.js');
+const hooksInstalled = () => ES_HOOK.test(JSON.stringify(readSettings()));
 
 // ---------- motor Gemini CLI: mismos hooks, traducidos por hook/motores.js ----------
 const GEMINI_SETTINGS = path.join(os.homedir(), '.gemini', 'settings.json');
 const GEMINI_EVENTS = [['SessionStart', 10000], ['SessionEnd', 10000], ['BeforeAgent', 10000], ['AfterAgent', 10000], ['BeforeTool', 120000], ['AfterTool', 10000], ['Notification', 10000]];   // ms
 const leerJSON = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
-const geminiHooksInstalled = () => JSON.stringify(leerJSON(GEMINI_SETTINGS)).includes('RobotCompanion/hook/hook.js');
+const geminiHooksInstalled = () => ES_HOOK.test(JSON.stringify(leerJSON(GEMINI_SETTINGS)));
 function geminiHooks(instalar) {
   const s = stripOurs(leerJSON(GEMINI_SETTINGS));
   if (instalar) {
     s.hooks = s.hooks || {};
-    for (const [ev, timeout] of GEMINI_EVENTS) (s.hooks[ev] = s.hooks[ev] || []).push({ ...(ev.includes('Tool') ? { matcher: '.*' } : {}), hooks: [{ name: 'robot-companion', type: 'command', command: `node "${HOOK_JS}" ${ev} --motor=gemini`, timeout }] });
+    for (const [ev, timeout] of GEMINI_EVENTS) (s.hooks[ev] = s.hooks[ev] || []).push({ ...(ev.includes('Tool') ? { matcher: '.*' } : {}), hooks: [{ name: 'robot-companion', type: 'command', command: `${HOOK_EJEC()} ${ev} --motor=gemini`, timeout }] });
   }
   let b = null;
   if (fs.existsSync(GEMINI_SETTINGS)) { b = GEMINI_SETTINGS + '.robot-backup-' + new Date().toISOString().replace(/[:.]/g, '-'); fs.copyFileSync(GEMINI_SETTINGS, b); }
@@ -839,6 +843,13 @@ const cliInstalado = { gemini: tieneCLI('gemini'), codex: tieneCLI('codex') };
 const loginOpts = () => ({ path: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] });
 const autoStart = () => app.getLoginItemSettings(loginOpts()).openAtLogin;
 const setAutoStart = v => app.setLoginItemSettings({ openAtLogin: v, ...loginOpts() });
+// el instalador .exe deja autoarranque.txt junto a APOLO.exe ("1"/"0" = casilla "Iniciar con Windows"); sin él, se activa
+const autoArranqueInicial = () => { try { return fs.readFileSync(path.join(path.dirname(process.execPath), 'autoarranque.txt'), 'utf8').trim() !== '0'; } catch { return true; } };
+// voz neural + micrófono (Python, edge-tts, faster-whisper): el .exe no los trae; se instalan bajo demanda en una ventana visible
+function instalarVoz() {
+  require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(__dirname, 'tools', 'instalar-voz.ps1'))],
+    { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+}
 
 // ---------- bandeja ----------
 function trayIcon() {
@@ -860,6 +871,7 @@ function buildTray() {
     { label: tr(geminiHooksInstalled() ? 'Quitar hooks de Gemini CLI' : 'Instalar hooks de Gemini CLI'), click: () => geminiHooks(!geminiHooksInstalled()) },
     { type: 'separator' },
     { label: `⬆ ${tr('Buscar actualizaciones')}`, click: () => buscarActualizacion() },
+    { label: `🎙 ${tr('Instalar voz y micrófono (Python + Whisper)')}`, click: () => instalarVoz() },
     { label: tr('Iniciar con Windows'), type: 'checkbox', checked: autoStart(), click: i => setAutoStart(i.checked) },
     { type: 'separator' },
     { label: `🤖 ${tr('Núcleo')}: ${tr('isla')} → ${(puente && puente.destino('isla')) || 'Claude Code'} · Discord → ${(puente && puente.destino('discord')) || 'Claude Code'}`, enabled: false },
@@ -868,7 +880,7 @@ function buildTray() {
     { label: `✨ ${tr('Asistente de bienvenida')}`, click: () => abrirPanel('/bienvenida') },
     { label: `💬 ${tr('Conectar ChatGPT (tu plan, sin API key)')}`, click: () => abrirPanel('/ajustes/modelos') },
     { label: `🧩 ${tr('Copiar token para la extensión del navegador')}`, click: () => { try { clipboard.writeText(fs.readFileSync(path.join(nucleo.cfg.dir, 'token'), 'utf8').trim()); } catch { } } },
-    { label: `🧩 ${tr('Abrir carpeta de la extensión')}`, click: () => shell.openPath(path.join(__dirname, 'extension')) },
+    { label: `🧩 ${tr('Abrir carpeta de la extensión')}`, click: () => shell.openPath(fuera(path.join(__dirname, 'extension'))) },
     { label: tr('Configurar modelos (abrir config del núcleo)…'), click: () => nucleo && shell.openPath(path.join(nucleo.cfg.dir, 'config.json')) },
     { type: 'separator' },
     { label: `Discord: ${tr(discord.status)}`, enabled: false },
@@ -985,7 +997,7 @@ async function mensajeWhatsapp(a) {
 // ---------- avisos de DMs (notificaciones de Windows de la app de Discord) ----------
 let dmsStatus = 'iniciando', dmsLast = -1;
 function startDms() {
-  const script = path.join(__dirname, 'tools', 'dms_reader.py');
+  const script = fuera(path.join(__dirname, 'tools', 'dms_reader.py'));
   const tick = () => execFile('python', [script, String(dmsLast)], { windowsHide: true, timeout: 8000 }, (err, out) => {
     if (err) { dmsStatus = 'no disponible (¿Python?)'; return; }
     try {
@@ -1001,7 +1013,7 @@ app.whenReady().then(() => {
   ensureToken(); loadRules(); ensureDiscordCfg();
   // primera vez que arranca en este PC: se activa "Iniciar con Windows" (luego se puede quitar en la bandeja)
   const primera = path.join(app.getPath('userData'), 'primer-arranque');
-  if (!fs.existsSync(primera)) { try { setAutoStart(true); fs.writeFileSync(primera, new Date().toISOString()); } catch (e) { console.error('[autoarranque]', e.message); } }
+  if (!fs.existsSync(primera)) { try { setAutoStart(autoArranqueInicial()); fs.writeFileSync(primera, new Date().toISOString()); } catch (e) { console.error('[autoarranque]', e.message); } }
   actualizador = crearActualizador({ dirApp: __dirname, dirDatos: app.getPath('userData'),
     avisar: info => { if (win && !win.isDestroyed()) win.webContents.send('actualizacion', info); } });
   actualizador.iniciar();

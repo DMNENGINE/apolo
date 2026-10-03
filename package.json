@@ -30,18 +30,111 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "streamdeck": "powershell -NoProfile -ExecutionPolicy Bypass -File streamdeck/instalar.ps1"
+    "test": "npm --prefix core test",
+    "streamdeck": "powershell -NoProfile -ExecutionPolicy Bypass -File streamdeck/instalar.ps1",
+    "icono": "python build/generar-icono.py",
+    "dist": "electron-builder --win nsis",
+    "dist:dir": "electron-builder --win dir",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:linux": "electron-builder --linux AppImage"
   },
   "private": true,
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "discord.js": "^14.27.0",
-    "electron": "^33.4.11",
     "imapflow": "^2.2.1",
     "mailparser": "^3.9.33",
     "nodemailer": "^10.0.13",
     "qrcode": "^1.5.4",
     "sql.js": "^1.14.2",
-    "three": "^0.160.0"
+    "three": "^0.160.0",
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.dmnengine.apolo",
+    "productName": "APOLO",
+    "executableName": "APOLO",
+    "copyright": "Copyright (c) 2026 DMNENGINE - MIT License",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "**/*",
+      "!casco_robot.blend",
+      "!*.md",
+      "!install.ps1",
+      "!{firmware,lanzamiento,docs,pi,antigravity,dist,build,.github,.claude}{,/**/*}",
+      "!core/test{,/**/*}",
+      "!streamdeck/**/debug.log",
+      "!**/*.{blend,blend1,map}"
+    ],
+    "asarUnpack": [
+      "hook/**",
+      "core/**",
+      "shared/**",
+      "tools/**",
+      "extension/**",
+      "streamdeck/**",
+      "plugins/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DMNENGINE",
+        "repo": "apolo",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signtoolOptions": {
+        "publisherName": "DMNENGINE"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "APOLO",
+      "uninstallDisplayName": "APOLO",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "include": "build/installer.nsh",
+      "artifactName": "APOLO-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "artifactName": "APOLO-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "artifactName": "APOLO-${version}-${arch}.${ext}"
+    }
   }
 }

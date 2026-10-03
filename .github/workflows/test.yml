@@ -1,0 +1,29 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core:
+    name: Core tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # el núcleo no tiene dependencias: no hace falta npm install.
+      # Los tests que necesitan Windows (DPAPI, tar.exe, PowerShell) se saltan solos en Linux con { skip: '…' }.
+      - name: Core tests
+        working-directory: core
+        run: npm test
+      - name: Syntax check (app)
+        shell: bash
+        run: |
+          for f in main.js preload.js hablar.js cerebro.js bot-discord.js puente-nucleo.js control-overlay.js actualizador.js hook/hook.js tools/quitar-hooks.js; do node --check "$f"; done

@@ -21,7 +21,7 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 | Correo / GitHub / HF / ElevenLabs | 🟡 OAuth sin IDs propios, correo sin probar con cuentas reales |
 | Panel web (Control UI) | ✅ |
 | Importar desde OpenClaw | ✅ |
-| Instalador + autoupdate | 🟡 one-liner PowerShell, sin .exe firmado |
+| Instalador + autoupdate | 🟡 one-liner + .exe NSIS con electron-updater (sin firmar) |
 | **Skills** | ✅ motor + antivirus + taller |
 | Plugins / SDK | 🟡 SDK + gestor + aislamiento + clima + Telegram (tras flag); faltan WhatsApp/Discord y panel |
 | macOS / Linux | ⬜ (solo Windows) |
@@ -166,10 +166,10 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 **Imprescindible antes de lanzar fuerte:**
 - ⬜ **Inglés** en UI, prompts y README (es/en), i18n preparado para más.
-- ⬜ **macOS y Linux**: sustituir los `.ps1` por módulos por SO (capturas, manos, TTS, notificaciones).
-- ⬜ Instalador `.exe` firmado + `.dmg` + AppImage; asistente de primer arranque (elegir modelo, canales, nombre, voz) en < 2 min.
+- 🟡 **macOS y Linux** (capa core/escritorio/so + docs/portabilidad.md): sustituir los `.ps1` por módulos por SO (capturas, manos, TTS, notificaciones).
+- 🟡 Instalador `.exe` NSIS hecho (sin firmar; CSC_LINK preparado, docs/instalador.md), `.dmg` + AppImage configurados sin construir; asistente de primer arranque (elegir modelo, canales, nombre, voz) en < 2 min.
 - ⬜ Web + docs (docs.apolo…), vídeo de 60 s, GIFs en el README.
-- ⬜ CI (tests en Windows/mac/Linux), releases automáticas, changelog.
+- 🟡 CI: test.yml (Windows + Ubuntu) y release.yml (tag v* → GitHub Release + latest.yml); falta mac y changelog automático.
 - ⬜ Telemetría **opt-in** anónima + informe de errores.
 - ⬜ Comprobar marca "APOLO" (conflictos) y dominio.
 - ⬜ Discord de comunidad (ya tenemos la base con BOT CENTRAL).

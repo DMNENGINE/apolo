@@ -5,7 +5,7 @@
 //                    vision: { activo: true, minElementos: 4, columnas: 16 } }
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const so = require('./so');               // capa de SO: hoy Windows (pantalla.ps1); mac/linux fallan con mensaje claro
 
 const BLOQUEADAS = ['banco', '\\bbank', 'paypal', 'zelle', 'venmo', 'cash ?app', 'wallet', 'binance', 'coinbase', 'metamask', 'kraken',
   '1password', 'bitwarden', 'keepass', 'lastpass', 'dashlane', 'administrador de contrase', 'password manager', 'credential manager'];
@@ -36,15 +36,7 @@ function limpiarViejas(dir, horas = 24) {
   }
 }
 
-function ejecutarPs(args, timeout = 20_000) {
-  return new Promise((ok, mal) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'pantalla.ps1'), ...args],
-      { windowsHide: true, timeout, maxBuffer: 8 << 20, encoding: 'utf8' }, (err, out, errOut) => {
-        if (err) return mal(new Error((errOut || err.message).trim().split('\n')[0]));
-        try { ok(JSON.parse(out.trim().replace(/^﻿/, ''))); } catch { mal(new Error('salida no válida del capturador')); }
-      });
-  });
-}
+const ejecutarPs = (args, timeout = 20_000) => so.ejecutarPantalla(args, { timeout });
 
 // "ojos" por defecto: pantalla.ps1. Los tests inyectan unos falsos con la misma forma de respuesta.
 async function ojosPs({ salida, monitor = 0, ancho = 1280, elementos = true, sinImagen = false, rejillaSiMenos = 0, columnas = 16 }) {

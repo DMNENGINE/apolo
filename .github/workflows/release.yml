@@ -1,0 +1,63 @@
+name: Release
+
+# Al subir un tag v* (p. ej. v0.2.0, igual que "version" en package.json) construye el instalador
+# y lo publica en GitHub Releases junto con latest.yml (lo que lee electron-updater para avisar de la actualización).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Tag == package.json version
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "El tag ${GITHUB_REF_NAME} no coincide con package.json ($v)"; exit 1; }
+      - run: npm ci
+      - name: Core tests
+        working-directory: core
+        run: npm test
+      - name: Build + publish (NSIS)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Firma de código (opcional): secretos CSC_LINK (.pfx en base64) y CSC_KEY_PASSWORD.
+          # Si no existen, el instalador sale sin firmar y Windows SmartScreen avisará al instalar.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: npx electron-builder --win nsis --publish always
+
+  # macOS (dmg) y Linux (AppImage) ya están configurados en package.json, pero el control del escritorio
+  # aún es solo Windows (ver docs/portabilidad.md). Actívalos con la variable de repositorio APOLO_BUILD_MAC_LINUX=true.
+  mac-linux:
+    if: vars.APOLO_BUILD_MAC_LINUX == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: --mac dmg
+          - os: ubuntu-latest
+            target: --linux AppImage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build + publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder ${{ matrix.target }} --publish always

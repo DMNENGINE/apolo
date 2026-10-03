@@ -13,7 +13,7 @@ const M = require('./manifest');
 const I = require('./instalar');
 const { VERSION } = require('../sdk');
 
-const SDK_DIR = path.join(__dirname, '..', 'sdk');
+const SDK_DIR = require('../rutas').fuera(path.join(__dirname, '..', 'sdk'));   // el node del sistema no lee app.asar
 const ORDEN = { lectura: 0, escritura: 1, ejecucion: 2 };
 const maxRiesgo = (...r) => r.filter(x => x in ORDEN).reduce((a, b) => (ORDEN[b] > ORDEN[a] ? b : a), 'lectura');
 const CLAVE_PLURAL = { herramienta: 'herramientas', comando: 'comandos', proveedor: 'proveedores', canal: 'canales' };

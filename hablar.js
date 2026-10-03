@@ -62,7 +62,7 @@ function createTalk({ dataDir, getHwnd, send, reply, onStop }) {
     return new Promise(ok => {
       const f = path.join(os.tmpdir(), `robot-msg-${Date.now()}.txt`);
       fs.writeFileSync(f, text, 'utf8');
-      execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'tools', 'escribir.ps1'), '-Hwnd', String(hwnd), '-File', f],
+      execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', require('./core/rutas').fuera(path.join(__dirname, 'tools', 'escribir.ps1')), '-Hwnd', String(hwnd), '-File', f],
         { windowsHide: true, timeout: 10000 }, (err, out) => { try { fs.unlinkSync(f); } catch { } ok(!err && String(out).includes('OK')); });
     });
   }

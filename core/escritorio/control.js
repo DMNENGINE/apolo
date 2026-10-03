@@ -10,7 +10,7 @@
 // o si no cambió nada. Cada mirada/acción queda en el registro de capturas (registro.js) para "Lo que hizo" de Mission Control.
 // Eventos del bus: 'control' { activo, sesion, motivo, hasta, razon }
 const path = require('path');
-const { spawn } = require('child_process');
+const so = require('./so');               // capa de SO: hoy Windows (manos.ps1)
 const { recientes, bloqueada, verPantalla, mirar, marcoDe, lineaElemento, textoRejilla } = require('./index');
 const { fusionar, describir, cambios } = require('./comprobar');
 
@@ -30,7 +30,8 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null, ojos, r
 
   function arrancar() {
     if (hijo) return listo;
-    hijo = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'manos.ps1')], { windowsHide: true });
+    if (!so.soportado) throw new Error(so.lanzarManos().error);
+    hijo = so.lanzarManos();
     hijo.stdout.setEncoding('utf8');
     let avisarListo;
     listo = new Promise(ok => { avisarListo = ok; });
