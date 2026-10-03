@@ -376,7 +376,7 @@
     'Abrir carpeta de la extensión': 'Open the extension folder', 'Configurar modelos (abrir config del núcleo)…': 'Configure models (open core config)…', 'Configurar Discord (abrir archivo)…': 'Configure Discord (open file)…', 'Reconectar Discord': 'Reconnect Discord',
     'Resumen del día ahora': 'Daily summary now', 'en pausa (cerca del límite del plan)': 'paused (near the plan limit)', 'Enviarme un aviso de prueba': 'Send me a test notice', '🤖 **Prueba:** así te llegarán los avisos del Robot Companion.': "🤖 **Test:** this is how Robot Companion's notices will reach you.",
     'Avisos de DMs': 'DM notices', 'Reglas "Permitir siempre" ({n})': '"Always allow" rules ({n})', 'quitar': 'remove', 'Quitar todas': 'Remove all', '(ninguna)': '(none)', 'Mover isla fuera del monitor principal': 'Move the island off the main monitor',
-    'Volver la isla al monitor principal': 'Move the island back to the main monitor', 'Evento de prueba': 'Test event', 'Herramientas de desarrollo': 'Developer tools', 'Salir': 'Quit',
+    'Volver la isla al monitor principal': 'Move the island back to the main monitor', 'Volver la isla a su sitio': 'Reset the island position', 'Traer la isla de vuelta': 'Bring the island back', 'Evento de prueba': 'Test event', 'Herramientas de desarrollo': 'Developer tools', 'Salir': 'Quit',
   };
   // ===== FASE 4: memoria v2 (grafo, línea de tiempo, sueños, privacidad) y Wrapped =====
   const I18N_EN_F4 = {

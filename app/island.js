@@ -36,6 +36,32 @@ const ICO = (() => {
 const island = $('island');
 const bridge = window.bridge || makeStubBridge();      // sin Electron (navegador): modo demo
 
+// ---------- dónde está la isla dentro de su ventana y hacia dónde se abre (lo decide main con shared/isla-geometria.js) ----------
+// barX/barY = la barra (isla cerrada) en la ventana; h izq|centro|der = crece a la derecha / a los dos lados / a la izquierda; v arriba|abajo = se abre hacia abajo / hacia arriba
+const GEO = window.IslaGeo;
+let lay = { barX: Math.round((innerWidth - GEO.BARRA_W) / 2), barY: 0, h: 'centro', v: 'arriba', ancho: innerWidth, alto: innerHeight };
+function colocarIsla() {
+  const L = { ventana: { width: lay.ancho, height: lay.alto }, barX: lay.barX, barY: lay.barY, h: lay.h, v: lay.v };
+  const abierta = island.classList.contains('open');
+  const ancho = abierta ? (island.classList.contains('term') ? 860 : 540) : GEO.BARRA_W;   // = anchos del CSS de #island
+  island.style.left = GEO.izquierdaPanel(L, ancho) + 'px';                 // left y width con la misma transición → el lado anclado no se mueve
+  const abajo = lay.v === 'abajo', nt = $('notifs');
+  island.style.top = abajo ? 'auto' : lay.barY + 'px';
+  island.style.bottom = abajo ? (lay.alto - lay.barY - GEO.BARRA_H) + 'px' : 'auto';
+  island.style.setProperty('--pmax', Math.max(120, GEO.altoMaxPanel(L) - 26) + 'px');   // 26 = padding del panel abierto
+  nt.style.left = lay.barX + 'px';
+  nt.style.top = abajo ? 'auto' : (lay.barY + GEO.BARRA_H + 8) + 'px';
+  nt.style.bottom = abajo ? (lay.alto - lay.barY + 8) + 'px' : 'auto';
+  document.body.classList.toggle('v-abajo', abajo);
+  document.body.classList.toggle('h-der', lay.h === 'der');
+}
+colocarIsla();
+if (bridge.onLayout) bridge.onLayout(l => {
+  island.classList.add('fijo');                       // sin transición: la barra no debe deslizarse mientras main mueve la ventana
+  lay = l; colocarIsla();
+  requestAnimationFrame(() => requestAnimationFrame(() => { bridge.layoutOk(); setTimeout(() => island.classList.remove('fijo'), 120); }));
+});
+
 // ---------- robot (un solo canvas que se mueve entre la barra y el panel) ----------
 const cv = document.createElement('canvas');
 const rwrap = document.createElement('div'); rwrap.className = 'rwrap';
@@ -549,7 +575,7 @@ $('tIr').addEventListener('click', () => tSel && irATerminal(tSel));
 let termOn = false;
 try { termOn = localStorage.getItem('robot-terminales') === '1'; } catch { }
 function setTerm(v) {
-  termOn = v; island.classList.toggle('term', v); $('tTog').classList.toggle('on', v);
+  termOn = v; island.classList.toggle('term', v); $('tTog').classList.toggle('on', v); colocarIsla();
   try { localStorage.setItem('robot-terminales', v ? '1' : '0'); } catch { }
   if (!v && tSel) cerrarChat();
 }
@@ -565,7 +591,7 @@ let lastActivity = Date.now(), usageToday = null;
 const SLEEP_MS = 3 * 60_000;                               // se duerme tras 3 min sin actividad
 function setOpen(v) {
   if (v === open) return;
-  open = v; island.classList.toggle('open', v);
+  open = v; island.classList.toggle('open', v); colocarIsla();
   (v ? $('big') : $('mini')).appendChild(rwrap);
   if (v) sound.play('abrir');
   ajustarFps();
@@ -581,8 +607,72 @@ function programarCierre() {
   clearTimeout(leaveTimer);
   leaveTimer = setTimeout(() => { leaveTimer = null; if (!cursorDentro) { hovering = false; cerrarTras = 10_000; render(); } }, cerrarTras);   // margen antes de cerrar
 }
-setInterval(() => { if (hovering && !cursorDentro && !leaveTimer && bridge.onCursor) { bridge.interactive(false); programarCierre(); } }, 1000);
-island.addEventListener('mouseenter', () => { hovering = true; bridge.interactive(true); render(); });
+setInterval(() => {
+  if (hovering && !cursorDentro && !leaveTimer && bridge.onCursor) programarCierre();
+  if (ultimoPunto) probarRaton(ultimoPunto.x, ultimoPunto.y);   // la isla cambió bajo un cursor quieto (se cerró, salió una tarjeta…)
+}, 1000);
+island.addEventListener('mouseenter', () => { hovering = true; render(); });
+
+// ---------- clics a través: SOLO lo visible (robot, tarjetas, botones, textos con fondo, [data-solido]) captura el ratón ----------
+// La ventana es atravesable por defecto (setIgnoreMouseEvents(true, {forward})); con cada mousemove reenviado o posición del
+// polling global se mira qué hay bajo el cursor (elementFromPoint + estilos, regla en shared/isla-geometria.js) y solo se pide
+// a main que capture el ratón al entrar en algo visible (y que lo suelte al salir). Durante un arrastre se queda capturado.
+let interactivo = null, ultimoPunto = null, probarPend = false;
+function ponerInteractivo(v) { if (v === interactivo) return; interactivo = v; bridge.interactive(v); }
+function sobreAlgoVisible(x, y) {
+  const cadena = [];
+  for (let e = document.elementFromPoint(x, y); e && e !== island && e !== document.body && e !== document.documentElement; e = e.parentElement) {
+    const cs = getComputedStyle(e);
+    cadena.push({ tag: e.tagName, fondo: cs.backgroundColor, imagen: cs.backgroundImage, bordeAncho: cs.borderTopWidth, bordeColor: cs.borderTopColor,
+      cursor: cs.cursor, opacidad: cs.opacity, marcado: e.hasAttribute('data-solido') });
+  }
+  return GEO.cadenaSolida(cadena);
+}
+function probarRaton(x, y) {                                // como mucho una vez por fotograma (no toca el canvas)
+  ultimoPunto = { x, y };
+  if (probarPend) return; probarPend = true;
+  requestAnimationFrame(() => { probarPend = false; const p = ultimoPunto; ponerInteractivo(!!gesto || arrastrando || sobreAlgoVisible(p.x, p.y)); });
+}
+document.addEventListener('mousemove', e => probarRaton(e.clientX, e.clientY));
+
+// ---------- mover la isla: mantener pulsado el robot ~0,3 s (o arrastrar desde la barra / la cabecera) y soltar donde quieras ----------
+// Un clic corto sigue siendo un clic (sacudida, 3 = mareo). Main mueve la ventana con el cursor y al soltar la coloca, la guarda y la re-ancla.
+const PULSACION_MS = 280, UMBRAL_PX = 6;
+let gesto = null, arrastrando = false, tragarClic = false;
+function zonaArrastre(t) {
+  if (!t || !t.closest) return null;
+  if (t.closest('.rwrap')) return 'robot';
+  if (t.closest('button, input, textarea, select, a, .sw, #tools')) return null;
+  return t.closest('#bar, #hero .sum') ? 'barra' : null;
+}
+document.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !bridge.arrastre || gesto) return;
+  const z = zonaArrastre(e.target); if (!z) return;
+  gesto = { x: e.screenX, y: e.screenY, id: e.pointerId, el: e.target, t: z === 'robot' ? setTimeout(empezarArrastre, PULSACION_MS) : null };
+});
+document.addEventListener('pointermove', e => {
+  if (gesto && !arrastrando && Math.hypot(e.screenX - gesto.x, e.screenY - gesto.y) > UMBRAL_PX) empezarArrastre();
+});
+function empezarArrastre() {
+  if (!gesto || arrastrando) return;
+  clearTimeout(gesto.t); arrastrando = true; tragarClic = true;
+  try { gesto.el.setPointerCapture(gesto.id); } catch { }
+  document.body.classList.add('arrastrando'); ponerInteractivo(true);
+  bridge.arrastre('inicio');
+  lastActivity = Date.now(); hacerGesto('sorpresa', 0.9, '');     // "¡me levantas!"
+}
+function terminarGesto() {
+  if (!gesto) return;
+  clearTimeout(gesto.t); gesto = null;
+  if (!arrastrando) return;
+  arrastrando = false; document.body.classList.remove('arrastrando');
+  bridge.arrastre('fin'); sound.play('blip');
+  setTimeout(() => { tragarClic = false; }, 80);           // el click que llega justo tras soltar no cuenta (ni sacudida ni mareo)
+  if (ultimoPunto) probarRaton(ultimoPunto.x, ultimoPunto.y);
+}
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(n => document.addEventListener(n, terminarGesto));
+window.addEventListener('blur', terminarGesto);
+document.addEventListener('click', e => { if (tragarClic) { tragarClic = false; e.stopPropagation(); e.preventDefault(); } }, true);
 island.addEventListener('mouseleave', () => { if (!bridge.onCursor) { hovering = false; setTimeout(render, 1200); } });   // en Electron lo decide el cursor global
 
 // ---------- voz (Windows) ----------
@@ -687,13 +777,11 @@ if (bridge.onCursor) bridge.onCursor(p => {            // cursor en toda la pant
   // hover fiable: el mouseleave no llega si el cursor salta fuera de la ventana
   const r = island.getBoundingClientRect(), inside = p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
   cursorDentro = inside;
+  probarRaton(p.x, p.y);                                 // ¿encima de algo visible? (si no, los clics pasan a lo de debajo)
   if (inside) {
     clearTimeout(leaveTimer); leaveTimer = null;
-    if (!hovering) { hovering = true; bridge.interactive(true); render(); }
-  } else if (hovering && !leaveTimer) {
-    bridge.interactive(false);
-    programarCierre();
-  }
+    if (!hovering) { hovering = true; render(); }
+  } else if (hovering && !leaveTimer) programarCierre();
 });
 
 function makeStubBridge() {

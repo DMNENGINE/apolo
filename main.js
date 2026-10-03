@@ -21,6 +21,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const esPeligroso = require('./shared/peligro.js');
+const IslaGeo = require('./shared/isla-geometria.js');      // dónde va la isla, hacia dónde se abre (y tests en core/test)
 const { decidirDiscord, whatsappComoPlugin: waComoPlugin } = require('./shared/canales-flags');
 const { createDiscord } = require('./bot-discord.js');
 const { createTalk } = require('./hablar.js');
@@ -39,7 +40,7 @@ const tr = (k, v) => { I18N.poner(idiomaApp()); return I18N.tr(k, v); };
 const nombreCompanero = () => { try { return nucleo ? nucleo.personalidad.nombre() : 'Robot'; } catch { return 'Robot'; } };
 
 const PORT = +process.env.APOLO_PUERTO || 47823;          // APOLO_PUERTO: solo pruebas (el hook usa 47823)
-const WIN_W = 900, WIN_H = 640;
+// tamaño de la ventana de la isla: IslaGeo.VENT_W x VENT_H (900 x 640, se recorta si el área de trabajo es menor)
 const { fuera } = require('./core/rutas');                 // app instalada: lo que usan procesos externos está en app.asar.unpacked
 const HOOK_JS = fuera(path.join(__dirname, 'hook', 'hook.js')).replace(/\\/g, '/');
 // sin Node.js en el PATH (instalación .exe) el hook corre con el propio APOLO.exe en modo node (hook/hook.cmd)
@@ -134,10 +135,9 @@ function matchesRule(tool, inp = {}) {
 const allowJSON = () => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } });
 
 function createWindow() {
-  const { workArea } = screen.getPrimaryDisplay();
+  layIsla = layoutElegido();                             // donde la dejó el usuario (o arriba en el centro del principal)
   win = new BrowserWindow({
-    width: WIN_W, height: WIN_H,
-    x: Math.round(workArea.x + (workArea.width - WIN_W) / 2), y: workArea.y,
+    ...layIsla.ventana,
     frame: false, transparent: true, resizable: false, movable: false,
     alwaysOnTop: true, skipTaskbar: true, hasShadow: false, focusable: true,
     backgroundColor: '#00000000',
@@ -145,7 +145,8 @@ function createWindow() {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true);
-  win.setIgnoreMouseEvents(true, { forward: true });     // clics pasan a través salvo encima de la isla
+  win.setIgnoreMouseEvents(true, { forward: true });     // clics pasan a través salvo encima de lo VISIBLE de la isla (hit-testing en island.js)
+  win.webContents.on('did-finish-load', () => enviarLayout(layIsla));
   win.loadFile(path.join(__dirname, 'app', 'index.html'));
 }
 
@@ -198,22 +199,76 @@ async function buscarActualizacion() {
   if (txt && win && !win.isDestroyed()) win.webContents.send('answer', { titulo: tr('Actualizaciones'), texto: txt });
 }
 
-ipcMain.on('interactive', (_e, on) => { if (win) win.setIgnoreMouseEvents(!on, { forward: true }); });
+// la isla decide (hit-testing) si el ratón está sobre algo visible: solo entonces la ventana deja de ser "atravesable"
+ipcMain.on('interactive', (_e, on) => { if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(!on, { forward: true }); });
+
+// ---------- posición de la isla: el usuario la arrastra a cualquier monitor y se guarda (geometría pura: shared/isla-geometria.js) ----------
+// layIsla = { ventana, barX, barY (barra = isla cerrada, dentro de la ventana), h: izq|centro|der, v: arriba|abajo (hacia dónde se abre), barra (pantalla) }
+const ISLA_POS = () => path.join(app.getPath('userData'), 'isla-posicion.json');
+let layIsla = null, mudada = false, animMudanza = null, arrastre = null, layPend = null;
+function posGuardada() { try { return JSON.parse(fs.readFileSync(ISLA_POS(), 'utf8')); } catch { return null; } }
+function guardarPos(d, barra) {
+  try { fs.writeFileSync(ISLA_POS(), JSON.stringify({ id: d.id, bounds: d.bounds, ...IslaGeo.aFraccion(barra, d.workArea) })); } catch (e) { console.error('[isla] no pude guardar la posición:', e.message); }
+}
+// monitor + fracción elegidos por el usuario; si ese monitor ya no existe → arriba en el centro del principal
+function sitioElegido() {
+  const g = posGuardada(), d = IslaGeo.elegirMonitor(g, screen.getAllDisplays());
+  return d ? { d, f: g } : { d: screen.getPrimaryDisplay(), f: IslaGeo.POR_DEFECTO };
+}
+function layoutElegido() { const { d, f } = sitioElegido(); return IslaGeo.layout(IslaGeo.deFraccion(f, d.workArea), d.workArea); }
+function layoutEn(d) { return IslaGeo.layout(IslaGeo.deFraccion(sitioElegido().f, d.workArea), d.workArea); }   // mismo sitio relativo en otro monitor
+function enviarLayout(lay) {
+  if (win && !win.isDestroyed()) win.webContents.send('isla-layout', { barX: lay.barX, barY: lay.barY, h: lay.h, v: lay.v, ancho: lay.ventana.width, alto: lay.ventana.height });
+}
+// cambia el anclaje dentro de la ventana y LUEGO mueve la ventana (la isla contesta 'isla-layout-ok' tras pintar) → la barra no salta
+function aplicarLayout(lay) {
+  if (!win || win.isDestroyed()) return;
+  layIsla = lay; enviarLayout(lay);
+  clearTimeout(layPend); layPend = setTimeout(() => { layPend = null; ponerVentana(lay.ventana); }, 200);   // por si la isla no contesta
+}
+ipcMain.on('isla-layout-ok', () => { if (layPend) { clearTimeout(layPend); layPend = null; ponerVentana(layIsla.ventana); } });
+function ponerVentana(v) { if (win && !win.isDestroyed()) win.setBounds(v); }
+function barraPantalla() { const b = win.getBounds(); return { x: b.x + layIsla.barX, y: b.y + layIsla.barY, w: IslaGeo.BARRA_W, h: IslaGeo.BARRA_H }; }
+function displayDeIsla() { return IslaGeo.monitorDe(IslaGeo.centroBarra(barraPantalla()), screen.getAllDisplays()) || screen.getPrimaryDisplay(); }
+
+// arrastre: la isla avisa 'inicio' (pulsación larga en el robot o arrastrar la barra/cabecera) y 'fin' al soltar; aquí la ventana sigue al cursor
+ipcMain.on('isla-arrastre', (_e, fase) => {
+  if (!win || win.isDestroyed()) return;
+  if (fase !== 'inicio') return terminarArrastre();
+  clearInterval(animMudanza); animMudanza = null;
+  if (arrastre) clearInterval(arrastre.t);
+  const p0 = screen.getCursorScreenPoint(), b0 = win.getBounds(), t0 = Date.now();
+  let lx = p0.x, ly = p0.y;
+  arrastre = { t: setInterval(() => {
+    if (!win || win.isDestroyed() || Date.now() - t0 > 120_000) return terminarArrastre();      // seguro: nunca se queda pegada al cursor
+    const c = screen.getCursorScreenPoint(); if (c.x === lx && c.y === ly) return;
+    lx = c.x; ly = c.y;
+    win.setBounds({ x: b0.x + c.x - p0.x, y: b0.y + c.y - p0.y, width: b0.width, height: b0.height });
+  }, 16) };
+});
+function terminarArrastre() {
+  if (!arrastre) return;
+  clearInterval(arrastre.t); arrastre = null;
+  if (!win || win.isDestroyed()) return;
+  const d = displayDeIsla(), lay = IslaGeo.layout(barraPantalla(), d.workArea);     // dentro del área de trabajo + dirección de apertura nueva
+  guardarPos(d, lay.barra); mudada = false;
+  console.log(`[isla] colocada en el monitor ${d.id} (${lay.h}/${lay.v})`);
+  aplicarLayout(lay);
+}
 
 // ---------- juego / vídeo a pantalla completa en el monitor de la isla → se va rodando a otro y vuelve al terminar ----------
-let pantallaCasa = null, mudada = false, animMudanza = null;
-const posIsla = d => ({ x: Math.round(d.workArea.x + (d.workArea.width - WIN_W) / 2), y: d.workArea.y });
-function displayDeIsla() { const b = win.getBounds(); return screen.getDisplayMatching({ x: b.x, y: b.y, width: b.width, height: 80 }); }
-function rodarA(d) {
-  if (!win || win.isDestroyed()) return;
-  const desde = win.getBounds(), hasta = posIsla(d), t0 = Date.now(), DUR = 900;
+function rodarA(d, destino) {
+  if (!win || win.isDestroyed() || !d || arrastre) return;
+  const lay2 = destino || layoutEn(d), desde = barraPantalla(), hasta = lay2.barra, t0 = Date.now(), DUR = 900;
+  const { barX, barY } = layIsla, { width, height } = win.getBounds();
   win.webContents.send('mudanza', hasta.x > desde.x ? 1 : -1);          // el robot rueda en esa dirección
   clearInterval(animMudanza);
-  // si los monitores no se tocan en horizontal, salta directo (rodando igual)
+  // se mueve la BARRA (con el anclaje actual) y al llegar se re-ancla según el sitio nuevo; si los monitores no se tocan, salta igual
   animMudanza = setInterval(() => {
+    if (!win || win.isDestroyed()) { clearInterval(animMudanza); return; }
     const k = Math.min(1, (Date.now() - t0) / DUR), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    win.setBounds({ x: Math.round(desde.x + (hasta.x - desde.x) * e), y: Math.round(desde.y + (hasta.y - desde.y) * e), width: WIN_W, height: WIN_H });
-    if (k >= 1) clearInterval(animMudanza);
+    win.setBounds({ x: Math.round(desde.x + (hasta.x - desde.x) * e) - barX, y: Math.round(desde.y + (hasta.y - desde.y) * e) - barY, width, height });
+    if (k >= 1) { clearInterval(animMudanza); animMudanza = null; aplicarLayout(lay2); }
   }, 16);
 }
 function otroMonitor(excluir) {
@@ -232,17 +287,15 @@ function vigilarPantallaCompleta() {
       let j; try { j = JSON.parse(l); } catch { continue; }
       try { if (nucleo) nucleo.bus.emit('pantalla-completa', { completa: !!j.completa, proceso: j.proceso || '' }); } catch { }   // co-host: modo comentarista
       if (!win || win.isDestroyed()) continue;
-      if (!pantallaCasa) pantallaCasa = displayDeIsla();
       if (j.completa) {
         const ocupado = screen.getDisplayMatching({ x: j.x, y: j.y, width: j.ancho, height: j.alto });
         if (ocupado.id === displayDeIsla().id) {
           const destino = otroMonitor(ocupado);
-          if (destino) { if (!mudada) pantallaCasa = ocupado; mudada = true; console.log(`[isla] ${j.proceso} a pantalla completa → me voy al otro monitor`); rodarA(destino); }
+          if (destino && !arrastre) { mudada = true; console.log(`[isla] ${j.proceso} a pantalla completa → me voy al otro monitor`); rodarA(destino); }
         }
       } else if (mudada) {
-        mudada = false;
-        const casa = screen.getAllDisplays().find(d => d.id === pantallaCasa.id) || screen.getPrimaryDisplay();
-        console.log('[isla] se acabó la pantalla completa → vuelvo'); rodarA(casa);
+        mudada = false;                                                    // vuelve al sitio que eligió el usuario (o al de por defecto)
+        console.log('[isla] se acabó la pantalla completa → vuelvo'); rodarA(sitioElegido().d, layoutElegido());
       }
     }
   });
@@ -250,11 +303,20 @@ function vigilarPantallaCompleta() {
   app.on('will-quit', () => { try { p.kill(); } catch { } });
 }
 
-// mover a mano (grabar vídeo en el principal): 'otro' = fuera del monitor principal, 'casa' = vuelve
+// mover a mano (grabar vídeo en el principal): 'otro' = fuera del monitor principal, 'casa' = vuelve al sitio elegido,
+// 'reset' = olvida el sitio elegido y vuelve arriba en el centro del principal (bandeja "Volver la isla a su sitio")
 function moverIsla(a) {
   const prim = screen.getPrimaryDisplay();
   mudada = false;
-  rodarA(a === 'casa' ? prim : otroMonitor(prim));
+  if (a === 'reset') { try { fs.unlinkSync(ISLA_POS()); } catch { } }
+  if (a === 'otro') { const d = otroMonitor(prim); if (d) rodarA(d); return; }
+  rodarA(sitioElegido().d, layoutElegido());
+}
+// un monitor desconectado o con otra resolución: se recoloca (si el suyo ya no está → posición por defecto)
+function vigilarMonitores() {
+  let t = null;
+  const recolocar = () => { clearTimeout(t); t = setTimeout(() => { if (win && !win.isDestroyed() && !arrastre && !animMudanza && !mudada) aplicarLayout(layoutElegido()); }, 600); };
+  screen.on('display-removed', recolocar); screen.on('display-added', recolocar); screen.on('display-metrics-changed', recolocar);
 }
 
 // respuesta a un permiso desde la isla (o Stream Deck / Discord): 'allow' | 'deny' | 'always'
@@ -513,7 +575,7 @@ function startServer() {
       res.writeHead(200); return res.end();
     }
     if (req.method === 'POST' && req.url.startsWith('/mover')) {     // mover la isla: ?a=otro (fuera del principal) | ?a=casa
-      moverIsla(/a=casa/.test(req.url) ? 'casa' : 'otro');
+      moverIsla(/a=reset/.test(req.url) ? 'reset' : /a=casa/.test(req.url) ? 'casa' : 'otro');
       res.writeHead(200); return res.end();
     }
     if (req.method === 'POST' && req.url === '/panico') {           // Stream Deck: Denegar mantenido 2 s = pánico global (FASE 9)
@@ -1025,7 +1087,8 @@ function buildTray() {
     },
     { type: 'separator' },
     { label: `↔ ${tr('Mover isla fuera del monitor principal')}`, click: () => moverIsla('otro') },
-    { label: `↩ ${tr('Volver la isla al monitor principal')}`, click: () => moverIsla('casa') },
+    ...(win && !win.isDestroyed() && layIsla && displayDeIsla().id !== sitioElegido().d.id ? [{ label: `↩ ${tr('Traer la isla de vuelta')}`, click: () => moverIsla('casa') }] : []),
+    { label: `⟲ ${tr('Volver la isla a su sitio')}`, click: () => moverIsla('reset') },
     { label: tr('Evento de prueba'), click: () => win.webContents.send('demo') },
     { label: tr('Herramientas de desarrollo'), click: () => win.webContents.openDevTools({ mode: 'detach' }) },
     { type: 'separator' },
@@ -1223,7 +1286,7 @@ app.whenReady().then(() => {
   // Ctrl+Alt+Espacio: hablarle al robot por voz
   app.whenReady().then(() => globalShortcut.register('Control+Alt+Space', () => win && win.webContents.send('listen-key')));
   createWindow(); startServer(); startNucleo(); buildTray(); trackCursor(); startDiscord(); startDms();
-  vigilarPantallaCompleta();
+  vigilarPantallaCompleta(); vigilarMonitores();
   win.webContents.once('did-finish-load', () => { scanUsage(); setInterval(scanUsage, 60_000); });
   // nombre del compañero (identidad del núcleo): isla, bandeja y textos
   const enviarNombre = () => { const n = nombreCompanero(); if (win && !win.isDestroyed()) win.webContents.send('nombre', n); if (tray) tray.setToolTip(n === 'Robot' ? 'Robot Companion' : `${n} · Robot Companion`); };

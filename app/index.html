@@ -8,11 +8,28 @@
     --ok:#3ddc84; --work:#35c8f0; --warn:#ffb020; --bad:#ff4d4d;
   }
   html,body{margin:0;height:100%;background:transparent;color:var(--tx);font:13px "Segoe UI",system-ui,sans-serif;overflow:hidden;user-select:none}
-  #island{position:absolute;top:0;left:50%;transform:translateX(-50%);width:340px;background:transparent;
+  /* left/top/bottom los pone island.js (colocarIsla) según dónde está la isla en el monitor: left y width se animan juntos → el lado anclado no se mueve */
+  #island{position:absolute;top:0;left:calc(50% - 170px);width:340px;background:transparent;
     border:none;border-radius:0 0 22px 22px;text-shadow:0 1px 3px #000,0 0 8px rgba(0,0,0,.8);
-    transition:width .5s cubic-bezier(.2,.8,.2,1), border-radius .5s; overflow:hidden}
+    transition:width .5s cubic-bezier(.2,.8,.2,1), left .5s cubic-bezier(.2,.8,.2,1), border-radius .5s; overflow:hidden}
   #island.open{width:540px;border-radius:0 0 26px 26px}
   #island.open.term{width:860px}
+  #island.fijo,#island.fijo #panel{transition:none!important}
+  /* isla en la mitad inferior: se abre HACIA ARRIBA con el robot abajo; en la mitad derecha: robot y columnas a la derecha */
+  body.v-abajo #island{border-radius:22px 22px 0 0} body.v-abajo #island.open{border-radius:26px 26px 0 0}
+  body.v-abajo #panel{transform:translateY(8px)}
+  body.v-abajo #izq{display:flex;flex-direction:column-reverse}
+  body.v-abajo #island.open.term #panel{align-items:end}
+  body.v-abajo #island.open #panel{padding-top:14px;padding-bottom:12px}
+  body.h-der #bar{flex-direction:row-reverse;padding:0 6px 0 14px}
+  body.h-der #hero{flex-direction:row-reverse}
+  body.h-der #island.open.term #panel{grid-template-columns:292px minmax(0,1fr)}
+  body.h-der #der{order:-1}
+  body.h-der #island.open.term #der{animation-name:entraIzq}
+  @keyframes entraIzq{from{opacity:0;transform:translateX(28px)}}
+  /* se puede arrastrar: barra y cabecera (el robot, manteniéndolo pulsado) */
+  #bar .txt,#hero .sum h2{cursor:grab}
+  body.arrastrando,body.arrastrando *{cursor:grabbing!important}
   /* abierta: izquierda = estado/permisos/pedidos, derecha = terminales + chat con la elegida */
   #island.open.term #panel{display:grid;grid-template-columns:minmax(0,1fr) 292px;gap:12px;align-items:start}
   #island:not(.term) #der{display:none}
@@ -65,7 +82,7 @@
   /* el panel se despliega/pliega suave en vez de aparecer/desaparecer de golpe */
   #panel{padding:0 14px;position:relative;max-height:0;opacity:0;overflow:hidden;transform:translateY(-8px);
     transition:max-height .6s cubic-bezier(.2,.8,.2,1), opacity .45s ease, transform .5s ease, padding .5s}
-  #island.open #panel{max-height:720px;opacity:1;transform:none;padding-bottom:14px}
+  #island.open #panel{max-height:var(--pmax,720px);opacity:1;transform:none;padding-bottom:14px}
   #island.open #mini{display:none}
   #island.open #bar{display:none}                 /* abierta: el panel ya muestra estado y robot grande */
   #island.open #panel{padding-top:12px}
@@ -139,7 +156,7 @@
   #askIn:focus{border-color:rgba(127,227,255,.55)}
   #mic.on{background:rgba(255,77,77,.25);border-color:var(--bad);animation:pulse 1s infinite}
   /* avisos de Discord: tarjetas que bajan bajo la isla y se van solas */
-  #notifs{position:absolute;top:calc(var(--robot) + 12px);left:50%;transform:translateX(-50%);width:340px;display:flex;flex-direction:column;gap:6px;z-index:4;pointer-events:none}
+  #notifs{position:absolute;top:calc(var(--robot) + 12px);left:calc(50% - 170px);width:340px;display:flex;flex-direction:column;gap:6px;z-index:4;pointer-events:none}
   #island.open ~ #notifs, #island.open + #notifs{display:none}
   .nt{background:rgba(20,22,40,.9);border:1px solid rgba(114,137,218,.45);border-radius:12px;padding:7px 10px;font-size:12px;
     box-shadow:0 6px 18px rgba(0,0,0,.4);animation:ntin .35s cubic-bezier(.2,1.3,.4,1) both;text-shadow:none}
@@ -151,7 +168,8 @@
   @keyframes ntout{to{opacity:0;transform:translateY(-8px)}}
   /* entrada: cae desde arriba con rebote */
   #island.intro{animation:drop .9s cubic-bezier(.2,1.4,.4,1) both}
-  @keyframes drop{from{transform:translate(-50%,-110%)}to{transform:translate(-50%,0)}}
+  @keyframes drop{from{transform:translateY(var(--caida,-110%))}to{transform:none}}
+  body.v-abajo #island.intro{--caida:110%}
   #fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
   /* robot + globito de estado */
   .rwrap{position:relative;width:100%;height:100%;cursor:pointer}
@@ -240,6 +258,7 @@
 </div>
 <div id="notifs"></div>
 <script src="../shared/peligro.js"></script>
+<script src="../shared/isla-geometria.js"></script>
 <script src="../core/ui/i18n.js"></script>
 <script type="module" src="island.js"></script>
 </body></html>

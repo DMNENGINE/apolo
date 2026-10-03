@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld('bridge', {
   onNombre: fn => ipcRenderer.on('nombre', (_e, n) => fn(n)),
   onIdioma: fn => ipcRenderer.on('idioma', (_e, l) => fn(l)),
   onMudanza: fn => ipcRenderer.on('mudanza', (_e, dir) => fn(dir)),
+  onLayout: fn => ipcRenderer.on('isla-layout', (_e, l) => fn(l)),                // dónde está la barra en la ventana y hacia dónde abrirse
+  layoutOk: () => ipcRenderer.send('isla-layout-ok'),
+  arrastre: fase => ipcRenderer.send('isla-arrastre', fase),                      // 'inicio' | 'fin': mover la isla con el ratón
   panico: on => ipcRenderer.send('panico', !!on),                       // kill switch global (FASE 9)
   panicoEstado: () => ipcRenderer.invoke('panico-estado'),
   onPanico: fn => ipcRenderer.on('panico', (_e, s) => fn(s)),
