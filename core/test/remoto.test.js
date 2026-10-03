@@ -72,13 +72,13 @@ async function montar({ aprobacion = 'pc', limites = {} } = {}) {
     });
     q.on('error', mal); q.end(); fr.req = q;
   });
-  const cerrar = () => { n.remoto.cortar('fin del test'); d.servidor.closeAllConnections?.(); d.servidor.close(); };
+  const cerrar = () => { n.escritorioRemoto.cortar('fin del test'); d.servidor.closeAllConnections?.(); d.servidor.close(); };
   return { n, d, pet, maestro, movil, disp: r.j.dispositivo, manos, capt, flujo, cerrar, dir };
 }
 const auditoria = m => { try { return fs.readFileSync(path.join(m.dir, 'auditoria.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)); } catch { return []; } };
 async function sesionAprobada(m) {
   const p = m.pet('POST', '/v1/escritorio/sesion', { cab: m.movil, cuerpo: {} });
-  let sol; for (let i = 0; i < 50 && !sol; i++) { await dormir(10); sol = m.n.remoto.estado().solicitudes[0]; }
+  let sol; for (let i = 0; i < 50 && !sol; i++) { await dormir(10); sol = m.n.escritorioRemoto.estado().solicitudes[0]; }
   const a = await m.pet('POST', `/v1/escritorio/solicitudes/${sol.id}`, { cab: m.maestro, cuerpo: { aprobar: true } });
   assert.strictEqual(a.status, 200, a.s);
   const r = await p; assert.strictEqual(r.status, 200, r.s);
@@ -106,14 +106,14 @@ test('cada sesión se aprueba en el PC (rechazar → 403) o con el PIN del móvi
   try {
     await m.pet('PATCH', `/v1/movil/dispositivos/${m.disp.id}`, { cab: m.maestro, cuerpo: { escritorio: true } });
     const p = m.pet('POST', '/v1/escritorio/sesion', { cab: m.movil, cuerpo: {} });
-    let sol; for (let i = 0; i < 50 && !sol; i++) { await dormir(10); sol = m.n.remoto.estado().solicitudes[0]; }
+    let sol; for (let i = 0; i < 50 && !sol; i++) { await dormir(10); sol = m.n.escritorioRemoto.estado().solicitudes[0]; }
     assert.ok(sol, 'la solicitud aparece en el PC');
     assert.notStrictEqual((await m.pet('POST', `/v1/escritorio/solicitudes/${sol.id}`, { cab: m.movil, cuerpo: { aprobar: true } })).status, 200, 'el móvil no se aprueba a sí mismo');
     await m.pet('POST', `/v1/escritorio/solicitudes/${sol.id}`, { cab: m.maestro, cuerpo: { aprobar: false } });
     assert.strictEqual((await p).status, 403);
-    assert.ok(!m.n.remoto.activa());
+    assert.ok(!m.n.escritorioRemoto.activa());
     const sid = await sesionAprobada(m);
-    assert.ok(sid && m.n.remoto.activa());
+    assert.ok(sid && m.n.escritorioRemoto.activa());
   } finally { m.cerrar(); }
   const m2 = await montar({ aprobacion: 'pin' });
   try {
@@ -161,14 +161,14 @@ test('vigilante de manos (tocas el PC) y pánico global cortan la sesión y el f
     const f = await m.flujo(sid);
     await m.pet('POST', '/v1/escritorio/accion', { cab: { ...m.movil, 'x-escritorio': sid }, cuerpo: { op: 'escribir', texto: 'secreto123' } });
     m.n.control._evento({ evento: 'panico', motivo: 'raton' });             // lo que emite manos.ps1 al mover el ratón real
-    assert.ok(!m.n.remoto.activa());
+    assert.ok(!m.n.escritorioRemoto.activa());
     for (let i = 0; i < 50 && !f.terminado; i++) await dormir(10);
     assert.ok(f.terminado, 'el flujo se cierra');
     assert.strictEqual(m.manos.at(-1).op, 'desarmar');
     assert.strictEqual((await m.pet('POST', '/v1/escritorio/accion', { cab: { ...m.movil, 'x-escritorio': sid }, cuerpo: { op: 'clic', x: .1, y: .1 } })).status, 410);
     sid = await sesionAprobada(m);
     m.n.panico.activar('test');
-    assert.ok(!m.n.remoto.activa());
+    assert.ok(!m.n.escritorioRemoto.activa());
     assert.strictEqual((await m.pet('POST', '/v1/escritorio/sesion', { cab: m.movil, cuerpo: {} })).status, 423, 'con pánico no se puede abrir otra');
     const a = auditoria(m);
     assert.ok(a.some(l => l.tipo === 'escritorio-remoto' && l.decision === 'fin' && /recuperaste el control/.test(l.resumen)));
@@ -182,7 +182,7 @@ test('tiempo máximo e inactividad; retirar el permiso corta; auditoría sin el 
     await m.pet('PATCH', `/v1/movil/dispositivos/${m.disp.id}`, { cab: m.maestro, cuerpo: { escritorio: true } });
     await sesionAprobada(m);
     await dormir(320);
-    assert.ok(!m.n.remoto.activa(), 'tiempo máximo');
+    assert.ok(!m.n.escritorioRemoto.activa(), 'tiempo máximo');
     assert.ok(auditoria(m).some(l => l.decision === 'fin' && /tiempo máximo/.test(l.resumen)));
   } finally { m.cerrar(); }
   const m2 = await montar({ limites: { maxMs: 60_000, inactMs: 150 } });
@@ -192,13 +192,13 @@ test('tiempo máximo e inactividad; retirar el permiso corta; auditoría sin el 
     await m2.flujo(sid); await dormir(50);
     await m2.pet('POST', '/v1/escritorio/accion', { cab: { ...m2.movil, 'x-escritorio': sid }, cuerpo: { op: 'escribir', texto: 'secreto123' } });
     await dormir(80);
-    assert.ok(m2.n.remoto.activa(), 'la acción reinicia la inactividad');
+    assert.ok(m2.n.escritorioRemoto.activa(), 'la acción reinicia la inactividad');
     await dormir(250);
-    assert.ok(!m2.n.remoto.activa(), 'inactividad');
+    assert.ok(!m2.n.escritorioRemoto.activa(), 'inactividad');
     const sid2 = await sesionAprobada(m2);
     assert.ok(sid2);
     await m2.pet('PATCH', `/v1/movil/dispositivos/${m2.disp.id}`, { cab: m2.maestro, cuerpo: { escritorio: false } });
-    assert.ok(!m2.n.remoto.activa(), 'retirar el permiso corta la sesión');
+    assert.ok(!m2.n.escritorioRemoto.activa(), 'retirar el permiso corta la sesión');
     const a = auditoria(m2), txt = JSON.stringify(a);
     assert.ok(!txt.includes('secreto123'), 'el texto escrito nunca va a la auditoría');
     const acc = a.find(l => l.decision === 'accion' && l.herramienta === 'escribir');
@@ -224,4 +224,13 @@ test('flujo.ps1 real en modo prueba: tapa en negro SOLO la ventana protegida', {
     assert.strictEqual(c.fgProt, true);
     assert.deepStrictEqual(c.muestras, [0], 'el píxel de la ventana protegida es negro');
   } finally { p.stdin.write('{"op":"parar"}\n'); setTimeout(() => p.kill(), 300); }
+});
+
+test('regresión: la app (main.js) pone nucleo.remoto para la Pi y el escritorio remoto sigue respondiendo', async () => {
+  const m = await montar();
+  try {
+    m.n.remoto = { decidir() { }, texto() { } };                    // lo que hace main.js con las acciones remotas de la Pi
+    const r = await m.pet('GET', '/v1/escritorio', { cab: m.maestro });
+    assert.strictEqual(r.status, 200, `GET /v1/escritorio → ${r.status} ${r.b || ''}`);
+  } finally { m.cerrar(); }
 });

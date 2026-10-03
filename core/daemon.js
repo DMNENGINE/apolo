@@ -118,7 +118,7 @@ function iniciar(opciones = {}) {
   const MV = require('./movil');
   const movil = n.movil || (n.movil = MV.crearMovil({ nucleo: n }));
   // escritorio remoto desde el móvil (core/escritorio/remoto.js): flujo de pantalla + ratón/teclado con permiso propio por dispositivo
-  if (!n.remoto) n.remoto = require('./escritorio/remoto').crearRemoto({ nucleo: n, ...(opciones.remoto || {}) });
+  if (!n.escritorioRemoto) n.escritorioRemoto = require('./escritorio/remoto').crearRemoto({ nucleo: n, ...(opciones.remoto || {}) });
   const ipCliente = opciones.ipCliente || ipDe;                 // las pruebas simulan IPs de la LAN
   const leerBinario = (req, max) => new Promise((ok, mal) => {
     const t = []; let l = 0;
@@ -158,7 +158,7 @@ function iniciar(opciones = {}) {
         try { return json(res, 200, await movil.http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {}, { maestro, dispositivo: disp, origen: String(req.headers.origin || ''), ip, puerto: srv.address()?.port })); }
         catch (e) { return json(res, e.status || 400, { error: e.message }); }
       }
-      if (p[1] === 'escritorio') return n.remoto.http(req, res, M, p, { maestro, disp, leer, json, origen: String(req.headers.origin || ''), q: Object.fromEntries(u.searchParams), sesionHdr: req.headers['x-escritorio'] });
+      if (p[1] === 'escritorio') return n.escritorioRemoto.http(req, res, M, p, { maestro, disp, leer, json, origen: String(req.headers.origin || ''), q: Object.fromEntries(u.searchParams), sesionHdr: req.headers['x-escritorio'] });
       if (p[1] === 'voz' && p[2] === 'transcribir' && M === 'POST') {   // nota de voz (móvil / panel) → Whisper de la app de escritorio
         if (!n.bus.listenerCount('transcribir-audio')) return json(res, 501, { error: 'la transcripción necesita la app de escritorio (Whisper)' });
         const tipo = String(req.headers['content-type'] || '');

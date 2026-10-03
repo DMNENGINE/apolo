@@ -52,7 +52,7 @@ function crearNucleo(opciones = {}) {
   let demo = null;
   control = crearControl({ cfg, bus, permisos, cancelarTurno: id => agente.cancelar(id), manos: opciones.manos, ojos: opciones.ojos, registro: registroCapturas,
     bloqueo: () => (demo?.grabando() ? 'se está grabando una demostración del usuario: espera a que pulse Parar'
-      : nucleo?.remoto?.activa?.() ? 'el usuario está usando el escritorio remoto desde el móvil: espera a que termine' : null) });
+      : nucleo?.escritorioRemoto?.activa?.() ? 'el usuario está usando el escritorio remoto desde el móvil: espera a que termine' : null) });
   demo = require('./escritorio/demo').crearDemo({ cfg, bus, permisos, control, taller: skills.taller,
     generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), modelo: modeloCerebro });
   control.demo = demo;                                            // la herramienta grabar_demostracion lo encuentra por ctx.control
