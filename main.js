@@ -59,13 +59,23 @@ let discord = { enabled: false, status: 'sin configurar', sendPerm() { }, resolv
 let telegram = { enabled: false, status: 'sin configurar', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { }, iniciar() { }, detener() { },
   estado: () => ({ configurado: false, estado: 'arrancando', bot: null, enlazado: false, usuario: '', enlace: null }) };
 let whatsapp = { enabled: false, status: 'sin vincular', sendPerm() { }, resolvePerm() { }, sendAviso() { }, reply() { }, sendCard() { } };
-// al móvil: Discord, Telegram y WhatsApp a la vez (cada uno ignora lo suyo si no está configurado)
+// canales de plugins del SDK (Slack, Matrix, Signal…); telegram queda fuera porque tiene su adaptador propio
+const canalesPlugin = {
+  P: () => (typeof nucleo !== 'undefined' && nucleo && nucleo.plugins) || null,
+  err: e => console.error('[plugins] canal:', e.message),
+  sendAviso(t) { const P = this.P(); if (P) P.difundir(t, { excluir: 'telegram' }).catch(this.err); },
+  sendPerm(p) { const P = this.P(); if (P) P.mostrarPermiso(p, { excluir: 'telegram' }).catch(this.err); },
+  resolvePerm(id, b, via) { const P = this.P(); if (P) P.permisoResuelto(id, b, via); },
+  sendCard(c) { const P = this.P(); if (P) P.mostrarTarjeta(c, { excluir: 'telegram' }).catch(this.err); },
+  reply(md) { this.sendAviso(md); },
+};
+// al móvil: Discord, Telegram, WhatsApp y los canales plugin a la vez (cada uno ignora lo suyo si no está configurado)
 const movil = {
-  sendAviso: (...a) => { discord.sendAviso(...a); telegram.sendAviso(...a); whatsapp.sendAviso(...a); },
-  sendPerm: p => { discord.sendPerm(p); telegram.sendPerm(p); whatsapp.sendPerm(p); },
-  resolvePerm: (...a) => { discord.resolvePerm(...a); telegram.resolvePerm(...a); whatsapp.resolvePerm(...a); },
-  sendCard: c => { discord.sendCard(c); telegram.sendCard(c); whatsapp.sendCard(c); },
-  reply: md => { discord.reply(md); telegram.reply(md); whatsapp.reply(md); },
+  sendAviso: (...a) => { discord.sendAviso(...a); telegram.sendAviso(...a); whatsapp.sendAviso(...a); canalesPlugin.sendAviso(a[0]); },
+  sendPerm: p => { discord.sendPerm(p); telegram.sendPerm(p); whatsapp.sendPerm(p); canalesPlugin.sendPerm(p); },
+  resolvePerm: (...a) => { discord.resolvePerm(...a); telegram.resolvePerm(...a); whatsapp.resolvePerm(...a); canalesPlugin.resolvePerm(...a); },
+  sendCard: c => { discord.sendCard(c); telegram.sendCard(c); whatsapp.sendCard(c); canalesPlugin.sendCard(c); },
+  reply: md => { discord.reply(md); telegram.reply(md); whatsapp.reply(md); canalesPlugin.reply(md); },
 };
 const esRemoto = o => o === 'discord' || o === 'telegram' || o === 'whatsapp';
 const responderA = (o, md) => ({ telegram, whatsapp }[o] || discord).reply(md);
@@ -1059,6 +1069,9 @@ app.whenReady().then(() => {
       if (M === 'DELETE') return telegram.desconectar();
       const e = new Error('ruta'); e.status = 404; throw e;
     } };
+    // la app media SIEMPRE los canales plugin: así los permisos de Claude Code (hooks) y los del núcleo les llegan con el id de la app
+    nucleo.plugins.mediar({ resolverPermiso: (id, b, via) => decide(id, b, via), accionTarjeta: (id, a) => cardAction(id, a), transcribir: ruta => transcribirArchivo(ruta),
+      recibir: ({ plugin, texto }) => (plugin === 'telegram' ? handleText(texto, 'telegram') : undefined) });
     if (nucleo.cfg.plugins && nucleo.cfg.plugins.telegramComoPlugin) telegramComoPlugin().catch(e => { console.error('[telegram] el plugin no arrancó:', e.message, '→ telegram.js'); usarTelegramJs(); });
     else { usarTelegramJs(); apagarPluginTelegram().catch(e => console.error('[telegram]', e.message)); }
     whatsapp = crearWhatsapp({ dir: path.join(app.getPath('userData'), 'whatsapp-auth'), decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),

@@ -344,8 +344,8 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   const canalesCon = (prop, filtro = {}) => {
     const out = [];
     for (const [nombre, r] of vivos) {
-      if (r.estado !== 'activo' || (filtro.plugin && filtro.plugin !== nombre)) continue;
-      for (const c of r.reg.canales.values()) if (c[prop] && (!filtro.canal || filtro.canal === c.id)) out.push({ nombre, r, c });
+      if (r.estado !== 'activo' || (filtro.plugin && filtro.plugin !== nombre) || (filtro.excluir && filtro.excluir === nombre)) continue;
+      for (const c of r.reg.canales.values()) if ((!prop || c[prop]) && (!filtro.canal || filtro.canal === c.id)) out.push({ nombre, r, c });
     }
     return out;
   };
@@ -593,6 +593,8 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   }
   // enviar por un canal de un plugin (avisos proactivos)
   const enviarCanal = (nombre, id, texto, a) => llamar(nombre, 'canal', { id, texto: String(texto), a });
+  // avisos/respuestas a TODOS los canales activos de plugins (filtro.excluir = el que ya tiene su adaptador propio, p. ej. telegram)
+  const difundir = (texto, filtro = {}) => Promise.all(canalesCon(null, filtro).map(({ nombre, c }) => enviarCanal(nombre, c.id, texto).catch(e => anotar(nombre, 'aviso', `aviso no enviado: ${e.message}`))));
 
   // arranque: tareas internas de plugins + plugins activos
   async function iniciar() {
@@ -605,7 +607,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
 
   return {
     lista: () => nombres().map(publica), obtener: nombre => (estado[nombre] ? { ...publica(nombre), logs: rt(nombre).logs.slice(-50) } : null),
-    instalar, activar, recargar, borrar, escanear, iniciar, cerrar, comandos, comando, enviarCanal, llamar,
+    instalar, activar, recargar, borrar, escanear, iniciar, cerrar, comandos, comando, enviarCanal, difundir, llamar,
     mediar, ponerSecretos, mostrarPermiso, permisoResuelto, mostrarTarjeta, accionCanal,
     activo: nombre => rt(nombre).estado === 'activo', estadoDe: nombre => rt(nombre).estado,
     dir: base, datos, version: VERSION,
