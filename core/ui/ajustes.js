@@ -85,7 +85,7 @@ VISTAS['ajustes/nucleo'] = {
 
 // ---------- Canales ----------
 VISTAS['ajustes/canales'] = {
-  claves: 'discord isla voz stream deck telegram whatsapp',
+  claves: 'discord isla voz stream deck telegram whatsapp slack matrix signal',
   async pintar(v) {
     const l = await api('GET', '/canales');
     const wa = await api('GET', '/whatsapp').catch(() => null);
@@ -98,6 +98,7 @@ VISTAS['ajustes/canales'] = {
       <div class="caja" id="tgCaja">${this.tgHtml(tg)}</div>
       <div class="seccion" id="canal-whatsapp">WhatsApp</div>
       <div class="caja" id="waCaja">${this.waHtml(wa)}</div>
+      <div id="cpCanales"></div>
       <div class="seccion" id="canal-discord">Discord</div>
       <p class="seccion-ayuda">${tr('El bot de Discord se configura desde la bandeja del robot: <b>Configurar Discord (abrir archivo)…</b> y luego <b>Reconectar Discord</b>. Su estado aparece arriba, en Conectados.')}</p>
       <div class="seccion">${tr('Conectar otros agentes (MCP)')}</div>
@@ -108,6 +109,7 @@ VISTAS['ajustes/canales'] = {
     const ancla = (location.hash.match(/^#\/ajustes\/canales\/(\w+)/) || [])[1];
     if (ancla) setTimeout(() => document.getElementById('canal-' + ancla)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     $('#rec').onclick = () => this.pintar(v);
+    if (typeof CP_pintar === 'function') CP_pintar($('#cpCanales'));   // Slack, Matrix y Signal (plugins del SDK): canales-plugin.js
     this.tgEnlazar(v, tg);
     $('#waCaja').onclick = async e => {
       const b = e.target.closest('button[data-wa]'); if (!b) return;

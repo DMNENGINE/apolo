@@ -29,6 +29,7 @@
 //   GET  /v1/plugins · GET /v1/plugins/:nombre (con logs) · POST /v1/plugins/instalar {fuente, reemplazar?, dev?} → {plugin} | {opciones}
 //   PATCH /v1/plugins/:nombre {activo, forzar?} · POST /v1/plugins/:nombre/recargar|escanear · DEL /v1/plugins/:nombre
 //   POST /v1/plugins/comandos/:cmd {texto} → {texto}   (comandos /x que aportan los plugins)
+//   POST /v1/plugins/oficial/:slack|matrix|signal (instala el canal del repo) · POST /v1/plugins/:nombre/canales/:id/:accion {datos} → acciones del canal
 //   GET  /v1/consejo · POST /v1/consejo {pregunta, miembros?, rondas?} → SSE (fase inicio|miembro|respuesta|ronda|votando|veredicto|fin)
 //   GET  /v1/consejo/:id · POST /v1/consejo/:id/cancelar
 //   /v1/turno (core/turno.js http): GET · POST {texto,cwd,modelo} · POST empezar|parar · PATCH orden {ids} · PATCH config · DEL :id
@@ -61,6 +62,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { crearNucleo, version } = require('./index');
+const CANALES_OFICIALES = ['slack', 'matrix', 'signal'];             // plugins de canal del repo (plugins/<n>) que el panel instala
 const admin = require('./admin');
 const seg = require('./seguridad');
 
@@ -377,8 +379,19 @@ function iniciar(opciones = {}) {
         if (p[2] === 'comandos' && p[3] && M === 'POST') {
           try { const t = await pl.comando(decodeURIComponent(p[3]), String((await leer(req)).texto || '')); return t === null ? json(res, 404, { error: 'comando' }) : json(res, 200, { texto: t }); } catch (e) { return err(e, 500); }
         }
+        if (p[2] === 'oficial' && p[3] && M === 'POST') {             // Panel → Canales: instala un canal oficial del repo
+          const of = decodeURIComponent(p[3]);
+          if (!CANALES_OFICIALES.includes(of)) return json(res, 404, { error: 'plugin' });
+          try { return json(res, 200, await pl.instalar(require('./rutas').fuera(path.join(__dirname, '..', 'plugins', of)), { reemplazar: true })); } catch (e) { return err(e); }
+        }
         const nom = p[2] && decodeURIComponent(p[2]);
         if (!nom || !pl.obtener(nom)) return json(res, 404, { error: 'plugin' });
+        // acciones de configuración de un canal (estado, conectar, enlace, prueba, desconectar): los secretos van del cuerpo
+        // al plugin, que los guarda cifrados con apolo.secretos; ninguna respuesta los incluye
+        if (p[3] === 'canales' && p[4] && p[5] && M === 'POST') {
+          if (!/^[a-z]{3,20}$/.test(p[5])) return json(res, 400, { error: 'accion' });
+          try { return json(res, 200, await pl.accionCanal(nom, decodeURIComponent(p[4]), p[5], await leer(req))); } catch (e) { return err(e); }
+        }
         if (!p[3] && M === 'GET') return json(res, 200, pl.obtener(nom));
         if (!p[3] && M === 'PATCH') {
           const b = await leer(req);

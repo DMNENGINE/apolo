@@ -1,7 +1,7 @@
 {
   "formato": "apolo-marketplace/1",
   "nombre": "Marketplace de APOLO",
-  "actualizado": "2026-10-02",
+  "actualizado": "2026-10-03",
   "entradas": [
     {
       "nombre": "clima",
@@ -10,6 +10,36 @@
       "fuente": "DMNENGINE/apolo/plugins/clima",
       "autor": "DMN / APOLO",
       "etiquetas": ["tiempo", "utilidades", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT"
+    },
+    {
+      "nombre": "slack",
+      "tipo": "plugin",
+      "descripcion": "Canal de Slack por Socket Mode (sin servidor público): tu app propia habla solo contigo por DM. Permisos con botones Block Kit, avisos, tarjetas y notas de voz. Guía y manifest en docs/canales/slack.md.",
+      "fuente": "DMNENGINE/apolo/plugins/slack",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["canales", "slack", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT"
+    },
+    {
+      "nombre": "matrix",
+      "tipo": "plugin",
+      "descripcion": "Canal de Matrix (Element…): una cuenta de bot en una sala privada contigo. Permisos con reacciones o 1/2/3. Sin cifrado de extremo a extremo en la v1. Guía en docs/canales/matrix.md.",
+      "fuente": "DMNENGINE/apolo/plugins/matrix",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["canales", "matrix", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT"
+    },
+    {
+      "nombre": "signal",
+      "tipo": "plugin",
+      "descripcion": "Canal de Signal vía signal-cli local (JSON-RPC en 127.0.0.1): solo tu número. Permisos con reacciones o 1/2/3. Necesita Java y signal-cli. Guía en docs/canales/signal.md.",
+      "fuente": "DMNENGINE/apolo/plugins/signal",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["canales", "signal", "oficial"],
       "version": "1.0.0",
       "licencia": "MIT"
     },

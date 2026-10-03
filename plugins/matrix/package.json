@@ -1,0 +1,8 @@
+{
+  "name": "apolo-plugin-matrix",
+  "version": "1.0.0",
+  "description": "Plugin de APOLO: canal de Matrix (Client-Server API, sala privada con el dueño, sin E2EE en v1)",
+  "main": "index.js",
+  "keywords": ["apolo-plugin"],
+  "license": "MIT"
+}

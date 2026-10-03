@@ -68,6 +68,24 @@ Los tipos completos están en `core/sdk/index.d.ts`.
 
 Ejemplo real: `plugins/telegram` (se activa con `"plugins": { "telegramComoPlugin": true }` en config.json; si no arranca, la app vuelve a `telegram.js`).
 
+Más canales oficiales, con el mismo patrón y sin dependencias: `plugins/slack`, `plugins/matrix` y `plugins/signal`. Sus guías están en `docs/canales/`. Se instalan desde **Configuración → Canales**: `POST /v1/plugins/oficial/:nombre` y luego las acciones `POST /v1/plugins/:nombre/canales/:id/:accion`.
+
+### WebSocket sin dependencias
+
+`require('@apolo/sdk/ws-cliente')` da un cliente RFC 6455 mínimo, con TLS de `node:tls`:
+
+```js
+const ws = await conectar('wss://…', { cabeceras: {} });
+ws.on('texto', s => { /* … */ });
+ws.enviarJSON(o);
+```
+
+Usa `tls.connect` en el momento de conectar, así que pasa por la vigilancia de red: el dominio tiene que estar declarado. Es el mismo código que usa el servidor de `core/nodos`.
+
+### Secretos sin la app
+
+Si el núcleo corre sin la app de escritorio (daemon o CLI), los secretos de los plugins se guardan en la bóveda (DPAPI) como `plugin:<nombre>`.
+
 ## Seguridad
 
 - Se usa el **modelo de permisos de Node**. El plugin:

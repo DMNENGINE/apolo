@@ -79,7 +79,9 @@ function crearNucleo(opciones = {}) {
   // plugins (core/plugins + core/sdk): cada uno en su proceso; el escáner es el mismo antivirus de las skills
   const plugins = crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, sesiones, enviar, herramientas: require('./herramientas'),
     escaner: () => opciones.escaner || require('./skills/escaner').crearEscaner({ generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), modelo: modeloCerebro() }),
-    tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github') });
+    tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github'),
+    // secretos de los plugins (slack:bot, matrix:token…): por defecto en la bóveda (DPAPI); la app puede poner el suyo con ponerSecretos
+    secretos: cfg.boveda ? { leer: s => cfg.boveda.leer('plugin:' + s) || '', guardar: (s, v) => (v ? cfg.boveda.guardar('plugin:' + s, v) : cfg.boveda.borrar('plugin:' + s)) } : null });
   if (!opciones.sinPlugins) plugins.iniciar().catch(e => console.log(`[plugins] ${e.message}`));
   nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills, plugins, consejo, turno };
   nucleo.extensiones.turno = { http: (...a) => turno.http(...a) };   // API /v1/turno (daemon → extensiones)

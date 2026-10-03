@@ -1,0 +1,16 @@
+{
+  "nombre": "matrix",
+  "version": "1.0.0",
+  "descripcion": "Canal de Matrix (Element, etc.) por la Client-Server API: una cuenta de bot propia habla SOLO contigo en una sala privada. Permisos con reacciones o respondiendo 1/2/3 (los peligrosos piden CONFIRMO), avisos, tarjetas y notas de voz. Sin cifrado de extremo a extremo en la v1.",
+  "autor": "DMN / APOLO",
+  "licencia": "MIT",
+  "entrada": "index.js",
+  "apoloSdk": "^1.0.0",
+  "permisos": ["red:matrix.org", "red:*.matrix.org", "conversaciones"],
+  "secretos": ["matrix:token"],
+  "aporta": {
+    "canales": [
+      { "nombre": "matrix", "permisos": true, "descripcion": "Cuenta de bot de Matrix en una sala privada contigo" }
+    ]
+  }
+}

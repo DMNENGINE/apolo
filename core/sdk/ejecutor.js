@@ -10,7 +10,8 @@ const { VERSION } = require('./index');
 
 const SDK = path.join(__dirname, 'index.js');
 const resolverOrig = Module._resolveFilename;
-Module._resolveFilename = function (req, ...r) { return req === '@apolo/sdk' ? SDK : resolverOrig.call(this, req, ...r); };
+const SUBMODULOS = { '@apolo/sdk/ws-cliente': path.join(__dirname, 'ws-cliente.js') };   // piezas del SDK que un plugin puede pedir
+Module._resolveFilename = function (req, ...r) { return req === '@apolo/sdk' ? SDK : SUBMODULOS[req] || resolverOrig.call(this, req, ...r); };
 
 const enviar = m => { try { if (process.connected) process.send(m); } catch { } };
 const texto = x => (typeof x === 'string' ? x : x instanceof Error ? x.stack || x.message : (() => { try { return JSON.stringify(x); } catch { return String(x); } })());

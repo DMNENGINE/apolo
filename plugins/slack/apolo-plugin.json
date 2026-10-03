@@ -1,0 +1,16 @@
+{
+  "nombre": "slack",
+  "version": "1.0.0",
+  "descripcion": "Canal de Slack (Socket Mode, sin servidor público): tu app propia habla SOLO con tu usuario por mensaje directo. Hablar con APOLO, permisos con botones Block Kit (los peligrosos piden confirmación), avisos, tarjetas y notas de voz.",
+  "autor": "DMN / APOLO",
+  "licencia": "MIT",
+  "entrada": "index.js",
+  "apoloSdk": "^1.0.0",
+  "permisos": ["red:slack.com", "red:*.slack.com", "conversaciones"],
+  "secretos": ["slack:app", "slack:bot"],
+  "aporta": {
+    "canales": [
+      { "nombre": "slack", "permisos": true, "descripcion": "App de Slack enlazada a tu usuario (mensajes directos)" }
+    ]
+  }
+}

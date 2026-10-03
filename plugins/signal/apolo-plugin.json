@@ -1,0 +1,16 @@
+{
+  "nombre": "signal",
+  "version": "1.0.0",
+  "descripcion": "Canal de Signal a través de signal-cli (daemon JSON-RPC en este equipo). El plugin solo habla con 127.0.0.1 y solo atiende a TU número. Permisos con reacciones o respondiendo 1/2/3 (los peligrosos piden CONFIRMO), avisos, tarjetas y notas de voz.",
+  "autor": "DMN / APOLO",
+  "licencia": "MIT",
+  "entrada": "index.js",
+  "apoloSdk": "^1.0.0",
+  "permisos": ["red:127.0.0.1", "red:localhost", "conversaciones"],
+  "secretos": [],
+  "aporta": {
+    "canales": [
+      { "nombre": "signal", "permisos": true, "descripcion": "Signal vía signal-cli local, solo tu número" }
+    ]
+  }
+}

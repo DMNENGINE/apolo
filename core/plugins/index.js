@@ -227,9 +227,10 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
         if (!(r.man.secretos || []).includes(s)) throw new Error(`el secreto "${s}" no está declarado en "secretos" de ${M.ARCHIVO}`);
         if (!proveedorSecretos) throw new Error('no hay almacén de secretos en este equipo');
         if (!await secretoPermitido(nombre, s)) throw denegado(`el secreto ${s}`);
-        if (metodo === 'secreto.leer') return String(await proveedorSecretos.leer(s) || '');
+        const tapar = v => { if (v && v.length >= 8) require('../seguridad').registrarSecreto(v); return v; };   // nunca en registros
+        if (metodo === 'secreto.leer') return tapar(String(await proveedorSecretos.leer(s) || ''));
         if (typeof proveedorSecretos.guardar !== 'function') throw new Error('el almacén de secretos es de solo lectura');
-        await proveedorSecretos.guardar(s, String(a.valor ?? '').slice(0, 10_000)); return true;
+        await proveedorSecretos.guardar(s, tapar(String(a.valor ?? '').slice(0, 10_000))); return true;
       }
       case 'bus.on': {
         const tipo = String(a.tipo || '');

@@ -1,0 +1,8 @@
+{
+  "name": "apolo-plugin-slack",
+  "version": "1.0.0",
+  "description": "Plugin de APOLO: canal de Slack por Socket Mode (solo tu usuario, por DM)",
+  "main": "index.js",
+  "keywords": ["apolo-plugin"],
+  "license": "MIT"
+}
