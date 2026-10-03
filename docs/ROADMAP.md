@@ -260,3 +260,34 @@ Leyenda: ✅ hecho · 🟡 a medias · ⬜ pendiente · 🔥 gancho viral
 
 ## v1.0 = cuando
 Windows + macOS + Linux firmados · 0 fallos graves abiertos · 1.000 usuarios activos · 100 skills en el Hub · el ojo montado por la comunidad.
+
+## Etapa J — 🎮 Modo Gamer (comunidad gamer) 🔥
+> Regla de oro: **solo optimizaciones reales, medidas y reversibles**. Nada de placebo ("limpiadores de RAM", tweaks mágicos del registro) ni de apagar la seguridad (Defender, firewall). Cada sesión enseña el antes/después con datos.
+
+**Al activarse** (a mano, por voz "modo gamer", o solo al detectar un juego a pantalla completa — ya existe la detección):
+- [ ] Plan de energía de **máximo rendimiento** (y vuelta al tuyo al salir)
+- [ ] **Modo juego** de Windows activado + **No molestar** (notificaciones en silencio)
+- [ ] **Pausar lo que roba recursos en segundo plano**: OneDrive/Dropbox, Windows Update, descargas (Steam/Epic que no sea el juego), indexación; cerrar apps pesadas de una lista que tú apruebas (navegador con 40 pestañas, etc.)
+- [ ] **Prioridad alta** al proceso del juego y afinidad sana (sin tocar procesos del sistema)
+- [ ] El propio APOLO baja a mínimo: isla dormida a 6 fps, cerebro en pausa, permisos en cola sin interrumpir (salvo lo urgente por el móvil)
+- [ ] Red: pausar descargas/actualizaciones para bajar el ping; aviso si algo satura la conexión
+- [ ] **Todo se deshace solo al cerrar el juego** (registro de cada cambio, como la copia del sueño)
+
+**Mantenimiento** (bajo demanda, nunca durante la partida):
+- [ ] Limpieza segura: temporales, caché de shaders de DirectX/NVIDIA/AMD (se regenera), restos de instaladores — mostrando cuánto libera antes de borrar
+- [ ] Revisar drivers de GPU desactualizados y enlazar la descarga oficial
+- [ ] Revisar ajustes que sí importan: HAGS (programación de GPU por hardware), VRR/G-Sync, frecuencia del monitor bien puesta (¡144 Hz configurado a 60 es el clásico!), XMP de la RAM (solo avisar: es de BIOS), plan de energía
+- [ ] Arranque de Windows: lista de programas al inicio con impacto real y desactivar con 1 clic (reversible)
+
+**Medir de verdad** (el gancho viral: "APOLO me subió 23 fps y aquí está la prueba"):
+- [ ] FPS, 1 % low y frametimes con **PresentMon** (herramienta open source de Intel) + temperaturas/uso de CPU/GPU (LibreHardwareMonitor)
+- [ ] Benchmark antes/después del modo gamer en el mismo juego → tarjeta para compartir estilo Wrapped
+- [ ] Alerta de **thermal throttling** ("tu GPU está a 88 °C y está bajando reloj: limpia el polvo")
+- [ ] Overlay propio opcional (FPS + temps) con el robot en una esquina
+
+**Extras para gamers**:
+- [ ] **Coach**: con visión local (qwen3.6) comenta la partida o da consejos a demanda ("¿qué hago en este jefe?") — ya existe la base del comentarista del co-host
+- [ ] **Clips automáticos**: con el buffer de repetición de OBS, guarda los últimos 30 s cuando el robot detecta un momento épico o tú dices "clip"
+- [ ] Perfiles por juego (ATS, Fortnite, etc.): qué cerrar, qué prioridad, qué overlay
+- [ ] El robot reacciona al juego (gestos al ganar/perder) y en el Stream Deck un botón "modo gamer"
+- [ ] Estado en Discord ("jugando a X con APOLO")
