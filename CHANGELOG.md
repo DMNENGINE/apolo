@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-10-04
+
+### Added
+- **Island**: drag it anywhere (hold the robot ~0.3 s or drag the bar/header), on any monitor; it remembers the spot and opens toward the free side (bottom → up, right → left). Tray: "Reset island position".
+
+### Fixed
+- Island: the invisible area around the open island no longer blocks clicks (real click-through, only visible parts catch the mouse).
+- Phone remote desktop failed with `n.remoto.http is not a function` (name clash with the Raspberry Pi actions).
+- Wrapped PNG / ZIP / MP4, night-shift video and time-lapse failed with `WebSocket is not defined` inside the app (Electron 33 runs Node 20).
+- Plugins crashed on Node 20–22.12 (experimental permission model); skill export to .zip was incomplete on Node 20.
+- Desktop-eye server could hang on shutdown (open WebSocket sockets).
+- Releases: one single release per tag with notes from this changelog (v0.2.0 had been published twice).
+- CI now also tests on Node 20, the version the app actually runs on.
+
 ## [0.2.0] - 2026-10-03
 
 ### Added
