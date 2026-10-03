@@ -174,7 +174,7 @@ test('herramientas: usar_skill, leer_recurso_skill (sin salir de la carpeta), ej
   await assert.rejects(porNombre.leer_recurso_skill.ejecutar({ nombre: 'util', ruta: '../sinpermisos/SKILL.md' }, ctx), /ruta no válida/);
   await assert.rejects(porNombre.leer_recurso_skill.ejecutar({ nombre: 'util', ruta: 'C:/Windows/win.ini' }, ctx), /ruta no válida/);
   const r = await porNombre.ejecutar_script_skill.ejecutar({ nombre: 'util', script: 'suma.js', args: ['2', '3'] }, ctx);
-  assert.match(r, /^5 util\n\[código de salida 0\]/);                  // cwd = carpeta de la skill
+  assert.match(r.replace(/\x1b\[[0-9;]*m/g, ''), /^5 util\n\[código de salida 0\]/);   // cwd = carpeta de la skill (sin colores ANSI: FORCE_COLOR depende de cómo se lance npm test)
   // permisos: verde + declara ejecución → flujo normal; sin permisos declarados o no verde → siempre pregunta
   const h = porNombre.ejecutar_script_skill;
   assert.strictEqual(h.siemprePreguntar({ nombre: 'util' }, { skills: n.skills }), '');

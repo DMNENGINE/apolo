@@ -158,4 +158,19 @@ function conectar(url, { cabeceras = {}, timeoutMs = 15_000, maxBytes = 4 * 1024
   });
 }
 
-module.exports = { conectar, aceptarClave, frame, crearLector, Conexion, GUID };
+// API mínima tipo navegador (onopen/onmessage/onerror/onclose, send, close) para Node sin WebSocket global (Electron 33 = Node 20)
+class WebSocketCompat {
+  constructor(url) {
+    conectar(url, { maxBytes: 64 * 1024 * 1024 }).then(c => {
+      this._c = c;
+      c.on('texto', data => this.onmessage && this.onmessage({ data }));
+      c.on('cerrar', e => this.onclose && this.onclose(e));
+      this.onopen && this.onopen();
+    }, e => this.onerror && this.onerror(e));
+  }
+  send(s) { if (this._c) this._c.enviarTexto(s); }
+  close() { try { this._c && this._c.cerrar(); } catch { } }
+}
+const WebSocketNode = globalThis.WebSocket || WebSocketCompat;
+
+module.exports = { conectar, aceptarClave, frame, crearLector, Conexion, GUID, WebSocketCompat, WebSocketNode };

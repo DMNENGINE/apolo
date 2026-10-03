@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
+const { WebSocketNode } = require('./sdk/ws-cliente');   // Electron 33 (Node 20) no trae WebSocket global
 
 const UI = path.join(__dirname, 'ui');
 const escH = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -174,7 +175,7 @@ async function grabar({ dir, segundos, ancho = 720, alto = 1280, navegador, ffmp
   try {
     let pag; for (let i = 0; i < 60 && !pag; i++) { await dormir(250); try { pag = (await (await fetch(`http://127.0.0.1:${puerto}/json`)).json()).find(x => x.type === 'page'); } catch { } }
     if (!pag) throw new Error('el navegador headless no arrancó');
-    ws = new WebSocket(pag.webSocketDebuggerUrl); await new Promise((ok, mal) => { ws.onopen = ok; ws.onerror = () => mal(new Error('CDP no conecta')); });
+    ws = new WebSocketNode(pag.webSocketDebuggerUrl); await new Promise((ok, mal) => { ws.onopen = ok; ws.onerror = () => mal(new Error('CDP no conecta')); });
     let n = 0; const esp = new Map(); const lista = [];
     ws.onmessage = m => {
       const j = JSON.parse(m.data);

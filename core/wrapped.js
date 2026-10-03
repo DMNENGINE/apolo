@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { WebSocketNode } = require('./sdk/ws-cliente');   // Electron 33 (Node 20) no trae WebSocket global
 
 const DIAS = { semana: 7, mes: 30, año: 365, ano: 365 };
 const pad = n => String(n).padStart(2, '0');
@@ -274,7 +275,7 @@ async function abrirCDP(navegador, ancho, alto) {
   const dormir = ms => new Promise(ok => setTimeout(ok, ms));
   let pag; for (let i = 0; i < 60 && !pag; i++) { await dormir(250); try { pag = (await (await fetch(`http://127.0.0.1:${puerto}/json`)).json()).find(x => x.type === 'page'); } catch { } }
   if (!pag) { try { nav.kill(); } catch { } throw new Error('el navegador headless no arrancó'); }
-  const ws = new WebSocket(pag.webSocketDebuggerUrl);
+  const ws = new WebSocketNode(pag.webSocketDebuggerUrl);
   await new Promise((ok, mal) => { ws.onopen = ok; ws.onerror = () => mal(new Error('CDP no conecta')); });
   let n = 0; const esp = new Map();
   ws.onmessage = m => { const j = JSON.parse(m.data); if (j.id && esp.has(j.id)) { esp.get(j.id)(j); esp.delete(j.id); } };
