@@ -69,6 +69,25 @@ const badge = document.createElement('div'); badge.id = 'badge';
 rwrap.append(cv, badge);
 $('mini').appendChild(rwrap);
 const robot = createRobot(cv);
+// ---------- skin 2D (Estudio de Avatares, core/ui/avatar.js): sustituye al casco 3D si el usuario lo activa en el panel ----------
+// El casco sigue existiendo pero oculto y a 1 fps; el avatar SVG se anima con CSS (sin canvas a 60 fps en reposo).
+const skin = document.createElement('div'); skin.className = 'skin2d'; skin.hidden = true; rwrap.insertBefore(skin, badge);
+let skinCfg = { usar: false, receta: null, imagen: null }, skinEstado = '';
+const setFpsCasco = robot.setFps.bind(robot);
+robot.setFps = f => setFpsCasco(skinCfg.usar ? 1 : f);
+function pintarSkin(st) {
+  if (!skinCfg.usar || !window.AvatarSVG) return;
+  st = st || lastState || 'reposo';
+  if (st === skinEstado) return;
+  skinEstado = st;
+  // sin fondo: en la isla flota como el casco
+  skin.innerHTML = window.AvatarSVG.svg({ ...skinCfg.receta, fondo: { tipo: 'transparente' } }, { estado: st, imagen: skinCfg.imagen || undefined });
+}
+if (bridge.onAvatar) bridge.onAvatar(a => {
+  skinCfg = { usar: !!(a && a.usar && a.receta && window.AvatarSVG), receta: a && a.receta, imagen: a && a.imagen };
+  skin.hidden = !skinCfg.usar; cv.style.visibility = skinCfg.usar ? 'hidden' : '';
+  skinEstado = ''; pintarSkin(); ajustarFps();
+});
 const center = () => { const r = rwrap.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
 let lastCode = null;                  // último cambio de código para la tarjeta "en vivo"
 
@@ -454,6 +473,7 @@ function render() {
     robot.setState(bad ? 'error' : st, st === 'permiso' ? (bad ? `${tr('PELIGRO')}: ${perms[0].tool}` : `${tr('¿PERMISO?')} ${perms[0]?.tool || ''}`) : '');
     if (bridge.robotState) bridge.robotState(st);
     lastState = st;
+    pintarSkin(st);
     ajustarFps();
   }
   const all = [...sessions.values()].sort((a, b) => b.t - a.t);
@@ -791,5 +811,7 @@ function makeStubBridge() {
   return {
     onEvent: f => (h.ev = f), onExpired: f => (h.ex = f), onDemo: f => (h.demo = f),
     decide: (id, b) => console.log('decisión', id, b), interactive: () => {},
+    // ?skin=<n> prueba la skin 2D con el preset n del Estudio de Avatares (capturas en navegador)
+    onAvatar: f => { const n = new URLSearchParams(location.search).get('skin'); if (n !== null && window.AvatarSVG) setTimeout(() => f({ usar: true, receta: window.AvatarSVG.PRESETS[+n || 0] }), 50); },
   };
 }

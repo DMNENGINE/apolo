@@ -34,7 +34,7 @@ function ipPrivada(ip) {
   return /^f[cd][0-9a-f]{0,2}:/.test(ip) || /^fe[89ab][0-9a-f]?:/.test(ip);
 }
 // estáticos que puede pedir un móvil de la LAN (nada del panel de escritorio)
-const ESTATICOS = /^(m\/[\w.-]+(\/[\w.-]+)*|vendor\/[\w.-]+(\/[\w.-]+)*|robot3d\.js|casco\.glb|icono\.svg|i18n\.js|wrapped\.html|wrapped-tarjetas\.js)$/;
+const ESTATICOS = /^(m\/[\w.-]+(\/[\w.-]+)*|vendor\/[\w.-]+(\/[\w.-]+)*|robot3d\.js|casco\.glb|icono\.svg|i18n\.js|wrapped\.html|wrapped-tarjetas\.js|avatar\.js)$/;
 const estaticoMovil = nombre => ESTATICOS.test(nombre) && !nombre.split('/').includes('..');
 // IPv4 de la LAN de este equipo (sin adaptadores virtuales), las 192.168 primero
 function ipsLan() {
@@ -51,7 +51,7 @@ function ipsLan() {
 // '*' = un segmento cualquiera; '**' = el resto. /v1/movil/** lo filtra después movil.http según quién llama.
 const ALCANCE = [
   ['GET', 'estado'], ['GET', 'sesiones'], ['POST', 'sesiones'], ['GET', 'sesiones/*'], ['POST', 'sesiones/*/mensajes'], ['POST', 'sesiones/*/cancelar'],
-  ['GET', 'eventos'], ['GET', 'agentes'], ['GET', 'turno'], ['POST', 'turno'], ['GET', 'wrapped'], ['POST', 'voz/transcribir'], ['GET', 'panico'], ['POST', 'panico'],   // pánico: el móvil lo activa; reanudar solo desde el escritorio
+  ['GET', 'eventos'], ['GET', 'agentes'], ['GET', 'turno'], ['POST', 'turno'], ['GET', 'wrapped'], ['GET', 'avatar'], ['GET', 'avatar/svg'], ['GET', 'avatar/ia/*'],['POST', 'voz/transcribir'], ['GET', 'panico'], ['POST', 'panico'],   // pánico: el móvil lo activa; reanudar solo desde el escritorio
   ['*', 'movil/**'],
   ['*', 'escritorio/**'],               // escritorio remoto: además exige d.escritorio (permiso concedido desde el PC) → core/escritorio/remoto.js
 ].map(([m, r]) => [m, r.split('/')]);

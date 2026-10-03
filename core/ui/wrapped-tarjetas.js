@@ -74,6 +74,8 @@
   /* portada */
   .c-portada{justify-content:flex-end;padding-bottom:230px}
   .c-portada .titulo{font-size:200px;line-height:.86;font-weight:900;letter-spacing:-.05em;text-transform:uppercase}
+  .c-portada .yo-av{width:170px;height:170px;border-radius:50%;overflow:hidden;margin-bottom:34px;background:rgba(255,255,255,.06);box-shadow:0 0 0 6px var(--a),0 0 70px color-mix(in srgb,var(--a) 45%,transparent)}
+  .c-portada .yo-av svg{width:100%;height:100%;display:block}
   .c-portada .titulo .ac{color:var(--a);text-shadow:0 0 90px color-mix(in srgb,var(--a) 60%,transparent)}
   .c-portada .w{display:inline-block;font-size:64px;font-weight:900;letter-spacing:.3em;color:#000;background:var(--a);padding:8px 26px;border-radius:14px;margin-top:26px;text-transform:uppercase}
   .pila{position:absolute;top:180px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:0;z-index:-1}
@@ -168,6 +170,7 @@
     // 1 · portada
     L.push({ id: 'portada', s: 5, robot: ['', 'listo', 'saludo', T('¡HOLA!')], fondo: [[-200, 200], [500, 1300]], html: `
       <div class="pila">${[0, 1, 2, 3].map(k => `<span style="--k:${k}">${nombre}</span>`).join('')}</div>
+      ${D.avatarSvg && /^<svg[\s>]/.test(D.avatarSvg) ? `<div class="yo-av e" style="--d:.1">${D.avatarSvg}</div>` : ''}
       <div class="ceja e" style="--d:.2">${esc(T(per()[0]))} ${esc(T('CON'))}</div>
       <div class="titulo e" style="--d:.35"><span class="ac">${nombre}</span></div>
       <div><span class="w zoom" style="--d:.7">Wrapped</span></div>

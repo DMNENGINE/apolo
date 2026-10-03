@@ -97,7 +97,9 @@ function crearNucleo(opciones = {}) {
   require('./herramientas').registrar([grafoMod.HERRAMIENTA]);
   const linea = require('./linea').crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria, reuniones: () => nucleo.reuniones });
   const privacidad = require('./privacidad').crearPrivacidad({ cfg, memoria, grafo, sesiones, personalidad, registro, bus });
-  const wrapped = require('./wrapped').crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos });
+  // Estudio de Avatares (core/avatar.js + core/ui/avatar.js) → /v1/avatar; el del usuario sale en el Wrapped
+  const avatar = require('./avatar').crearAvatar({ cfg, bus });
+  const wrapped = require('./wrapped').crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos, avatar: () => avatar.svgDe('usuario') });
   Object.assign(nucleo, { grafo, sueno, linea, privacidad, wrapped });
   nucleo.extensiones.sueno = { http: async (M, p, b = {}) => {
     if (!p[2] && M === 'GET') return { config: sueno.conf(), enCurso: sueno.enCurso(), informes: sueno.informes(30) };
@@ -118,6 +120,7 @@ function crearNucleo(opciones = {}) {
   } };
   nucleo.extensiones.privacidad = { http: (...a) => privacidad.http(...a) };
   nucleo.extensiones.wrapped = { http: (...a) => wrapped.http(...a) };
+  nucleo.avatar = avatar; nucleo.extensiones.avatar = { http: (...a) => avatar.http(...a) };
   // FASE 9: registro de auditoría encadenado + kill switch global
   const auditoria = require('./auditoria').crearAuditoria({ cfg, bus, boveda: cfg.boveda });
   permisos.ponerAuditoria(auditoria);

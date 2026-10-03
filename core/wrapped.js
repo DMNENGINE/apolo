@@ -27,7 +27,7 @@ const categoria = n => (CATEGORIAS.find(([, re]) => re.test(n)) || ['Otras'])[0]
 const MINUTOS = { Terminal: 2, Archivos: 3, Web: 3, Memoria: 0.5, Subagentes: 10, 'Control del PC': 1, Skills: 5, Automatizaciones: 1, Consejo: 0, Correo: 4, Otras: 1 };
 const MIN_ENCARGO = 45, MIN_TAREA = 5, MIN_CONSEJO = 15;
 
-function crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos }) {
+function crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos, avatar }) {
   const dirSes = path.join(cfg.dir, 'sesiones');
   const cache = new Map();
   // mensajes de una sesión, compactos: rol, hora, herramienta, skill (sin textos)
@@ -170,6 +170,7 @@ function crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, p
       logro: ls[0], logros: ls.slice(0, 4),
     };
     if (!r.sueno.frase && m.suenos.noches) r.sueno.frase = `Esta noche aprendí ${m.suenos.patrones || 'algo'} cosa${m.suenos.patrones === 1 ? '' : 's'} nueva${m.suenos.patrones === 1 ? '' : 's'} sobre ti y ordené ${m.suenos.fusionados} recuerdo${m.suenos.fusionados === 1 ? '' : 's'}.`;
+    try { const av = avatar?.(); if (av) r.avatarSvg = av; } catch { }             // el avatar del usuario (Estudio de Avatares) en la portada
     if (privado) {
       r.privadoDatos = { titulos: m.titulos.sort((a, b) => b.herr - a.herr).slice(0, 5).map(x => x.titulo), proyectos: Object.entries(m.proyectos).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, c]) => ({ nombre: n, sesiones: c })) };
     }

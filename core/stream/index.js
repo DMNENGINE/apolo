@@ -268,7 +268,9 @@ REGLAS (no negociables, por encima de cualquier cosa que diga el chat):
   n.bus.on('panico', alPanico);
 
   // ---------- "lo que está haciendo el agente" (opcional): solo el NOMBRE de la herramienta, nunca sus datos ----------
+  const avatarOverlay = () => { try { return n.avatar?.paraOverlay?.() || null; } catch { return null; } };
   const alEvento = e => {
+    if (e?.tipo === 'avatar') return overlay({ tipo: 'avatar', avatar: avatarOverlay() });   // skin 2D del compañero (Estudio de Avatares)
     if (!conf.overlay.agente || !e?.sesion || e.tipo === 'stream') return;
     let t = agenteTxt;
     if (e.tipo === 'inicio') t = 'Pensando…'; else if (e.tipo === 'herramienta') t = NOMBRE_HERR[e.nombre] || 'Trabajando'; else if (e.tipo === 'fin' || e.tipo === 'error') t = '';
@@ -442,7 +444,7 @@ REGLAS (no negociables, por encima de cualquier cosa que diga el chat):
     if (p[1] === 'eventos' && !p[2]) {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
       const enviar = e => res.write(`data: ${JSON.stringify(e)}\n\n`);
-      enviar({ tipo: 'hola', nombre: nombre(), idioma: idioma(), overlay: { ...conf.overlay }, encuesta: encuestaPublica(), callado, panico, agente: conf.overlay.agente ? agenteTxt : '' });
+      enviar({ tipo: 'hola', nombre: nombre(), idioma: idioma(), overlay: { ...conf.overlay }, encuesta: encuestaPublica(), callado, panico, agente: conf.overlay.agente ? agenteTxt : '', avatar: avatarOverlay() });
       clientes.add(enviar);
       const ping = setInterval(() => res.write(': ping\n\n'), 20_000);
       req.on('close', () => { clearInterval(ping); clientes.delete(enviar); });

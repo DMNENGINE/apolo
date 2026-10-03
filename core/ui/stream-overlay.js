@@ -33,6 +33,23 @@ if (q.get('robot') !== '0') {
   try { robot = createRobot($('#robot'), '/casco.glb', { animacion: 'vitrina', log: ['> co-host en directo', '> leyendo el chat…'] }); }
   catch (e) { console.warn('sin WebGL:', e); $('#robot').style.visibility = 'hidden'; }
 }
+// skin 2D del compañero (Estudio de Avatares, /avatar.js): si el usuario la activó para el overlay, sustituye al casco 3D
+// (que se queda oculto a 1 fps). Los estados del robot se reflejan en la pose del avatar.
+let skin = null, skinEst = 'reposo';
+const skinDemo = () => (demo && q.get('skin') !== null && window.AvatarSVG ? { receta: window.AvatarSVG.PRESETS[+q.get('skin') || 0] } : null);   // ?demo=1&skin=n (capturas)
+const casco3d = robot;
+function pintarSkin(st) {
+  skinEst = st || skinEst;
+  if (!skin) return;
+  $('#skin').innerHTML = window.AvatarSVG.svg({ ...skin.receta, fondo: { tipo: 'transparente' } }, { estado: skinEst, imagen: skin.imagen || undefined });
+}
+function ponerSkin(a) {
+  skin = q.get('robot') !== '0' && a && a.receta && window.AvatarSVG ? a : null;
+  $('#robot').style.display = skin ? 'none' : ''; $('#skin').hidden = !skin;
+  try { casco3d?.setFps?.(skin ? 1 : 60); } catch { }
+  pintarSkin();
+}
+robot = { setState: s => { pintarSkin(s); try { casco3d?.setState(s); } catch { } }, gesto: (g, s) => { try { casco3d?.gesto(g, s); } catch { } } };
 const gesto = (g, s = 3) => { try { if (g) robot?.gesto(g, s); } catch { } };
 
 // ---------- bocadillo + subtítulos + voz (una frase detrás de otra) ----------
@@ -151,7 +168,8 @@ function aplicar(c = {}, nombre) {
 // ---------- eventos del núcleo ----------
 function manejar(e) {
   switch (e.tipo) {
-    case 'hola': if (e.idioma && !q.get('idioma')) idioma = e.idioma === 'en' ? 'en' : 'es'; aplicar(e.overlay, e.nombre); raiz.classList.toggle('panico', !!e.panico); pintarEncuesta(e.encuesta); agente(e.agente); break;
+    case 'hola': if (e.idioma && !q.get('idioma')) idioma = e.idioma === 'en' ? 'en' : 'es'; aplicar(e.overlay, e.nombre); raiz.classList.toggle('panico', !!e.panico); pintarEncuesta(e.encuesta); agente(e.agente); ponerSkin(e.avatar || skinDemo()); break;
+    case 'avatar': ponerSkin(e.avatar); break;
     case 'config': aplicar(e.overlay, e.nombre); break;
     case 'decir': decir(e); break;
     case 'gesto': gesto(e.gesto, 3); break;

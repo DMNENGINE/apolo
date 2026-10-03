@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('bridge', {
   onIconSize: fn => ipcRenderer.on('icon-size', (_e, px) => fn(px)),
   onNombre: fn => ipcRenderer.on('nombre', (_e, n) => fn(n)),
   onIdioma: fn => ipcRenderer.on('idioma', (_e, l) => fn(l)),
+  onAvatar: fn => ipcRenderer.on('avatar', (_e, a) => fn(a)),                      // skin 2D del compañero (Estudio de Avatares)
   onMudanza: fn => ipcRenderer.on('mudanza', (_e, dir) => fn(dir)),
   onLayout: fn => ipcRenderer.on('isla-layout', (_e, l) => fn(l)),                // dónde está la barra en la ventana y hacia dónde abrirse
   layoutOk: () => ipcRenderer.send('isla-layout-ok'),

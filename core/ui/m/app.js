@@ -243,11 +243,23 @@ function montarApp(recien = false) {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && E.token) { cargarPermisos(); cargarAgentes(); } });
   }
   api('GET', '/movil/yo').then(y => { E.yo = y; E.nombre = y.nombreAsistente || E.nombre; LS.set('nombre', E.nombre); pintarCab(); if (E.vista === 'ajustes') ruta(); if (E.vista === 'inicio') window.pintarEscBtn?.(); }).catch(() => { });
+  cargarAvatar();
   cargarPermisos(); cargarAgentes();
   escucharEventos();
   ruta();
   if (recien) setTimeout(bienvenida, 500);
   clearInterval(E.refresco); E.refresco = setInterval(() => { if (document.visibilityState === 'visible') { cargarPermisos(); cargarAgentes(); } }, 20_000);
+}
+// avatar del usuario (Estudio de Avatares, ../avatar.js) en la cabecera; los Personajes IA se piden con el token del móvil
+async function cargarAvatar() {
+  if (!window.AvatarSVG) return;
+  try {
+    const a = await api('GET', '/avatar'), r = a.usuario;
+    let imagen;
+    if (r && r.tipo === 'ia') { const x = await fetch(`/v1/avatar/ia/${encodeURIComponent(r.ia.id)}`, { headers: { 'x-dispositivo': E.token } }); if (x.ok) imagen = URL.createObjectURL(await x.blob()); }
+    E.avatarSvg = r ? window.AvatarSVG.svg(r, { animado: false, imagen }) : '';
+    pintarCab();
+  } catch { }
 }
 function pintarCab() {
   const app = $('#app'); if (!app) return;
@@ -258,7 +270,7 @@ function pintarCab() {
   $('#cabT').textContent = E.vista === 'inicio' ? E.nombre.toUpperCase() : titulos[E.vista];
   const punto = { reposo: 'ok', trabajando: 'info', permiso: 'aviso', dormido: 'mal' }[s];
   $('#cabS').innerHTML = `<span class="punto ${punto}"></span>${E.vista === 'inicio' || E.vista === 'chat' ? tr(TXT_ESTADO[s]) : esc(E.nombre) + ' · ' + tr(TXT_ESTADO[s])}`;
-  $('#cabA').innerHTML = E.vista === 'chat' ? `<button class="btn-ic" id="nuevoChat" aria-label="${tr('Nueva conversación')}">${ic('nuevo')}</button>` : '';
+  $('#cabA').innerHTML = E.vista === 'chat' ? `<button class="btn-ic" id="nuevoChat" aria-label="${tr('Nueva conversación')}">${ic('nuevo')}</button>` : (E.avatarSvg ? `<span class="yo-av" aria-hidden="true">${E.avatarSvg}</span>` : '');
   $('#nuevoChat')?.addEventListener('click', () => nuevaConversacion());
   const n = E.permisos.length, bd = $('#badge');
   if (bd) { bd.hidden = !n; bd.textContent = n; }

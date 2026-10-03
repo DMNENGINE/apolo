@@ -1029,3 +1029,80 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .gm-vivo small { color: var(--txt-3); }
 .gm-error { color: var(--mal); margin: 10px 0 0; overflow-wrap: anywhere; }
 .gm-hist { border-bottom: 1px solid var(--borde); padding: 6px 0; }
+
+/* ---------- Estudio de Avatares (avatar-pagina.js, av-) ---------- */
+.avatar-svg { display: block; }
+.av-quien { margin: -6px 0 16px; }
+.av-grid { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; align-items: start; }
+.av-prev { position: sticky; top: 14px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.av-escena { aspect-ratio: 1; border-radius: 18px; display: grid; place-items: center; overflow: hidden;
+  background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--acento) 14%, transparent), transparent 62%), repeating-conic-gradient(var(--capa-2) 0 25%, var(--capa) 0 50%) 0 0 / 22px 22px; border: 1px solid var(--borde); }
+.av-escena svg { width: 100%; height: 100%; }
+.av-estados, .av-chips, .av-paleta, .av-fila { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.av-estados { justify-content: center; }
+.chip-btn.on { color: var(--txt); border-color: var(--acento); background: color-mix(in srgb, var(--acento) 12%, transparent); }
+.chip-btn.apagado { opacity: .55; cursor: not-allowed; }
+.chip-btn .i { width: 13px; height: 13px; }
+.av-guardar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.av-skin { border-top: 1px solid var(--borde); margin: 0 -18px -18px; }
+.av-modo { margin-bottom: 10px; }
+.av-bloques { display: flex; flex-direction: column; gap: 18px; }
+.av-bloque { display: flex; flex-direction: column; gap: 8px; }
+.av-bloque > b { font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: var(--txt-3); font-weight: 650; display: flex; align-items: center; justify-content: space-between; }
+.av-formas { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.av-ojos { display: grid; grid-template-columns: repeat(5, minmax(0, 92px)); gap: 6px; }
+.av-op { background: var(--capa-2); border: 1px solid var(--borde); border-radius: 12px; padding: 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--txt-2); font-size: 11px; transition: border-color .12s, transform .12s; min-width: 0; }
+.av-op:hover { border-color: var(--borde-2); transform: translateY(-1px); }
+.av-op.on { border-color: var(--acento); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 22%, transparent); color: var(--txt); }
+.av-op svg { width: 100%; height: auto; aspect-ratio: 1; }
+.av-op span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.av-color { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--capa); box-shadow: 0 0 0 1px var(--borde-2); cursor: pointer; padding: 0; position: relative; flex: none; }
+.av-color.on { box-shadow: 0 0 0 2px var(--acento); }
+.av-color.libre { background: conic-gradient(#ff5fa2, #f5a524, #ffd84d, #2bdc7c, #5ab0ff, #a78bfa, #ff5fa2); overflow: hidden; }
+.av-color.libre input { position: absolute; inset: -6px; width: 40px; height: 40px; opacity: 0; cursor: pointer; }
+.av-fila > span { margin-right: 6px; }
+.av-hoja { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.av-hoja figure { margin: 0; background: var(--capa); border: 1px solid var(--borde); border-radius: 14px; padding: 8px; text-align: center; }
+.av-hoja figcaption { font-size: 11.5px; color: var(--txt-3); margin-top: 2px; }
+.av-hoja svg { width: 100%; height: auto; }
+.av-presets, .av-bv { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.av-hist { display: flex; flex-wrap: wrap; gap: 8px; }
+.av-carta { background: var(--capa); border: 1px solid var(--borde); border-radius: 14px; padding: 6px 6px 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--txt-2); font-size: 12px; transition: border-color .12s, transform .12s; }
+.av-carta:hover { border-color: var(--borde-2); transform: translateY(-2px); color: var(--txt); }
+.av-carta.on { border-color: var(--acento); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 22%, transparent); }
+.av-carta svg { width: 100%; height: auto; border-radius: 10px; }
+.av-carta.mini { width: 64px; padding: 4px; }
+.av-dado { width: 100%; aspect-ratio: 1; display: grid; place-items: center; color: var(--acento); }
+.av-dado .i { width: 34px; height: 34px; }
+.av-ia textarea, .av-campos input, .av-campos select { width: 100%; }
+.av-campos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 12px; }
+.av-campos label { display: flex; flex-direction: column; gap: 3px; }
+.av-campos small { color: var(--txt-3); }
+.av-check { display: flex; gap: 8px; align-items: center; color: var(--txt-2); cursor: pointer; }
+.av-nota { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 12px; }
+.av-nota .i { width: 14px; height: 14px; flex: none; }
+.av-sinmotor { display: flex; gap: 10px; padding: 12px; border-radius: 10px; border: 1px dashed var(--borde-2); background: var(--capa-2); }
+.av-sinmotor p { margin: 4px 0 8px; }
+.av-bloque > .btn.pri { align-self: flex-start; }
+.av-todo { grid-column: 1 / -1; margin: 0; }
+.av-galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.av-ia-item { background: var(--capa-2); border: 1px solid var(--borde); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.av-ia-item.on { border-color: var(--acento); }
+.av-ia-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+.av-coste { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 10px; background: var(--capa-2); border: 1px solid var(--borde); margin-bottom: 10px; }
+.av-prompt pre { white-space: pre-wrap; font-size: 12px; max-height: 200px; overflow: auto; background: var(--capa-2); padding: 10px; border-radius: 8px; }
+.av-girando { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: av-gira .8s linear infinite; }
+@keyframes av-gira { to { transform: rotate(360deg); } }
+.av-mini { width: 36px; height: 36px; display: inline-block; border-radius: 50%; overflow: hidden; background: var(--capa-2); flex: none; }
+.av-mini svg { width: 100%; height: 100%; }
+/* el avatar del usuario junto a sus mensajes del chat */
+.con-avatar .m-yo { position: relative; margin-right: 38px; }
+.con-avatar .m-yo::after { content: ""; position: absolute; right: -38px; bottom: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--av-usuario) center 45% / 128% no-repeat, var(--capa-3); box-shadow: 0 0 0 1px var(--borde-2); }
+@media (max-width: 900px) {
+  .av-grid { grid-template-columns: 1fr; }
+  .av-prev { position: static; }
+  .av-formas { grid-template-columns: repeat(4, 1fr); }
+  .av-ojos { grid-template-columns: repeat(5, 1fr); }
+  .av-hoja { grid-template-columns: repeat(3, 1fr); }
+  .av-campos { grid-template-columns: 1fr; }
+}

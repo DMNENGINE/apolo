@@ -20,6 +20,7 @@
   html.vertical #zonaRobot { right: auto; left: 50%; transform: translateX(-50%); bottom: calc(150 * var(--u)); width: calc(640 * var(--u)); height: calc(680 * var(--u)); }
   #robot { width: 100%; height: calc(100% - 60 * var(--u)); display: block; filter: drop-shadow(0 0 calc(18 * var(--u)) color-mix(in srgb, var(--acento) calc(var(--glow, .6) * 60%), transparent)) drop-shadow(0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,.55)); }
   html.sin-robot #zonaRobot { opacity: 0; }
+  #skin { width: 100%; height: calc(100% - 60 * var(--u)); display: block; filter: drop-shadow(0 calc(10 * var(--u)) calc(16 * var(--u)) rgba(0,0,0,.55)); } #skin[hidden] { display: none; } #skin svg { width: 100%; height: 100%; display: block; }
   .placa { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; align-items: center; gap: calc(10 * var(--u)); white-space: nowrap;
     padding: calc(8 * var(--u)) calc(18 * var(--u)); border-radius: calc(40 * var(--u)); background: var(--fondo); border: calc(2 * var(--u)) solid color-mix(in srgb, var(--acento) 70%, transparent);
     box-shadow: 0 0 calc(24 * var(--u)) color-mix(in srgb, var(--acento) 35%, transparent); font-size: calc(22 * var(--u)); font-weight: 800; letter-spacing: .08em; }
@@ -109,8 +110,9 @@
     <div id="alertas"></div>
     <div id="bocadillo"><div class="quien"></div><div class="txt"></div></div>
     <div id="subs"><span></span></div>
-    <div id="zonaRobot"><div id="agente"></div><canvas id="robot"></canvas><div class="placa"><span class="punto"></span><span id="nombre">APOLO</span><small id="rol">co-host IA</small></div></div>
+    <div id="zonaRobot"><div id="agente"></div><canvas id="robot"></canvas><div id="skin" hidden></div><div class="placa"><span class="punto"></span><span id="nombre">APOLO</span><small id="rol">co-host IA</small></div></div>
   </div>
+  <script src="/avatar.js"></script>
   <script type="module" src="/stream-overlay.js"></script>
 </body>
 </html>
