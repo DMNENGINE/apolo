@@ -93,7 +93,7 @@ VISTAS.hizo = {
     const l = (d.demos || []).slice(0, 5);
     $('#lhDemos').innerHTML = l.length ? `<div class="seccion">${tr('Demostraciones')}</div>` + l.map(x => `<div class="flex" style="justify-content:space-between;padding:6px 0;border-top:1px solid var(--borde)">
         <span><b>${esc(x.skill?.nombre || x.nombre || x.id)}</b> <small class="tenue">· ${tr('{n} pasos', { n: x.pasos })} · ${hace(x.fin)}</small>${x.errorSkill ? ` <small class="tenue">· ${esc(x.errorSkill)}</small>` : ''}</span>
-        ${x.skill ? `<a class="btn mini fantasma" href="#/skills">${tr('Revisar skill')} ${ic('der')}</a>` : ''}</div>`).join('') : '';
+        ${x.skill ? `<a class="btn mini fantasma" href="#/skills/${encodeURIComponent(x.skill.slug || '')}">${tr('Revisar skill')} ${ic('der')}</a>` : ''}</div>`).join('') : '';
     this.reloj();
   },
   reloj() {
