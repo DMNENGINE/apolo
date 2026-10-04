@@ -1,4 +1,4 @@
-// Plugin de APOLO: canal de Telegram (sustituye a telegram.js de la app cuando cfg.plugins.telegramComoPlugin = true).
+// Plugin de APOLO: canal de Telegram (es el único canal de Telegram de la app; sustituyó a telegram.js).
 // Corre en su propio proceso: solo puede hablar con api.telegram.org, el token lo pide a la app (secreto "tg:token" declarado)
 // y los permisos que resuelve son SOLO los que la app le mostró. La lógica está en bot.js (se prueba con un fetch falso).
 const { definirPlugin } = require('@apolo/sdk');

@@ -66,7 +66,7 @@ Los tipos completos están en `core/sdk/index.d.ts`.
 - **`acciones`**: funciones que la app llama desde el panel (estado, conectar…).
 - En la app de escritorio, `main.js` media con `plugins.mediar({ resolverPermiso, accionTarjeta, recibir, transcribir })`. Sin app (daemon/CLI), el gestor reenvía él mismo los permisos del núcleo.
 
-Ejemplo real: `plugins/telegram` (se activa con `"plugins": { "telegramComoPlugin": true }` en config.json; si no arranca, la app vuelve a `telegram.js`).
+Ejemplo real: `plugins/telegram` (el canal de Telegram de la app; siempre activo, sin flag).
 
 - **Mensajes de otras personas** (por ejemplo, los contactos de WhatsApp en modo avisar/auto): se pasan con `ajeno(datos)`. Necesita el permiso `conversaciones`. Van **solo** a la app (el mediador), nunca al bus ni a otros plugins. Responder a esa persona lo decide siempre la app, nunca el plugin.
 - `tarjeta(id, 'enviar', texto)` manda tu propio texto en vez de la respuesta sugerida.

@@ -12,7 +12,6 @@
 for (const k of Object.keys(process.env)) if (/^(CLAUDE_CODE_|CLAUDECODE$|CLAUDE_PID$|CLAUDE_EFFORT$)/.test(k)) delete process.env[k];
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, shell, globalShortcut, clipboard, safeStorage } = require('electron');
 const { crearConectores } = require('./conectores');
-const { crearTelegram } = require('./telegram');
 const { crearWhatsapp } = require('./whatsapp');
 const http = require('http');
 const fs = require('fs');
@@ -330,19 +329,13 @@ function ojoHook(ev) {
 }
 function ojoPermiso(ev) { ojoBus('nodo-permiso', { id: ev._id, resumen: `${ev.tool_name}: ${detallePerm(ev)}`, peligro: ev._peligro || '' }); }
 
-// ---------- Telegram: telegram.js (por defecto) o el plugin del SDK plugins/telegram (cfg.plugins.telegramComoPlugin = true) ----------
+// ---------- Telegram: el plugin del SDK plugins/telegram (telegram.js de la app ya no existe) ----------
 // El plugin corre en su proceso (solo api.telegram.org); el token sale del almacén cifrado (conectores) por el proveedor de secretos;
-// los permisos que resuelve son SOLO los que se le mostraron. Si no arranca o se rompe → vuelta a telegram.js.
+// los permisos que resuelve son SOLO los que se le mostraron. Si se rompe, el gestor lo reintenta y el panel lo enseña como ROTO.
 const DIR_PLUGIN_TG = fuera(path.join(__dirname, 'plugins', 'telegram'));
 const esNuestroTg = o => !!o && o.tipo === 'local' && path.resolve(String(o.fuente || '')).toLowerCase() === path.resolve(DIR_PLUGIN_TG).toLowerCase();
-function usarTelegramJs() {
-  try { telegram.detener && telegram.detener(); } catch { }
-  telegram = crearTelegram({ almacen: conectores.almacen, decide: (id, b, via) => decide(id, b, via), cardAction: (id, a) => cardAction(id, a),
-    onTalk: t => handleText(t, 'telegram'), transcribir: transcribirArchivo, onEstado: e => console.log('[telegram]', e) });
-  telegram.iniciar();
-}
 const esperarPlugin = async (P, n) => { for (let i = 0; i < 150 && ['arrancando', 'reiniciando'].includes(P.estadoDe(n)); i++) await new Promise(ok => setTimeout(ok, 200)); };
-// misma interfaz que telegram.js (movil, responderA, panel /v1/telegram)
+// interfaz de canal de la app (movil, responderA, panel /v1/telegram)
 function adaptadorTelegramPlugin() {
   const P = nucleo.plugins, acc = (a, d) => P.accionCanal('telegram', 'telegram', a, d), err = e => console.error('[telegram] plugin:', e.message);
   let estado = 'conectando';
@@ -365,7 +358,7 @@ async function telegramComoPlugin() {
     permitir: ({ plugin, nombre, origen }) => plugin === 'telegram' && nombre === 'tg:token' && esNuestroTg(origen) });   // el de la app, sin preguntar
   P.mediar({ resolverPermiso: (id, b, via) => decide(id, b, via), accionTarjeta: (id, a, t) => cardAction(id, a, t), transcribir: ruta => transcribirArchivo(ruta),
     recibir: ({ plugin, texto }) => (CON_ADAPTADOR.includes(plugin) ? handleText(texto, plugin) : undefined), ajeno: ajenoPlugin });
-  // el enlace de telegram.js (chat, bot) pasa al plugin la 1.ª vez por su config (solo en memoria)
+  // el enlace del antiguo telegram.js (chat, bot) pasa al plugin la 1.ª vez por su config (solo en memoria)
   const viejo = alm.config().telegram || {};
   nucleo.cfg.plugins = nucleo.cfg.plugins || {};
   if (!nucleo.cfg.plugins.telegram) nucleo.cfg.plugins.telegram = { chatId: viejo.chatId || null, bot: viejo.bot || null, usuario: viejo.usuario || '', codigo: viejo.codigo || null };
@@ -378,15 +371,8 @@ async function telegramComoPlugin() {
   telegram = adaptadorTelegramPlugin();
   console.log('[telegram] usando el plugin del SDK (plugins/telegram)');
   nucleo.bus.on('evento', e => {
-    if (!e || e.tipo !== 'plugins' || e.nombre !== 'telegram' || !['roto', 'desactivado', 'borrado'].includes(e.accion) || !telegram.plugin) return;
-    console.error(`[telegram] el plugin quedó ${e.accion} → vuelvo a telegram.js`); usarTelegramJs();
+    if (e && e.tipo === 'plugins' && e.nombre === 'telegram' && e.accion === 'roto') console.error('[telegram] el plugin quedó roto (míralo en Panel → Plugins)');
   });
-}
-// con el flag apagado, un plugin "telegram" activo competiría con telegram.js por el mismo bot (409): se desactiva
-async function apagarPluginTelegram() {
-  const P = nucleo.plugins; await esperarPlugin(P, 'telegram');
-  const ya = P.lista().find(x => x.nombre === 'telegram');
-  if (ya && ya.activo) { console.log('[telegram] desactivo el plugin telegram (cfg.plugins.telegramComoPlugin está apagado)'); await P.activar('telegram', false); }
 }
 
 // ---------- WhatsApp y Discord como plugins del SDK (cfg.plugins.whatsappComoPlugin / discordComoPlugin, false por defecto) ----------
@@ -553,6 +539,7 @@ async function startNucleo() {
     nucleo.canales.registrar('codex', { nombre: 'Codex CLI', tipo: 'claudecode', instalado: cliInstalado.codex, estado: 'inactivo', detalle: tr('Sus hooks son experimentales y aún no funcionan en Windows') });
     nucleo.canales.registrar('claudecode', { nombre: 'Claude Code (hooks)', tipo: 'claudecode', estado: hooksCfg.instalados() ? 'activo' : 'inactivo', detalle: tr(hooksCfg.instalados() ? 'Hooks instalados' : 'Instálalos desde la bandeja') });
   };
+  for (const n of CON_ADAPTADOR) nucleo.canales.ocultar(`plugin:${n}:${n}`);
   canalesRobot(); setInterval(canalesRobot, 15_000);
   // avisos de agentes externos (MCP: Antigravity, Cursor…) → isla con voz + Discord si urgente o no estás
   nucleo.bus.on('aviso-externo', a => {
@@ -848,8 +835,7 @@ app.whenReady().then(() => {
     // la app media SIEMPRE los canales plugin: así los permisos de Claude Code (hooks) y los del núcleo les llegan con el id de la app
     nucleo.plugins.mediar({ resolverPermiso: (id, b, via) => decide(id, b, via), accionTarjeta: (id, a, t) => cardAction(id, a, t), transcribir: ruta => transcribirArchivo(ruta),
       recibir: ({ plugin, texto }) => (CON_ADAPTADOR.includes(plugin) ? handleText(texto, plugin) : undefined), ajeno: ajenoPlugin });
-    if (nucleo.cfg.plugins && nucleo.cfg.plugins.telegramComoPlugin) telegramComoPlugin().catch(e => { console.error('[telegram] el plugin no arrancó:', e.message, '→ telegram.js'); usarTelegramJs(); });
-    else { usarTelegramJs(); apagarPluginTelegram().catch(e => console.error('[telegram]', e.message)); }
+    telegramComoPlugin().catch(e => console.error('[telegram] el plugin no arrancó:', e.message));
     if (waComoPlugin(nucleo.cfg.plugins)) whatsappComoPlugin().catch(e => { console.error('[whatsapp] el plugin no arrancó:', e.message, '→ whatsapp.js'); usarWhatsappJs(); });
     else { usarWhatsappJs(); apagarPlugin('whatsapp').catch(e => console.error('[whatsapp]', e.message)); }
     nucleo.extensiones.whatsapp = { http: async (M, p, b) => {

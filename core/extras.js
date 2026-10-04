@@ -101,9 +101,11 @@ function crearCanales() {
     ['web', { nombre: 'Panel web', tipo: 'web', estado: 'activo', detalle: 'Este panel' }],
     ['api', { nombre: 'API local', tipo: 'api', estado: 'activo', detalle: 'HTTP + SSE en 127.0.0.1' }],
   ]);
+  const ocultos = new Set();          // p. ej. plugin:telegram:telegram cuando la app ya enseña "telegram" (canal con adaptador)
   return {
     registrar(id, datos) { m.set(id, { ...(m.get(id) || {}), ...datos, actualizado: Date.now() }); },
-    lista: () => [...m.entries()].map(([id, c]) => ({ id, ...c })),
+    ocultar(id, si = true) { if (si) ocultos.add(id); else ocultos.delete(id); },
+    lista: () => [...m.entries()].filter(([id]) => !ocultos.has(id)).map(([id, c]) => ({ id, ...c })),
   };
 }
 
