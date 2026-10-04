@@ -122,3 +122,14 @@ test('un clic que cae fuera de la ventana activa (detrás de un diálogo) no se 
   await n.control.accion(s, 'clic', { elemento: 5 });
   assert.strictEqual(acciones().length, 2);
 });
+
+test('escribir en un campo que YA tiene el foco no hace clic (no mueve el cursor del editor)', async t => {
+  const { n, s, estado, acciones } = entorno(t);
+  await n.control.tomar(s, { motivo: 'escribir' });
+  estado.foco = { tipo: 'Button', nombre: 'Guardar', password: false };       // el elemento #5 ya tiene el foco
+  await n.control.accion(s, 'escribir', { elemento: 5, texto: '1, 2, 3' });
+  assert.deepStrictEqual(acciones().map(o => o.op), ['escribir']);
+  estado.foco = { tipo: 'Edit', nombre: 'Otro', password: false };            // foco en otro sitio: primero clic
+  await n.control.accion(s, 'escribir', { elemento: 5, texto: '4, 5' });
+  assert.deepStrictEqual(acciones().map(o => o.op), ['escribir', 'clic', 'escribir']);
+});

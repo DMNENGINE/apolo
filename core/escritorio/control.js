@@ -173,8 +173,12 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null, ojos, r
 
   async function hacer(s, op, a, p, p2, info, objetivo) {
     if (op === 'escribir') {
-      if (p) { await orden({ op: 'clic', x: p.x, y: p.y, armadoRequerido: true }); await new Promise(ok => setTimeout(ok, 150)); }
-      const foco = p ? (await orden({ op: 'info' })).foco : info.foco;
+      // si ese campo YA tiene el foco no se hace clic: en un editor el clic movería el cursor a mitad del texto
+      // (prueba real: los números del 1 al 50 salieron desordenados porque cada grupo clicaba en el centro del Bloc de notas)
+      const yaEnFoco = !!(p && info.foco && p.nombre && info.foco.nombre === p.nombre && (!p.tipo || info.foco.tipo === p.tipo));
+      const clicar = p && !yaEnFoco;
+      if (clicar) { await orden({ op: 'clic', x: p.x, y: p.y, armadoRequerido: true }); await new Promise(ok => setTimeout(ok, 150)); }
+      const foco = clicar ? (await orden({ op: 'info' })).foco : info.foco;
       if (foco?.password) throw new Error('el campo con el foco es una CONTRASEÑA: no escribo contraseñas. Pide al usuario que la escriba él.');
       await orden({ op: 'escribir', texto: String(a.texto || ''), armadoRequerido: true }, 120_000);
       return `escrito (${String(a.texto || '').length} caracteres) en ${foco?.nombre ? `"${foco.nombre}"` : 'el campo con el foco'} de "${info.ventana.titulo}"`;
