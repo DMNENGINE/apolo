@@ -49,7 +49,8 @@ SHA=$(curl -fsSL -H 'User-Agent: APOLO-instalador' "https://api.github.com/repos
   | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).sha||'')}catch{}})" || true)
 [ -n "$SHA" ] || aviso "no pude leer la version de GitHub (los avisos de actualizacion no funcionaran)"
 REF="${SHA:-$RAMA}"
-curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" | tar -xz -C "$TMP"
+# APOLO_TARBALL=<archivo .tar.gz>: instalar desde un paquete local (pruebas antes de publicar)
+if [ -n "${APOLO_TARBALL:-}" ]; then tar -xzf "$APOLO_TARBALL" -C "$TMP"; else curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" | tar -xz -C "$TMP"; fi
 SRC=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)
 # si APOLO esta abierto, cerrarlo (y sus ayudantes: Whisper, etc.) antes de reemplazar archivos
 pkill -f -- "$DIR/node_modules/electron" 2>/dev/null || true
