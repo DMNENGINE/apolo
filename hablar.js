@@ -15,7 +15,7 @@ const norm = p => String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowe
 
 function createTalk({ dataDir, getHwnd, send, reply, onStop }) {
   const projFile = path.join(dataDir, 'proyectos.json');
-  let cfg = { defaultDir: 'D:/', proyectos: { RobotCompanion: 'D:/RobotCompanion', 'control-commander': 'D:/Projects/control-commander' } };
+  let cfg = { defaultDir: os.homedir().replace(/\\/g, '/'), proyectos: {} };   // los proyectos se aprenden solos
   try { cfg = { ...cfg, ...JSON.parse(fs.readFileSync(projFile, 'utf8')) }; } catch { fs.writeFileSync(projFile, JSON.stringify(cfg, null, 2)); }
   const saveCfg = () => fs.writeFileSync(projFile, JSON.stringify(cfg, null, 2));
 

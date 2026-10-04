@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Puente Robot Companion → Antigravity.
 // Lo arranca EL AGENTE de Antigravity (así hereda las variables que Antigravity da a sus agentes para usar agentapi):
-//   Start-Process node -ArgumentList 'D:/RobotCompanion/antigravity/puente.js' -WindowStyle Hidden
+//   Start-Process node -ArgumentList '<carpeta de APOLO>/antigravity/puente.js' -WindowStyle Hidden
 // Escucha los encargos del robot ("antigravity: …" desde la isla, Discord o voz) y los convierte en conversaciones
 // nuevas de Antigravity. La respuesta vuelve al robot por MCP (robot_avisar).
 // No lee archivos internos de Antigravity: solo usa lo que Antigravity pone en el entorno de su agente.

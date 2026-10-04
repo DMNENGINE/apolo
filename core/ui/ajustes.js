@@ -90,6 +90,7 @@ VISTAS['ajustes/canales'] = {
     const l = await api('GET', '/canales');
     const wa = await api('GET', '/whatsapp').catch(() => null);
     const tg = await api('GET', '/telegram').catch(() => null);
+    const mcpRuta = (await api('GET', '/estado').catch(() => null))?.mcpRuta || 'C:/ruta/a/APOLO/core/mcp.js';
     v.innerHTML = `<div class="pagina estrecha">${cabecera('Canales', 'Por dónde puedes hablar con el robot. Todos comparten memoria, permisos y modelos.', `<button class="btn" id="rec">${ic('recargar')}${tr('Actualizar')}</button>`)}
       <div class="seccion">${tr('Conectados')} <span class="n">${l.filter(c => c.estado === 'activo').length}</span></div>
       <div class="caja">${l.map(c => fila(`<span class="flex">${ic(ICONO_CANAL[c.tipo] || 'enlace')}${esc(tr(c.nombre))}</span>`, esc(tr(c.detalle || '')),
@@ -102,8 +103,8 @@ VISTAS['ajustes/canales'] = {
       <div class="seccion" id="canal-discord">Discord</div>
       <p class="seccion-ayuda">${tr('El bot de Discord se configura desde la bandeja del robot: <b>Configurar Discord (abrir archivo)…</b> y luego <b>Reconectar Discord</b>. Su estado aparece arriba, en Conectados.')}</p>
       <div class="seccion">${tr('Conectar otros agentes (MCP)')}</div>
-      <p class="seccion-ayuda">${tr('Antigravity, Cursor, Claude Desktop, Claude Code… pueden usar al robot: avisarte, pedirte permiso por tus canales, la memoria y las tareas. Añade esto a su configuración MCP (cambia la ruta si instalaste en otra carpeta):')}</p>
-      <div class="bloque-cod"><header><span>mcp_config.json</span><button class="btn fantasma mini" data-copiar>${ic('copiar')}${tr('Copiar')}</button></header><pre><code>${esc(JSON.stringify({ mcpServers: { 'robot-companion': { command: 'node', args: ['D:/RobotCompanion/core/mcp.js'], env: { ROBOT_MCP_ORIGEN: 'Antigravity' } } } }, null, 2))}</code></pre></div>
+      <p class="seccion-ayuda">${tr('Antigravity, Cursor, Claude Desktop, Claude Code… pueden usar al robot: avisarte, pedirte permiso por tus canales, la memoria y las tareas. Añade esto a su configuración MCP:')}</p>
+      <div class="bloque-cod"><header><span>mcp_config.json</span><button class="btn fantasma mini" data-copiar>${ic('copiar')}${tr('Copiar')}</button></header><pre><code>${esc(JSON.stringify({ mcpServers: { 'robot-companion': { command: 'node', args: [mcpRuta], env: { ROBOT_MCP_ORIGEN: 'Antigravity' } } } }, null, 2))}</code></pre></div>
       <p class="tenue" style="font-size:12px;margin-top:14px">${tr('Desde cualquier canal: <code>gemma: mensaje</code> manda a un modelo concreto · <code>usa gpt</code> cambia el modelo por defecto de ese canal · <code>usa claude code</code> vuelve a Claude Code.')}</p></div>`;
     // #/ajustes/canales/telegram (enlaces del asistente de bienvenida): baja hasta esa tarjeta
     const ancla = (location.hash.match(/^#\/ajustes\/canales\/(\w+)/) || [])[1];

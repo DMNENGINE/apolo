@@ -759,7 +759,7 @@ setTimeout(() => {                                        // saludo al arrancar
 
 // ---------- demo (bandeja > "Evento de prueba", o navegador sin Electron) ----------
 function demo() {
-  const sid = 'demo-' + Math.random().toString(36).slice(2, 6), cwd = 'D:/RobotCompanion';
+  const sid = 'demo-' + Math.random().toString(36).slice(2, 6), cwd = 'C:/proyectos/mi-app';
   const E = (hook_event_name, extra = {}, _usage) => onEvent({ hook_event_name, session_id: sid, cwd, _id: Math.random() * 1e9 | 0, _usage, ...extra });
   const seq = [
     [0, () => E('SessionStart')],
@@ -767,8 +767,8 @@ function demo() {
     [900, () => E('PreToolUse', { tool_name: 'Grep', tool_input: { pattern: 'PermissionRequest' } }, { ctx: 48210, model: 'claude-opus-5-5' })],
     [1700, () => E('PreToolUse', { tool_name: 'Task', tool_input: { subagent_type: 'Explore', description: 'buscar hooks en el código' } })],
     [1900, () => E('SubagentStart', { agent_id: 'a1', agent_type: 'Explore' })],
-    [2600, () => E('PreToolUse', { agent_id: 'a1', tool_name: 'Read', tool_input: { file_path: 'D:/RobotCompanion/main.js' } })],
-    [3400, () => E('PreToolUse', { tool_name: 'Edit', tool_input: { file_path: 'D:/RobotCompanion/hook/hook.js', old_string: 'const FIRE_BUDGET_MS = 1_500;', new_string: 'const FIRE_BUDGET_MS = 2_000;   // más margen\nconst RETRIES = 2;' } }, { ctx: 61800, model: 'claude-opus-5-5' })],
+    [2600, () => E('PreToolUse', { agent_id: 'a1', tool_name: 'Read', tool_input: { file_path: 'C:/proyectos/mi-app/main.js' } })],
+    [3400, () => E('PreToolUse', { tool_name: 'Edit', tool_input: { file_path: 'C:/proyectos/mi-app/hook/hook.js', old_string: 'const FIRE_BUDGET_MS = 1_500;', new_string: 'const FIRE_BUDGET_MS = 2_000;   // más margen\nconst RETRIES = 2;' } }, { ctx: 61800, model: 'claude-opus-5-5' })],
     [4200, () => E('SubagentStop', { agent_id: 'a1' })],
     [4800, () => E('PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'npm test -- --runInBand' } })],
     [5600, () => notif({ kind: 'server', guild: 'BOT CENTRAL', channel: 'general', author: 'dmnshop', text: 'probando los avisos del robot 🤖' })],
