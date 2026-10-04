@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Robot Companion</title>
+<style>
+  body { margin: 0; padding: 10px 12px; background: #2d2d2d; color: #d8d8d8; font: 13px "Segoe UI", Arial, sans-serif; }
+  .fila { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+  .fila label { flex: 0 0 92px; color: #9a9a9a; text-align: right; }
+  .fila input, .fila select, .fila textarea { flex: 1; min-width: 0; background: #3d3d3d; color: #e6e6e6; border: 0; border-radius: 3px; padding: 5px 7px; font: inherit; }
+  .fila textarea { resize: vertical; min-height: 52px; }
+  .ayuda { margin: 2px 0 12px 102px; color: #8a8a8a; font-size: 12px; line-height: 1.4; }
+  .ayuda code { color: #c8c8c8; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <div id="panel" hidden>
+    <div class="fila"><label for="ruta">Página</label>
+      <select id="ruta">
+        <option value="">Inicio</option><option value="/chat">Chat</option><option value="/agentes">Mission Control</option>
+        <option value="/turno">Turno de noche</option><option value="/auto">Automatizaciones</option><option value="/skills">Skills</option>
+        <option value="/memoria">Memoria</option><option value="/reuniones">Reuniones</option><option value="/dashboards">Dashboards</option>
+        <option value="/uso">Uso</option><option value="/wrapped">Wrapped</option><option value="/stream">Stream</option>
+        <option value="/avatar">Avatar</option><option value="/ajustes">Configuración</option>
+      </select></div>
+    <p class="ayuda">Abre el panel de control en el navegador, en esa página.</p>
+  </div>
+  <div id="mensaje" hidden>
+    <div class="fila"><label for="titulo">Nombre</label><input id="titulo" maxlength="20" placeholder="lo que pone la tecla"></div>
+    <div class="fila"><label for="texto">Mensaje</label><textarea id="texto" maxlength="2000" placeholder="resumen del día"></textarea></div>
+    <p class="ayuda">Se lo manda al robot como si lo escribieras en la isla, y la respuesta sale en la isla. Ideas:
+      <code>resumen</code> · <code>¿dónde me quedé?</code> · <code>usa auto</code> · <code>usa claude code</code> ·
+      <code>gemma: ¿qué tengo pendiente hoy?</code> · <code>consejo: …</code> · <code>empieza el turno</code></p>
+  </div>
+<script>
+  // Inspector de propiedades (SDK v2): Stream Deck llama a connectElgatoStreamDeckSocket al abrirlo
+  let ws = null, ctx = null, ajustes = {};
+  const $ = id => document.getElementById(id);
+  function guardar() {
+    if (!ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ event: 'setSettings', context: ctx, payload: ajustes }));
+  }
+  window.connectElgatoStreamDeckSocket = function (puerto, uuid, registrar, _info, infoAccion) {
+    ctx = uuid;
+    let accion = {}; try { accion = JSON.parse(infoAccion); } catch { }
+    ajustes = (accion.payload && accion.payload.settings) || {};
+    const tipo = String(accion.action || '').split('.').pop();
+    if (tipo === 'panel') { $('panel').hidden = false; $('ruta').value = ajustes.ruta || ''; }
+    if (tipo === 'mensaje') { $('mensaje').hidden = false; $('titulo').value = ajustes.titulo || ''; $('texto').value = ajustes.texto || ''; }
+    ws = new WebSocket('ws://127.0.0.1:' + puerto);
+    ws.onopen = () => ws.send(JSON.stringify({ event: registrar, uuid }));
+  };
+  $('ruta').addEventListener('change', e => { ajustes.ruta = e.target.value; guardar(); });
+  for (const id of ['titulo', 'texto']) $(id).addEventListener('input', e => { ajustes[id] = e.target.value; guardar(); });
+</script>
+</body>
+</html>

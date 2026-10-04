@@ -3,12 +3,12 @@
   "UUID": "com.robotcompanion",
   "Author": "DMNENGINE",
   "CodePath": "plugin.js",
-  "Description": "Botones del Robot Companion: permitir/denegar permisos de Claude Code y ver el estado del robot.",
+  "Description": "Botones del Robot Companion (APOLO): permisos de Claude Code, pánico, micrófono, panel de control, mensajes rápidos, uso del plan, isla, terminal y Modo Gamer.",
   "Name": "Robot Companion",
   "Icon": "imgs/plugin-list",
   "Category": "Robot Companion",
   "CategoryIcon": "imgs/plugin-list",
-  "Version": "1.0.0",
+  "Version": "1.1.0",
   "Software": { "MinimumVersion": "6.0" },
   "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
   "Nodejs": { "Version": "20" },
@@ -17,14 +17,14 @@
       "Name": "Permitir",
       "UUID": "com.robotcompanion.allow",
       "Icon": "imgs/allow-list",
-      "Tooltip": "Permite la petición de Claude Code que está esperando. Si es peligrosa, mantenlo pulsado 1 segundo.",
+      "Tooltip": "Permite la petición que está esperando. Si es peligrosa, mantenlo pulsado 1 segundo.",
       "States": [{ "Image": "imgs/allow", "ShowTitle": false }]
     },
     {
       "Name": "Denegar",
       "UUID": "com.robotcompanion.deny",
       "Icon": "imgs/deny-list",
-      "Tooltip": "Deniega la petición de Claude Code que está esperando.",
+      "Tooltip": "Deniega la petición que está esperando. Sin petición, recupera el ratón si el robot lo controla. Mantenlo 2 segundos = PÁNICO.",
       "States": [{ "Image": "imgs/deny", "ShowTitle": false }]
     },
     {
@@ -33,6 +33,64 @@
       "Icon": "imgs/status-list",
       "Tooltip": "Muestra el estado del robot. Púlsalo para tocarlo.",
       "States": [{ "Image": "imgs/status", "ShowTitle": false }]
+    },
+    {
+      "Name": "Pánico / Reanudar",
+      "UUID": "com.robotcompanion.panico",
+      "Icon": "imgs/panico-list",
+      "Tooltip": "Para TODO al instante (turnos, ratón y teclado, tareas, permisos). Para reanudar, mantenlo pulsado 1 segundo.",
+      "States": [{ "Image": "imgs/panico", "ShowTitle": false }]
+    },
+    {
+      "Name": "Hablar (micrófono)",
+      "UUID": "com.robotcompanion.micro",
+      "Icon": "imgs/micro-list",
+      "Tooltip": "Activa el micrófono de la isla para hablarle al robot (igual que Ctrl+Alt+Espacio).",
+      "States": [{ "Image": "imgs/micro", "ShowTitle": false }]
+    },
+    {
+      "Name": "Abrir panel",
+      "UUID": "com.robotcompanion.panel",
+      "Icon": "imgs/panel-list",
+      "Tooltip": "Abre el panel de control en la página que elijas.",
+      "PropertyInspectorPath": "pi.html",
+      "States": [{ "Image": "imgs/panel", "ShowTitle": false }]
+    },
+    {
+      "Name": "Mensaje rápido",
+      "UUID": "com.robotcompanion.mensaje",
+      "Icon": "imgs/mensaje-list",
+      "Tooltip": "Le manda al robot un mensaje fijo (resumen, dónde me quedé, usa auto…). La respuesta sale en la isla.",
+      "PropertyInspectorPath": "pi.html",
+      "States": [{ "Image": "imgs/mensaje", "ShowTitle": false }]
+    },
+    {
+      "Name": "Uso del plan",
+      "UUID": "com.robotcompanion.uso",
+      "Icon": "imgs/uso-list",
+      "Tooltip": "Muestra el uso de la ventana de 5 h y de la semana. Púlsalo para abrir Uso en el panel.",
+      "States": [{ "Image": "imgs/uso", "ShowTitle": false }]
+    },
+    {
+      "Name": "Mover isla",
+      "UUID": "com.robotcompanion.isla",
+      "Icon": "imgs/isla-list",
+      "Tooltip": "Manda la isla a otro monitor y la trae de vuelta. Mantenlo 1 segundo: vuelve a su sitio de siempre.",
+      "States": [{ "Image": "imgs/isla", "ShowTitle": false }]
+    },
+    {
+      "Name": "Ir a la terminal",
+      "UUID": "com.robotcompanion.terminal",
+      "Icon": "imgs/terminal-list",
+      "Tooltip": "Trae al frente la terminal de Claude Code que pide permiso (o la última que habló).",
+      "States": [{ "Image": "imgs/terminal", "ShowTitle": false }]
+    },
+    {
+      "Name": "Modo Gamer",
+      "UUID": "com.robotcompanion.gamer",
+      "Icon": "imgs/gamer-list",
+      "Tooltip": "Activa o desactiva el Modo Gamer (la isla se duerme y el PC se prepara para jugar).",
+      "States": [{ "Image": "imgs/gamer", "ShowTitle": false }]
     }
   ]
 }

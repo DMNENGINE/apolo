@@ -45,6 +45,7 @@ const { readContext, crearUso } = require('./main/uso');
 const { resolveTerminal, focusTerminal, hwndDe } = require('./main/terminales');
 const { crearReglas } = require('./main/reglas');
 const { crearIsla } = require('./main/isla-ventana');
+const { crearDispositivos } = require('./main/dispositivos');
 const TOKEN_FILE = path.join(CLAUDE_DIR, 'robot-companion.token');
 const { crearActualizador } = require('./actualizador');
 let actualizador = null;
@@ -117,7 +118,10 @@ const hooksCfg = crearHooksConfig({ empaquetado: () => app.isPackaged, mensaje: 
 
 // ---------- uso del plan (main/uso.js) ----------
 const uso = crearUso({ claudeDir: CLAUDE_DIR, dirDatos: () => app.getPath('userData'), cerebro: () => cerebro,
-  avisar: (t, tono) => movil.sendAviso(t, tono), alUso: d => { if (win && !win.isDestroyed()) win.webContents.send('usage', d); } });
+  avisar: (t, tono) => movil.sendAviso(t, tono), alUso: d => { ultimoUso = d; if (win && !win.isDestroyed()) win.webContents.send('usage', d); } });
+let ultimoUso = null, ultimaSid = null;                      // para las teclas del Stream Deck (uso del plan, ir a la terminal)
+const dispositivos = crearDispositivos({ getWin: () => win, getNucleo: () => nucleo, abrirPanel: r => abrirPanel(r), handleText: (t, o) => handleText(t, o),
+  focusTerminal: sid => focusTerminal(sid), ultimaSesion: () => { const p = [...pending.values()].find(x => x.ev && x.ev.session_id && !x.nucleoId); return (p && p.ev.session_id) || ultimaSid; } });
 
 ipcMain.on('upd-ahora', () => { if (!actualizador) return; actualizador.actualizar(); });
 ipcMain.on('upd-luego', () => { if (actualizador) actualizador.posponer(24); });
@@ -238,6 +242,7 @@ function startServer() {
       if (win && !win.isDestroyed()) win.webContents.send('poke');
       res.writeHead(200); return res.end();
     }
+    if (dispositivos.atender(req, res)) return;                     // Stream Deck: micro, panel, mensaje, pánico, gamer, terminal
     if (req.method !== 'POST' || req.url !== '/event') { res.writeHead(404); return res.end(); }
     let body = '';
     req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
@@ -247,7 +252,7 @@ function startServer() {
       ev._t = Date.now();
       const u = readContext(ev.transcript_path);
       if (u) ev._usage = u;
-      if (ev._ppid && ev.session_id) resolveTerminal(ev.session_id, ev._ppid);
+      if (ev._ppid && ev.session_id) { resolveTerminal(ev.session_id, ev._ppid); ultimaSid = ev.session_id; }
       if (talk) talk.onEvent(ev);
       ojoHook(ev);                                                    // las terminales de Claude Code también mueven el ojo
       if (!win || win.isDestroyed()) return res.end();
@@ -607,6 +612,11 @@ function stateForDevices() {
   return {
     state: lastRobotState, pending: pending.size,
     perm: first ? { id: first.ev._id, tool: first.ev.tool_name, detail: String(first.ev.tool_input?.command || first.ev.tool_input?.file_path || ''), peligro: first.ev._peligro || '' } : null,
+    panico: !!(nucleo && nucleo.panico && nucleo.panico.activo()),
+    gamer: !!(nucleo && nucleo.gamer && nucleo.gamer.estado().activo),
+    uso: ultimoUso ? { p5: ultimoUso.p5, pW: ultimoUso.pW, tokens: ultimoUso.tokens, msgs: ultimoUso.msgs, pausado: !!ultimoUso.paused } : null,
+    islaFuera: isla.fueraDeSuSitio(),
+    nombre: nombreCompanero(),
   };
 }
 
