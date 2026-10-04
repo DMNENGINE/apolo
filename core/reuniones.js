@@ -242,7 +242,9 @@ function crearReuniones({ cfg, bus, navegador, generarJSON, modelo, tareas, memo
     if (!r.segmentos.length) throw err('la reunión no tiene transcripción');
     r.estado = 'resumiendo'; guardar(r); emitir('resumiendo', r);
     const c = conf(), fecha = new Date(r.inicio);
-    const system = 'Eres quien toma las notas de una reunión. Resume en el idioma de la transcripción, sin inventar nada. ' +
+    // el resumen es para el usuario: en SU idioma (cfg.idioma; español por defecto), aunque la reunión fuera en otro
+    const idioma = { es: 'español', en: 'English', pt: 'português', fr: 'français', it: 'italiano', de: 'Deutsch' }[String(cfg.idioma || 'es').slice(0, 2).toLowerCase()] || cfg.idioma;
+    const system = `Eres quien toma las notas de una reunión. Escribe TODO (resumen, decisiones, tareas, preguntas y temas) en ${idioma}, aunque la reunión sea en otro idioma, sin inventar nada. ` +
       '"yo" es el usuario (dueño del asistente); "ellos" son los demás participantes cuando no hay nombres. ' +
       'tareas: solo compromisos concretos (quien = persona o "yo"; cuando = fecha ISO YYYY-MM-DD o YYYY-MM-DDTHH:MM si se dijo, si no omítelo). ' +
       'decisiones: lo que quedó acordado. preguntasAbiertas: lo que quedó sin resolver. temas: 3-8 etiquetas cortas.';
