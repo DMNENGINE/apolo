@@ -23,12 +23,29 @@ const lanzarManos = () => spawn('powershell.exe', [...PS, script('manos.ps1')], 
 const lanzarFlujo = (args = []) => spawn('powershell.exe', [...PS, script('flujo.ps1'), ...args], { windowsHide: true });
 const lanzarGrabadora = () => spawn('powershell.exe', [...PS, script('grabar.ps1')], { windowsHide: true });
 
-function escribirEnTerminal({ hwnd, archivo, timeout = 15_000 }) {
-  return new Promise((ok, mal) => execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', raiz('tools/escribir.ps1'), '-Hwnd', String(hwnd), '-File', archivo],
+// ---------- terminales de Claude Code: destino = { hwnd, nombre } ----------
+const psT = (args, timeout = 8000) => new Promise(ok => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', ...args],
+  { windowsHide: true, timeout }, (err, out) => ok(err ? '' : String(out).trim())));
+// ev = evento del hook: _ppid es claude.exe (CLAUDE_PID). tools/ventana-terminal.ps1: consola → dueño (Windows Terminal) o padres con ventana
+async function localizarTerminal(ev) {
+  if (!ev || !ev._ppid) return null;
+  const [hwnd, nombre] = (await psT(['-File', raiz('tools/ventana-terminal.ps1'), '-Proceso', String(Number(ev._ppid))])).split('|');
+  return /^\d+$/.test(hwnd || '') ? { hwnd, nombre } : null;
+}
+// Windows solo deja pasar al frente a quien recibió la última entrada: un Alt simulado lo desbloquea (truco habitual)
+async function enfocarTerminal(destino) {
+  const h = Number(destino && destino.hwnd); if (!h) return false;
+  const r = await psT(['-Command', `Add-Type -Name W -Namespace U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h,int c); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);'; $h=[IntPtr]${h}; if([U.W]::IsIconic($h)){[U.W]::ShowWindowAsync($h,9)|Out-Null}; [U.W]::keybd_event(0x12,0,0,[UIntPtr]::Zero); [U.W]::keybd_event(0x12,0,2,[UIntPtr]::Zero); [U.W]::SetForegroundWindow($h)`]);
+  return r !== 'False';
+}
+// → texto de escribir.ps1 (contiene "OK" si se escribió)
+function escribirEnTerminal({ destino, hwnd, archivo, timeout = 15_000 }) {
+  const h = (destino && destino.hwnd) || hwnd;
+  return new Promise((ok, mal) => execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', raiz('tools/escribir.ps1'), '-Hwnd', String(h), '-File', archivo],
     { windowsHide: true, timeout }, (e, out) => (e ? mal(e) : ok(String(out || '').trim()))));
 }
-
-const abrirTerminal = (dir, args = []) => execFile('wt.exe', ['-w', 'new', '-d', dir, ...args], { windowsHide: false }, () => { });
+// wt.exe usa ";" para separar comandos y las comillas rompen el argumento: se suavizan solo aquí
+const abrirTerminal = (dir, args = []) => execFile('wt.exe', ['-w', 'new', '-d', dir, ...args.map((a, i) => (i ? String(a).replace(/;/g, ',').replace(/"/g, "'") : a))], { windowsHide: false }, () => { });
 
 const voz = {
   // reserva sin Python: System.Speech (listen.ps1). hablar: la voz de Windows la gestiona hoy la isla (speechSynthesis).
@@ -83,4 +100,4 @@ async function gamerInicio() {                                     // SOLO lista
 }
 const gamer = { gamerPlanes, gamerPonerPlan, gamerProcesos, gamerSuspender, gamerReanudar, gamerCerrar, gamerPrioridad, gamerPonerPrioridad, gamerLeerRegistro, gamerNoMolestar, gamerPonerNoMolestar, gamerMonitores, gamerInicio };
 
-module.exports = { nombre: 'windows', soportado: true, ejecutarPantalla, lanzarManos, lanzarFlujo, lanzarGrabadora, escribirEnTerminal, abrirTerminal, voz, ...gamer };
+module.exports = { nombre: 'windows', soportado: true, terminal: true, ejecutarPantalla, lanzarManos, lanzarFlujo, lanzarGrabadora, localizarTerminal, enfocarTerminal, escribirEnTerminal, abrirTerminal, voz, ...gamer };

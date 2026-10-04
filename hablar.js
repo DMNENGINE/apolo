@@ -7,7 +7,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFile } = require('child_process');
+const so = require('./core/escritorio/so');            // escribir en la terminal / abrir una nueva (Windows, Linux)
 
 const GENERIC = /^(system32|windows|users?|desktop|escritorio|documents|documentos|downloads|descargas|home|[a-z]:)$/i;
 const USUARIO = (() => { try { return os.userInfo().username.toLowerCase(); } catch { return ''; } })();
@@ -58,26 +58,27 @@ function createTalk({ dataDir, getHwnd, send, reply, onStop }) {
     return '';
   }
 
-  function typeInto(hwnd, text) {
-    return new Promise(ok => {
-      const f = path.join(os.tmpdir(), `robot-msg-${Date.now()}.txt`);
-      fs.writeFileSync(f, text, 'utf8');
-      execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', require('./core/rutas').fuera(path.join(__dirname, 'tools', 'escribir.ps1')), '-Hwnd', String(hwnd), '-File', f],
-        { windowsHide: true, timeout: 10000 }, (err, out) => { try { fs.unlinkSync(f); } catch { } ok(!err && String(out).includes('OK')); });
-    });
+  // destino = dónde está su terminal (core/escritorio/so: Windows {hwnd}, Linux {tmux, x11})
+  async function typeInto(destino, text) {
+    const f = path.join(os.tmpdir(), `robot-msg-${Date.now()}.txt`);
+    fs.writeFileSync(f, text, 'utf8');
+    try { return String(await so.escribirEnTerminal({ destino, archivo: f, timeout: 10000 })).includes('OK'); }
+    catch { return false; }
+    finally { try { fs.unlinkSync(f); } catch { } }
   }
 
+  // terminal nueva con claude (Windows Terminal; en Linux el emulador que haya, dentro de tmux)
   function openNew(dir, text, origin) {
-    // wt usa ";" para separar comandos: lo cambiamos para que no rompa el mensaje
-    const safe = text.replace(/;/g, ',').replace(/"/g, "'");
-    execFile('wt.exe', ['-w', 'new', '-d', dir, 'claude', ...(safe ? [safe] : [])], { windowsHide: false }, () => { });
+    try { so.abrirTerminal(dir, ['claude', ...(text ? [text] : [])]); }
+    catch (e) { console.error('[hablar] no pude abrir una terminal:', e.message); return false; }
     pendingNew.push({ dir: norm(dir), origin, t: Date.now() });
+    return true;
   }
 
   async function deliver(s, item) {
-    const hwnd = getHwnd(s.sid);
-    if (!hwnd) return false;
-    const ok = await typeInto(hwnd, item.text);
+    const destino = getHwnd(s.sid);
+    if (!destino) return false;
+    const ok = await typeInto(destino, item.text);
     if (ok) { s.origin = item.origin; s.busy = true; }
     return ok;
   }
@@ -93,7 +94,7 @@ function createTalk({ dataDir, getHwnd, send, reply, onStop }) {
       const key = ns[1] && Object.keys(cfg.proyectos).find(k => k.toLowerCase() === ns[1].toLowerCase());
       if (ns[1] && !key) return { ok: false, msg: `No conozco el proyecto "${ns[1]}". Proyectos: ${Object.keys(cfg.proyectos).join(', ')}` };
       const d = key ? cfg.proyectos[key] : cfg.defaultDir;
-      openNew(d, ns[2].trim(), origin);
+      if (!openNew(d, ns[2].trim(), origin)) return { ok: false, msg: 'No pude abrir una terminal nueva en este equipo.' };
       return { ok: true, msg: `🚀 Abrí una sesión nueva en \`${d}\`${ns[2].trim() ? ' con tu pedido' : ''}.` };
     }
     let proj = null;
@@ -121,7 +122,7 @@ function createTalk({ dataDir, getHwnd, send, reply, onStop }) {
       dir = target.cwd;
     }
     dir = dir || cfg.defaultDir;
-    openNew(dir, text, origin);
+    if (!openNew(dir, text, origin)) return { ok: false, msg: 'No había sesión libre y no pude abrir una terminal nueva en este equipo.' };
     return { ok: true, msg: `🚀 No había sesión libre: abrí una **nueva** en \`${dir}\`.` };
   }
 

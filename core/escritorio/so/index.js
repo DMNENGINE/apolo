@@ -6,7 +6,9 @@
 //   lanzarManos()               → ChildProcess con el protocolo JSON por líneas de manos.ps1 (stdin órdenes, stdout respuestas/eventos)
 //   lanzarFlujo(args)          → ChildProcess de flujo.ps1 (escritorio remoto: fotogramas JPEG binarios por stdout, config por stdin)
 //   lanzarGrabadora()          → ChildProcess de grabar.ps1 (reuniones: mic + loopback en trozos WAV; JSON por líneas)
-//   escribirEnTerminal(o)       → Promise   escribir texto en la terminal de una sesión ({ hwnd, archivo })
+//   localizarTerminal(ev)       → Promise<destino|null>  dónde está la terminal de una sesión (evento del hook: _ppid, _term)
+//   enfocarTerminal(destino)    → Promise<bool>  traerla al frente
+//   escribirEnTerminal(o)       → Promise<texto con "OK">  escribir en ella ({ destino, archivo }); destino: Windows {hwnd}, Linux {tmux, x11}
 //   abrirTerminal(dir, args)    → abre una terminal nueva en dir ejecutando args (p. ej. ['claude', 'msg'])
 //   voz: { hablar, escuchar }   TTS/STT del sistema como reserva cuando no hay edge-tts / whisper
 // Ver docs/portabilidad.md para el plan por módulo.

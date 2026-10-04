@@ -23,6 +23,7 @@ module.exports = function sinSoporte(plataforma, pendiente = 'docs/portabilidad.
     ejecutarPantalla: falla('Ver la pantalla'),
     lanzarManos, lanzarGrabadora,
     escribirEnTerminal: falla('Escribir en la terminal de una sesión'),
+    localizarTerminal: async () => null, enfocarTerminal: async () => false, terminal: false,
     abrirTerminal: () => { throw Object.assign(new Error(msg('Abrir una terminal nueva')), { codigo: 'SO_NO_SOPORTADO' }); },
     voz: { escuchar: falla('El reconocimiento de voz del sistema'), hablar: null },
     // Modo Gamer (core/gamer): de momento solo Windows

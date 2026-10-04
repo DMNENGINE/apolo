@@ -253,7 +253,7 @@ function startServer() {
       ev._t = Date.now();
       const u = readContext(ev.transcript_path);
       if (u) ev._usage = u;
-      if (ev._ppid && ev.session_id) { resolveTerminal(ev.session_id, ev._ppid); ultimaSid = ev.session_id; }
+      if (ev.session_id && (ev._ppid || ev._term)) { resolveTerminal(ev.session_id, ev); ultimaSid = ev.session_id; }
       if (talk) talk.onEvent(ev);
       ojoHook(ev);                                                    // las terminales de Claude Code también mueven el ojo
       if (!win || win.isDestroyed()) return res.end();

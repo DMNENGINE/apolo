@@ -1,29 +1,22 @@
-// Ventana de terminal de cada sesión de Claude Code (Windows Terminal, consola clásica, VS Code…) para traerla
-// al frente con un clic desde la isla o el Stream Deck. La búsqueda está en tools/ventana-terminal.ps1.
-const path = require('path');
-const { execFile } = require('child_process');
-const { fuera } = require('../core/rutas');
+// Terminal de cada sesión de Claude Code para traerla al frente (isla, Stream Deck) y escribirle (hablar.js).
+// La parte del sistema operativo está en core/escritorio/so: Windows busca la ventana (tools/ventana-terminal.ps1),
+// Linux usa el panel de tmux o la ventana X11 que manda el hook.
+const so = require('../core/escritorio/so');
 
-const SCRIPT = fuera(path.join(__dirname, '..', 'tools', 'ventana-terminal.ps1'));
-const sessionWin = new Map();       // session_id -> { hwnd, name } | 'buscando'
-function ps(args) {
-  return new Promise(ok => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', ...args], { windowsHide: true, timeout: 8000 },
-    (err, out) => ok(err ? '' : String(out).trim())));
+const sesiones = new Map();       // session_id -> destino ({hwnd} en Windows, {tmux, x11} en Linux) | 'buscando'
+// ev = evento del hook (_ppid = claude.exe, _term = TMUX_PANE/TMUX/WINDOWID)
+async function resolveTerminal(sid, ev) {
+  if (!sid || !ev || sesiones.has(sid)) return;
+  sesiones.set(sid, 'buscando');
+  let d = null; try { d = await so.localizarTerminal(ev); } catch { }
+  if (d) sesiones.set(sid, d); else sesiones.delete(sid);
 }
-async function resolveTerminal(sid, ppid) {
-  if (!ppid || sessionWin.has(sid)) return;
-  sessionWin.set(sid, 'buscando');
-  const out = await ps(['-File', SCRIPT, '-Proceso', String(Number(ppid))]);
-  const [hwnd, name] = out.split('|');
-  if (/^\d+$/.test(hwnd || '')) sessionWin.set(sid, { hwnd, name }); else sessionWin.delete(sid);
-}
-// Windows solo deja pasar al frente a quien recibió la última entrada: un Alt simulado lo desbloquea (truco habitual)
 async function focusTerminal(sid) {
-  const w = sessionWin.get(sid);
-  if (!w || w === 'buscando') return false;
-  const r = await ps(['-Command', `Add-Type -Name W -Namespace U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h,int c); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, UIntPtr e);'; $h=[IntPtr]${Number(w.hwnd)}; if([U.W]::IsIconic($h)){[U.W]::ShowWindowAsync($h,9)|Out-Null}; [U.W]::keybd_event(0x12,0,0,[UIntPtr]::Zero); [U.W]::keybd_event(0x12,0,2,[UIntPtr]::Zero); [U.W]::SetForegroundWindow($h)`]);
-  return r !== 'False';
+  const d = sesiones.get(sid);
+  if (!d || d === 'buscando') return false;
+  try { return await so.enfocarTerminal(d); } catch { return false; }
 }
-const hwndDe = sid => { const w = sessionWin.get(sid); return w && w !== 'buscando' ? w.hwnd : null; };
+// destino para escribirle (hablar.js); null si todavía no se sabe
+const hwndDe = sid => { const d = sesiones.get(sid); return d && d !== 'buscando' ? d : null; };
 
 module.exports = { resolveTerminal, focusTerminal, hwndDe };
