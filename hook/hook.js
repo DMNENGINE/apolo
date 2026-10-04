@@ -75,7 +75,8 @@ async function run() {
     process.exit(0);
   }
 
-  data._ppid = process.ppid;                       // para encontrar la ventana de la terminal
+  // para encontrar la ventana de la terminal: claude.exe (CLAUDE_PID, vive toda la sesión); process.ppid es un shell que muere al momento
+  data._ppid = +process.env.CLAUDE_PID || process.ppid;
   const out = await enviar(token, data);
   if (data.hook_event_name === 'PermissionRequest' && out) process.stdout.write(out + '\n');
   process.exit(0);

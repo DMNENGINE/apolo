@@ -86,7 +86,7 @@ function panelKey(c) {
 }
 function mensajeKey(c) {
   const col = c.ocupado ? '#ffffff' : viva() ? '#b58cff' : APAGADO, s = c.settings || {};
-  const etiqueta = corto(s.titulo || s.texto || 'CONFIGÚRAME', 12);
+  const etiqueta = corto(s.titulo || s.texto || 'RESUMEN', 12);   // sin configurar: resumen del día
   const activo = c.ocupado ? Math.floor(Date.now() / 300) % 3 : -1;
   const puntos = [0, 1, 2].map(i => `<circle cx="${50 + i * 22}" cy="56" r="7" fill="${col}" opacity="${activo < 0 || activo === i ? 1 : .35}"/>`).join('');
   return svg(`<rect x="24" y="22" width="96" height="66" rx="18" fill="none" stroke="${col}" stroke-width="7"/><path d="M44 86 v20 l22 -20" fill="${col}"/>${puntos}${txt(etiqueta, 134, etiqueta.length > 9 ? 15 : 18, col)}`);
@@ -165,8 +165,7 @@ async function pulsar(action, context, held) {
     }
     case A.panel: return resultado(context, await req('POST', '/panel?ruta=' + encodeURIComponent(s.ruta || '')));
     case A.mensaje:
-      if (!String(s.texto || '').trim()) { send({ event: 'showAlert', context }); return; }   // sin texto: configúralo en el inspector
-      return resultado(context, await mientras(context, req('POST', '/texto', { texto: s.texto }, 120_000)));
+      return resultado(context, await mientras(context, req('POST', '/texto', { texto: String(s.texto || '').trim() || 'resumen' }, 120_000)));
     case A.uso: return resultado(context, await req('POST', '/panel?ruta=/uso'));
     case A.isla: return resultado(context, await req('POST', '/mover?a=' + (held >= 1000 ? 'reset' : state && state.islaFuera ? 'casa' : 'otro')));
     case A.terminal: return resultado(context, await req('POST', '/enfocar', null, 10_000));
