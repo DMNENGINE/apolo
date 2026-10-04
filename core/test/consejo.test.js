@@ -109,3 +109,15 @@ test('consejo: ningún miembro disponible → error claro', async t => {
   await assert.rejects(n.consejo.consultar({ pregunta: 'x', miembros: ['falso/roto'] }), /ningún miembro respondió/);
   await assert.rejects(n.consejo.consultar({ pregunta: 'x', miembros: ['noexiste/zz'] }), /ningún miembro respondió[\s\S]*no configurado/);
 });
+
+test('comparar ("gemma + gpt: …"): todos a la vez, sin debate ni moderador, y se ven TODAS las respuestas', async t => {
+  const { n, pedidos } = await servidor(t);
+  const r = await n.consejo.consultar({ pregunta: '¿Capital de Australia?', miembros: ['falso/m1', 'falso/m2'], comparar: true });
+  assert.ok(!pedidos.some(p => /MODERADOR/.test(p.messages.find(m => m.role === 'system')?.content || '')), 'no llama al moderador');
+  assert.ok(!pedidos.some(p => /RONDA DE DEBATE/.test(JSON.stringify(p.messages))), 'no hay rondas de debate');
+  assert.strictEqual(pedidos.length, 2);
+  assert.ok(Math.abs(pedidos[0].t - pedidos[1].t) < 200, 'en paralelo');
+  assert.match(r.texto, /m1 vs m2/);
+  assert.match(r.texto, /### m1[^\n]*\nCanberra\./);
+  assert.match(r.texto, /### m2[^\n]*\nSídney\./);
+});

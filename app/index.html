@@ -154,6 +154,13 @@
   .pill.pausa{color:var(--warn);border-color:var(--warn)}
   #askIn{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:7px 10px;font:13px "Segoe UI";outline:none;text-shadow:none}
   #askIn:focus{border-color:rgba(127,227,255,.55)}
+  #askHelp.on{background:rgba(127,227,255,.18);border-color:rgba(127,227,255,.55)}
+  #atajos{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;margin-bottom:8px;display:grid;gap:2px}
+  #atajos[hidden]{display:none}
+  #atajos button{display:flex;gap:10px;align-items:baseline;text-align:left;background:none;border:0;border-radius:7px;color:var(--tx);padding:5px 8px;font:12px "Segoe UI";cursor:pointer}
+  #atajos button:hover{background:rgba(127,227,255,.1)}
+  #atajos code{flex:0 0 132px;color:#7fe3ff;font:12px Consolas,monospace}
+  #atajos span{opacity:.75}
   #mic.on{background:rgba(255,77,77,.25);border-color:var(--bad);animation:pulse 1s infinite}
   /* avisos de Discord: tarjetas que bajan bajo la isla y se van solas */
   #notifs{position:absolute;top:calc(var(--robot) + 12px);left:calc(50% - 170px);width:340px;display:flex;flex-direction:column;gap:6px;z-index:4;pointer-events:none}
@@ -240,7 +247,8 @@
         </div>
       </div>
     </div>
-    <div id="ask"><input id="askIn" placeholder="Pídele algo a Claude…  (en Proyecto: …)" data-i18n-attr="placeholder" autocomplete="off"><button class="icon" id="mic" title="Hablar (Ctrl+Alt+Espacio)" data-i18n-attr="title"></button><button class="icon" id="askGo" title="Enviar" data-i18n-attr="title"></button></div>
+    <div id="atajos" hidden></div>
+    <div id="ask"><button class="icon" id="askHelp" title="Atajos: varios modelos a la vez, consejo, cambiar de modelo…" data-i18n-attr="title"></button><input id="askIn" placeholder="Pídele algo…  (gemma + gpt: compara modelos)" data-i18n-attr="placeholder" autocomplete="off"><button class="icon" id="mic" title="Hablar (Ctrl+Alt+Espacio)" data-i18n-attr="title"></button><button class="icon" id="askGo" title="Enviar" data-i18n-attr="title"></button></div>
     <div id="toast"></div>
     <div id="answer"></div>
     <div id="cards"></div>

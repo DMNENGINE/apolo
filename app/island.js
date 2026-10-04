@@ -20,6 +20,7 @@ const ICO = (() => {
     enviar: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>',
     copiar: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
     abrir: '<path d="M7 17 17 7M8 7h9v9"/>',
+    ayuda: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>',
     ok: '<path d="M20 6 9 17l-5-5"/>',
     arriba: '<path d="M12 19V5M5 12l7-7 7 7"/>',
@@ -730,7 +731,27 @@ $('voz').addEventListener('click', () => { voiceOn = !voiceOn; try { localStorag
 let toastT;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 4500); }
 
-$('voz').innerHTML = ICO.voz; $('mic').innerHTML = ICO.mic; $('askGo').innerHTML = ICO.enviar;
+$('voz').innerHTML = ICO.voz; $('mic').innerHTML = ICO.mic; $('askGo').innerHTML = ICO.enviar; $('askHelp').innerHTML = ICO.ayuda;
+// atajos del campo de la isla: pulsar uno escribe su prefijo (el usuario no tenía forma de saber que existen)
+const ATAJOS = [
+  ['gemma + gpt: ', 'varios modelos a la vez; ves todas las respuestas'],
+  ['consejo: ', 'varios modelos debaten y votan una respuesta'],
+  ['gemma: ', 'un modelo concreto (qwen, gpt, gemini, haiku…)'],
+  ['claude: ', 'directo a Claude Code'],
+  ['usa auto', 'elijo el modelo según lo que pidas'],
+  ['usa gemma', 'cambia el modelo por defecto de la isla'],
+  ['nueva conversación', 'empieza de cero'],
+  ['? ', 'busca en tu historial'],
+  ['resumen', 'resumen del día'],
+];
+$('atajos').innerHTML = ATAJOS.map(([p, d]) => `<button data-pre="${p}"><code>${p.trim() === '?' ? '? …' : p}${p.endsWith(': ') ? '…' : ''}</code><span>${tr(d)}</span></button>`).join('');
+$('askHelp').addEventListener('click', () => { const a = $('atajos'); a.hidden = !a.hidden; $('askHelp').classList.toggle('on', !a.hidden); });
+$('atajos').addEventListener('click', e => {
+  const b = e.target.closest('button[data-pre]'); if (!b) return;
+  const i = $('askIn'), pre = b.dataset.pre;
+  i.value = pre.endsWith(' ') ? pre + i.value.replace(/^\S+:\s*/, '') : pre;
+  $('atajos').hidden = true; $('askHelp').classList.remove('on'); i.focus();
+});
 $('snd').innerHTML = sound.muted ? ICO.mudo : ICO.sonido;
 $('snd').addEventListener('click', () => { $('snd').innerHTML = sound.toggle() ? ICO.mudo : ICO.sonido; });
 // FASE 9 · kill switch: STOP = pánico global; mientras dure, el botón dice REANUDAR y la cabecera lo avisa

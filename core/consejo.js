@@ -166,6 +166,11 @@ function crearConsejo({ cfg, bus, sesiones, proveedores, generarJSON }) {
 
   const textoVeredicto = r => {
     const v = r.veredicto; if (!v) return r.error || '(sin veredicto)';
+    if (v.comparar) {                                        // una sección por modelo, en el orden en que se pidieron
+      const resp = r.miembros.map(m => ({ m, x: (r.rondas[0] || []).find(y => y.modelo === m.modelo) }));
+      return `⚖️ **${r.miembros.map(m => etiqueta(m.modelo)).join(' vs ')}**\n\n` + resp.map(({ m, x }) =>
+        `### ${etiqueta(m.modelo)}${x ? ` · ${(x.ms / 1000).toFixed(1)} s` : ''}\n${x ? x.texto : `_(${m.estado === 'ausente' ? 'no disponible: ' + (m.motivo || '') : m.motivo || 'sin respuesta'})_`}`).join('\n\n');
+    }
     const sim = { 'a favor': '✅', parcial: '🟡', 'en contra': '❌' };
     const pres = r.miembros.filter(m => m.estado === 'listo').length;
     return `🏛️ **Consejo de ${pres} modelo${pres === 1 ? '' : 's'}** · acuerdo ${v.acuerdo}%${v.titular ? `\n_${v.titular}_` : ''}\n\n${v.respuesta}` +
@@ -174,7 +179,8 @@ function crearConsejo({ cfg, bus, sesiones, proveedores, generarJSON }) {
   };
 
   // pregunta → respuestas en paralelo → rondas de debate → veredicto.  alSesion(s) se llama ANTES del primer await
-  async function consultar({ pregunta, miembros, rondas, moderador, signal, alEvento, alSesion, origen } = {}) {
+  // comparar: true → solo la ronda 0 (todos a la vez) y el texto final enseña la respuesta de cada uno ("gemma + gpt: …" en cualquier canal)
+  async function consultar({ pregunta, miembros, rondas, moderador, signal, alEvento, alSesion, origen, comparar = false } = {}) {
     pregunta = String(pregunta || '').trim();
     if (!pregunta) throw new Error('falta la pregunta');
     const max = c().max || 6;
@@ -182,16 +188,16 @@ function crearConsejo({ cfg, bus, sesiones, proveedores, generarJSON }) {
     lista = lista ? [...new Set(lista.map(alias).filter(Boolean))] : candidatos().filter(x => x.ok).map(x => x.modelo);
     if (lista.length > max) lista = lista.slice(0, max);
     if (!lista.length) throw new Error('no hay ningún modelo disponible para el consejo (configura cfg.consejo.miembros)');
-    const nRondas = Math.max(0, Math.min(3, Number.isFinite(+rondas) ? +rondas : (c().rondas ?? 1)));
+    const nRondas = comparar ? 0 : Math.max(0, Math.min(3, Number.isFinite(+rondas) ? +rondas : (c().rondas ?? 1)));
     const ctl = new AbortController();
     const parar = () => ctl.abort(new Error('cancelado'));
     signal?.addEventListener('abort', parar, { once: true });
 
     const id = `c${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex')}`;
-    const s0 = sesiones.crear({ modelo: alias(moderador || c().moderador || lista[0]), canal: 'consejo', titulo: `Consejo: ${pregunta.slice(0, 60)}`, nombreAgente: 'Consejo' });
+    const s0 = sesiones.crear({ modelo: alias(moderador || c().moderador || lista[0]), canal: 'consejo', titulo: `${comparar ? 'Comparar' : 'Consejo'}: ${pregunta.slice(0, 60)}`, nombreAgente: comparar ? 'Comparar' : 'Consejo' });
     s0.consejo = id; sesiones.guardarMeta(s0);
     const r = {
-      id, pregunta, creado: Date.now(), fin: 0, estado: 'trabajando', sesion: s0.id, rondasPedidas: nRondas, origen: origen || undefined,
+      id, pregunta, creado: Date.now(), fin: 0, estado: 'trabajando', sesion: s0.id, rondasPedidas: nRondas, origen: origen || undefined, comparar: comparar || undefined,
       moderador: s0.modelo, miembros: [], rondas: [[]], veredicto: null,
     };
     for (const m of lista) {
@@ -225,8 +231,8 @@ function crearConsejo({ cfg, bus, sesiones, proveedores, generarJSON }) {
       }
       if (ctl.signal.aborted) throw new Error('cancelado');
       if (!r.miembros.some(m => m.estado === 'listo')) throw new Error(`ningún miembro respondió (${r.miembros.map(m => `${etiqueta(m.modelo)}: ${m.motivo || m.estado}`).join('; ')})`);
-      r.fase = 'votando'; emitir(r, 'votando', {}, alEvento);
-      r.veredicto = await moderar(r, ctl.signal);
+      if (comparar) r.veredicto = { respuesta: '', votos: [], acuerdo: 0, titular: '', moderador: null, comparar: true };
+      else { r.fase = 'votando'; emitir(r, 'votando', {}, alEvento); r.veredicto = await moderar(r, ctl.signal); }
       if (r.veredicto.moderador) r.moderador = r.veredicto.moderador;
       r.estado = 'listo'; r.fin = Date.now(); r.fase = undefined;
       const texto = textoVeredicto(r);

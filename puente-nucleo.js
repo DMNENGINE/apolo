@@ -125,6 +125,17 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     if ((m = t.match(/^(?:claude(?:\s*code)?|cc)\s*:\s*([\s\S]+)$/i))) return { claude: m[1].trim() };
     if (/^usa(?:r)?\s+auto(?:m[aá]tico)?$/i.test(t)) { st.destino[c] = '@auto'; guardar(); return { ok: true, msg: '🧭 Modo automático: elijo el destino según lo que me pidas (código → Claude Code; web, PC y lo demás → núcleo).' }; }
     if ((m = t.match(/^(antigravity|ag)\s*:\s*([\s\S]+)$/i))) return aMotor('antigravity', m[2].trim(), origin);
+    // "gemma + gpt: <pregunta>" → esos modelos responden A LA VEZ y se ven todas las respuestas (consejo en modo comparar)
+    if ((m = t.match(/^([\w.\-\/:]+(?:\s*(?:\+|,|\by\b|&)\s*[\w.\-\/:]+)+)\s*:\s+([\s\S]+)$/i)) && nucleo.consejo) {
+      const nombres = m[1].split(/\s*(?:\+|,|\by\b|&)\s*/i).map(x => x.trim().toLowerCase()).filter(Boolean);
+      const conocido = x => !!(nucleo.cfg.alias && nucleo.cfg.alias[x]) || x.includes('/');
+      if (nombres.length >= 2 && nombres.every(conocido)) {
+        let creado = false;
+        nucleo.consejo.consultar({ pregunta: m[2].trim(), miembros: nombres, comparar: true, alSesion: s => { creado = true; origen.set(s.id, origin); } })
+          .catch(e => { if (!creado) reply(origin, `❌ Comparar: ${e.message}`, 'consejo'); });
+        return { ok: true, msg: `⚖️ Pregunto a la vez a **${nombres.join(', ')}**. Te traigo las respuestas juntas.` };
+      }
+    }
     // "consejo: <pregunta>" → varios modelos debaten y votan (core/consejo.js); el veredicto vuelve por el 'fin' de su sesión
     if ((m = t.match(/^consejo\s*:\s*([\s\S]+)$/i)) && nucleo.consejo) {
       let quienes = [], creado = false;
