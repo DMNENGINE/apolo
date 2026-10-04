@@ -1,5 +1,5 @@
 // Configuración → Canales: tarjetas de los canales que son plugins del SDK (Slack, Matrix, Signal, y WhatsApp/Discord con su flag).
-// WhatsApp y Discord tienen implementación propia en la app: el flag cfg.plugins.<x>ComoPlugin elige (se aplica al reiniciar). Globales CP_.
+// Discord tiene implementación propia en la app (bot local o Pi): el flag cfg.plugins.discordComoPlugin elige (se aplica al reiniciar). Globales CP_.
 // Flujo: instalar (del repo) → activar → configurar → vincular → probar. Los secretos (tokens, contraseña) se escriben en
 // campos de contraseña, viajan una sola vez al plugin (POST /v1/plugins/:n/canales/:id/conectar) y él los guarda cifrados;
 // el panel NUNCA los recibe de vuelta: solo ve "configurado".
@@ -34,10 +34,6 @@ const CP_DEF = {
       { id: 'dueno', txt: 'Tu número', ph: '+34600333444' },
     ],
     pasos: 'Instala signal-cli, registra un número para el robot y arráncalo con <code>signal-cli -a +NUM daemon --http 127.0.0.1:8080</code>.',
-  },
-  whatsapp: {
-    titulo: 'WhatsApp', doc: 'docs/plugins.md', flag: 'whatsappComoPlugin', soloFlag: true,
-    intro: 'Usa WhatsApp como <b>plugin aislado</b> (su propio proceso, solo los dominios de WhatsApp, la sesión en su almacén). Hace lo mismo que el WhatsApp de la app; la vinculación (QR o «usar la sesión actual») sigue en la tarjeta <b>WhatsApp</b> de arriba.',
   },
   discord: {
     titulo: 'Discord', doc: 'docs/canales/discord.md', flag: 'discordComoPlugin',

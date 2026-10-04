@@ -1,4 +1,4 @@
-// Plugin de APOLO: canal de WhatsApp con Baileys (sustituye a whatsapp.js de la app cuando cfg.plugins.whatsappComoPlugin = true).
+// Plugin de APOLO: canal de WhatsApp con Baileys (es el único WhatsApp de la app; sustituyó a whatsapp.js).
 // Corre en su propio proceso: solo habla con los dominios de WhatsApp declarados, la sesión vive en SU almacén y los permisos
 // que resuelve son SOLO los que la app le mostró. Los mensajes de otras personas van a la app (canal.ajeno): el plugin no
 // responde a nadie más que a ti salvo que la app se lo ordene (acción enviarA). La lógica está en wa.js.

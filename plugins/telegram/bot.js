@@ -26,8 +26,16 @@ const AYUDA = '🤖 <b>Qué puedo hacer por aquí</b>\n• Escríbeme cualquier 
 
 function crearBot({ fetch: f = globalThis.fetch, canal, almacen, secretos, config = {}, log = () => { }, esperaReintento = 5000 }) {
   let token = '', vivo = false, ctl = null, estado = 'sin configurar', offset = 0, bucleEnCurso = null;
-  // estado persistente en el almacén del plugin; la 1.ª vez se migra el enlace de telegram.js (cfg.plugins.telegram)
-  let st = almacen.leer('estado', null) || { chatId: config.chatId || null, bot: config.bot || null, usuario: config.usuario || '', codigo: config.codigo || null, enlazado: config.enlazado || null };
+  // estado persistente en el almacén del plugin; la 1.ª vez se migra el enlace del antiguo telegram.js (cfg.plugins.telegram)
+  // y se GUARDA en el momento. También se repara un estado guardado sin enlace por un arranque que aún no tenía esa config
+  // (sin chat, sin código pendiente y sin desconexión a propósito): conectar/nuevoEnlace dejan código y desconectar deja la marca.
+  const desdeConfig = { chatId: config.chatId || null, bot: config.bot || null, usuario: config.usuario || '', codigo: config.codigo || null, enlazado: config.enlazado || null };
+  let st = almacen.leer('estado', null);
+  if (config.chatId && (!st || (!st.migrado && !st.chatId && !st.codigo && !st.desconectado))) {
+    st = { ...(st || {}), ...desdeConfig, bot: (st && st.bot) || desdeConfig.bot, migrado: true };
+    almacen.guardar('estado', st);
+  }
+  st = st || desdeConfig;
   const guardar = c => { st = { ...st, ...c }; almacen.guardar('estado', st); };
   const perms = new Map();                                    // id de permiso → { msgId, p }
   const tarjetas = new Map();                                 // id de tarjeta → msgId
@@ -173,7 +181,7 @@ function crearBot({ fetch: f = globalThis.fetch, canal, almacen, secretos, confi
     return estadoPublico();
   }
   function nuevoEnlace() { guardar({ codigo: crypto.randomBytes(6).toString('hex'), chatId: null, usuario: '', enlazado: null }); setEstado('esperando enlace'); return estadoPublico(); }
-  async function desconectar() { detener(); token = ''; await secretos.guardar('tg:token', ''); st = {}; almacen.guardar('estado', {}); setEstado('sin configurar'); return estadoPublico(); }
+  async function desconectar() { detener(); token = ''; await secretos.guardar('tg:token', ''); st = { desconectado: true }; almacen.guardar('estado', st); setEstado('sin configurar'); return estadoPublico(); }
   async function prueba() { await avisar('🤖 **Prueba:** así te llegarán los avisos.'); return estadoPublico(); }
   const estadoPublico = () => ({
     configurado: !!token, estado, bot: st.bot || null, enlazado: !!st.chatId, usuario: st.usuario || '',

@@ -73,7 +73,7 @@ Ejemplo real: `plugins/telegram` (el canal de Telegram de la app; siempre activo
 
 Con el mismo patrón que Telegram (flag en `config.json` y caída a la versión de la app), hay dos más:
 
-- `plugins/whatsapp`: `"whatsappComoPlugin": true`. Usa Baileys como dependencia del plugin y guarda la sesión en su almacén. En el panel, «Usar la sesión actual» copia la de la app con tu confirmación.
+- `plugins/whatsapp`: siempre activo (es el WhatsApp de la app). Usa Baileys como dependencia del plugin y guarda la sesión en su almacén. En el panel, «Usar la sesión actual» copia la de la app con tu confirmación.
 - `plugins/discord`: `"discordComoPlugin": true`, sin discord.js. Nunca corre junto al modo Pi ni al bot local. Guía: `docs/canales/discord.md`.
 
 Más canales oficiales, con el mismo patrón y sin dependencias: `plugins/slack`, `plugins/matrix` y `plugins/signal`. Sus guías están en `docs/canales/`. Se instalan desde **Configuración → Canales**: `POST /v1/plugins/oficial/:nombre` y luego las acciones `POST /v1/plugins/:nombre/canales/:id/:accion`.

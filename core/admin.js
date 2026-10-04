@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // copia de la config apta para el navegador: las API keys nunca salen, solo si están puestas
-const FLAGS_PLUGINS = ['whatsappComoPlugin', 'discordComoPlugin'];   // Telegram ya es siempre plugin   // se aplican al reiniciar la app
+const FLAGS_PLUGINS = ['discordComoPlugin'];   // Telegram y WhatsApp ya son siempre plugin   // se aplican al reiniciar la app
 function configPublica(cfg) {
   const proveedores = {};
   for (const [k, p] of Object.entries(cfg.proveedores)) {

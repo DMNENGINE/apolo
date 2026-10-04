@@ -14,7 +14,7 @@ const { analizarEstatico } = require('../skills/escaner');
 const RAIZ = path.join(__dirname, '..', '..', 'plugins');
 const { crearWhatsapp, extraer, esMiChat, jidIgnorado } = require(path.join(RAIZ, 'whatsapp', 'wa.js'));
 const { crearDiscord, intentsDe } = require(path.join(RAIZ, 'discord', 'discord.js'));
-const { decidirDiscord, whatsappComoPlugin } = require('../../shared/canales-flags');
+const { decidirDiscord } = require('../../shared/canales-flags');
 
 const base = process.env.NUCLEO_HOME && fs.existsSync(process.env.NUCLEO_HOME) ? process.env.NUCLEO_HOME : os.tmpdir();
 const tmp = p => fs.mkdtempSync(path.join(base, p));
@@ -317,7 +317,6 @@ test('discord: exclusión — nunca a la vez que el modo Pi o el bot local; con 
   const local = decidirDiscord({ discordComoPlugin: true }, { token: 'abc' });
   assert.strictEqual(local.plugin, false); assert.strictEqual(local.actual, 'local');
   assert.deepStrictEqual(decidirDiscord({ discordComoPlugin: true }, { token: '  ' }), { plugin: true, actual: 'plugin', bloqueado: '', aviso: '' });
-  assert.strictEqual(whatsappComoPlugin({ whatsappComoPlugin: true }), true); assert.strictEqual(whatsappComoPlugin(undefined), false);
   // el plugin bloqueado ni lee el token ni abre el gateway
   const rf = restFalso(), alm = almacenFalso(), ev = canalFalso(alm.ruta), sec = secretosFalsos({ 'discord:token': TOKEN });
   let ws = 0;

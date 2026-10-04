@@ -1,6 +1,6 @@
 {
   "nombre": "telegram",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "descripcion": "Canal de Telegram: tu bot propio (de @BotFather) ligado SOLO a tu chat. Hablar con APOLO, permisos con botones (los peligrosos piden confirmación), avisos, tarjetas y notas de voz.",
   "autor": "DMN / APOLO",
   "licencia": "MIT",

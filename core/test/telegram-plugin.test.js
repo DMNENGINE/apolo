@@ -152,3 +152,17 @@ test('telegram plugin: se instala y activa en el gestor (proceso propio); sin to
   assert.strictEqual(pedidos.length, 0);                                                         // tg:token lo permitió la app: sin preguntar
   await n.plugins.cerrar();
 });
+
+test('telegram plugin: un estado guardado sin enlace (arranque sin config) se repara; una desconexión o un enlace nuevo, no', () => {
+  const almacenCon = estado => { const datos = { estado }; return { datos, leer: (k, d = null) => (k in datos ? JSON.parse(JSON.stringify(datos[k])) : d), guardar: (k, v) => { datos[k] = v; return true; } }; };
+  const nuevo = (alm, config) => crearBot({ fetch: async () => ({ ok: true, json: async () => ({ ok: true, result: [] }) }), canal: { estado: async () => { } }, almacen: alm, secretos: { leer: async () => '', guardar: async () => true }, config });
+  const config = { chatId: 777, bot: 'MiBot', usuario: 'yo' };
+  const roto = almacenCon({ chatId: null, bot: 'MiBot', usuario: '', codigo: null, enlazado: null });
+  assert.strictEqual(nuevo(roto, config).estado().enlazado, true);
+  assert.strictEqual(roto.datos.estado.chatId, 777, 'la reparación queda guardada');
+  const vacio = { datos: {}, leer: (k, d = null) => d, guardar(k, v) { this.datos[k] = v; return true; } };
+  nuevo(vacio, config);
+  assert.strictEqual(vacio.datos.estado.chatId, 777, 'la 1.ª migración se guarda al momento');
+  assert.strictEqual(nuevo(almacenCon({ desconectado: true }), config).estado().enlazado, false);
+  assert.strictEqual(nuevo(almacenCon({ chatId: null, bot: 'MiBot', codigo: 'abc123' }), config).estado().enlazado, false);
+});
