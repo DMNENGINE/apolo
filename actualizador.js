@@ -7,7 +7,7 @@ const { execFile } = require('child_process');
 
 const REPO = 'DMNENGINE/apolo', RAMA = 'main';
 const API = `https://api.github.com/repos/${REPO}`;
-const INSTALADOR = `https://raw.githubusercontent.com/${REPO}/${RAMA}/install.ps1`;
+const INSTALADOR = `https://raw.githubusercontent.com/${REPO}/${RAMA}/install.${process.platform === 'win32' ? 'ps1' : 'sh'}`;
 const CADA_MS = 6 * 3600_000;
 
 // Dos caminos, misma interfaz { iniciar, comprobar, posponer, actualizar, esDesarrollo, pendiente }:
@@ -122,6 +122,14 @@ function crearActualizadorGit({ dirApp, dirDatos, avisar, log = console.log, ins
   let enCurso = false;
   function actualizar(progreso = () => { }) {
     if (enCurso) return; enCurso = true;
+    if (process.platform !== 'win32') {                       // Linux/mac: install.sh en una terminal (independiente: setsid)
+      const linea = `curl -fsSL ${instalador} | bash`;
+      try {
+        require('./core/escritorio/so').abrirTerminal(os.homedir(), ['bash', '-c', `${linea}; echo; read -p "Pulsa Enter para cerrar" _`]);
+        progreso({ fase: 'abriendo' });
+      } catch (e) { enCurso = false; progreso({ fase: 'error', error: e.message, manual: linea }); }
+      return;
+    }
     const script = path.join(os.tmpdir(), 'apolo-actualizar.ps1');
     fs.writeFileSync(script, [
       "$Host.UI.RawUI.WindowTitle = 'Actualizando APOLO'",

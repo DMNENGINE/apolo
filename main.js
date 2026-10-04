@@ -114,7 +114,7 @@ ipcMain.handle('tts', async (_e, text) => { const f = await voz.generarTts(text)
 ipcMain.handle('listen', () => voz.escuchar());
 
 // ---------- hooks en ~/.claude y ~/.gemini (main/hooks-config.js) ----------
-const hooksCfg = crearHooksConfig({ empaquetado: () => app.isPackaged, mensaje: o => dialog.showMessageBox(o), tr: (k, v) => tr(k, v) });
+const hooksCfg = crearHooksConfig({ empaquetado: () => app.isPackaged, mensaje: o => dialog.showMessageBox(o), tr: (k, v) => tr(k, v), dirDatos: () => app.getPath('userData') });
 
 // ---------- uso del plan (main/uso.js) ----------
 const uso = crearUso({ claudeDir: CLAUDE_DIR, dirDatos: () => app.getPath('userData'), cerebro: () => cerebro,
@@ -538,7 +538,7 @@ async function startNucleo() {
     nucleo.canales.registrar('telegram', { nombre: 'Telegram', tipo: 'telegram', estado: telegram.enabled && telegram.status === 'conectado' ? 'activo' : 'inactivo', detalle: `${tr(telegram.status)} · ${tr('destino:')} ${puente.destino('telegram') || tr('automático')}` });
     nucleo.canales.registrar('whatsapp', { nombre: 'WhatsApp', tipo: 'whatsapp', estado: whatsapp.enabled ? 'activo' : 'inactivo', detalle: `${tr(whatsapp.status)} · ${tr('destino:')} ${puente.destino('whatsapp') || tr('automático')}` });
     nucleo.canales.registrar('voz', { nombre: tr('Voz'), tipo: 'voz', estado: 'activo', detalle: tr(voz.whisperCargado() ? 'Whisper cargado · Ctrl+Alt+Espacio' : 'Whisper se carga al hablar · Ctrl+Alt+Espacio') });
-    nucleo.canales.registrar('streamdeck', { nombre: 'Stream Deck', tipo: 'streamdeck', estado: fs.existsSync(path.join(process.env.APPDATA || '', 'Elgato', 'StreamDeck', 'Plugins', 'com.robotcompanion.sdPlugin')) ? 'activo' : 'inactivo', detalle: tr('Permitir / Denegar / Estado') });
+    if (process.platform !== 'linux') nucleo.canales.registrar('streamdeck', { nombre: 'Stream Deck', tipo: 'streamdeck', estado: fs.existsSync(path.join(process.env.APPDATA || '', 'Elgato', 'StreamDeck', 'Plugins', 'com.robotcompanion.sdPlugin')) ? 'activo' : 'inactivo', detalle: tr('Permitir / Denegar / Estado') });
     nucleo.canales.registrar('gemini', { nombre: 'Gemini CLI (hooks)', tipo: 'claudecode', instalado: cliInstalado.gemini, estado: hooksCfg.geminiInstalados() ? 'activo' : 'inactivo', detalle: tr(hooksCfg.geminiInstalados() ? 'Hooks instalados: permisos y actividad en la isla' : cliInstalado.gemini ? 'Instálalos desde la bandeja' : 'Gemini CLI no está instalado (npm i -g @google/gemini-cli)') });
     nucleo.canales.registrar('codex', { nombre: 'Codex CLI', tipo: 'claudecode', instalado: cliInstalado.codex, estado: 'inactivo', detalle: tr('Sus hooks son experimentales y aún no funcionan en Windows') });
     nucleo.canales.registrar('claudecode', { nombre: 'Claude Code (hooks)', tipo: 'claudecode', estado: hooksCfg.instalados() ? 'activo' : 'inactivo', detalle: tr(hooksCfg.instalados() ? 'Hooks instalados' : 'Instálalos desde la bandeja') });
@@ -623,16 +623,32 @@ function stateForDevices() {
 
 const cliInstalado = { gemini: tieneCLI('gemini'), codex: tieneCLI('codex') };
 
-// ---------- arranque con Windows ----------
+// ---------- arranque con el sistema ----------
+// Windows/mac: Electron (registro / elementos de inicio). Linux: Electron no lo hace → ~/.config/autostart/apolo.desktop
 const loginOpts = () => ({ path: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] });
-const autoStart = () => app.getLoginItemSettings(loginOpts()).openAtLogin;
-const setAutoStart = v => app.setLoginItemSettings({ openAtLogin: v, ...loginOpts() });
+const DESKTOP_AUTO = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'autostart', 'apolo.desktop');
+const execLinux = () => (process.env.APPIMAGE ? `"${process.env.APPIMAGE}"` : `"${process.execPath}"${app.isPackaged ? '' : ` "${app.getAppPath()}"`}`);
+const autoStart = () => (process.platform === 'linux' ? fs.existsSync(DESKTOP_AUTO) : app.getLoginItemSettings(loginOpts()).openAtLogin);
+const setAutoStart = v => {
+  if (process.platform !== 'linux') return app.setLoginItemSettings({ openAtLogin: v, ...loginOpts() });
+  if (!v) { try { fs.unlinkSync(DESKTOP_AUTO); } catch { } return; }
+  fs.mkdirSync(path.dirname(DESKTOP_AUTO), { recursive: true });
+  fs.writeFileSync(DESKTOP_AUTO, ['[Desktop Entry]', 'Type=Application', 'Name=APOLO', 'Comment=APOLO, tu compañero de escritorio',
+    `Exec=${execLinux()}`, 'X-GNOME-Autostart-enabled=true', 'Terminal=false', ''].join('\n'));
+};
 // el instalador .exe deja autoarranque.txt junto a APOLO.exe ("1"/"0" = casilla "Iniciar con Windows"); sin él, se activa
 const autoArranqueInicial = () => { try { return fs.readFileSync(path.join(path.dirname(process.execPath), 'autoarranque.txt'), 'utf8').trim() !== '0'; } catch { return true; } };
 // voz neural + micrófono (Python, edge-tts, faster-whisper): el .exe no los trae; se instalan bajo demanda en una ventana visible
 function instalarVoz() {
-  require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(__dirname, 'tools', 'instalar-voz.ps1'))],
-    { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+  if (process.platform === 'win32') {
+    require('child_process').spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(__dirname, 'tools', 'instalar-voz.ps1'))],
+      { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+    return;
+  }
+  // Linux/mac: los mismos paquetes de Python, en una terminal visible (si la hay); si no, se explica el comando
+  const cmd = 'python3 -m pip install --user --upgrade faster-whisper sounddevice edge-tts av numpy; echo; echo Listo. Pulsa Enter para cerrar; read _';
+  try { require('./core/escritorio/so').abrirTerminal(os.homedir(), ['sh', '-c', cmd]); }
+  catch { dialog.showMessageBox({ message: tr('Instalar voz y micrófono'), detail: `${tr('Ejecuta en una terminal:')}\n\nsudo apt install python3-pip portaudio19-dev ffmpeg\n${cmd.split(';')[0]}` }); }
 }
 
 // ---------- bandeja ----------
@@ -884,7 +900,8 @@ app.whenReady().then(() => {
   });
   // Ctrl+Alt+Espacio: hablarle al robot por voz
   app.whenReady().then(() => globalShortcut.register('Control+Alt+Space', () => win && win.webContents.send('listen-key')));
-  createWindow(); startServer(); startNucleo(); buildTray(); trackCursor(); startDiscord(); startDms();
+  createWindow(); startServer(); startNucleo(); buildTray(); trackCursor(); startDiscord();
+  if (process.platform === 'win32') startDms();                // avisos de DMs: lee la base de notificaciones de Windows
   isla.vigilarPantallaCompleta(); isla.vigilarMonitores();
   win.webContents.once('did-finish-load', () => { uso.scanUsage(); setInterval(uso.scanUsage, 60_000); });
   // nombre del compañero (identidad del núcleo): isla, bandeja y textos

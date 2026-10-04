@@ -107,6 +107,7 @@ function crearIsla({ alPantallaCompleta }) {
     return otros.sort((a, b) => (b.bounds.width * b.bounds.height) - (a.bounds.width * a.bounds.height) || (b.bounds.width >= b.bounds.height) - (a.bounds.width >= a.bounds.height))[0];
   }
   function vigilarPantallaCompleta() {
+    if (process.platform !== 'win32') { console.log('[isla] apartarse de la pantalla completa: solo Windows por ahora'); return; }
     const p = require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(RAIZ, 'tools', 'pantalla-completa.ps1'))], { windowsHide: true });
     let buf = '';
     p.stdout.setEncoding('utf8');

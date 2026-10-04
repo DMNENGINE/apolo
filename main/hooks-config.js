@@ -6,7 +6,7 @@ const path = require('path');
 const { fuera } = require('../core/rutas');                 // app instalada: lo que usan procesos externos está en app.asar.unpacked
 
 const HOOK_JS = fuera(path.join(__dirname, '..', 'hook', 'hook.js')).replace(/\\/g, '/');
-const ES_HOOK = /(RobotCompanion|APOLO|app\.asar\.unpacked)\/hook\/hook\.(js|cmd)/i;   // copia de desarrollo, one-liner o .exe
+const ES_HOOK = /(RobotCompanion|robot-companion|APOLO|app\.asar\.unpacked)\/hook\/hook\.(js|cmd)/i;   // copia de desarrollo, one-liner, .exe o copia de Linux
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const SETTINGS = path.join(CLAUDE_DIR, 'settings.json');
 const GEMINI_SETTINGS = path.join(os.homedir(), '.gemini', 'settings.json');
@@ -17,7 +17,7 @@ const HOOK_EVENTS = [
 ];
 const GEMINI_EVENTS = [['SessionStart', 10000], ['SessionEnd', 10000], ['BeforeAgent', 10000], ['AfterAgent', 10000], ['BeforeTool', 120000], ['AfterTool', 10000], ['Notification', 10000]];   // ms
 
-const tieneCLI = n => { try { require('child_process').execSync(`where ${n}`, { stdio: 'ignore', windowsHide: true }); return true; } catch { return false; } };
+const tieneCLI = n => { try { require('child_process').execSync(process.platform === 'win32' ? `where ${n}` : `command -v ${n}`, { stdio: 'ignore', windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/sh' }); return true; } catch { return false; } };
 const leerJSON = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
 const isOurs = h => typeof h.command === 'string' && ES_HOOK.test(h.command);
 function copia(f) {
@@ -36,9 +36,24 @@ function stripOurs(s) {
 }
 
 // empaquetado: app.isPackaged; mensaje({message, detail}) = dialog.showMessageBox; tr = traducción
-function crearHooksConfig({ empaquetado, mensaje, tr }) {
+function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
   // sin Node.js en el PATH (instalación .exe) el hook corre con el propio APOLO.exe en modo node (hook/hook.cmd)
-  const HOOK_EJEC = () => (empaquetado() && !tieneCLI('node') ? `"${HOOK_JS.replace(/hook\.js$/, 'hook.cmd')}"` : `node "${HOOK_JS}"`);
+  // Linux empaquetado (AppImage): la ruta interna cambia en cada arranque (/tmp/.mount_…) → el hook se copia a los datos de la app
+  // y corre con el propio AppImage en modo node (ELECTRON_RUN_AS_NODE) si no hay Node.js
+  function rutaHook() {
+    if (process.platform === 'win32' || !empaquetado() || !dirDatos) return HOOK_JS;
+    const dst = path.join(dirDatos(), 'hook'); fs.mkdirSync(dst, { recursive: true });
+    for (const f of fs.readdirSync(path.dirname(HOOK_JS))) if (f.endsWith('.js')) fs.copyFileSync(path.join(path.dirname(HOOK_JS), f), path.join(dst, f));
+    return path.join(dst, 'hook.js').replace(/\\/g, '/');
+  }
+  const HOOK_EJEC = () => {
+    if (process.platform === 'win32') return empaquetado() && !tieneCLI('node') ? `"${HOOK_JS.replace(/hook\.js$/, 'hook.cmd')}"` : `node "${HOOK_JS}"`;
+    const js = rutaHook();
+    const propio = path.join(__dirname, '..', '.node', 'bin', 'node');          // install.sh sin Node en el sistema
+    if (!tieneCLI('node') && fs.existsSync(propio)) return `"${propio}" "${js}"`;
+    if (tieneCLI('node') || !empaquetado()) return `node "${js}"`;
+    return `ELECTRON_RUN_AS_NODE=1 "${process.env.APPIMAGE || process.execPath}" "${js}"`;
+  };
   function instalar() {
     const s = stripOurs(leerJSON(SETTINGS));
     s.hooks = s.hooks || {};
