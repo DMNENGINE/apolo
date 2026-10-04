@@ -78,6 +78,7 @@ const P = {
   mas2: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
   salir: '<path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/>',
   enlace: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+  github: '<path d="M9 19c-4 1.5-4-2-6-2.5M15 22v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V22"/>',
   pieza: '<path d="M4 7.5h4.2a2.3 2.3 0 1 1 4.6 0H17v4.2a2.3 2.3 0 1 1 0 4.6V20.5H4z"/>',
 };
 const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || P.info}</svg>`;
@@ -373,7 +374,7 @@ function pintarLado(modo) {
       <div style="padding:0 14px 8px;font-size:17px;font-weight:650">${tr('Configuración')}</div>
       <div class="buscador-lado">${ic('buscar')}<input id="buscaAjustes" placeholder="${tr('Buscar en la configuración…')}"></div>
       <div class="lado-scroll" id="navAjustes"></div>
-      <div class="lado-pie"><span class="tenue" style="font-size:11px">Robot Companion · ${tr('núcleo')} v${esc(E.estado?.version || '')}</span></div>`;
+      <div class="lado-pie"><span class="tenue" style="font-size:11px">${E.estado?.versionApp ? `APOLO v${esc(E.estado.versionApp)}` : 'Robot Companion'} · ${tr('núcleo')} v${esc(E.estado?.version || '')}</span></div>`;
     pintarNavAjustes('');
     $('#buscaAjustes').oninput = e => pintarNavAjustes(e.target.value);
     return;

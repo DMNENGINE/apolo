@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.3] - 2026-10-05
+
+### Added
+- **Control panel → About**: links to the GitHub repository, the website (apolocompanion.com) and the release notes; it now shows the APOLO version next to the core version (also in the settings sidebar).
+
 ## [0.2.2] - 2026-10-05
 
 ### Fixed

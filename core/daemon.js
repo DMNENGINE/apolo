@@ -176,7 +176,7 @@ function iniciar(opciones = {}) {
         } catch (e) { return json(res, 500, { error: e.message }); } finally { fs.rm(fa, () => { }); }
       }
 
-      if (M === 'GET' && p[1] === 'estado') return json(res, 200, { version, nombre: n.personalidad.nombre(), proveedores: n.proveedores.disponibles(), modeloPorDefecto: n.cfg.modeloPorDefecto, permisos: n.permisos.pendientes(), mcpRuta: require('./rutas').fuera(path.join(__dirname, 'mcp.js')).replace(/\\/g, '/') });
+      if (M === 'GET' && p[1] === 'estado') return json(res, 200, { version, versionApp: n.versionApp || null, nombre: n.personalidad.nombre(), proveedores: n.proveedores.disponibles(), modeloPorDefecto: n.cfg.modeloPorDefecto, permisos: n.permisos.pendientes(), mcpRuta: require('./rutas').fuera(path.join(__dirname, 'mcp.js')).replace(/\\/g, '/') });
       if (p[1] === 'config') {
         if (M === 'GET') return json(res, 200, admin.configPublica(n.cfg));
         if (M === 'PATCH') {

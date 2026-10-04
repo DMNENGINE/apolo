@@ -48,8 +48,12 @@ VISTAS['ajustes/acerca'] = {
     const s = await api('GET', '/sistema');
     v.innerHTML = `<div class="pagina estrecha" style="text-align:center">${cabecera('Acerca de', '')}
       <div class="robot-acerca" id="robotAcerca" title="${tr('Tócame')}">${casco('casco-grande')}</div>
-      <h2 style="margin:12px 0 2px;font-size:24px">Robot Companion</h2><p class="suave" style="margin:0">${tr('Tu asistente personal, en tu equipo, con el modelo que tú elijas.')}</p>
-      <div class="flex" style="justify-content:center;margin:14px 0 26px"><span class="chip acento">${tr('núcleo')} v${esc(E.estado.version)}</span><span class="chip">${tr('Licencia MIT')}</span><span class="chip">${tr('Código abierto')}</span></div>
+      <h2 style="margin:12px 0 2px;font-size:24px">APOLO</h2><p class="suave" style="margin:0">${tr('Tu asistente personal, en tu equipo, con el modelo que tú elijas.')}</p>
+      <div class="flex" style="justify-content:center;margin:14px 0 12px">${E.estado.versionApp ? `<span class="chip acento">APOLO v${esc(E.estado.versionApp)}</span>` : ''}<span class="chip">${tr('núcleo')} v${esc(E.estado.version)}</span><span class="chip">${tr('Licencia MIT')}</span><span class="chip">${tr('Código abierto')}</span></div>
+      <div class="flex" style="justify-content:center;gap:8px;flex-wrap:wrap;margin:0 0 26px">
+        <a class="btn" href="https://github.com/DMNENGINE/apolo" target="_blank" rel="noopener">${ic('github')}GitHub</a>
+        <a class="btn" href="https://apolocompanion.com/" target="_blank" rel="noopener">${ic('mundo')}apolocompanion.com</a>
+        <a class="btn" href="https://github.com/DMNENGINE/apolo/releases" target="_blank" rel="noopener">${ic('enlace')}${tr('Novedades')}</a></div>
       <div class="caja" style="text-align:left">${fila('Equipo', '', `<span class="mono">${esc(s.host)}</span>`)}${fila('Sistema', '', esc(s.so))}${fila('Node.js', '', esc(s.node))}${fila('Datos', '', `<span class="mono" style="word-break:break-all">${esc(s.datos)}</span>`)}</div>
       <p class="tenue" style="margin-top:22px;font-size:12px">${tr('Hecho a mano, desde cero.')} © ${new Date().getFullYear()}</p></div>`;
     montarRobot($('#robotAcerca'), 'vitrina', 60);
