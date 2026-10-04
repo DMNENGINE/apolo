@@ -14,7 +14,7 @@ async function servidor(t, { espera = 300, hijoTrabajaPara = null } = {}) {
   const srv = http.createServer((req, res) => {
     let b = ''; req.on('data', d => { b += d; });
     req.on('end', async () => {
-      const j = JSON.parse(b); recibidos.push(j);
+      const j = JSON.parse(b); recibidos.push(j); j._llegada = Date.now();
       const primero = j.messages.find(m => m.role === 'user')?.content || '';
       let msg;
       if (/Eres un SUBAGENTE/.test(primero)) {
@@ -46,7 +46,11 @@ test('delegar: dos subagentes en paralelo, informes en orden y el padre responde
   const final = await n.enviar(s, 'revisa el sistema');
   const ms = Date.now() - t0;
   assert.strictEqual(final, 'todo revisado');
-  assert.ok(ms < 1000, `tardó ${ms} ms: no fueron en paralelo`);
+  // en paralelo = la petición del 2.º hijo llega ANTES de que el 1.º termine (600 ms). No se mide el turno entero:
+  // en un CI cargado las llamadas del padre lo alargan sin que haya nada mal (fallaba a veces en windows + Node 20)
+  const llegadas = recibidos.filter(j => /TAREA:/.test(JSON.stringify(j.messages))).map(j => j._llegada);
+  assert.strictEqual(llegadas.length, 2);
+  assert.ok(Math.abs(llegadas[1] - llegadas[0]) < 600, `los hijos empezaron con ${Math.abs(llegadas[1] - llegadas[0])} ms de diferencia (${ms} ms en total): no fueron en paralelo`);
   const tools = s.mensajes.filter(m => m.role === 'tool');
   assert.deepStrictEqual(tools.map(m => m.toolCallId), ['d1', 'd2']);
   assert.match(tools[0].content, /subagente "logs" terminó[\s\S]*informe: revisa los logs/);
