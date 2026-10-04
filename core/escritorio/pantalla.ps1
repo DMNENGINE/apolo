@@ -9,6 +9,19 @@ param([string]$Salida, [int]$Monitor = 0, [int]$Ancho = 1280, [int]$Elementos = 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing, UIAutomationClient, UIAutomationTypes
+# JPEG a memoria y luego al disco: Image.Save(ruta) a veces falla con un "Error genérico en GDI+" sin causa (visto con la isla
+# delante y el borde rojo apareciendo); así se reintenta una vez y, si el disco falla, el error dice el motivo real.
+function Guardar($img, [string]$ruta, $enc, $par) {
+  for ($i = 0; $i -lt 2; $i++) {
+    try {
+      $ms = New-Object IO.MemoryStream
+      try { $img.Save($ms, $enc, $par); [IO.File]::WriteAllBytes($ruta, $ms.ToArray()); return } finally { $ms.Dispose() }
+    } catch {
+      if ($i -eq 1) { $x = $_.Exception; if ($x.InnerException) { $x = $x.InnerException }; throw "no pude guardar la captura en $($ruta): $($x.Message)" }
+      Start-Sleep -Milliseconds 150
+    }
+  }
+}
 Add-Type @'
 using System; using System.Text; using System.Runtime.InteropServices;
 public class W32 {
@@ -47,7 +60,7 @@ if (-not $SinImagen) {
   $enc = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
   $par = New-Object Drawing.Imaging.EncoderParameters 1
   $par.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), ([long]72)
-  $peq.Save($Salida, $enc, $par)
+  Guardar $peq $Salida $enc $par
   $res.imagen = [ordered]@{ ruta = $Salida; ancho = $w; alto = $hh }
 }
 
@@ -106,7 +119,7 @@ if ($res.imagen -and $RejillaSiMenos -gt 0) {
       $g.DrawString($num, $fuente, $tinta, [float]($i * $cw + 2), [float]($j * $ch + 1)) } }
     $g.Dispose(); $lapiz.Dispose(); $fuente.Dispose(); $fondo.Dispose(); $tinta.Dispose()
     $rutaRejilla = [IO.Path]::ChangeExtension($Salida, $null).TrimEnd('.') + '.rejilla.jpg'
-    $peq.Save($rutaRejilla, $enc, $par)
+    Guardar $peq $rutaRejilla $enc $par
     $res.imagen.rejilla = [ordered]@{ ruta = $rutaRejilla; cols = $cols; filas = $filas; utiles = $utiles }
   }
 }
