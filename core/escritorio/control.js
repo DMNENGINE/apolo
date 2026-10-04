@@ -144,6 +144,14 @@ function crearControl({ cfg, bus, permisos, cancelarTurno, manos = null, ojos, r
     const info = await orden({ op: 'info', ...(p ? { x: p.x, y: p.y } : {}) });
     const prot = bloqueada(cfg, info.ventana);
     if (prot) throw new Error(`la ventana activa ("${info.ventana.titulo}") está PROTEGIDA: no actúo ahí. Pide al usuario que lo haga él.`);
+    // clic que caería FUERA de la ventana activa (p. ej. detrás de un diálogo "Guardar como"): no se hace sin fuera:true
+    // los menús y desplegables del MISMO programa son ventanas aparte (PopupHost en el Bloc de notas de Windows 11): cuentan como dentro
+    if (op === 'clic' && info.ventanaEnPunto && !a.fuera && String(info.ventanaEnPunto.proceso).toLowerCase() !== String(info.ventana.proceso).toLowerCase()) {
+      const en = info.ventanaEnPunto.titulo || info.ventanaEnPunto.proceso || 'otra ventana';
+      return `⚠ NO hice el clic: ese punto cae fuera de la ventana activa "${info.ventana.titulo}", en "${en}". ` +
+        'Si hay un diálogo abierto, trabaja dentro de él (el campo con el foco ya acepta escribir; usa ver_pantalla y un #elemento). ' +
+        'Si de verdad quieres pulsar en esa otra ventana, repite el clic con fuera:true.';
+    }
     const objetivo = p?.nombre || info.enPunto?.nombre || '';
     const ventana = `${info.ventana.titulo} ${info.ventana.proceso}`;
 

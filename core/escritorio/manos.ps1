@@ -22,6 +22,8 @@ public static class Manos {
   [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
   [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
   [DllImport("user32.dll")] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] static extern short VkKeyScan(char c);
@@ -93,6 +95,15 @@ public static class Manos {
     try { r["foco"] = Elem(AutomationElement.FocusedElement); } catch { }
     if (o.ContainsKey("x") && o.ContainsKey("y")) {
       try { r["enPunto"] = Elem(AutomationElement.FromPoint(new System.Windows.Point(Convert.ToDouble(o["x"]), Convert.ToDouble(o["y"])))); } catch { }
+      try {   // ventana (raíz) que hay en ese punto: si no es la activa, el clic caería detrás o en otra ventana
+        POINT q; q.X = Convert.ToInt32(o["x"]); q.Y = Convert.ToInt32(o["y"]);
+        var raiz = GetAncestor(WindowFromPoint(q), 2);
+        if (raiz != IntPtr.Zero && raiz != GetAncestor(h, 2)) {
+          var sb2 = new StringBuilder(512); GetWindowText(raiz, sb2, 512); uint pid2; GetWindowThreadProcessId(raiz, out pid2);
+          string proc2 = ""; try { proc2 = System.Diagnostics.Process.GetProcessById((int)pid2).ProcessName; } catch { }
+          r["ventanaEnPunto"] = new Dictionary<string, object> { {"titulo", sb2.ToString()}, {"proceso", proc2} };
+        }
+      } catch { }
     }
     return r;
   }

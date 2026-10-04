@@ -108,3 +108,17 @@ test('tomar_control pregunta SIEMPRE: aunque el modo sea auto y aunque contestes
   assert.strictEqual(preguntas, 2);
   assert.strictEqual(n.permisos.reglas?.().length ?? 0, 0);
 });
+
+test('un clic que cae fuera de la ventana activa (detrás de un diálogo) no se hace sin fuera:true', async t => {
+  const { n, s, estado, acciones } = entorno(t, { info: { ventana: { titulo: 'Guardar como', proceso: 'notepad' } } });
+  await n.control.tomar(s, { motivo: 'guardar' });
+  estado.ventanaEnPunto = { titulo: 'AI - Google Chrome', proceso: 'chrome' };
+  const r = await n.control.accion(s, 'clic', { x: 100, y: 400 });
+  assert.match(String(r), /NO hice el clic.*Guardar como.*Google Chrome/s);
+  assert.strictEqual(acciones().length, 0);
+  await n.control.accion(s, 'clic', { x: 100, y: 400, fuera: true });
+  assert.strictEqual(acciones().length, 1);
+  estado.ventanaEnPunto = { titulo: 'PopupHost', proceso: 'Notepad' };   // menú del mismo programa: dentro
+  await n.control.accion(s, 'clic', { elemento: 5 });
+  assert.strictEqual(acciones().length, 2);
+});

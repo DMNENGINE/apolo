@@ -222,7 +222,8 @@ const HERRAMIENTAS = [
   ...[
     ['clic', 'Hace clic en un elemento (#id de ver_pantalla, preferible) o en x,y de la imagen.', {
       elemento: { type: 'number', description: 'id del elemento en la última ver_pantalla' }, x: { type: 'number' }, y: { type: 'number' },
-      boton: { type: 'string', enum: ['izq', 'der', 'medio'] }, doble: { type: 'boolean' } }, [], a => `${a.doble ? 'doble ' : ''}clic ${a.elemento ? '#' + a.elemento : `${a.x},${a.y}`}`],
+      boton: { type: 'string', enum: ['izq', 'der', 'medio'] }, doble: { type: 'boolean' },
+      fuera: { type: 'boolean', description: 'true solo si quieres pulsar a propósito FUERA de la ventana activa (si no, ese clic se rechaza)' } }, [], a => `${a.doble ? 'doble ' : ''}clic ${a.elemento ? '#' + a.elemento : `${a.x},${a.y}`}`],
     ['escribir', 'Escribe texto con el teclado. Si das elemento o x,y, primero hace clic ahí para darle el foco. Nunca escribe en campos de contraseña.', {
       texto: { type: 'string' }, elemento: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' } }, ['texto'], a => `"${String(a.texto || '').slice(0, 60)}"`],
     ['tecla', 'Pulsa una tecla o combinación: "enter", "esc", "tab", "ctrl+s", "alt+tab", "ctrl+shift+t", "f5", "win"…', {
