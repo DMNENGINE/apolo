@@ -107,7 +107,7 @@ const isla = crearIsla({ alPantallaCompleta: e => { if (nucleo) nucleo.bus.emit(
 function createWindow() { win = isla.crearVentana(); }
 
 // ---------- voz: TTS (Fish / edge-tts) y Whisper (main/voz.js) ----------
-const voz = crearVoz({ dirDatos: () => app.getPath('userData'), idioma: () => idiomaApp() });
+const voz = crearVoz({ dirDatos: () => app.getPath('userData'), idioma: () => idiomaApp(), nombre: () => nombreCompanero() });
 const transcribirArchivo = ruta => voz.transcribirArchivo(ruta);
 // lo que dice la isla también sale por el altavoz del ojo si la petición vino del ojo (o cfg.nodos.vozSiempre)
 ipcMain.handle('tts', async (_e, text) => { const f = await voz.generarTts(text); vozAlOjo(f); return f; });
@@ -845,6 +845,11 @@ app.whenReady().then(() => {
       recibir: ({ plugin, texto }) => (CON_ADAPTADOR.includes(plugin) ? handleText(texto, plugin) : undefined), ajeno: ajenoPlugin });
     telegramComoPlugin().catch(e => console.error('[telegram] el plugin no arrancó:', e.message));
     whatsappComoPlugin().catch(e => console.error('[whatsapp] el plugin no arrancó:', e.message));
+    nucleo.extensiones.voz = { http: async (M, p, b) => {          // vocabulario de Whisper (Canales → Voz)
+      if (p[2] === 'vocabulario' && M === 'GET') return { vocabulario: voz.leerVocabulario() };
+      if (p[2] === 'vocabulario' && (M === 'PUT' || M === 'POST')) return { vocabulario: voz.guardarVocabulario(b.vocabulario) };
+      const e = new Error('ruta'); e.status = 404; throw e;
+    } };
     nucleo.extensiones.whatsapp = { http: async (M, p, b) => {
       if (M === 'POST' && p[2] === 'migrar') return migrarSesionWhatsapp(b);
       if (M === 'GET' && p[2] === 'config') return whatsapp.config();

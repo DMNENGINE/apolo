@@ -91,6 +91,7 @@ VISTAS['ajustes/canales'] = {
     const wa = await api('GET', '/whatsapp').catch(() => null);
     const tg = await api('GET', '/telegram').catch(() => null);
     const mcpRuta = (await api('GET', '/estado').catch(() => null))?.mcpRuta || 'C:/ruta/a/APOLO/core/mcp.js';
+    const vocab = (await api('GET', '/voz/vocabulario').catch(() => null))?.vocabulario;
     v.innerHTML = `<div class="pagina estrecha">${cabecera('Canales', 'Por dónde puedes hablar con el robot. Todos comparten memoria, permisos y modelos.', `<button class="btn" id="rec">${ic('recargar')}${tr('Actualizar')}</button>`)}
       <div class="seccion">${tr('Conectados')} <span class="n">${l.filter(c => c.estado === 'activo').length}</span></div>
       <div class="caja">${l.map(c => fila(`<span class="flex">${ic(ICONO_CANAL[c.tipo] || 'enlace')}${esc(tr(c.nombre))}</span>`, esc(tr(c.detalle || '')),
@@ -100,6 +101,10 @@ VISTAS['ajustes/canales'] = {
       <div class="seccion" id="canal-whatsapp">WhatsApp</div>
       <div class="caja" id="waCaja">${this.waHtml(wa)}</div>
       <div id="cpCanales"></div>
+      ${vocab ? `<div class="seccion" id="canal-voz">${tr('Voz: palabras que debe reconocer')}</div>
+      <p class="seccion-ayuda">${tr('Nombres propios y palabras tuyas (proyectos, juegos, personas, marcas) separadas por comas. El micrófono y las notas de voz las reconocen mucho mejor (en las pruebas, de 9,5 % a 6 % de palabras mal). Tus proyectos y el nombre del compañero ya van solos.')}</p>
+      <div class="caja"><textarea id="vozVocab" rows="3" style="width:100%;box-sizing:border-box" placeholder="Ender 3, American Truck Simulator, FPS, Tailscale…">${esc(vocab.join(', '))}</textarea>
+        <div class="flex" style="justify-content:flex-end;margin-top:8px"><button class="btn pri mini" id="vozGuardar">${tr('Guardar')}</button></div></div>` : ''}
       <div class="seccion" id="canal-discord">Discord</div>
       <p class="seccion-ayuda">${tr('El bot de Discord se configura desde la bandeja del robot: <b>Configurar Discord (abrir archivo)…</b> y luego <b>Reconectar Discord</b>. Su estado aparece arriba, en Conectados.')}</p>
       <div class="seccion">${tr('Conectar otros agentes (MCP)')}</div>
@@ -110,6 +115,11 @@ VISTAS['ajustes/canales'] = {
     const ancla = (location.hash.match(/^#\/ajustes\/canales\/(\w+)/) || [])[1];
     if (ancla) setTimeout(() => document.getElementById('canal-' + ancla)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     $('#rec').onclick = () => this.pintar(v);
+    if ($('#vozGuardar')) $('#vozGuardar').onclick = async () => {
+      const r = await api('PUT', '/voz/vocabulario', { vocabulario: $('#vozVocab').value }).catch(er => ({ error: er.message }));
+      if (r.error) return aviso(r.error, true);
+      $('#vozVocab').value = r.vocabulario.join(', '); aviso(tr('Guardado: Whisper lo usará la próxima vez que se cargue'));
+    };
     if (typeof CP_pintar === 'function') CP_pintar($('#cpCanales'));   // Slack, Matrix y Signal (plugins del SDK): canales-plugin.js
     this.tgEnlazar(v, tg);
     $('#waCaja').onclick = async e => {

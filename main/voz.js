@@ -12,7 +12,8 @@ const { fuera } = require('../core/rutas');
 const VOZ_TTS_IDIOMA = { es: { voz: 'es-ES-AlvaroNeural', rate: '+8%', pitch: '+12Hz' }, en: { voz: 'en-US-AndrewNeural', rate: '+6%', pitch: '+8Hz' } };
 const RAIZ = path.join(__dirname, '..');
 
-function crearVoz({ dirDatos, idioma }) {
+// nombre() = nombre del compañero (para el vocabulario de Whisper)
+function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
   const VOZ_CFG = () => { try { return JSON.parse(fs.readFileSync(path.join(dirDatos(), 'voz.json'), 'utf8')); } catch { return {}; } };
   let fishCaidoHasta = 0;                                       // si Fish falla, 5 min con edge-tts antes de reintentar
   async function ttsFish(cfg, text, f) {
@@ -49,10 +50,21 @@ function crearVoz({ dirDatos, idioma }) {
   }
 
   // ---------- Whisper (servidor Python persistente); respaldo: reconocedor de Windows ----------
+  // vocabulario (initial_prompt): palabras fijas + nombre del compañero + tus proyectos + voz.json "vocabulario": [..]
+  // (medido con 36 frases: 13,7 % → 10,5 % de palabras mal solo con las fijas; los nombres propios son lo que más falla)
+  const FIJAS = ['Claude', 'ChatGPT', 'Gemma', 'Gemini', 'Telegram', 'WhatsApp', 'Discord', 'Stream Deck', 'Mission Control', 'Modo Gamer', 'panel', 'sesión', 'proyecto', 'terminal', 'memoria', 'tarea', 'resumen', 'consejo'];
+  function vocabulario() {
+    let proyectos = [], propias = [];
+    try { proyectos = Object.keys(JSON.parse(fs.readFileSync(path.join(dirDatos(), 'proyectos.json'), 'utf8')).proyectos || {}); } catch { }
+    try { propias = VOZ_CFG().vocabulario || []; } catch { }
+    const todas = [...new Set([nombre(), ...propias, ...FIJAS, ...proyectos].map(x => String(x || '').trim()).filter(Boolean))];
+    return todas.join(', ').slice(0, 600) + '.';   // initial_prompt: corto (Whisper usa como mucho ~224 tokens)
+  }
   let whisper = null, whisperReady = false, whisperWait = null, whisperBuf = '';
   function startWhisper() {
     try {
-      whisper = spawn('python', [fuera(path.join(RAIZ, 'tools', 'whisper_srv.py'))], { windowsHide: true, env: { ...process.env, HF_HUB_DISABLE_SYMLINKS_WARNING: '1', PYTHONIOENCODING: 'utf-8' } });
+      whisper = spawn('python', [fuera(path.join(RAIZ, 'tools', 'whisper_srv.py'))], { windowsHide: true, env: { ...process.env, HF_HUB_DISABLE_SYMLINKS_WARNING: '1', PYTHONIOENCODING: 'utf-8',
+        ROBOT_WHISPER_IDIOMA: idioma() || 'es', ROBOT_WHISPER_PROMPT: vocabulario() } });
     } catch { return; }
     whisper.stdout.setEncoding('utf8');
     whisper.stdout.on('data', d => {
@@ -94,8 +106,19 @@ function crearVoz({ dirDatos, idioma }) {
   // micrófono de la isla: Whisper si carga, si no el reconocedor de Windows
   async function escuchar() { const ok = await whisperListo(); apagarWhisperLuego(); return ok && !whisperWait ? listenWhisper() : listenWindows(); }
 
+  // vocabulario propio (voz.json "vocabulario"); al cambiarlo se descarga Whisper: lo usa la próxima vez que se cargue
+  function leerVocabulario() { return (VOZ_CFG().vocabulario || []).map(String); }
+  function guardarVocabulario(lista) {
+    const v = [...new Set((Array.isArray(lista) ? lista : String(lista || '').split(/[,\n]/)).map(x => String(x).trim()).filter(Boolean))].slice(0, 80).map(x => x.slice(0, 60));
+    const f = path.join(dirDatos(), 'voz.json');
+    let c = {}; try { c = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { }
+    c.vocabulario = v; fs.writeFileSync(f, JSON.stringify(c, null, 2));
+    try { whisper && whisper.kill(); } catch { }
+    return v;
+  }
+
   return {
-    generarTts, transcribirArchivo, escuchar,
+    generarTts, transcribirArchivo, escuchar, leerVocabulario, guardarVocabulario,
     whisperCargado: () => whisperReady,
     cerrar() { try { whisper && whisper.kill(); } catch { } },
   };
