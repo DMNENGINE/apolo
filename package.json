@@ -1,6 +1,6 @@
 {
   "name": "robot-companion",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "APOLO: open-source AI desktop companion. A 3D robot that watches, approves and directs your AI agents (Claude Code, Gemini CLI, Ollama, OpenAI...).",
   "author": "DMNENGINE",
   "license": "MIT",

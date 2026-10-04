@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-10-05
+
+### Fixed
+- **Updates**: "Update now" seemed to do nothing. The .exe now shows *Downloading N %* → *Installing* on the island, and on failure the reason, **Retry** and a manual link. The one-line install launches its updater outside APOLO (it could die together with the app when APOLO ran inside a Windows job). `install.ps1` closes APOLO's helpers, waits and retries, so a locked file no longer leaves a half-deleted install. **Users on 0.2.1 or older must update once by hand** (download the new .exe, or run the install line again).
+- **Desktop control**: screenshots could fail with a GDI+ error (the agent then fell back to shell commands); clicks that would land outside the active window (e.g. behind a *Save as* dialog) are refused; typing into an already focused field no longer clicks first (text came out of order); the check after typing now reads the field's text (it reported "nothing changed" and the model typed twice).
+- **Go to terminal** works with Windows Terminal (from the island and the Stream Deck).
+- Meeting summaries are written in the app language. "Review skill" opens that skill.
+- Telegram plugin keeps the migrated chat link across restarts.
+
+### Added
+- **Several models at once from the island**: `gemma + chatgpt: question` shows every answer side by side; new **?** button with all the shortcuts.
+- **Stream Deck 1.1**: 11 keys — panic/resume, microphone, open panel page, quick message, live plan usage, move island, go to terminal, Gamer Mode.
+- **Speech-to-text**: personal vocabulary (Settings → Channels → Voice), the app language for the microphone and a hallucination filter (13.7 % → 9.5 % word error rate on our test set, 6 % with personal words).
+
+### Changed
+- Telegram and WhatsApp run only as isolated plugins (the old built-in versions were removed; existing links and sessions are migrated automatically).
+- No hard-coded paths of the author's machine (MCP snippet uses the real install path).
+
 ## [0.2.1] - 2026-10-04
 
 ### Added
