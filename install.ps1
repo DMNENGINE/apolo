@@ -55,12 +55,19 @@ $ref = if ($sha) { $sha } else { "refs/heads/$Rama" }
 Invoke-WebRequest "https://codeload.github.com/$Repo/zip/$ref" -OutFile $zip -UseBasicParsing
 Expand-Archive $zip -DestinationPath $tmp -Force
 $src = Get-ChildItem $tmp -Directory | Select-Object -First 1
-# si APOLO esta abierto, cerrarlo antes de reemplazar archivos
-Get-CimInstance Win32_Process -Filter "Name='electron.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.CommandLine -like "*$Dir*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+# si APOLO esta abierto, cerrarlo antes de reemplazar archivos: la app y sus ayudantes (Whisper, capturas, manos...)
+# que corren desde su carpeta; se espera a que terminen (si no, algun archivo sigue bloqueado y el borrado falla a medias)
+$deApolo = { Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+  $_.ProcessId -ne $PID -and $_.Name -match '^(electron|python|pythonw|powershell|node)\.exe$' -and $_.CommandLine -like "*$Dir*" -and $_.CommandLine -notlike '*install.ps1*' } }
+& $deApolo | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+for ($i = 0; $i -lt 20 -and (& $deApolo); $i++) { Start-Sleep -Milliseconds 500 }
 New-Item -ItemType Directory -Force $Dir | Out-Null
-# copia el codigo nuevo; conserva node_modules para que actualizar sea rapido
-Get-ChildItem $Dir -Force | Where-Object { $_.Name -ne 'node_modules' } | Remove-Item -Recurse -Force
+# copia el codigo nuevo; conserva node_modules para que actualizar sea rapido. Reintenta: el antivirus o un proceso
+# que acaba de cerrarse pueden tener un archivo abierto unos segundos
+for ($i = 1; $i -le 5; $i++) {
+  try { Get-ChildItem $Dir -Force | Where-Object { $_.Name -ne 'node_modules' } | Remove-Item -Recurse -Force -ErrorAction Stop; break }
+  catch { if ($i -eq 5) { throw "No pude reemplazar los archivos de APOLO ($($_.Exception.Message)). Cierra APOLO del todo y vuelve a ejecutar." }; Aviso "archivo en uso, reintento ($i/5)..."; Start-Sleep 2 }
+}
 Copy-Item (Join-Path $src.FullName '*') $Dir -Recurse -Force
 Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 if ($sha) {

@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('bridge', {
   tts: text => ipcRenderer.invoke('tts', text),
   onActualizacion: fn => ipcRenderer.on('actualizacion', (_e, i) => fn(i)),
   actualizarAhora: () => ipcRenderer.send('upd-ahora'),
+  onActualizacionProgreso: fn => ipcRenderer.on('actualizacion-progreso', (_e, p) => fn(p)),   // {fase: descargando|instalando|abriendo|error, pct?, error?, manual?}
   actualizarLuego: () => ipcRenderer.send('upd-luego'),
   onCursor: fn => ipcRenderer.on('cursor', (_e, p) => fn(p)),
   onDecided: fn => ipcRenderer.on('decided', (_e, id, b) => fn(id, b)),

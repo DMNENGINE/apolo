@@ -2,7 +2,8 @@
 // con el último commit de GitHub. En una copia de desarrollo (con .git) no hace nada.
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const os = require('os');
+const { execFile } = require('child_process');
 
 const REPO = 'DMNENGINE/apolo', RAMA = 'main';
 const API = `https://api.github.com/repos/${REPO}`;
@@ -47,13 +48,26 @@ function crearActualizadorExe({ dirDatos, avisar, log = console.log }) {
     if (!ultima) return;
     try { fs.writeFileSync(fPospuesto, JSON.stringify({ sha: ultima.sha, hasta: Date.now() + horas * 3600_000 })); } catch { }
   }
-  // descarga (diferencial si se puede) y reinicia con el instalador en silencio; los datos (%APPDATA%) no se tocan
-  async function actualizar() {
-    if (!au) return;
+  // descarga (diferencial si se puede) y reinicia con el instalador en silencio; los datos (%APPDATA%) no se tocan.
+  // progreso({fase:'descargando'|'instalando'|'error', pct?, error?}) → la isla lo enseña (antes no se veía nada ~1-3 min
+  // mientras bajaban ~95 MB y los errores solo iban al registro: los usuarios creían que no hacía nada)
+  let enCurso = false;
+  async function actualizar(progreso = () => { }) {
+    if (!au) return progreso({ fase: 'error', error: 'electron-updater no disponible' });
+    if (enCurso) return;                                       // un segundo clic no lanza otra descarga
+    enCurso = true;
+    const alProgreso = p => progreso({ fase: 'descargando', pct: Math.round(p.percent || 0) });
+    au.on('download-progress', alProgreso);
     try {
+      if (!ultima) { const r = await comprobar(true); if (r.estado !== 'nueva') throw new Error(r.estado === 'al-dia' ? 'ya tienes la última versión' : r.error || 'no encuentro la actualización'); }
+      progreso({ fase: 'descargando', pct: 0 });
       if (!descargada) { await au.downloadUpdate(); descargada = true; }
-      au.quitAndInstall(true, true);
-    } catch (e) { log('[actualizador]', e.message); }
+      progreso({ fase: 'instalando' });
+      setTimeout(() => au.quitAndInstall(true, true), 1500);  // que la isla llegue a decir "instalando"
+    } catch (e) {
+      log('[actualizador]', e.message); enCurso = false;
+      progreso({ fase: 'error', error: String(e.message || e).split('\n')[0], manual: `https://github.com/${REPO}/releases/latest` });
+    } finally { au.removeListener('download-progress', alProgreso); }
   }
   function iniciar() {
     if (!au) return;
@@ -63,7 +77,7 @@ function crearActualizadorExe({ dirDatos, avisar, log = console.log }) {
   return { iniciar, comprobar, posponer, actualizar, esDesarrollo: false, pendiente: () => ultima, modo: 'exe' };
 }
 
-function crearActualizadorGit({ dirApp, dirDatos, avisar, log = console.log }) {
+function crearActualizadorGit({ dirApp, dirDatos, avisar, log = console.log, instalador = INSTALADOR }) {   // instalador: otra URL solo en pruebas
   const esDesarrollo = fs.existsSync(path.join(dirApp, '.git'));
   const fInstalado = path.join(dirApp, 'instalado.json');
   const fPospuesto = path.join(dirDatos, 'actualizacion-pospuesta.json');
@@ -102,11 +116,28 @@ function crearActualizadorGit({ dirApp, dirDatos, avisar, log = console.log }) {
     try { fs.writeFileSync(fPospuesto, JSON.stringify({ sha: ultima.sha, hasta: Date.now() + horas * 3600_000 })); } catch { }
   }
 
-  // ejecuta install.ps1 en una ventana visible: cierra APOLO, actualiza y lo vuelve a abrir
-  function actualizar() {
-    const cmd = `Write-Host 'Actualizando APOLO...' -ForegroundColor Green; irm ${INSTALADOR} | iex; Start-Sleep 4`;
-    const p = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', cmd], { detached: true, stdio: 'ignore' });
-    p.unref();
+  // ejecuta install.ps1 en una ventana visible: cierra APOLO, actualiza y lo vuelve a abrir.
+  // Se lanza con WMI (Win32_Process.Create) y no como hijo: APOLO puede correr dentro de un "job" de Windows que mata a sus
+  // hijos al cerrarse, e install.ps1 empieza cerrando APOLO → el actualizador moría con él y APOLO quedaba cerrado sin actualizar.
+  let enCurso = false;
+  function actualizar(progreso = () => { }) {
+    if (enCurso) return; enCurso = true;
+    const script = path.join(os.tmpdir(), 'apolo-actualizar.ps1');
+    fs.writeFileSync(script, [
+      "$Host.UI.RawUI.WindowTitle = 'Actualizando APOLO'",
+      "Write-Host 'Actualizando APOLO... (no cierres esta ventana)' -ForegroundColor Green",
+      `try { irm ${instalador} | iex; Start-Sleep 3 }`,
+      "catch { Write-Host ''; Write-Host ('No se pudo actualizar: ' + $_.Exception.Message) -ForegroundColor Red; Read-Host 'Pulsa Enter para cerrar' }",
+    ].join('\r\n'), 'utf8');
+    const linea = `cmd.exe /c start "Actualizando APOLO" powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${script}"`;
+    const ps = `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = '${linea.replace(/'/g, "''")}' }; $r.ReturnValue`;
+    progreso({ fase: 'abriendo' });
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true, timeout: 20_000 }, (err, out) => {
+      if (!err && String(out).trim() === '0') return;        // en marcha: install.ps1 cerrará APOLO y lo volverá a abrir
+      enCurso = false;
+      log('[actualizador] no pude lanzar install.ps1:', err ? err.message : String(out).trim());
+      progreso({ fase: 'error', error: 'no pude abrir el actualizador', manual: `irm ${instalador} | iex` });
+    });
   }
 
   function iniciar() {

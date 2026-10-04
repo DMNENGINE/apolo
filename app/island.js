@@ -395,10 +395,26 @@ if (bridge.onAnswer) bridge.onAnswer(a => {
 $('answer').addEventListener('click', e => {
   const b = e.target.closest('button[data-upd]');
   if (b) {
-    if (b.dataset.upd === 'ahora') { bridge.actualizarAhora(); robot.hud(tr('ACTUALIZANDO…'), 30, 'trabajando'); say(tr('Me actualizo. Vuelvo en un momento.')); }
+    if (b.dataset.upd === 'ahora') { bridge.actualizarAhora(); robot.hud(tr('ACTUALIZANDO…'), 30, 'trabajando'); say(tr('Me actualizo. Vuelvo en un momento.')); return; }   // la tarjeta se queda: enseña el progreso
+    else if (b.dataset.upd === 'copiar') { navigator.clipboard?.writeText(b.dataset.txt || '').catch(() => { }); toast(tr('Copiado')); return; }
     else { bridge.actualizarLuego(); toast(tr('Te lo recuerdo mañana. También en la bandeja: Buscar actualizaciones.')); }
   }
   $('answer').classList.remove('on');
+});
+// progreso de la actualización: la tarjeta sigue abierta con lo que está pasando (y Reintentar si falla)
+if (bridge.onActualizacionProgreso) bridge.onActualizacionProgreso(p => {
+  const el = $('answer'); clearTimeout(el._t);
+  const titulo = `<b class="t">⬆ ${tr('Actualización')}</b>`;
+  if (p.fase === 'descargando') el.innerHTML = titulo + `${tr('Descargando…')} ${p.pct || 0}%<div class="upd-barra"><i style="width:${Math.max(2, p.pct || 0)}%"></i></div>`;
+  else if (p.fase === 'instalando') { el.innerHTML = titulo + tr('Descargada. Me cierro, me instalo y vuelvo a abrirme solo (menos de un minuto).'); say(tr('Me instalo y vuelvo enseguida.')); }
+  else if (p.fase === 'abriendo') el.innerHTML = titulo + tr('Abro el actualizador en una ventana: me cerraré, me actualizo y vuelvo a abrirme solo (1-3 min).');
+  else if (p.fase === 'error') {
+    el.innerHTML = titulo + `❌ ${tr('No pude actualizar')}: ${esc(p.error || '')}` +
+      (p.manual ? `<div class="tenue" style="margin-top:6px">${tr('Puedes hacerlo a mano')}: <code>${esc(p.manual)}</code></div>` : '') +
+      `<div class="upd"><button data-upd="ahora">${tr('Reintentar')}</button>${p.manual ? `<button data-upd="copiar" data-txt="${esc(p.manual)}">${tr('Copiar')}</button>` : ''}<button data-upd="luego">${tr('Más tarde')}</button></div>`;
+    robot.hud(tr('ERROR'), 4, 'error');
+  }
+  el.classList.add('on'); abrirUnRato(p.fase === 'error' ? 60_000 : 120_000);
 });
 // hay una versión nueva en GitHub: la isla se abre, lo dice y pregunta
 if (bridge.onActualizacion) bridge.onActualizacion(i => {

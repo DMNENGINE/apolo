@@ -123,7 +123,8 @@ let ultimoUso = null, ultimaSid = null;                      // para las teclas 
 const dispositivos = crearDispositivos({ getWin: () => win, getNucleo: () => nucleo, abrirPanel: r => abrirPanel(r), handleText: (t, o) => handleText(t, o),
   focusTerminal: sid => focusTerminal(sid), ultimaSesion: () => { const p = [...pending.values()].find(x => x.ev && x.ev.session_id && !x.nucleoId); return (p && p.ev.session_id) || ultimaSid; } });
 
-ipcMain.on('upd-ahora', () => { if (!actualizador) return; actualizador.actualizar(); });
+// el progreso (descargando %, instalando, error) va a la isla: antes no se veía nada y parecía que no hacía nada
+ipcMain.on('upd-ahora', () => { if (!actualizador) return; actualizador.actualizar(p => { if (win && !win.isDestroyed()) win.webContents.send('actualizacion-progreso', p); }); });
 ipcMain.on('upd-luego', () => { if (actualizador) actualizador.posponer(24); });
 async function buscarActualizacion() {
   const r = await actualizador.comprobar(true);
