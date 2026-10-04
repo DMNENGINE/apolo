@@ -21,7 +21,6 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const esPeligroso = require('./shared/peligro.js');
-const IslaGeo = require('./shared/isla-geometria.js');      // dónde va la isla, hacia dónde se abre (y tests en core/test)
 const { decidirDiscord, whatsappComoPlugin: waComoPlugin } = require('./shared/canales-flags');
 const { createDiscord } = require('./bot-discord.js');
 const { createTalk } = require('./hablar.js');
@@ -42,12 +41,12 @@ const nombreCompanero = () => { try { return nucleo ? nucleo.personalidad.nombre
 const PORT = +process.env.APOLO_PUERTO || 47823;          // APOLO_PUERTO: solo pruebas (el hook usa 47823)
 // tamaño de la ventana de la isla: IslaGeo.VENT_W x VENT_H (900 x 640, se recorta si el área de trabajo es menor)
 const { fuera } = require('./core/rutas');                 // app instalada: lo que usan procesos externos está en app.asar.unpacked
-const HOOK_JS = fuera(path.join(__dirname, 'hook', 'hook.js')).replace(/\\/g, '/');
-// sin Node.js en el PATH (instalación .exe) el hook corre con el propio APOLO.exe en modo node (hook/hook.cmd)
-const HOOK_EJEC = () => (app.isPackaged && !tieneCLI('node') ? `"${HOOK_JS.replace(/hook\.js$/, 'hook.cmd')}"` : `node "${HOOK_JS}"`);
-const ES_HOOK = /(RobotCompanion|APOLO|app\.asar\.unpacked)\/hook\/hook\.(js|cmd)/i;   // copia de desarrollo, one-liner o .exe
-const CLAUDE_DIR = path.join(os.homedir(), '.claude');
-const SETTINGS = path.join(CLAUDE_DIR, 'settings.json');
+const { crearHooksConfig, tieneCLI, CLAUDE_DIR } = require('./main/hooks-config');
+const { crearVoz } = require('./main/voz');
+const { readContext, crearUso } = require('./main/uso');
+const { resolveTerminal, focusTerminal, hwndDe } = require('./main/terminales');
+const { crearReglas } = require('./main/reglas');
+const { crearIsla } = require('./main/isla-ventana');
 const TOKEN_FILE = path.join(CLAUDE_DIR, 'robot-companion.token');
 const { crearActualizador } = require('./actualizador');
 let actualizador = null;
@@ -82,11 +81,6 @@ const movil = {
 };
 const esRemoto = o => o === 'discord' || o === 'telegram' || o === 'whatsapp';
 const responderA = (o, md) => ({ telegram, whatsapp }[o] || discord).reply(md);
-const HOOK_EVENTS = [
-  ['SessionStart', 10], ['SessionEnd', 10], ['UserPromptSubmit', 10], ['PreToolUse', 10], ['PostToolUse', 10],
-  ['PostToolUseFailure', 10], ['PermissionRequest', 120], ['Notification', 10], ['Stop', 10], ['StopFailure', 10],
-  ['SubagentStart', 10], ['SubagentStop', 10],
-];
 
 let win, tray;
 const pending = new Map();          // id -> { res, timer, ev }
@@ -106,89 +100,26 @@ function ensureToken() {
 }
 
 // ---------- reglas "Permitir siempre" ----------
-let rules = [];
-const loadRules = () => { try { rules = JSON.parse(fs.readFileSync(RULES_FILE(), 'utf8')); } catch { rules = []; } };
-const saveRules = () => fs.writeFileSync(RULES_FILE(), JSON.stringify(rules, null, 2));
-function ruleFor(tool, inp = {}) {
-  if (tool === 'Bash' || tool === 'PowerShell') {
-    const w = String(inp.command || '').trim().split(/\s+/);
-    const pre = w[1] && !w[1].startsWith('-') ? `${w[0]} ${w[1]}` : w[0];
-    return { tool, prefix: pre, label: `${tool}: ${pre} …` };
-  }
-  if (inp.file_path) {
-    const dir = path.dirname(String(inp.file_path)).replace(/\\/g, '/');
-    return { tool, prefix: dir, label: `${tool} en ${dir}` };
-  }
-  return { tool, prefix: '', label: tool };
-}
-function matchesRule(tool, inp = {}) {
-  return rules.find(r => {
-    if (r.tool !== tool) return false;
-    if (tool === 'Bash' || tool === 'PowerShell') {
-      const c = String(inp.command || '').trim();
-      return c === r.prefix || c.startsWith(r.prefix + ' ');
-    }
-    if (r.prefix) return String(inp.file_path || '').replace(/\\/g, '/').startsWith(r.prefix + '/');
-    return true;
-  });
-}
+const reglas = crearReglas(RULES_FILE);
 const allowJSON = () => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } });
 
-function createWindow() {
-  layIsla = layoutElegido();                             // donde la dejó el usuario (o arriba en el centro del principal)
-  win = new BrowserWindow({
-    ...layIsla.ventana,
-    frame: false, transparent: true, resizable: false, movable: false,
-    alwaysOnTop: true, skipTaskbar: true, hasShadow: false, focusable: true,
-    backgroundColor: '#00000000',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
-  });
-  win.setAlwaysOnTop(true, 'screen-saver');
-  win.setVisibleOnAllWorkspaces(true);
-  win.setIgnoreMouseEvents(true, { forward: true });     // clics pasan a través salvo encima de lo VISIBLE de la isla (hit-testing en island.js)
-  win.webContents.on('did-finish-load', () => enviarLayout(layIsla));
-  win.loadFile(path.join(__dirname, 'app', 'index.html'));
-}
+// ---------- isla (ventana, posición, arrastre, pantalla completa: main/isla-ventana.js) ----------
+const isla = crearIsla({ alPantallaCompleta: e => { if (nucleo) nucleo.bus.emit('pantalla-completa', e); } });   // co-host: modo comentarista
+function createWindow() { win = isla.crearVentana(); }
 
-// voz: 1) Fish Audio (si hay key y voz en %APPDATA%\robot-companion\voz.json) 2) edge-tts (Microsoft es-ES-Alvaro)
-// 3) null → la isla usa la voz de Windows. Todo en mp3 con caché por texto.
-const VOZ_TTS_IDIOMA = { es: { voz: 'es-ES-AlvaroNeural', rate: '+8%', pitch: '+12Hz' }, en: { voz: 'en-US-AndrewNeural', rate: '+6%', pitch: '+8Hz' } };
-const VOZ_CFG = () => { try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'voz.json'), 'utf8')); } catch { return {}; } };
-let fishCaidoHasta = 0;                                       // si Fish falla, 5 min con edge-tts antes de reintentar
-async function ttsFish(cfg, text, f) {
-  if (!cfg.apiKey || !cfg.voz || Date.now() < fishCaidoHasta) return false;
-  try {
-    const r = await fetch('https://api.fish.audio/v1/tts', {
-      method: 'POST', signal: AbortSignal.timeout(15_000),
-      headers: { Authorization: 'Bearer ' + cfg.apiKey, 'Content-Type': 'application/json', model: cfg.modelo || 's2.1-pro-free' },
-      body: JSON.stringify({ text, reference_id: cfg.voz, format: 'mp3' }),
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
-    return true;
-  } catch (e) { console.error('[voz] Fish Audio falló:', e.message); fishCaidoHasta = Date.now() + 300_000; return false; }
-}
+// ---------- voz: TTS (Fish / edge-tts) y Whisper (main/voz.js) ----------
+const voz = crearVoz({ dirDatos: () => app.getPath('userData'), idioma: () => idiomaApp() });
+const transcribirArchivo = ruta => voz.transcribirArchivo(ruta);
 // lo que dice la isla también sale por el altavoz del ojo si la petición vino del ojo (o cfg.nodos.vozSiempre)
-ipcMain.handle('tts', async (_e, text) => { const f = await generarTts(text); vozAlOjo(f); return f; });
-async function generarTts(text) {
-  text = String(text || '').slice(0, 600); if (!text.trim()) return null;
-  const dir = path.join(os.tmpdir(), 'robot-tts'); try { fs.mkdirSync(dir, { recursive: true }); } catch { }
-  const vc = VOZ_CFG();
-  const VOZ_TTS = VOZ_TTS_IDIOMA[idiomaApp()] || VOZ_TTS_IDIOMA.es;     // edge-tts con la voz del idioma elegido
-  const firma = vc.apiKey && vc.voz ? 'fish' + vc.voz + (vc.modelo || '') : VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch;
-  const f = path.join(dir, crypto.createHash('sha1').update(firma + text).digest('hex').slice(0, 16) + '.mp3');
-  if (fs.existsSync(f)) return f;
-  if (await ttsFish(vc, text, f)) return f;
-  const fe = path.join(dir, crypto.createHash('sha1').update(VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch + text).digest('hex').slice(0, 16) + '.mp3');
-  if (fs.existsSync(fe)) return fe;
-  return edgeTts(text, fe, VOZ_TTS);
-}
-const edgeTts = (text, f, VOZ_TTS = VOZ_TTS_IDIOMA.es) => new Promise(ok => {
-  const p =require('child_process').spawn('python', ['-m', 'edge_tts', '--voice', VOZ_TTS.voz, '--rate=' + VOZ_TTS.rate, '--pitch=' + VOZ_TTS.pitch, '--text', text, '--write-media', f], { windowsHide: true });
-  const t = setTimeout(() => { try { p.kill(); } catch { } ok(null); }, 12_000);
-  p.on('error', () => { clearTimeout(t); ok(null); });
-  p.on('exit', c => { clearTimeout(t); ok(c === 0 && fs.existsSync(f) ? f : null); });
-});
+ipcMain.handle('tts', async (_e, text) => { const f = await voz.generarTts(text); vozAlOjo(f); return f; });
+ipcMain.handle('listen', () => voz.escuchar());
+
+// ---------- hooks en ~/.claude y ~/.gemini (main/hooks-config.js) ----------
+const hooksCfg = crearHooksConfig({ empaquetado: () => app.isPackaged, mensaje: o => dialog.showMessageBox(o), tr: (k, v) => tr(k, v) });
+
+// ---------- uso del plan (main/uso.js) ----------
+const uso = crearUso({ claudeDir: CLAUDE_DIR, dirDatos: () => app.getPath('userData'), cerebro: () => cerebro,
+  avisar: (t, tono) => movil.sendAviso(t, tono), alUso: d => { if (win && !win.isDestroyed()) win.webContents.send('usage', d); } });
 
 ipcMain.on('upd-ahora', () => { if (!actualizador) return; actualizador.actualizar(); });
 ipcMain.on('upd-luego', () => { if (actualizador) actualizador.posponer(24); });
@@ -197,126 +128,6 @@ async function buscarActualizacion() {
   const txt = { 'al-dia': tr('Tienes la última versión.'), desarrollo: tr('Esta es una copia de desarrollo (git): actualízala con git pull.'),
     desconocido: tr('No sé qué versión tienes: reinstala con el comando de una línea para recibir avisos.'), error: tr('No pude consultar GitHub: {x}', { x: r.error || '' }) }[r.estado];
   if (txt && win && !win.isDestroyed()) win.webContents.send('answer', { titulo: tr('Actualizaciones'), texto: txt });
-}
-
-// la isla decide (hit-testing) si el ratón está sobre algo visible: solo entonces la ventana deja de ser "atravesable"
-ipcMain.on('interactive', (_e, on) => { if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(!on, { forward: true }); });
-
-// ---------- posición de la isla: el usuario la arrastra a cualquier monitor y se guarda (geometría pura: shared/isla-geometria.js) ----------
-// layIsla = { ventana, barX, barY (barra = isla cerrada, dentro de la ventana), h: izq|centro|der, v: arriba|abajo (hacia dónde se abre), barra (pantalla) }
-const ISLA_POS = () => path.join(app.getPath('userData'), 'isla-posicion.json');
-let layIsla = null, mudada = false, animMudanza = null, arrastre = null, layPend = null;
-function posGuardada() { try { return JSON.parse(fs.readFileSync(ISLA_POS(), 'utf8')); } catch { return null; } }
-function guardarPos(d, barra) {
-  try { fs.writeFileSync(ISLA_POS(), JSON.stringify({ id: d.id, bounds: d.bounds, ...IslaGeo.aFraccion(barra, d.workArea) })); } catch (e) { console.error('[isla] no pude guardar la posición:', e.message); }
-}
-// monitor + fracción elegidos por el usuario; si ese monitor ya no existe → arriba en el centro del principal
-function sitioElegido() {
-  const g = posGuardada(), d = IslaGeo.elegirMonitor(g, screen.getAllDisplays());
-  return d ? { d, f: g } : { d: screen.getPrimaryDisplay(), f: IslaGeo.POR_DEFECTO };
-}
-function layoutElegido() { const { d, f } = sitioElegido(); return IslaGeo.layout(IslaGeo.deFraccion(f, d.workArea), d.workArea); }
-function layoutEn(d) { return IslaGeo.layout(IslaGeo.deFraccion(sitioElegido().f, d.workArea), d.workArea); }   // mismo sitio relativo en otro monitor
-function enviarLayout(lay) {
-  if (win && !win.isDestroyed()) win.webContents.send('isla-layout', { barX: lay.barX, barY: lay.barY, h: lay.h, v: lay.v, ancho: lay.ventana.width, alto: lay.ventana.height });
-}
-// cambia el anclaje dentro de la ventana y LUEGO mueve la ventana (la isla contesta 'isla-layout-ok' tras pintar) → la barra no salta
-function aplicarLayout(lay) {
-  if (!win || win.isDestroyed()) return;
-  layIsla = lay; enviarLayout(lay);
-  clearTimeout(layPend); layPend = setTimeout(() => { layPend = null; ponerVentana(lay.ventana); }, 200);   // por si la isla no contesta
-}
-ipcMain.on('isla-layout-ok', () => { if (layPend) { clearTimeout(layPend); layPend = null; ponerVentana(layIsla.ventana); } });
-function ponerVentana(v) { if (win && !win.isDestroyed()) win.setBounds(v); }
-function barraPantalla() { const b = win.getBounds(); return { x: b.x + layIsla.barX, y: b.y + layIsla.barY, w: IslaGeo.BARRA_W, h: IslaGeo.BARRA_H }; }
-function displayDeIsla() { return IslaGeo.monitorDe(IslaGeo.centroBarra(barraPantalla()), screen.getAllDisplays()) || screen.getPrimaryDisplay(); }
-
-// arrastre: la isla avisa 'inicio' (pulsación larga en el robot o arrastrar la barra/cabecera) y 'fin' al soltar; aquí la ventana sigue al cursor
-ipcMain.on('isla-arrastre', (_e, fase) => {
-  if (!win || win.isDestroyed()) return;
-  if (fase !== 'inicio') return terminarArrastre();
-  clearInterval(animMudanza); animMudanza = null;
-  if (arrastre) clearInterval(arrastre.t);
-  const p0 = screen.getCursorScreenPoint(), b0 = win.getBounds(), t0 = Date.now();
-  let lx = p0.x, ly = p0.y;
-  arrastre = { t: setInterval(() => {
-    if (!win || win.isDestroyed() || Date.now() - t0 > 120_000) return terminarArrastre();      // seguro: nunca se queda pegada al cursor
-    const c = screen.getCursorScreenPoint(); if (c.x === lx && c.y === ly) return;
-    lx = c.x; ly = c.y;
-    win.setBounds({ x: b0.x + c.x - p0.x, y: b0.y + c.y - p0.y, width: b0.width, height: b0.height });
-  }, 16) };
-});
-function terminarArrastre() {
-  if (!arrastre) return;
-  clearInterval(arrastre.t); arrastre = null;
-  if (!win || win.isDestroyed()) return;
-  const d = displayDeIsla(), lay = IslaGeo.layout(barraPantalla(), d.workArea);     // dentro del área de trabajo + dirección de apertura nueva
-  guardarPos(d, lay.barra); mudada = false;
-  console.log(`[isla] colocada en el monitor ${d.id} (${lay.h}/${lay.v})`);
-  aplicarLayout(lay);
-}
-
-// ---------- juego / vídeo a pantalla completa en el monitor de la isla → se va rodando a otro y vuelve al terminar ----------
-function rodarA(d, destino) {
-  if (!win || win.isDestroyed() || !d || arrastre) return;
-  const lay2 = destino || layoutEn(d), desde = barraPantalla(), hasta = lay2.barra, t0 = Date.now(), DUR = 900;
-  const { barX, barY } = layIsla, { width, height } = win.getBounds();
-  win.webContents.send('mudanza', hasta.x > desde.x ? 1 : -1);          // el robot rueda en esa dirección
-  clearInterval(animMudanza);
-  // se mueve la BARRA (con el anclaje actual) y al llegar se re-ancla según el sitio nuevo; si los monitores no se tocan, salta igual
-  animMudanza = setInterval(() => {
-    if (!win || win.isDestroyed()) { clearInterval(animMudanza); return; }
-    const k = Math.min(1, (Date.now() - t0) / DUR), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    win.setBounds({ x: Math.round(desde.x + (hasta.x - desde.x) * e) - barX, y: Math.round(desde.y + (hasta.y - desde.y) * e) - barY, width, height });
-    if (k >= 1) { clearInterval(animMudanza); animMudanza = null; aplicarLayout(lay2); }
-  }, 16);
-}
-function otroMonitor(excluir) {
-  const otros = screen.getAllDisplays().filter(d => d.id !== excluir.id);
-  // el más grande; a igualdad, el horizontal (la isla queda mejor arriba de una pantalla apaisada)
-  return otros.sort((a, b) => (b.bounds.width * b.bounds.height) - (a.bounds.width * a.bounds.height) || (b.bounds.width >= b.bounds.height) - (a.bounds.width >= a.bounds.height))[0];
-}
-function vigilarPantallaCompleta() {
-  const p = require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(__dirname, 'tools', 'pantalla-completa.ps1'))], { windowsHide: true });
-  let buf = '';
-  p.stdout.setEncoding('utf8');
-  p.stdout.on('data', d => {
-    buf += d; let i;
-    while ((i = buf.indexOf('\n')) >= 0) {
-      const l = buf.slice(0, i).trim().replace(/^﻿/, ''); buf = buf.slice(i + 1);
-      let j; try { j = JSON.parse(l); } catch { continue; }
-      try { if (nucleo) nucleo.bus.emit('pantalla-completa', { completa: !!j.completa, proceso: j.proceso || '' }); } catch { }   // co-host: modo comentarista
-      if (!win || win.isDestroyed()) continue;
-      if (j.completa) {
-        const ocupado = screen.getDisplayMatching({ x: j.x, y: j.y, width: j.ancho, height: j.alto });
-        if (ocupado.id === displayDeIsla().id) {
-          const destino = otroMonitor(ocupado);
-          if (destino && !arrastre) { mudada = true; console.log(`[isla] ${j.proceso} a pantalla completa → me voy al otro monitor`); rodarA(destino); }
-        }
-      } else if (mudada) {
-        mudada = false;                                                    // vuelve al sitio que eligió el usuario (o al de por defecto)
-        console.log('[isla] se acabó la pantalla completa → vuelvo'); rodarA(sitioElegido().d, layoutElegido());
-      }
-    }
-  });
-  p.on('exit', () => setTimeout(vigilarPantallaCompleta, 5000));          // si se cae, se relanza
-  app.on('will-quit', () => { try { p.kill(); } catch { } });
-}
-
-// mover a mano (grabar vídeo en el principal): 'otro' = fuera del monitor principal, 'casa' = vuelve al sitio elegido,
-// 'reset' = olvida el sitio elegido y vuelve arriba en el centro del principal (bandeja "Volver la isla a su sitio")
-function moverIsla(a) {
-  const prim = screen.getPrimaryDisplay();
-  mudada = false;
-  if (a === 'reset') { try { fs.unlinkSync(ISLA_POS()); } catch { } }
-  if (a === 'otro') { const d = otroMonitor(prim); if (d) rodarA(d); return; }
-  rodarA(sitioElegido().d, layoutElegido());
-}
-// un monitor desconectado o con otra resolución: se recoloca (si el suyo ya no está → posición por defecto)
-function vigilarMonitores() {
-  let t = null;
-  const recolocar = () => { clearTimeout(t); t = setTimeout(() => { if (win && !win.isDestroyed() && !arrastre && !animMudanza && !mudada) aplicarLayout(layoutElegido()); }, 600); };
-  screen.on('display-removed', recolocar); screen.on('display-added', recolocar); screen.on('display-metrics-changed', recolocar);
 }
 
 // respuesta a un permiso desde la isla (o Stream Deck / Discord): 'allow' | 'deny' | 'always'
@@ -332,10 +143,7 @@ function decide(id, behavior, via = '?') {
     movil.resolvePerm(id, behavior, via);
     return true;
   }
-  if (behavior === 'always' && !esPeligroso(p.ev.tool_name, p.ev.tool_input)) {
-    const r = ruleFor(p.ev.tool_name, p.ev.tool_input);
-    if (!rules.some(x => x.tool === r.tool && x.prefix === r.prefix)) { rules.push(r); saveRules(); }
-  }
+  if (behavior === 'always' && !esPeligroso(p.ev.tool_name, p.ev.tool_input)) reglas.agregar(p.ev.tool_name, p.ev.tool_input);
   const decision = behavior === 'deny' ? { behavior: 'deny', message: `Denegado desde ${nombreCompanero()}` } : { behavior: 'allow' };
   p.res.end(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } }));
   if (win && !win.isDestroyed()) win.webContents.send('decided', id, behavior);
@@ -344,114 +152,6 @@ function decide(id, behavior, via = '?') {
 }
 ipcMain.on('decision', (_e, id, behavior) => decide(id, behavior, 'isla'));
 
-// ---------- tokens: lee el final del transcript y saca el uso del último mensaje ----------
-function readContext(transcript) {
-  try {
-    if (!transcript || !fs.existsSync(transcript)) return null;
-    const st = fs.statSync(transcript), len = Math.min(st.size, 256 * 1024);
-    const fd = fs.openSync(transcript, 'r'); const buf = Buffer.alloc(len);
-    fs.readSync(fd, buf, 0, len, st.size - len); fs.closeSync(fd);
-    const lines = buf.toString('utf8').split('\n').reverse();
-    for (const l of lines) {
-      if (!l.includes('"usage"')) continue;
-      try {
-        const j = JSON.parse(l), u = j.message && j.message.usage;
-        if (!u) continue;
-        return {
-          ctx: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0),
-          out: u.output_tokens || 0, model: j.message.model || '',
-        };
-      } catch { /* línea cortada al inicio del bloque */ }
-    }
-  } catch { }
-  return null;
-}
-
-// ---------- uso de hoy (todas las sesiones): tokens y mensajes ----------
-const usage = { day: '', tokens: 0, nuevo: 0, cache: 0, out: 0, msgs: 0, offsets: new Map(), seen: new Set(), ev: [], hits: [] };
-const LIMITS = () => path.join(app.getPath('userData'), 'limites.json');
-let limits = null;
-const loadLimits = () => { try { limits = JSON.parse(fs.readFileSync(LIMITS(), 'utf8')); } catch { limits = { ventana5h: null, semanal: null, avisarAl: 0.8, pausarAl: 0.92 }; fs.writeFileSync(LIMITS(), JSON.stringify(limits, null, 2)); } };
-function scanUsage() {
-  const today = new Date().toDateString();
-  if (!limits) loadLimits();
-  if (usage.day !== today) Object.assign(usage, { day: today, tokens: 0, nuevo: 0, cache: 0, out: 0, msgs: 0 });
-  const root = path.join(CLAUDE_DIR, 'projects');
-  let dirs = []; try { dirs = fs.readdirSync(root); } catch { return; }
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  const weekAgo = Date.now() - 7 * 86400_000;
-  for (const d of dirs) {
-    let files = []; try { files = fs.readdirSync(path.join(root, d)).filter(f => f.endsWith('.jsonl')); } catch { continue; }
-    for (const f of files) {
-      const fp = path.join(root, d, f);
-      let st; try { st = fs.statSync(fp); } catch { continue; }
-      if (st.mtimeMs < weekAgo) continue;
-      const from = usage.offsets.get(fp) || 0;
-      if (st.size <= from) continue;
-      try {
-        const fd = fs.openSync(fp, 'r'), buf = Buffer.alloc(st.size - from);
-        fs.readSync(fd, buf, 0, buf.length, from); fs.closeSync(fd);
-        const txt = buf.toString('utf8'), cut = txt.lastIndexOf('\n');
-        usage.offsets.set(fp, from + Buffer.byteLength(txt.slice(0, cut + 1)));
-        for (const l of txt.slice(0, cut).split('\n')) {
-          // aviso REAL de límite: lo genera Claude Code como mensaje sintético de error (no texto normal de una conversación)
-          if ((l.includes('"isApiErrorMessage":true') || l.includes('"model":"<synthetic>"')) && /usage limit|limit reached|l[ií]mite de uso/i.test(l)) {
-            try { const j = JSON.parse(l); const ts = new Date(j.timestamp).getTime(); if (ts > Date.now() - 6 * 3600_000 && !usage.hits.includes(ts)) usage.hits.push(ts); } catch { }
-          }
-          if (!l.includes('"usage"')) continue;
-          try {
-            const j = JSON.parse(l), u = j.message && j.message.usage;
-            if (!u || !j.timestamp) continue;
-            const ts = new Date(j.timestamp).getTime();
-            if (ts < weekAgo) continue;
-            const key = j.message.id || j.uuid;                          // un mensaje puede venir en varias líneas
-            if (key && usage.seen.has(key)) continue;
-            if (key) usage.seen.add(key);
-            const tk = (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
-            usage.ev.push([ts, tk]);
-            if (ts >= start.getTime()) { usage.msgs++; usage.out += u.output_tokens || 0; usage.tokens += tk; usage.cache += u.cache_read_input_tokens || 0; usage.nuevo += tk - (u.cache_read_input_tokens || 0); }
-          } catch { }
-        }
-      } catch { }
-    }
-  }
-  // ventanas: 5 h y 7 días; si Claude Code avisó de límite, ese consumo se toma como el límite real (autocalibrado)
-  const now = Date.now();
-  usage.ev = usage.ev.filter(([t]) => t > now - 7 * 86400_000);
-  const h5 = usage.ev.reduce((n, [t, k]) => n + (t > now - 5 * 3600_000 ? k : 0), 0);
-  const week = usage.ev.reduce((n, [, k]) => n + k, 0);
-  for (const hit of usage.hits.splice(0)) {
-    const at = usage.ev.reduce((n, [t, k]) => n + (t > hit - 5 * 3600_000 && t <= hit ? k : 0), 0);
-    if (at > 0) { limits.ventana5h = at; fs.writeFileSync(LIMITS(), JSON.stringify(limits, null, 2)); movil.sendAviso(`⛔ Llegaste al límite de la ventana de 5 h del plan (~${Math.round(at / 1e6)}M tokens). Lo apunto para avisarte antes la próxima vez.`, 'red'); }
-  }
-  const p5 = limits.ventana5h ? h5 / limits.ventana5h : 0, pW = limits.semanal ? week / limits.semanal : 0;
-  const near = Math.max(p5, pW);
-  if (cerebro) cerebro.setPaused(near >= limits.pausarAl);
-  if (near >= limits.avisarAl && !usage.warned) { usage.warned = true; movil.sendAviso(`⚠️ Llevas el ${Math.round(near * 100)}% del límite del plan (${p5 >= pW ? 'ventana de 5 h' : 'semana'}). El cerebro del robot se pausa al ${Math.round(limits.pausarAl * 100)}%.`, 'amber'); }
-  if (near < limits.avisarAl * 0.8) usage.warned = false;
-  if (win && !win.isDestroyed()) win.webContents.send('usage', { tokens: usage.tokens, nuevo: usage.nuevo, cache: usage.cache, out: usage.out, msgs: usage.msgs, h5, week, p5, pW, paused: cerebro ? cerebro.paused : false });
-}
-
-// ---------- ventana de terminal de cada sesión ----------
-const sessionWin = new Map();       // session_id -> { hwnd, name } | 'buscando'
-function ps(script) {
-  return new Promise(ok => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 },
-    (err, out) => ok(err ? '' : String(out).trim())));
-}
-async function resolveTerminal(sid, ppid) {
-  if (!ppid || sessionWin.has(sid)) return;
-  sessionWin.set(sid, 'buscando');
-  // sube por los procesos padre hasta encontrar uno con ventana (Windows Terminal, VS Code, consola…)
-  const out = await ps(`$p=${Number(ppid)}; for($i=0;$i -lt 15 -and $p;$i++){ $pr=Get-Process -Id $p -EA SilentlyContinue; if($pr -and $pr.MainWindowHandle -ne 0){ "$($pr.MainWindowHandle)|$($pr.ProcessName)"; break }; $p=(Get-CimInstance Win32_Process -Filter "ProcessId=$p").ParentProcessId }`);
-  const [hwnd, name] = out.split('|');
-  if (hwnd) sessionWin.set(sid, { hwnd, name }); else sessionWin.delete(sid);
-}
-async function focusTerminal(sid) {
-  const w = sessionWin.get(sid);
-  if (!w || w === 'buscando') return false;
-  await ps(`Add-Type -Name W -Namespace U -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h,int c); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);'; $h=[IntPtr]${w.hwnd}; if([U.W]::IsIconic($h)){[U.W]::ShowWindowAsync($h,9)|Out-Null}; [U.W]::SetForegroundWindow($h)|Out-Null`);
-  return true;
-}
 ipcMain.handle('focus-terminal', (_e, sid) => focusTerminal(sid));
 ipcMain.handle('talk', (_e, text, origin) => talk ? handleText(text, origin || 'isla') : { ok: false, msg: 'no listo' });
 ipcMain.handle('ses-chat', (_e, sid) => talk ? talk.conversacion(sid) : { ok: false, msg: 'no listo' });
@@ -507,52 +207,6 @@ async function cardAction(id, action, text) {
   cerebro.dropCard(id); win && win.webContents.send('card-done', id);
   return '🗑 Descartada.';
 }
-// ---------- voz: Whisper (servidor Python persistente); respaldo: reconocedor de Windows ----------
-const { spawn } = require('child_process');
-let whisper = null, whisperReady = false, whisperWait = null, whisperBuf = '';
-function startWhisper() {
-  try {
-    whisper = spawn('python', [fuera(path.join(__dirname, 'tools', 'whisper_srv.py'))], { windowsHide: true, env: { ...process.env, HF_HUB_DISABLE_SYMLINKS_WARNING: '1', PYTHONIOENCODING: 'utf-8' } });
-  } catch { return; }
-  whisper.stdout.setEncoding('utf8');
-  whisper.stdout.on('data', d => {
-    whisperBuf += d; let i;
-    while ((i = whisperBuf.indexOf('\n')) >= 0) {
-      const line = whisperBuf.slice(0, i).trim(); whisperBuf = whisperBuf.slice(i + 1);
-      let j; try { j = JSON.parse(line); } catch { continue; }
-      if (j.ready) { whisperReady = true; console.log('[whisper] listo en', j.device, j.model); continue; }
-      if (whisperWait) { const w = whisperWait; whisperWait = null; w(j); }
-    }
-  });
-  whisper.on('exit', () => { whisperReady = false; whisper = null; });
-}
-// Whisper bajo demanda: se carga al pulsar el micro (o Ctrl+Alt+Espacio) y se descarga tras 2 min sin usarlo (~660 MB)
-let whisperApagar = null;
-function whisperListo(ms = 25_000) {
-  if (whisperReady) return Promise.resolve(true);
-  if (!whisper) startWhisper();
-  return new Promise(ok => { const t0 = Date.now(); const iv = setInterval(() => { if (whisperReady || !whisper || Date.now() - t0 > ms) { clearInterval(iv); ok(whisperReady); } }, 100); });
-}
-function apagarWhisperLuego() { clearTimeout(whisperApagar); whisperApagar = setTimeout(() => { try { whisper && whisper.kill(); console.log('[whisper] descargado (sin uso)'); } catch { } }, 120_000); }
-ipcMain.handle('listen', async () => { const ok = await whisperListo(); apagarWhisperLuego(); return ok && !whisperWait ? listenWhisper() : listenWindows(); });
-// notas de voz (Telegram / WhatsApp): una a una por la misma instancia de Whisper
-let colaWhisper = Promise.resolve();
-function transcribirArchivo(ruta) {
-  const tarea = colaWhisper.then(async () => {
-    if (!await whisperListo(60_000)) return { text: '', error: 'Whisper no está disponible (¿Python y faster-whisper instalados?)' };
-    apagarWhisperLuego();
-    while (whisperWait) await new Promise(ok => setTimeout(ok, 200));          // si estás usando el micro, espera
-    return new Promise(ok => { whisperWait = ok; whisper.stdin.write('file ' + ruta + '\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', error: 'tiempo agotado' }); } }, 120_000); });
-  });
-  colaWhisper = tarea.catch(() => { });
-  return tarea;
-}
-const listenWhisper = () =>
-  new Promise(ok => { whisperWait = ok; whisper.stdin.write('listen\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', conf: 0 }); } }, 30000); });
-const listenWindows = () => new Promise(ok => execFile('powershell.exe',
-  ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(__dirname, 'tools', 'listen.ps1'))],
-  { windowsHide: true, timeout: 15000 }, (err, out) => { try { ok(JSON.parse(String(out).trim())); } catch { ok({ text: '', conf: 0, error: err ? err.message : 'sin respuesta' }); } }));
-
 // ---------- servidor de eventos ----------
 function startServer() {
   const srv = http.createServer((req, res) => {
@@ -575,7 +229,7 @@ function startServer() {
       res.writeHead(200); return res.end();
     }
     if (req.method === 'POST' && req.url.startsWith('/mover')) {     // mover la isla: ?a=otro (fuera del principal) | ?a=casa
-      moverIsla(/a=reset/.test(req.url) ? 'reset' : /a=casa/.test(req.url) ? 'casa' : 'otro');
+      isla.mover(/a=reset/.test(req.url) ? 'reset' : /a=casa/.test(req.url) ? 'casa' : 'otro');
       res.writeHead(200); return res.end();
     }
     if (req.method === 'POST' && req.url === '/panico') {           // Stream Deck: Denegar mantenido 2 s = pánico global (FASE 9)
@@ -601,7 +255,7 @@ function startServer() {
       if (!win || win.isDestroyed()) return res.end();
       if (ev.hook_event_name === 'PermissionRequest') {
         ev._peligro = esPeligroso(ev.tool_name, ev.tool_input);
-        const rule = !ev._peligro && matchesRule(ev.tool_name, ev.tool_input);
+        const rule = !ev._peligro && reglas.coincide(ev.tool_name, ev.tool_input);
         if (rule) {                                                   // regla "Permitir siempre": sin molestar
           ev._auto = rule.label;
           win.webContents.send('event', ev);
@@ -853,7 +507,7 @@ async function startNucleo() {
     tarjetas: () => (cerebro ? cerebro.tarjetas() : []), accion: (id, a, t) => cardAction(id, a, t) };   // tarjetas para la app móvil
   // co-host de streaming (core/stream): genera el mp3 con la voz de la isla; el overlay de OBS lo reproduce
   nucleo.bus.on('stream-decir', ({ texto, responder }) => {
-    generarTts(texto).then(f => responder && responder(null, f), e => responder && responder(e));
+    voz.generarTts(texto).then(f => responder && responder(null, f), e => responder && responder(e));
   });
   // notas de voz de la app móvil (POST /v1/voz/transcribir) → Whisper
   nucleo.bus.on('transcribir-audio', ({ ruta, responder }) => {
@@ -893,11 +547,11 @@ async function startNucleo() {
     nucleo.canales.registrar('discord', { nombre: 'Discord', tipo: 'discord', estado: /conectado/i.test(discord.status) ? 'activo' : 'inactivo', detalle: `${tr(discord.status)} · ${tr('destino:')} ${puente.destino('discord') || 'Claude Code'}` });
     nucleo.canales.registrar('telegram', { nombre: 'Telegram', tipo: 'telegram', estado: telegram.enabled && telegram.status === 'conectado' ? 'activo' : 'inactivo', detalle: `${tr(telegram.status)} · ${tr('destino:')} ${puente.destino('telegram') || tr('automático')}` });
     nucleo.canales.registrar('whatsapp', { nombre: 'WhatsApp', tipo: 'whatsapp', estado: whatsapp.enabled ? 'activo' : 'inactivo', detalle: `${tr(whatsapp.status)} · ${tr('destino:')} ${puente.destino('whatsapp') || tr('automático')}` });
-    nucleo.canales.registrar('voz', { nombre: tr('Voz'), tipo: 'voz', estado: 'activo', detalle: tr(whisperReady ? 'Whisper cargado · Ctrl+Alt+Espacio' : 'Whisper se carga al hablar · Ctrl+Alt+Espacio') });
+    nucleo.canales.registrar('voz', { nombre: tr('Voz'), tipo: 'voz', estado: 'activo', detalle: tr(voz.whisperCargado() ? 'Whisper cargado · Ctrl+Alt+Espacio' : 'Whisper se carga al hablar · Ctrl+Alt+Espacio') });
     nucleo.canales.registrar('streamdeck', { nombre: 'Stream Deck', tipo: 'streamdeck', estado: fs.existsSync(path.join(process.env.APPDATA || '', 'Elgato', 'StreamDeck', 'Plugins', 'com.robotcompanion.sdPlugin')) ? 'activo' : 'inactivo', detalle: tr('Permitir / Denegar / Estado') });
-    nucleo.canales.registrar('gemini', { nombre: 'Gemini CLI (hooks)', tipo: 'claudecode', instalado: cliInstalado.gemini, estado: geminiHooksInstalled() ? 'activo' : 'inactivo', detalle: tr(geminiHooksInstalled() ? 'Hooks instalados: permisos y actividad en la isla' : cliInstalado.gemini ? 'Instálalos desde la bandeja' : 'Gemini CLI no está instalado (npm i -g @google/gemini-cli)') });
+    nucleo.canales.registrar('gemini', { nombre: 'Gemini CLI (hooks)', tipo: 'claudecode', instalado: cliInstalado.gemini, estado: hooksCfg.geminiInstalados() ? 'activo' : 'inactivo', detalle: tr(hooksCfg.geminiInstalados() ? 'Hooks instalados: permisos y actividad en la isla' : cliInstalado.gemini ? 'Instálalos desde la bandeja' : 'Gemini CLI no está instalado (npm i -g @google/gemini-cli)') });
     nucleo.canales.registrar('codex', { nombre: 'Codex CLI', tipo: 'claudecode', instalado: cliInstalado.codex, estado: 'inactivo', detalle: tr('Sus hooks son experimentales y aún no funcionan en Windows') });
-    nucleo.canales.registrar('claudecode', { nombre: 'Claude Code (hooks)', tipo: 'claudecode', estado: hooksInstalled() ? 'activo' : 'inactivo', detalle: tr(hooksInstalled() ? 'Hooks instalados' : 'Instálalos desde la bandeja') });
+    nucleo.canales.registrar('claudecode', { nombre: 'Claude Code (hooks)', tipo: 'claudecode', estado: hooksCfg.instalados() ? 'activo' : 'inactivo', detalle: tr(hooksCfg.instalados() ? 'Hooks instalados' : 'Instálalos desde la bandeja') });
   };
   canalesRobot(); setInterval(canalesRobot, 15_000);
   // avisos de agentes externos (MCP: Antigravity, Cursor…) → isla con voz + Discord si urgente o no estás
@@ -971,61 +625,6 @@ function stateForDevices() {
   };
 }
 
-// ---------- instalar / quitar hooks en ~/.claude/settings.json ----------
-const isOurs = h => typeof h.command === 'string' && ES_HOOK.test(h.command);
-function readSettings() { try { return JSON.parse(fs.readFileSync(SETTINGS, 'utf8')); } catch { return {}; } }
-function backup() {
-  if (fs.existsSync(SETTINGS)) {
-    const b = SETTINGS + '.robot-backup-' + new Date().toISOString().replace(/[:.]/g, '-');
-    fs.copyFileSync(SETTINGS, b); return b;
-  }
-  return null;
-}
-function stripOurs(s) {
-  if (!s.hooks) return s;
-  for (const ev of Object.keys(s.hooks)) {
-    s.hooks[ev] = (s.hooks[ev] || []).map(m => ({ ...m, hooks: (m.hooks || []).filter(h => !isOurs(h)) })).filter(m => m.hooks.length);
-    if (!s.hooks[ev].length) delete s.hooks[ev];
-  }
-  if (!Object.keys(s.hooks).length) delete s.hooks;
-  return s;
-}
-function installHooks() {
-  const s = stripOurs(readSettings());
-  s.hooks = s.hooks || {};
-  for (const [ev, timeout] of HOOK_EVENTS) {
-    (s.hooks[ev] = s.hooks[ev] || []).push({ hooks: [{ type: 'command', command: `${HOOK_EJEC()} ${ev}`, timeout }] });
-  }
-  const b = backup();
-  fs.mkdirSync(path.dirname(SETTINGS), { recursive: true });
-  fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2));
-  dialog.showMessageBox({ message: tr('Hooks instalados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}\n${tr('Abre una sesión nueva de Claude Code para que los use.')}` });
-}
-function removeHooks() {
-  const b = backup();
-  fs.writeFileSync(SETTINGS, JSON.stringify(stripOurs(readSettings()), null, 2));
-  dialog.showMessageBox({ message: tr('Hooks quitados.'), detail: `${tr('Copia de seguridad:')} ${b}` });
-}
-const hooksInstalled = () => ES_HOOK.test(JSON.stringify(readSettings()));
-
-// ---------- motor Gemini CLI: mismos hooks, traducidos por hook/motores.js ----------
-const GEMINI_SETTINGS = path.join(os.homedir(), '.gemini', 'settings.json');
-const GEMINI_EVENTS = [['SessionStart', 10000], ['SessionEnd', 10000], ['BeforeAgent', 10000], ['AfterAgent', 10000], ['BeforeTool', 120000], ['AfterTool', 10000], ['Notification', 10000]];   // ms
-const leerJSON = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return {}; } };
-const geminiHooksInstalled = () => ES_HOOK.test(JSON.stringify(leerJSON(GEMINI_SETTINGS)));
-function geminiHooks(instalar) {
-  const s = stripOurs(leerJSON(GEMINI_SETTINGS));
-  if (instalar) {
-    s.hooks = s.hooks || {};
-    for (const [ev, timeout] of GEMINI_EVENTS) (s.hooks[ev] = s.hooks[ev] || []).push({ ...(ev.includes('Tool') ? { matcher: '.*' } : {}), hooks: [{ name: 'robot-companion', type: 'command', command: `${HOOK_EJEC()} ${ev} --motor=gemini`, timeout }] });
-  }
-  let b = null;
-  if (fs.existsSync(GEMINI_SETTINGS)) { b = GEMINI_SETTINGS + '.robot-backup-' + new Date().toISOString().replace(/[:.]/g, '-'); fs.copyFileSync(GEMINI_SETTINGS, b); }
-  fs.mkdirSync(path.dirname(GEMINI_SETTINGS), { recursive: true });
-  fs.writeFileSync(GEMINI_SETTINGS, JSON.stringify(s, null, 2));
-  dialog.showMessageBox({ message: tr(instalar ? 'Hooks de Gemini CLI instalados.' : 'Hooks de Gemini CLI quitados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}${instalar ? '\n' + tr('Abre una sesión nueva de Gemini CLI. Puedes comprobarlos con /hooks.') : ''}` });
-}
-const tieneCLI = n => { try { require('child_process').execSync(`where ${n}`, { stdio: 'ignore', windowsHide: true }); return true; } catch { return false; } };
 const cliInstalado = { gemini: tieneCLI('gemini'), codex: tieneCLI('codex') };
 
 // ---------- arranque con Windows ----------
@@ -1053,11 +652,11 @@ function buildTray() {
   tray = new Tray(trayIcon());
   tray.setToolTip('Robot Companion');
   const menu = () => Menu.buildFromTemplate([
-    { label: tr(hooksInstalled() ? '✓ Hooks de Claude Code instalados' : 'Hooks NO instalados'), enabled: false },
-    { label: tr('Instalar hooks'), click: installHooks },
-    { label: tr('Quitar hooks'), click: removeHooks },
-    { label: geminiHooksInstalled() ? tr('✓ Hooks de Gemini CLI instalados') : `${tr('Gemini CLI: hooks no instalados')}${cliInstalado.gemini ? '' : ' ' + tr('(CLI no encontrado)')}`, enabled: false },
-    { label: tr(geminiHooksInstalled() ? 'Quitar hooks de Gemini CLI' : 'Instalar hooks de Gemini CLI'), click: () => geminiHooks(!geminiHooksInstalled()) },
+    { label: tr(hooksCfg.instalados() ? '✓ Hooks de Claude Code instalados' : 'Hooks NO instalados'), enabled: false },
+    { label: tr('Instalar hooks'), click: () => hooksCfg.instalar() },
+    { label: tr('Quitar hooks'), click: () => hooksCfg.quitar() },
+    { label: hooksCfg.geminiInstalados() ? tr('✓ Hooks de Gemini CLI instalados') : `${tr('Gemini CLI: hooks no instalados')}${cliInstalado.gemini ? '' : ' ' + tr('(CLI no encontrado)')}`, enabled: false },
+    { label: tr(hooksCfg.geminiInstalados() ? 'Quitar hooks de Gemini CLI' : 'Instalar hooks de Gemini CLI'), click: () => hooksCfg.gemini(!hooksCfg.geminiInstalados()) },
     { type: 'separator' },
     { label: `⬆ ${tr('Buscar actualizaciones')}`, click: () => buscarActualizacion() },
     { label: `🎙 ${tr('Instalar voz y micrófono (Python + Whisper)')}`, click: () => instalarVoz() },
@@ -1080,15 +679,15 @@ function buildTray() {
     { label: tr('Enviarme un aviso de prueba'), click: () => movil.sendAviso(tr('🤖 **Prueba:** así te llegarán los avisos del Robot Companion.'), 'blue') },
     { label: `${tr('Avisos de DMs')}: ${tr(dmsStatus)}`, enabled: false },
     {
-      label: tr('Reglas "Permitir siempre" ({n})', { n: rules.length }), submenu: rules.length ? [
-        ...rules.map((r, i) => ({ label: `✕ ${tr('quitar')}: ${r.label}`, click: () => { rules.splice(i, 1); saveRules(); } })),
-        { type: 'separator' }, { label: tr('Quitar todas'), click: () => { rules = []; saveRules(); } },
+      label: tr('Reglas "Permitir siempre" ({n})', { n: reglas.lista().length }), submenu: reglas.lista().length ? [
+        ...reglas.lista().map((r, i) => ({ label: `✕ ${tr('quitar')}: ${r.label}`, click: () => reglas.quitar(i) })),
+        { type: 'separator' }, { label: tr('Quitar todas'), click: () => reglas.quitarTodas() },
       ] : [{ label: tr('(ninguna)'), enabled: false }],
     },
     { type: 'separator' },
-    { label: `↔ ${tr('Mover isla fuera del monitor principal')}`, click: () => moverIsla('otro') },
-    ...(win && !win.isDestroyed() && layIsla && displayDeIsla().id !== sitioElegido().d.id ? [{ label: `↩ ${tr('Traer la isla de vuelta')}`, click: () => moverIsla('casa') }] : []),
-    { label: `⟲ ${tr('Volver la isla a su sitio')}`, click: () => moverIsla('reset') },
+    { label: `↔ ${tr('Mover isla fuera del monitor principal')}`, click: () => isla.mover('otro') },
+    ...(isla.fueraDeSuSitio() ? [{ label: `↩ ${tr('Traer la isla de vuelta')}`, click: () => isla.mover('casa') }] : []),
+    { label: `⟲ ${tr('Volver la isla a su sitio')}`, click: () => isla.mover('reset') },
     { label: tr('Evento de prueba'), click: () => win.webContents.send('demo') },
     { label: tr('Herramientas de desarrollo'), click: () => win.webContents.openDevTools({ mode: 'detach' }) },
     { type: 'separator' },
@@ -1218,7 +817,7 @@ function startDms() {
 }
 
 app.whenReady().then(() => {
-  ensureToken(); loadRules(); ensureDiscordCfg();
+  ensureToken(); reglas.cargar(); ensureDiscordCfg();
   // primera vez que arranca en este PC: se activa "Iniciar con Windows" (luego se puede quitar en la bandeja)
   const primera = path.join(app.getPath('userData'), 'primer-arranque');
   if (!fs.existsSync(primera)) { try { setAutoStart(autoArranqueInicial()); fs.writeFileSync(primera, new Date().toISOString()); } catch (e) { console.error('[autoarranque]', e.message); } }
@@ -1277,7 +876,7 @@ app.whenReady().then(() => {
   talk = createTalk({
     onStop: (name, txt, fail) => cerebro.record({ kind: 'claude', author: name, text: String(txt).slice(0, 300), resumen: `${fail ? 'Error' : 'Terminó'}: ${String(txt).slice(0, 140)}`, prioridad: 'normal' }),
     dataDir: app.getPath('userData'),
-    getHwnd: sid => { const w = sessionWin.get(sid); return w && w !== 'buscando' ? w.hwnd : null; },
+    getHwnd: hwndDe,
     reply: (origin, md, plain) => {
       if (esRemoto(origin)) responderA(origin, md);
       else if (win && !win.isDestroyed()) win.webContents.send('say', plain);
@@ -1286,8 +885,8 @@ app.whenReady().then(() => {
   // Ctrl+Alt+Espacio: hablarle al robot por voz
   app.whenReady().then(() => globalShortcut.register('Control+Alt+Space', () => win && win.webContents.send('listen-key')));
   createWindow(); startServer(); startNucleo(); buildTray(); trackCursor(); startDiscord(); startDms();
-  vigilarPantallaCompleta(); vigilarMonitores();
-  win.webContents.once('did-finish-load', () => { scanUsage(); setInterval(scanUsage, 60_000); });
+  isla.vigilarPantallaCompleta(); isla.vigilarMonitores();
+  win.webContents.once('did-finish-load', () => { uso.scanUsage(); setInterval(uso.scanUsage, 60_000); });
   // nombre del compañero (identidad del núcleo): isla, bandeja y textos
   const enviarNombre = () => { const n = nombreCompanero(); if (win && !win.isDestroyed()) win.webContents.send('nombre', n); if (tray) tray.setToolTip(n === 'Robot' ? 'Robot Companion' : `${n} · Robot Companion`); };
   win.webContents.on('did-finish-load', enviarNombre);
@@ -1312,4 +911,4 @@ app.whenReady().then(() => {
   }, 5 * 60_000);
 });
 app.on('window-all-closed', () => app.quit());
-app.on('will-quit', () => { try { whisper && whisper.kill(); } catch { } try { nucleo?.control.cerrar(); } catch { } });
+app.on('will-quit', () => { voz.cerrar(); try { nucleo?.control.cerrar(); } catch { } });
