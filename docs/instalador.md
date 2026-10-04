@@ -42,6 +42,25 @@ Preparado, sin certificado todavía. electron-builder firma solo si existen esta
 
 Sin firma, SmartScreen avisa ("Windows protegió tu PC" → Más información → Ejecutar de todas formas) hasta que el instalador gane reputación. Alternativas a valorar: certificado EV (reputación inmediata, requiere token HSM → firma en la nube tipo Azure Trusted Signing con `win.azureSignOptions`).
 
+### Opción barata para el lanzamiento: Azure Trusted Signing (~10 US$/mes)
+
+Decidido el 2026-10-05: se firma al lanzar, no antes. Pasos cuando toque (comprueba antes nombre y precio actuales en Azure, Microsoft los ha ido cambiando):
+
+1. Cuenta de Azure → crear un recurso **Trusted Signing** (cuenta de firma) → **validación de identidad** (individual o empresa; tarda días).
+2. Crear un **perfil de certificado** (Public Trust) en esa cuenta.
+3. Crear una aplicación en Entra ID (cliente + secreto) con el rol **Trusted Signing Certificate Profile Signer** sobre la cuenta.
+4. En `package.json` → `build.win`, añadir:
+   ```json
+   "azureSignOptions": {
+     "publisherName": "<nombre validado>",
+     "endpoint": "https://<región>.codesigning.azure.net",
+     "codeSigningAccountName": "<cuenta>",
+     "certificateProfileName": "<perfil>"
+   }
+   ```
+5. Variables (local o secretos del repo para `release.yml`): `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`.
+6. `npm run dist` y comprobar: clic derecho en el `.exe` → Propiedades → **Firmas digitales**.
+
 ## Pruebas sin tocar la instalación real
 
 ```powershell
