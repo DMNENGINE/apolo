@@ -133,3 +133,15 @@ test('escribir en un campo que YA tiene el foco no hace clic (no mueve el cursor
   await n.control.accion(s, 'escribir', { elemento: 5, texto: '4, 5' });
   assert.deepStrictEqual(acciones().map(o => o.op), ['escribir', 'clic', 'escribir']);
 });
+
+test('comprobación: si cambia el texto del campo con el foco NO dice "no cambió nada" (si no, el modelo repite lo escrito)', () => {
+  const { describir } = require('../escritorio/comprobar');
+  const vent = { titulo: 'Guardar como', proceso: 'Notepad' };
+  const diff = { elementos: [], nuevos: [], fuera: [], cambiados: [] };
+  const foco = valor => ({ tipo: 'Edit', nombre: 'Nombre:', password: false, valor });
+  const r = describir({ ms: 600, antes: { ventana: vent, foco: foco('*.txt') }, despues: { ventana: vent, foco: foco('numeros.txt') }, diff, hayAntes: true, linea: () => '' });
+  assert.strictEqual(r.nada, false);
+  assert.match(r.texto, /ahora dice: "numeros\.txt" \(antes "\*\.txt"\)/);
+  const igual = describir({ ms: 600, antes: { ventana: vent, foco: foco('x') }, despues: { ventana: vent, foco: foco('x') }, diff, hayAntes: true, linea: () => '' });
+  assert.strictEqual(igual.nada, true);
+});

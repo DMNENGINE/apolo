@@ -83,7 +83,11 @@ public static class Manos {
     if (e == null) return null;
     try {
       var c = e.Current;
-      return new Dictionary<string, object> { {"tipo", c.ControlType.ProgrammaticName.Replace("ControlType.", "")}, {"nombre", c.Name ?? ""}, {"password", c.IsPassword} };
+      var r = new Dictionary<string, object> { {"tipo", c.ControlType.ProgrammaticName.Replace("ControlType.", "")}, {"nombre", c.Name ?? ""}, {"password", c.IsPassword} };
+      if (!c.IsPassword) {   // texto del campo (para comprobar que escribir funcionó); nunca el de una contraseña
+        try { object vp; if (e.TryGetCurrentPattern(ValuePattern.Pattern, out vp)) { string v = ((ValuePattern)vp).Current.Value ?? ""; r["valor"] = v.Length > 300 ? v.Substring(v.Length - 300) : v; } } catch { }
+      }
+      return r;
     } catch { return null; }
   }
   static Dictionary<string, object> Info(Dictionary<string, object> o) {

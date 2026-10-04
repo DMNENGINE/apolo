@@ -39,13 +39,14 @@ const unir = (l, n, tam) => { const t = l.slice(0, n).join(' · '); return (t.le
 function cambios({ antes, despues, diff, hayAntes }) {
   const tituloCambio = (antes.ventana?.titulo || '') !== (despues.ventana?.titulo || '') || (antes.ventana?.proceso || '') !== (despues.ventana?.proceso || '');
   const focoCambio = nombreFoco(antes.foco) !== nombreFoco(despues.foco);
+  const valorCambio = !focoCambio && typeof despues.foco?.valor === 'string' && (antes.foco?.valor ?? null) !== despues.foco.valor;
   const hayEls = !!(hayAntes && (diff.nuevos.length || diff.fuera.length || diff.cambiados.length));
-  return { tituloCambio, focoCambio, hayEls, nada: !tituloCambio && !focoCambio && !hayEls };
+  return { tituloCambio, focoCambio, valorCambio, hayEls, nada: !tituloCambio && !focoCambio && !valorCambio && !hayEls };
 }
 
 // texto para el modelo. { ms, antes:{ventana,foco}, despues:{ventana,foco}, diff, hayAntes, linea(e), sinLista } → { texto, nada, resumen }
 function describir({ ms, antes, despues, diff, hayAntes, linea, sinLista = false }) {
-  const { tituloCambio, focoCambio, nada } = cambios({ antes, despues, diff, hayAntes });
+  const { tituloCambio, focoCambio, valorCambio, nada } = cambios({ antes, despues, diff, hayAntes });
   const seg = (ms / 1000).toFixed(1);
   const l = [];
   const resumen = [];
@@ -57,6 +58,10 @@ function describir({ ms, antes, despues, diff, hayAntes, linea, sinLista = false
     l.push(`COMPROBACIÓN (${seg} s después):`);
     if (tituloCambio) { l.push(`· ventana: "${antes.ventana?.titulo || '?'}" → "${despues.ventana?.titulo || '?'}" (${despues.ventana?.proceso || ''})`); resumen.push(`ventana → ${despues.ventana?.titulo || '?'}`); }
     if (focoCambio) { l.push(`· foco: ${nombreFoco(antes.foco)} → ${nombreFoco(despues.foco)}`); resumen.push(`foco → ${nombreFoco(despues.foco)}`); }
+    if (valorCambio) {
+      const corta = t => { t = String(t ?? ''); return t.length > 120 ? '…' + t.slice(-119) : t; };
+      l.push(`· el campo con el foco ahora dice: "${corta(despues.foco.valor)}" (antes "${corta(antes.foco?.valor)}")`); resumen.push('texto del campo cambiado');
+    }
     if (hayAntes) {
       if (diff.nuevos.length) { l.push(`· NUEVOS (${diff.nuevos.length}): ${unir(diff.nuevos.map(linea), 25, 2500)}`); resumen.push(`+${diff.nuevos.length} elementos`); }
       if (diff.fuera.length) { l.push(`· YA NO ESTÁN (${diff.fuera.length}): ${unir(diff.fuera.map(nombreEl), 15, 700)}`); resumen.push(`-${diff.fuera.length} elementos`); }
