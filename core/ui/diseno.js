@@ -13,7 +13,7 @@ Object.assign(I18N.dic.en, {
   'Aprender solo cada noche': 'Learn by itself every night', 'Estudia {n} temas nuevos del temario a las 3:30 y te lo cuenta en el briefing.': 'Studies {n} new topics from the syllabus at 3:30 and tells you in the briefing.',
   'Estudiar ahora': 'Study now', '{n} temas del temario por estudiar': '{n} syllabus topics left', 'Buscar en la biblioteca…': 'Search the library…',
   'La biblioteca está vacía. Conecta Mobbin y estudia el primer tema, o activa el aprendizaje nocturno.': 'The library is empty. Connect Mobbin and study the first topic, or turn on nightly learning.',
-  'Aprendido: {n}': 'Learned: {n}', 'Borrar patrón': 'Delete pattern', '¿Borrar este patrón?': 'Delete this pattern?', 'Biblioteca': 'Library', '{n} patrones': '{n} patterns',
+  'Aprendido: {n}': 'Learned: {n}', 'Esta función necesita reiniciar APOLO (el núcleo que está corriendo es de antes). Bandeja → Salir y vuelve a abrirlo.': 'This feature needs APOLO to restart (the running core is older). Tray → Quit and open it again.', 'Borrar patrón': 'Delete pattern', '¿Borrar este patrón?': 'Delete this pattern?', 'Biblioteca': 'Library', '{n} patrones': '{n} patterns',
 });
 
 const DS_fecha = t => new Date(t).toLocaleDateString(I18N.idioma() === 'en' ? 'en' : 'es', { day: 'numeric', month: 'short' });
@@ -23,7 +23,13 @@ VISTAS.diseno = {
   async pintar(v, sub) {
     this.salir(); this.v = v;
     if (sub) return this.ficha(v, sub);
-    const [D, M] = await Promise.all([api('GET', '/diseno'), api('GET', '/mcp-remotos').catch(() => ({ servidores: [] }))]);
+    let D, M;
+    try { [D, M] = await Promise.all([api('GET', '/diseno'), api('GET', '/mcp-remotos').catch(() => ({ servidores: [] }))]); }
+    catch (e) {                                              // núcleo de antes de la biblioteca de diseño (la app no se reinició)
+      v.innerHTML = `<div class="pagina">${cabecera('Diseño', 'APOLO estudia apps reales en Mobbin y guarda los patrones que aprende. Los consulta antes de diseñar cualquier interfaz.')}
+        <div class="caja pad rn-vacio">${ic('info')}<p>${esc(/ruta|404/i.test(e.message) ? tr('Esta función necesita reiniciar APOLO (el núcleo que está corriendo es de antes). Bandeja → Salir y vuelve a abrirlo.') : e.message)}</p></div></div>`;
+      return;
+    }
     this.D = D;
     const mb = M.servidores.find(s => s.id === 'mobbin') || {};
     v.innerHTML = `<div class="pagina">${cabecera('Diseño', 'APOLO estudia apps reales en Mobbin y guarda los patrones que aprende. Los consulta antes de diseñar cualquier interfaz.')}
