@@ -1,0 +1,1 @@
+{ "type": "module", "private": true, "description": "Plugin de APOLO para opencode (se copia a ~/.config/opencode/plugins/)" }

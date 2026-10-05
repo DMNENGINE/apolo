@@ -115,6 +115,7 @@ ipcMain.handle('listen', () => voz.escuchar());
 
 // ---------- hooks en ~/.claude y ~/.gemini (main/hooks-config.js) ----------
 const hooksCfg = crearHooksConfig({ empaquetado: () => app.isPackaged, mensaje: o => dialog.showMessageBox(o), tr: (k, v) => tr(k, v), dirDatos: () => app.getPath('userData') });
+try { if (hooksCfg.opencodeAlDia()) console.log('[opencode] plugin actualizado'); } catch { }   // plugin instalado de una versión anterior
 
 // ---------- uso del plan (main/uso.js) ----------
 const uso = crearUso({ claudeDir: CLAUDE_DIR, dirDatos: () => app.getPath('userData'), cerebro: () => cerebro,
@@ -540,6 +541,7 @@ async function startNucleo() {
     nucleo.canales.registrar('voz', { nombre: tr('Voz'), tipo: 'voz', estado: 'activo', detalle: tr(voz.whisperCargado() ? 'Whisper cargado · Ctrl+Alt+Espacio' : 'Whisper se carga al hablar · Ctrl+Alt+Espacio') });
     if (process.platform !== 'linux') nucleo.canales.registrar('streamdeck', { nombre: 'Stream Deck', tipo: 'streamdeck', estado: fs.existsSync(path.join(process.env.APPDATA || '', 'Elgato', 'StreamDeck', 'Plugins', 'com.robotcompanion.sdPlugin')) ? 'activo' : 'inactivo', detalle: tr('Permitir / Denegar / Estado') });
     nucleo.canales.registrar('gemini', { nombre: 'Gemini CLI (hooks)', tipo: 'claudecode', instalado: cliInstalado.gemini, estado: hooksCfg.geminiInstalados() ? 'activo' : 'inactivo', detalle: tr(hooksCfg.geminiInstalados() ? 'Hooks instalados: permisos y actividad en la isla' : cliInstalado.gemini ? 'Instálalos desde la bandeja' : 'Gemini CLI no está instalado (npm i -g @google/gemini-cli)') });
+    nucleo.canales.registrar('opencode', { nombre: 'opencode (plugin)', tipo: 'claudecode', instalado: cliInstalado.opencode, estado: hooksCfg.opencodeInstalado() ? 'activo' : 'inactivo', detalle: tr(hooksCfg.opencodeInstalado() ? 'Plugin instalado: permisos y actividad en la isla' : cliInstalado.opencode ? 'Instálalo desde la bandeja' : 'opencode no está instalado (npm i -g opencode-ai)') });
     nucleo.canales.registrar('codex', { nombre: 'Codex CLI', tipo: 'claudecode', instalado: cliInstalado.codex, estado: 'inactivo', detalle: tr('Sus hooks son experimentales y aún no funcionan en Windows') });
     nucleo.canales.registrar('claudecode', { nombre: 'Claude Code (hooks)', tipo: 'claudecode', estado: hooksCfg.instalados() ? 'activo' : 'inactivo', detalle: tr(hooksCfg.instalados() ? 'Hooks instalados' : 'Instálalos desde la bandeja') });
   };
@@ -621,7 +623,7 @@ function stateForDevices() {
   };
 }
 
-const cliInstalado = { gemini: tieneCLI('gemini'), codex: tieneCLI('codex') };
+const cliInstalado = { gemini: tieneCLI('gemini'), codex: tieneCLI('codex'), opencode: tieneCLI('opencode') };
 
 // ---------- arranque con el sistema ----------
 // Windows/mac: Electron (registro / elementos de inicio). Linux: Electron no lo hace → ~/.config/autostart/apolo.desktop
@@ -669,6 +671,8 @@ function buildTray() {
     { label: tr('Quitar hooks'), click: () => hooksCfg.quitar() },
     { label: hooksCfg.geminiInstalados() ? tr('✓ Hooks de Gemini CLI instalados') : `${tr('Gemini CLI: hooks no instalados')}${cliInstalado.gemini ? '' : ' ' + tr('(CLI no encontrado)')}`, enabled: false },
     { label: tr(hooksCfg.geminiInstalados() ? 'Quitar hooks de Gemini CLI' : 'Instalar hooks de Gemini CLI'), click: () => hooksCfg.gemini(!hooksCfg.geminiInstalados()) },
+    { label: hooksCfg.opencodeInstalado() ? tr('✓ Plugin de opencode instalado') : `${tr('opencode: plugin no instalado')}${cliInstalado.opencode ? '' : ' ' + tr('(CLI no encontrado)')}`, enabled: false },
+    { label: tr(hooksCfg.opencodeInstalado() ? 'Quitar plugin de opencode' : 'Instalar plugin de opencode'), click: () => hooksCfg.opencode(!hooksCfg.opencodeInstalado()) },
     { type: 'separator' },
     { label: `⬆ ${tr('Buscar actualizaciones')}`, click: () => buscarActualizacion() },
     { label: `🎙 ${tr('Instalar voz y micrófono (Python + Whisper)')}`, click: () => instalarVoz() },

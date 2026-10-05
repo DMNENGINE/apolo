@@ -1,5 +1,6 @@
 // Instalar / quitar nuestros hooks en ~/.claude/settings.json (Claude Code) y ~/.gemini/settings.json (Gemini CLI,
 // traducidos por hook/motores.js). Siempre con copia de seguridad antes de escribir.
+// opencode no usa hooks de comando sino plugins: se copia opencode/apolo.js a ~/.config/opencode/plugins/.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -10,6 +11,8 @@ const ES_HOOK = /(RobotCompanion|robot-companion|APOLO|app\.asar\.unpacked)\/hoo
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const SETTINGS = path.join(CLAUDE_DIR, 'settings.json');
 const GEMINI_SETTINGS = path.join(os.homedir(), '.gemini', 'settings.json');
+const OPENCODE_PLUGIN = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'opencode', 'plugins', 'apolo.js');
+const OPENCODE_FUENTE = path.join(__dirname, '..', 'opencode', 'apolo.js');
 const HOOK_EVENTS = [
   ['SessionStart', 10], ['SessionEnd', 10], ['UserPromptSubmit', 10], ['PreToolUse', 10], ['PostToolUse', 10],
   ['PostToolUseFailure', 10], ['PermissionRequest', 120], ['Notification', 10], ['Stop', 10], ['StopFailure', 10],
@@ -81,8 +84,21 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     fs.writeFileSync(GEMINI_SETTINGS, JSON.stringify(s, null, 2));
     mensaje({ message: tr(instalar ? 'Hooks de Gemini CLI instalados.' : 'Hooks de Gemini CLI quitados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}${instalar ? '\n' + tr('Abre una sesión nueva de Gemini CLI. Puedes comprobarlos con /hooks.') : ''}` });
   }
+  const leer = f => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
+  function opencode(instalar) {
+    if (instalar) { fs.mkdirSync(path.dirname(OPENCODE_PLUGIN), { recursive: true }); fs.writeFileSync(OPENCODE_PLUGIN, leer(OPENCODE_FUENTE)); }
+    else { try { fs.unlinkSync(OPENCODE_PLUGIN); } catch { } }
+    mensaje({ message: tr(instalar ? 'Plugin de opencode instalado.' : 'Plugin de opencode quitado.'), detail: instalar ? `${OPENCODE_PLUGIN}\n${tr('Abre opencode de nuevo: sus permisos saldrán en la isla, el Stream Deck y el móvil.')}` : OPENCODE_PLUGIN });
+  }
+  // si ya está instalado y la app trae una versión nueva del plugin, se cambia sin preguntar
+  function opencodeAlDia() {
+    const nuevo = leer(OPENCODE_FUENTE), actual = leer(OPENCODE_PLUGIN);
+    if (actual !== null && nuevo && actual !== nuevo) { try { fs.writeFileSync(OPENCODE_PLUGIN, nuevo); return true; } catch { } }
+    return false;
+  }
   return {
-    instalar, quitar, gemini,
+    instalar, quitar, gemini, opencode, opencodeAlDia,
+    opencodeInstalado: () => fs.existsSync(OPENCODE_PLUGIN),
     instalados: () => ES_HOOK.test(JSON.stringify(leerJSON(SETTINGS))),
     geminiInstalados: () => ES_HOOK.test(JSON.stringify(leerJSON(GEMINI_SETTINGS))),
   };

@@ -181,7 +181,7 @@ function ses(ev) {
     s = { id, name: base(ev.cwd), state: 'reposo', act: '', subs: new Map(), pendingTask: [], usage: null, t: Date.now(), doneAt: 0, steps: 0 };
     sessions.set(id, s);
   }
-  if (ev.cwd) { s.folder = base(ev.cwd); s.name = GENERIC.test(s.folder) ? (s.title ? s.title : ev._motor === 'gemini' ? 'Gemini CLI' : 'Claude Code') : s.folder; }
+  if (ev.cwd) { s.folder = base(ev.cwd); s.name = GENERIC.test(s.folder) ? (s.title ? s.title : ev._motor === 'gemini' ? 'Gemini CLI' : ev._motor === 'opencode' ? 'opencode' : 'Claude Code') : s.folder; }
   s.t = Date.now();
   if (ev._usage) s.usage = ev._usage;
   return s;
