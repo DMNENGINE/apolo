@@ -75,6 +75,7 @@
     ],
     "asarUnpack": [
       "hook/**",
+      "bin/**",
       "core/**",
       "shared/**",
       "tools/**",

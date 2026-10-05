@@ -16,6 +16,9 @@
       FileClose $0
     apolo_arranque_listo:
   ${endIf}
+  ; comando `apolo` en cualquier terminal (también al actualizar: no duplica)
+  nsExec::Exec 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\app.asar.unpacked\tools\ruta-cli.ps1" -Agregar "$INSTDIR\resources\app.asar.unpacked\bin"'
+  Pop $0
 !macroend
 
 !macro customUnInstall
@@ -25,6 +28,9 @@
     nsExec::Exec '"$INSTDIR\APOLO.exe" "$INSTDIR\resources\app.asar.unpacked\tools\quitar-hooks.js"'
     Pop $0
     System::Call 'Kernel32::SetEnvironmentVariable(t "ELECTRON_RUN_AS_NODE", n)'
+    ; comando `apolo` fuera del PATH
+    nsExec::Exec 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\app.asar.unpacked\tools\ruta-cli.ps1" -Quitar "$INSTDIR\resources\app.asar.unpacked\bin"'
+    Pop $0
     ; arranque con Windows fuera (la clave la crea app.setLoginItemSettings)
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "electron.app.APOLO"
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.dmnengine.apolo"

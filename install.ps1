@@ -126,6 +126,11 @@ foreach ($l in $destinos) {
   $s.Save()
 }
 Info 'Menu Inicio y Escritorio'
+# comando `apolo` (CLI) en cualquier terminal nueva
+try {
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Dir 'tools\ruta-cli.ps1') -Agregar (Join-Path $Dir 'bin')
+  Info 'comando "apolo" disponible en terminales nuevas'
+} catch { Aviso "no pude poner el comando apolo en el PATH ($($_.Exception.Message))" }
 
 # ---------- 6. Arrancar ----------
 Paso 'Arrancando APOLO'
