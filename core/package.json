@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Núcleo multi-modelo de Robot Companion: agente, herramientas, permisos y sesiones",
   "main": "index.js",
-  "bin": { "robot": "cli.js" },
+  "bin": { "apolo": "cli.js", "robot": "cli.js" },
   "scripts": {
     "daemon": "node daemon.js",
     "cli": "node cli.js",

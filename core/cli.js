@@ -1,111 +1,73 @@
 #!/usr/bin/env node
-// Chat de terminal con el núcleo (en proceso, sin daemon).
-//   node cli.js [-m proveedor/modelo] [-C carpeta] ["mensaje único"]
-//   Comandos: /modelo x/y   /proveedores   /tareas   /memoria   /skills   /skill add <fuente> | on|off|rm|scan|update <slug>   /compactar   /nueva   /salir
-//             /plugins   /plugin add <fuente> [--dev] | on|off <nombre> [--forzar] | rm|reload|scan <nombre>   /<comando de un plugin> [texto]
-//   (las tareas programadas se ejecutan en el daemon / la app, no en el CLI)
-const readline = require('readline');
-const { crearNucleo } = require('./index');
+// CLI de APOLO.
+//   apolo                         interactiva (estilo Claude Code): habla con el núcleo de la app o, si no está abierta, arranca uno en proceso
+//   apolo "mensaje"               interactiva y empieza con ese mensaje
+//   apolo -p "mensaje"            una respuesta y sale (para scripts; también si la entrada viene por tubería: cat log | apolo -p "resume")
+//   -m modelo|alias   -C carpeta   -c (seguir la última de esta carpeta)   -r [id] (retomar)   --local (sin daemon)   --simple (CLI antigua)
+'use strict';
 
 const argv = process.argv.slice(2);
-const opt = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv.splice(i, 2)[1] : undefined; };
-const modelo = opt('-m'), cwd = opt('-C');
-const unico = argv.join(' ').trim();
+const bandera = (...f) => { for (const x of f) { const i = argv.indexOf(x); if (i >= 0) { argv.splice(i, 1); return true; } } return false; };
+const valor = (...f) => { for (const x of f) { const i = argv.indexOf(x); if (i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('-')) return argv.splice(i, 2)[1]; if (i >= 0) { argv.splice(i, 1); return true; } } return undefined; };
 
-const n = crearNucleo();
-let s = n.sesiones.crear({ modelo, cwd, canal: 'cli' });
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-const preguntar = q => new Promise(ok => rl.question(q, ok));
-const gris = t => `\x1b[90m${t}\x1b[0m`, amarillo = t => `\x1b[33m${t}\x1b[0m`, rojo = t => `\x1b[31m${t}\x1b[0m`;
+if (bandera('-h', '--help', '--ayuda')) {
+  console.log(`APOLO · CLI
 
-n.bus.on('permiso', async req => {
-  const r = (await preguntar(amarillo(`\n⚠ ${req.herramienta}: ${req.resumen}${req.peligro ? rojo(`  [PELIGRO: ${req.peligro}]`) : ''}\n  ¿Permitir? [s]í / [a]siempre / [n]o: `))).trim().toLowerCase();
-  n.permisos.resolver(req.id, r.startsWith('a') ? 'always' : r.startsWith('s') || r.startsWith('y') ? 'allow' : 'deny');
-});
-
-function pintar(e) {
-  if (e.tipo === 'texto') console.log(`\n${e.texto}`);
-  else if (e.tipo === 'herramienta') console.log(gris(`  ▸ ${e.nombre} ${e.resumen}`));
-  else if (e.tipo === 'resultado') console.log(gris(`    ${e.resultado.split('\n').slice(0, 3).join(' ⏎ ').slice(0, 160)}`));
-  else if (e.tipo === 'error') console.log(rojo(`✖ ${e.error}`));
-  else if (e.tipo === 'compactacion') console.log(gris(`  [conversación resumida: ${e.antes} → ${e.despues} tokens · ${e.recuerdos.length} recuerdos guardados]`));
-  else if (e.tipo === 'aviso') console.log(amarillo(`  ${e.texto}`));
-  else if (e.tipo === 'fin') console.log(gris(`  [${s.modelo} · ${e.uso.entrada}↑ ${e.uso.salida}↓ tokens]`));
+  apolo [mensaje]              conversación interactiva
+  apolo -p "mensaje"           responde y sale (admite entrada por tubería)
+  -m, --modelo <x>             modelo o alias (gemma, haiku, ollama/qwen3.6…)
+  -C, --carpeta <ruta>         carpeta de trabajo
+  -c, --continuar              seguir la última conversación de esta carpeta
+  -r, --retomar [id]           retomar una conversación (sin id: elegir)
+  --local                      no usar el núcleo de la app (arranca uno en proceso)
+  --simple                     la CLI antigua de líneas (gestión de skills/plugins)`);
+  process.exit(0);
 }
+if (bandera('--simple')) { require('./cli-simple'); return; }
 
-async function turno(texto) {
-  const c = texto.trim();
-  if (c === '/salir') { rl.close(); process.exit(0); }
-  if (c === '/proveedores') { n.proveedores.disponibles().forEach(p => console.log(`  ${p.listo ? '●' : '○'} ${p.nombre} (${p.tipo})`)); return; }
-  if (c === '/tareas') { const l = n.tareas.lista(); console.log(l.length ? l.map(t => `  ${t.activa ? '●' : '○'} ${t.id} ${t.nombre} · ${n.tareas.describir(t.cuando)}${t.proxima ? ' · ' + new Date(t.proxima).toLocaleString('es') : ''}`).join('\n') : '  (no hay tareas)'); return; }
-  if (c === '/memoria') { const l = n.memoria.lista(); console.log(l.length ? l.map(m => `  ${m.id} · ${m.tipo} · ${m.texto}`).join('\n') : '  (memoria vacía)'); return; }
-  if (c === '/nueva') { s = n.sesiones.crear({ modelo: s.modelo, cwd: s.cwd, canal: 'cli' }); console.log(gris('  sesión nueva')); return; }
-  if (c === '/compactar') {
-    try { const r = await n.compactador.compactar(s, { forzar: true }); n.sesiones.guardarMeta(s); console.log(gris(r ? `  resumida: ${r.antes} → ${r.despues} tokens · ${r.recuerdos.length} recuerdos guardados` : '  no hay nada antiguo que resumir')); }
-    catch (e) { console.log(gris(`  no se pudo: ${e.message}`)); }
-    return;
-  }
-  if (c === '/skills') {
-    const l = n.skills.lista(), col = { verde: '\x1b[32m', amarillo: '\x1b[33m', rojo: '\x1b[31m' };
-    console.log(l.length ? l.map(x => `  ${x.activa ? '●' : '○'} ${x.slug}${x.externa ? gris(' [externa]') : ''} ${col[x.escaneo?.nivel] || ''}${x.escaneo?.nivel || 'sin escanear'}\x1b[0m · ${x.usos} usos · ${gris(x.descripcion.slice(0, 90))}`).join('\n') : '  (no hay skills)');
-    return;
-  }
-  if (/^\/skill\s+(add|on|off|rm|scan|update)\b/.test(c)) {           // /skill add <fuente> · on|off|rm|scan|update <slug>
-    const [, op, arg = ''] = c.match(/^\/skill\s+(\w+)\s*(.*)$/);
-    try {
-      if (op === 'add') {
-        const r = await n.skills.instalar(arg.trim());
-        if (r.opciones) console.log(`  la fuente trae ${r.opciones.length} skills; usa una de estas:\n` + r.opciones.map(o => `   /skill add ${o.fuente}`).join('\n'));
-        else console.log(`  instalada ${r.skill.slug} (DESACTIVADA) · escaneo ${r.skill.escaneo?.nivel}: ${r.skill.escaneo?.resumen || ''}\n  actívala con /skill on ${r.skill.slug}`);
-      } else if (op === 'on' || op === 'off') {
-        const forzar = / --forzar$/.test(arg), slug = arg.replace(/ --forzar$/, '').trim();
-        const x = await n.skills.activar(slug, op === 'on', { forzar });
-        console.log(gris(`  ${x.slug}: ${x.activa ? 'activa' : 'desactivada'}`));
-      } else if (op === 'rm') console.log(gris(n.skills.borrar(arg.trim()) ? '  borrada' : '  no existe'));
-      else if (op === 'scan') { const r = await n.skills.escanear(arg.trim()); console.log(`  ${r.nivel}: ${r.resumen}\n${r.explicacion || ''}`); }
-      else if (op === 'update') {
-        const r = await n.skills.actualizar(arg.trim());
-        if (r.alDia) console.log(gris('  ya está al día'));
-        else if ((await preguntar(`${r.diff}\n  ¿Aplicar la actualización? [s/n]: `)).trim().toLowerCase().startsWith('s')) {
-          const a = await n.skills.actualizar(arg.trim(), { aplicar: true }); console.log(gris(`  actualizada · escaneo ${a.escaneo?.nivel}`));
-        }
-      }
-    } catch (e) { console.log(rojo(`  ${e.message}${e.status === 409 ? ' (añade --forzar)' : ''}`)); }
-    return;
-  }
-  if (c === '/plugins') {
-    const l = n.plugins.lista(), col = { verde: '\x1b[32m', amarillo: '\x1b[33m', rojo: '\x1b[31m' };
-    console.log(l.length ? l.map(x => `  ${x.activo ? '●' : '○'} ${x.nombre} ${x.version}${x.dev ? gris(' [dev]') : ''} · ${x.roto ? rojo('ROTO') : x.estado} · ${col[x.escaneo?.nivel] || ''}${x.escaneo?.nivel || 'sin escanear'}\x1b[0m · ${gris((x.permisos.join(', ') || 'sin permisos') + ' · ' + x.descripcion.slice(0, 70))}`).join('\n') : '  (no hay plugins)');
-    const cm = n.plugins.comandos(); if (cm.length) console.log(gris('  comandos: ' + cm.map(x => '/' + x.nombre).join(' ')));
-    return;
-  }
-  if (/^\/plugin\s+(add|on|off|rm|reload|scan)\b/.test(c)) {         // /plugin add <fuente> [--dev] · on|off <nombre> [--forzar] · rm|reload|scan <nombre>
-    const [, op, resto = ''] = c.match(/^\/plugin\s+(\w+)\s*(.*)$/);
-    const forzar = /\s--forzar\b/.test(' ' + resto), dev = /\s--dev\b/.test(' ' + resto), arg = resto.replace(/\s*--(forzar|dev)\b/g, '').trim();
-    try {
-      if (op === 'add') {
-        const r = await n.plugins.instalar(arg, { dev });
-        if (r.opciones) console.log(`  la fuente trae ${r.opciones.length} plugins; elige con #nombre:\n` + r.opciones.map(o => `   /plugin add ${arg}#${o.nombre}`).join('\n'));
-        else console.log(`  instalado ${r.plugin.nombre} ${r.plugin.version} (DESACTIVADO) · escaneo ${r.plugin.escaneo?.nivel}: ${r.plugin.escaneo?.resumen || ''}\n  permisos: ${r.plugin.permisos.join(', ') || 'ninguno'}\n  actívalo con /plugin on ${r.plugin.nombre}`);
-      } else if (op === 'on' || op === 'off') { const x = await n.plugins.activar(arg, op === 'on', { forzar }); console.log(gris(`  ${x.nombre}: ${x.activo ? 'activo' : 'desactivado'}${x.registrados.herramientas.length ? ' · herramientas ' + x.registrados.herramientas.join(', ') : ''}`)); }
-      else if (op === 'rm') { await n.plugins.borrar(arg); console.log(gris('  borrado')); }
-      else if (op === 'reload') { const x = await n.plugins.recargar(arg); console.log(gris(`  ${x.nombre} recargado (${x.estado})`)); }
-      else if (op === 'scan') { const r = await n.plugins.escanear(arg); console.log(`  ${r.nivel}: ${r.resumen}\n${r.explicacion || ''}`); }
-    } catch (e) { console.log(rojo(`  ${e.message}${e.status === 409 && /ROJO/.test(e.message) ? ' (añade --forzar)' : ''}`)); }
-    return;
-  }
-  const cmdPlugin = c.match(/^\/([\w-]+)(?:\s+([\s\S]*))?$/);
-  if (cmdPlugin && n.plugins.comandos().some(x => x.nombre === cmdPlugin[1])) {
-    try { console.log(await n.plugins.comando(cmdPlugin[1], cmdPlugin[2] || '', { canal: 'cli' })); } catch (e) { console.log(rojo(`  ${e.message}`)); }
-    return;
-  }
-  if (c.startsWith('/modelo ')) { s.modelo = c.slice(8).trim(); n.sesiones.guardarMeta(s); console.log(gris(`  modelo: ${s.modelo}`)); return; }
-  if (!c) return;
-  await n.enviar(s, c, pintar).catch(() => { });
-}
+const imprimirSolo = bandera('-p', '--print');
+const modelo = valor('-m', '--modelo');
+const cwd = valor('-C', '--carpeta');
+const continuar = bandera('-c', '--continuar');
+const retomar = valor('-r', '--retomar');
+const local = bandera('--local');
+const mensaje = argv.join(' ').trim();
+const path = require('path');
+const { conectar } = require('./tui/conexion');
+
+const leerEntrada = () => new Promise(ok => { let b = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', d => b += d); process.stdin.on('end', () => ok(b)); });
 
 (async () => {
-  if (unico) { await turno(unico); rl.close(); return; }
-  console.log(gris(`Robot Companion · ${s.modelo} · ${s.cwd}\n/modelo x/y · /proveedores · /tareas · /memoria · /skills · /skill add|on|off|rm|scan|update · /plugins · /plugin add|on|off|rm|reload · /compactar · /nueva · /salir`));
-  for (;;) await turno(await preguntar('\n› '));
-})();
+  const con = await conectar({ local });
+  const carpeta = cwd ? path.resolve(cwd) : process.cwd();
+
+  if (imprimirSolo || !process.stdin.isTTY || !process.stdout.isTTY) {
+    // modo una sola respuesta: el texto final a stdout, lo demás a stderr
+    let texto = mensaje;
+    if (!process.stdin.isTTY) { const e = (await leerEntrada()).trim(); if (e) texto = texto ? `${texto}\n\n<entrada>\n${e}\n</entrada>` : e; }
+    if (!texto) { console.error('apolo -p: falta el mensaje'); process.exit(2); }
+    let m = modelo;
+    if (m && !m.includes('/')) { try { m = (await con.config()).alias?.[m.toLowerCase()] || m; } catch { } }
+    const s = typeof retomar === 'string' ? await con.sesion(retomar) : await con.crearSesion({ modelo: m, cwd: carpeta, titulo: texto.slice(0, 60) });
+    const err = t => process.stderr.write(`\x1b[90m${t}\x1b[0m\n`);
+    con.bus.on('evento', e => {
+      if (e.tipo !== 'permiso' || e.sesion !== s.id) return;
+      if (con.modo === 'daemon') err(`⚠ ${e.herramienta}: ${e.resumen} → esperando permiso en la isla, el móvil o el Stream Deck…`);
+      else { err(`✗ ${e.herramienta}: denegado (sin la app nadie puede aprobarlo; ábrela o usa la CLI interactiva)`); con.resolver(e.id, 'deny').catch(() => { }); }
+    });
+    let final = '', fallo = '';
+    await con.enviar(s.id, texto, e => {
+      if (e.tipo === 'herramienta') err(`● ${e.nombre}(${String(e.resumen || '').split('\n')[0].slice(0, 120)})`);
+      else if (e.tipo === 'fin') final = e.texto || final;
+      else if (e.tipo === 'texto') final = e.texto;
+      else if (e.tipo === 'error') fallo = e.error;
+    });
+    if (final) process.stdout.write(final.trimEnd() + '\n');
+    if (fallo) { process.stderr.write(`error: ${fallo}\n`); process.exitCode = 1; }
+    con.cerrar(); setTimeout(() => process.exit(process.exitCode || 0), 50);
+    return;
+  }
+
+  const { iniciarTUI } = require('./tui/app');
+  await iniciarTUI(con, { modelo, cwd: carpeta, continuar, sesion: typeof retomar === 'string' ? retomar : undefined, retomarElegir: retomar === true, mensaje });
+})().catch(e => { process.stderr.write(`apolo: ${e.message}\n`); process.exit(1); });
