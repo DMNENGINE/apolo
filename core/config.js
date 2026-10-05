@@ -70,6 +70,8 @@ const POR_DEFECTO = {
     autoresConfianza: [], marketplaceAnthropic: true, reglasProyecto: true },
   // seguridad.exfil: 'preguntar' | 'bloquear' | 'off' (core/exfil.js: enviar datos a un dominio nuevo)
   seguridad: { exfil: 'preguntar' },
+  // apariencia de la nube flotante (isla): estilo del cristal, color de fondo y borde (elegible en Ajustes y en el primer arranque)
+  isla: { estilo: 'glass', fondo: '', borde: '', bordeAncho: 1 },   // estilo: glass | liquid | solido · fondo/borde: '' = por defecto
 };
 
 // opciones.boveda: bóveda inyectable (tests); por defecto core/boveda.js (DPAPI en Windows)
@@ -87,7 +89,7 @@ function cargarConfig(dir = carpetaDatos(), opciones = {}) {
     catch (e) { bovedaError = e.message; break; }                 // sin bóveda (p. ej. PowerShell bloqueado) → se queda como estaba
   }
   if (migradas) { try { fs.writeFileSync(f, JSON.stringify(guardada, null, 2)); } catch { } }
-  const cfg = { ...POR_DEFECTO, ...guardada, permisos: { ...POR_DEFECTO.permisos, ...guardada.permisos }, alias: { ...POR_DEFECTO.alias, ...guardada.alias }, memoria: { ...POR_DEFECTO.memoria, ...guardada.memoria }, compactar: { ...POR_DEFECTO.compactar, ...guardada.compactar }, skills: { ...POR_DEFECTO.skills, ...guardada.skills }, proveedores: { ...POR_DEFECTO.proveedores } };
+  const cfg = { ...POR_DEFECTO, ...guardada, permisos: { ...POR_DEFECTO.permisos, ...guardada.permisos }, alias: { ...POR_DEFECTO.alias, ...guardada.alias }, memoria: { ...POR_DEFECTO.memoria, ...guardada.memoria }, compactar: { ...POR_DEFECTO.compactar, ...guardada.compactar }, skills: { ...POR_DEFECTO.skills, ...guardada.skills }, isla: { ...POR_DEFECTO.isla, ...guardada.isla }, proveedores: { ...POR_DEFECTO.proveedores } };
   for (const [k, v] of Object.entries(guardada.proveedores || {})) cfg.proveedores[k] = { ...POR_DEFECTO.proveedores[k], ...v };
   // migraciones de proveedores que cambiaron de API (se conserva la clave)
   const pp = cfg.proveedores.perplexity;

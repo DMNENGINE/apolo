@@ -11,7 +11,7 @@ function configPublica(cfg) {
     proveedores[k] = { ...resto, tieneKey: !!apiKey && apiKey !== 'ollama', keyDeEntorno: !!(p.env && process.env[p.env]), enBoveda: !!apiKeyRef };
   }
   return { herramientasOff: cfg.herramientasOff || [], modeloPorDefecto: cfg.modeloPorDefecto, alias: cfg.alias, permisos: cfg.permisos, maxPasos: cfg.maxPasos, puerto: cfg.puerto, carpeta: cfg.carpeta || '', proveedores, dir: cfg.dir,
-    idioma: cfg.idioma || '', bienvenida: cfg.bienvenida === true,
+    idioma: cfg.idioma || '', bienvenida: cfg.bienvenida === true, isla: cfg.isla || { estilo: 'glass', fondo: '', borde: '', bordeAncho: 1 },
     // canales como plugins (flags de la app) y por qué el de Discord no puede arrancar (modo Pi / bot local), si es el caso
     plugins: { ...Object.fromEntries(FLAGS_PLUGINS.map(k => [k, !!(cfg.plugins && cfg.plugins[k])])), discordBloqueado: (cfg.plugins && cfg.plugins.discord && cfg.plugins.discord.bloqueado) || '' } };      // idioma '' = automático (el del sistema); bienvenida = asistente de primer arranque hecho
 }
@@ -25,6 +25,15 @@ function guardarConfig(cfg, cambios) {
   if (typeof cambios.carpeta === 'string') cfg.carpeta = disco.carpeta = cambios.carpeta.trim();
   if (typeof cambios.idioma === 'string' && /^([a-z]{2})?$/.test(cambios.idioma)) cfg.idioma = disco.idioma = cambios.idioma;
   if (typeof cambios.bienvenida === 'boolean') cfg.bienvenida = disco.bienvenida = cambios.bienvenida;
+  if (cambios.isla && typeof cambios.isla === 'object') {           // apariencia de la nube flotante
+    const i = cfg.isla = { estilo: 'glass', fondo: '', borde: '', bordeAncho: 1, ...(cfg.isla || {}) }, c = cambios.isla;
+    const hex = x => typeof x === 'string' && /^#[0-9a-fA-F]{6}$/.test(x);
+    if (['glass', 'liquid', 'solido'].includes(c.estilo)) i.estilo = c.estilo;
+    if (c.fondo === '' || hex(c.fondo)) i.fondo = c.fondo;
+    if (c.borde === '' || hex(c.borde)) i.borde = c.borde;
+    if (Number.isFinite(c.bordeAncho) && c.bordeAncho >= 0 && c.bordeAncho <= 4) i.bordeAncho = c.bordeAncho;
+    disco.isla = i;
+  }
   if (cambios.permisos && ['preguntar', 'auto', 'solo-lectura'].includes(cambios.permisos.modo)) {
     cfg.permisos.modo = cambios.permisos.modo; disco.permisos = { ...disco.permisos, modo: cambios.permisos.modo };
   }

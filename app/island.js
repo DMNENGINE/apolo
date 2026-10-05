@@ -89,6 +89,23 @@ if (bridge.onAvatar) bridge.onAvatar(a => {
   skin.hidden = !skinCfg.usar; cv.style.visibility = skinCfg.usar ? 'hidden' : '';
   skinEstado = ''; pintarSkin(); ajustarFps();
 });
+// Apariencia de la nube flotante: estilo del cristal (glass/liquid/sólido), color de fondo y borde (elegido en el panel).
+function hexRGBA(hex, a) { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
+function aplicarApariencia(a) {
+  a = a || {};
+  const rs = document.documentElement.style;
+  const estilo = ['glass', 'liquid', 'solido'].includes(a.estilo) ? a.estilo : 'glass';
+  const hex = /^#[0-9a-fA-F]{6}$/;
+  const alpha = estilo === 'solido' ? 0.95 : estilo === 'liquid' ? 0.34 : 0.72;
+  const blur = estilo === 'solido' ? '0px' : estilo === 'liquid' ? '18px' : '8px';
+  document.body.dataset.iso = estilo;
+  if (hex.test(a.fondo || '')) rs.setProperty('--card', hexRGBA(a.fondo, alpha)); else rs.removeProperty('--card');
+  if (hex.test(a.borde || '')) rs.setProperty('--line', hexRGBA(a.borde, 0.55)); else rs.removeProperty('--line');
+  rs.setProperty('--iso-blur', blur);
+  rs.setProperty('--iso-sat', estilo === 'liquid' ? '1.7' : '1.05');
+  rs.setProperty('--iso-borde', (Number.isFinite(a.bordeAncho) ? Math.max(0, Math.min(4, a.bordeAncho)) : 1) + 'px');
+}
+if (bridge.onApariencia) bridge.onApariencia(aplicarApariencia);
 const center = () => { const r = rwrap.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
 let lastCode = null;                  // último cambio de código para la tarjeta "en vivo"
 
@@ -351,7 +368,28 @@ function notif(n) {
   robot.pushLog(n.kind === 'dm' ? `@${n.author}` : `# ${n.channel}: ${n.author}`);
   if (n.kind === 'dm' || n.mention) say(n.kind === 'dm' ? tr('Mensaje de {x}', { x: n.author }) : tr('{a} te mencionó en {g}', { a: n.author, g: n.guild }));
 }
-if (bridge.onNotif) bridge.onNotif(notif);
+// Modo Gamer = No molestar: las notificaciones no aparecen; se cuentan y al salir se muestra un resumen.
+var perdidas = [];
+const CAT_PERDIDA = { mail: 'correo', dm: 'mensaje', whatsapp: 'mensaje', server: 'mención', pi: 'aviso', claude: 'aviso' };
+const catPerdida = kind => CAT_PERDIDA[kind] || 'aviso';
+function registrarPerdida(cat, quien) { perdidas.push({ cat, quien: quien || '', t: Date.now() }); robot.pushLog(tr('silenciado (jugando)')); }
+function resumenPerdidas() {
+  if (!perdidas.length) return '';
+  const plural = { 'correo': 'correos', 'mensaje': 'mensajes', 'mención': 'menciones', 'urgente': 'urgentes', 'aviso': 'avisos' };
+  const cuenta = {};
+  for (const p of perdidas) cuenta[p.cat] = (cuenta[p.cat] || 0) + 1;
+  return Object.entries(cuenta).map(([c, n]) => `${n} ${tr(n === 1 ? c : (plural[c] || c))}`).join(', ');
+}
+function mostrarResumenPerdidas() {
+  const r = resumenPerdidas(); if (!r) return;
+  const total = perdidas.length; perdidas = [];
+  const el = $('answer');
+  el.innerHTML = `<b class="t">${esc(tr('Mientras jugabas'))}</b>${esc(tr('Silencié {n} notificación: {r}.|Silencié {n} notificaciones: {r}.', { n: total, r }))}`;
+  el.classList.add('on'); abrirUnRato(25_000);
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 90_000);
+  sound.play('blip');
+}
+if (bridge.onNotif) bridge.onNotif(n => modoGamer ? registrarPerdida(catPerdida(n.kind), n.author) : notif(n));
 
 // ---------- cerebro: tarjetas de acción, urgentes, respuestas ----------
 const cards = [];
@@ -376,16 +414,19 @@ $('cards').addEventListener('click', async e => {
   if (['enviar', 'descartar', 'ruido'].includes(b.dataset.a) && !/No pude|Couldn't/i.test(r)) { const i = cards.findIndex(c => c.id === id); if (i >= 0) cards.splice(i, 1); renderCards(); }
 });
 if (bridge.onCard) bridge.onCard(c => {
-  cards.unshift(c); if (cards.length > 8) cards.pop(); renderCards();
+  cards.unshift(c); if (cards.length > 8) cards.pop(); renderCards();   // la tarjeta se guarda para actuar luego
+  if (modoGamer) return registrarPerdida(catPerdida(c.kind), c.author);   // sin toast ni sonido mientras juegas
   notif({ kind: c.kind === 'server' ? 'server' : 'dm', guild: c.guild || '', channel: c.channel || c.kind, author: c.author || '', text: c.resumen, mention: c.prioridad === 'urgente' });
 });
 if (bridge.onUrgent) bridge.onUrgent(c => {
+  if (modoGamer) return registrarPerdida('urgente', c.author);
   robot.hud(tr('URGENTE'), 4, 'error'); sound.play('permiso');
   say(tr('Urgente: {x}', { x: c.resumen })); abrirUnRato(25_000);
 });
 if (bridge.onCardDone) bridge.onCardDone(id => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { cards.splice(i, 1); renderCards(); } });
 if (bridge.onThinking) bridge.onThinking(v => { if (v) robot.hud(tr('PENSANDO…'), 30, 'trabajando'); else robot.hud('', 0.01, 'reposo'); });
 if (bridge.onAnswer) bridge.onAnswer(a => {
+  if (modoGamer && !a.voz) return registrarPerdida('aviso', a.titulo);   // retenido; las respuestas habladas sí pasan
   const el = $('answer');
   el.innerHTML = `<b class="t">${esc(tr(a.titulo || 'Respuesta'))}</b>${esc(a.texto || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}`;
   el.classList.add('on'); abrirUnRato(25_000);
@@ -455,7 +496,7 @@ $('mic').addEventListener('click', startListen);
 if (bridge.onListenKey) bridge.onListenKey(startListen);
 if (bridge.onSay) bridge.onSay(t => { robot.hud(tr('RESPUESTA'), 4, 'listo'); say(String(t).replace(/[`*#>_]/g, '').slice(0, 400)); });
 var modoGamer = false;                                         // Modo Gamer activo → isla dormida (evento del núcleo {tipo:'gamer'})
-if (bridge.onGamer) bridge.onGamer(v => { modoGamer = !!v; if (!modoGamer) lastActivity = Date.now(); render(); });
+if (bridge.onGamer) bridge.onGamer(v => { const antes = modoGamer; modoGamer = !!v; if (!modoGamer) { lastActivity = Date.now(); if (antes) setTimeout(mostrarResumenPerdidas, 600); } render(); });
 if (bridge.onPoke) bridge.onPoke(() => { const [x, y] = center(); robot.poke(); sound.play('poke'); emit(x, y, 14, COLORS.listo, 'burst'); lastActivity = Date.now(); render(); });
 bridge.onExpired(id => { const i = perms.findIndex(p => p.id === id); if (i >= 0) { perms.splice(i, 1); render(); } });
 

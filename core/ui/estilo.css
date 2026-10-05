@@ -330,6 +330,10 @@ textarea { resize: vertical; }
 .robot-lado .casco { width: 38px; height: 38px; }
 .robot-inicio { width: 170px; height: 150px; flex: none; cursor: pointer; display: grid; place-items: center; margin: -18px -10px -18px -16px; }
 canvas.robot3d { width: 100%; height: 100%; display: block; filter: drop-shadow(0 0 14px var(--glow, transparent)); }
+.av-companero { display: grid; place-items: center; width: 100%; height: 100%; }
+.av-companero svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--acento) 26%, transparent)); }
+.robot-lado .av-companero svg { width: 52px; height: 52px; }
+.robot-marca .av-companero svg { width: 34px; height: 34px; }
 .robot-bienvenida { width: 210px; height: 170px; margin: -20px auto -16px; cursor: pointer; display: grid; place-items: center; }
 .robot-bienvenida .casco { width: 84px; height: 84px; }
 .lado-pie { padding: 12px 12px 12px 14px; overflow: visible; }

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.4] - 2026-10-05
+
+### Added
+- **One avatar everywhere**: the avatar you pick is now your face across the whole app. It replaces the 3D helmet on the floating island and the streaming overlay, and appears as the companion in the panel (sidebar, chat, Home, onboarding). Changing it updates everywhere live.
+- **Floating island appearance**: pick its look in Settings → Appearance → Floating island — *Glassmorphism*, *Liquid glass* or *Solid color*, with a custom background color and border color/width, applied to the island live. You also choose the style on first run (new onboarding step).
+- **Do Not Disturb while gaming**: with Game Mode active, APOLO's own notifications (cards, mentions, Gmail, channel messages, answers) are silenced — no pop-ups or sounds. When you leave, the island shows a summary of what you missed.
+
+### Changed
+- The floating companion follows your chosen avatar by default (the 3D helmet is used only until you pick one).
+
 ## [0.2.3] - 2026-10-05
 
 ### Added
