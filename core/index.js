@@ -121,6 +121,13 @@ function crearNucleo(opciones = {}) {
   nucleo.extensiones.privacidad = { http: (...a) => privacidad.http(...a) };
   nucleo.extensiones.wrapped = { http: (...a) => wrapped.http(...a) };
   nucleo.avatar = avatar; nucleo.extensiones.avatar = { http: (...a) => avatar.http(...a) };
+  // servidores MCP remotos con OAuth (Mobbin…) → herramientas <id>_<herramienta>; API /v1/mcp-remotos
+  const mcpRemotos = require('./mcp-remoto').crearMcpRemotos({ cfg, registrar: require('./herramientas').registrar, quitar: require('./herramientas').quitar, log: (...a) => console.log(...a) });
+  nucleo.mcpRemotos = mcpRemotos; nucleo.extensiones['mcp-remotos'] = { http: (...a) => mcpRemotos.http(...a) };
+  // biblioteca de diseño: patrones aprendidos de apps reales en Mobbin; API /v1/diseno
+  const diseno = require('./diseno').crearDiseno({ cfg, mcpRemotos, generarJSON: generarJSONvivo, memoria, tareas, bus });
+  require('./herramientas').registrar(diseno.HERRAMIENTAS);
+  nucleo.diseno = diseno; nucleo.extensiones.diseno = { http: (...a) => diseno.http(...a) };
   // FASE 9: registro de auditoría encadenado + kill switch global
   const auditoria = require('./auditoria').crearAuditoria({ cfg, bus, boveda: cfg.boveda });
   permisos.ponerAuditoria(auditoria);

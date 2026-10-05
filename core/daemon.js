@@ -478,7 +478,7 @@ function iniciar(opciones = {}) {
     }
   };
   srv.on('close', () => { for (const s of extras.splice(0)) s.close(); });
-  return new Promise((ok, mal) => { srv.once('error', mal); srv.listen(puerto, host, () => (opciones.sinTareas || (n.tareas.iniciar(), n.turno?.iniciar(), n.sueno?.programar(), n.sueno?.iniciar()), 0) || ok({ nucleo: n, servidor: srv, puerto: srv.address().port, token })); });
+  return new Promise((ok, mal) => { srv.once('error', mal); srv.listen(puerto, host, () => (opciones.sinTareas || (n.tareas.iniciar(), n.turno?.iniciar(), n.sueno?.programar(), n.sueno?.iniciar(), n.diseno?.programar()), 0) || ok({ nucleo: n, servidor: srv, puerto: srv.address().port, token })); });
 }
 
 if (require.main === module) {

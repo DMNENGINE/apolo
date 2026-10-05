@@ -31,12 +31,13 @@ function validar(v, s, ruta = '') {
 }
 
 function crearEstructurado(proveedores) {
-  return async function generarJSON({ modelo, system, prompt, schema, signal }) {
+  // imagenes (opcional): [{ mime, datos(base64) }] → van con la petición (modelos con visión)
+  return async function generarJSON({ modelo, system, prompt, schema, signal, imagenes }) {
     const { api, model } = proveedores.resolver(modelo);
     const sys = `${system || ''}\n\nResponde ÚNICAMENTE con un objeto JSON válido, sin texto antes ni después y sin \`\`\`. Debe cumplir este JSON Schema:\n${JSON.stringify(schema)}`;
     let pedido = prompt, ultimoError = '';
     for (let intento = 0; intento < 2; intento++) {
-      const r = await api.chat({ model, system: sys, mensajes: [{ role: 'user', content: pedido }], herramientas: [], formatoJSON: true, signal });
+      const r = await api.chat({ model, system: sys, mensajes: [{ role: 'user', content: pedido, ...(imagenes?.length ? { imagenes } : {}) }], herramientas: [], formatoJSON: true, signal });
       const j = extraerJSON(r.texto);
       ultimoError = j ? validar(j, schema) : 'no era JSON';
       if (j && !ultimoError) return { datos: j, uso: r.uso };

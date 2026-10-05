@@ -81,6 +81,9 @@ async function conectarDaemon({ dir = carpetaDatos(), puerto } = {}) {
     uso: () => pedir('GET', '/v1/uso?dias=7'),
     config: () => pedir('GET', '/v1/config'),
     panico: () => pedir('POST', '/v1/panico', { origen: 'cli', quien: 'cli' }),
+    conectarMcp: id => pedir('POST', `/v1/mcp-remotos/${id}/conectar`, {}),
+    flujoMcp: f => pedir('GET', `/v1/mcp-remotos/flujo/${f}`),
+    diseno: () => pedir('GET', '/v1/diseno'),
     reanudar: () => pedir('POST', '/v1/panico/reanudar', { quien: 'cli' }),
     cerrar() { cerrado = true; parar?.(); },
   };
@@ -119,6 +122,9 @@ function enProceso() {
     uso: async () => require('../admin').uso(n.sesiones, 7),
     config: async () => n.cfg,
     panico: async () => n.panico.activar('cli'),
+    conectarMcp: id => n.mcpRemotos.conectar(id),
+    flujoMcp: async f => n.mcpRemotos.flujo(f) || { estado: 'desconocido' },
+    diseno: async () => n.diseno.http('GET', ['v1', 'diseno']),
     reanudar: async () => n.panico.reanudar('cli'),
     cerrar() { },
   };

@@ -1106,3 +1106,20 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
   .av-hoja { grid-template-columns: repeat(3, 1fr); }
   .av-campos { grid-template-columns: 1fr; }
 }
+
+/* ── Diseño (biblioteca de patrones aprendidos en Mobbin, ui/diseno.js) ── */
+.ds-mobbin { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.ds-mobbin b { display: flex; align-items: center; gap: 8px; }
+.ds-mobbin small { display: block; margin-top: 3px; }
+.ds-estudiar { margin-bottom: 6px; }
+.ds-fila { display: flex; gap: 8px; flex-wrap: wrap; }
+.ds-fila input { min-width: 240px; }
+.ds-regla { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--borde); }
+.ds-regla small { display: block; margin-top: 3px; }
+.ds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ds-item { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; transition: border-color .15s, transform .15s; }
+.ds-item:hover { border-color: var(--acento); transform: translateY(-1px); }
+.ds-ficha { max-width: 860px; line-height: 1.6; }
+.ds-ficha h1 { margin-top: 0; }
+.ds-ficha blockquote { margin: 0 0 12px; padding-left: 12px; border-left: 3px solid var(--acento); color: var(--txt-2); }
+@media (max-width: 700px) { .ds-mobbin, .ds-regla { flex-wrap: wrap; } .ds-fila input { min-width: 0; width: 100%; } }

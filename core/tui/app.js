@@ -20,6 +20,7 @@ const COMANDOS = [
   ['/ayuda', 'comandos y atajos'], ['/modelo', 'cambiar de modelo (sin nada: elegir de la lista)'], ['/nueva', 'conversación nueva (también /clear)'],
   ['/sesiones', 'retomar una conversación anterior'], ['/compactar', 'resumir lo antiguo para liberar contexto'], ['/memoria', 'ver o buscar en la memoria: /memoria [texto]'],
   ['/tareas', 'tareas programadas'], ['/skills', 'skills instaladas'], ['/plugins', 'plugins instalados'], ['/uso', 'tokens de los últimos 7 días'],
+  ['/diseno', 'biblioteca de diseño (patrones aprendidos en Mobbin)'], ['/conectar', 'conectar un servicio: /conectar mobbin'],
   ['/cwd', 'carpeta de trabajo: /cwd <ruta>'], ['/estado', 'conexión, sesión y permisos'], ['/panico', 'PARAR todo (agentes, control del PC…)'], ['/reanudar', 'salir del pánico'],
   ['/limpiar', 'limpiar la pantalla'], ['/salir', 'cerrar la CLI'],
 ];
@@ -407,6 +408,23 @@ async function iniciarTUI(con, opciones = {}) {
           return lista('Estado', [`  ${c.tenue('conexión')}  ${con.modo === 'daemon' ? `daemon ${con.base}` : 'en proceso'}${conectado ? '' : c.rojo(' (eventos caídos)')}`,
             `  ${c.tenue('sesión  ')}  ${ses.id} · ${ses.titulo}`, `  ${c.tenue('modelo  ')}  ${ses.modelo}`, `  ${c.tenue('carpeta ')}  ${ses.cwd}`,
             `  ${c.tenue('permisos')}  ${modoPerm()}`, `  ${c.tenue('tokens  ')}  ↑${miles(ses.uso?.entrada || 0)} ↓${miles(ses.uso?.salida || 0)} en esta conversación`]);
+        case '/conectar': {
+          const id = (arg || 'mobbin').toLowerCase();
+          const { flujo } = await con.conectarMcp(id);
+          imprimir(c.tenue(`  ⎿  se abrió el navegador: entra en ${id} y autoriza a ${con.nombre}…`));
+          for (let i = 0; i < 400; i++) {
+            await new Promise(ok => setTimeout(ok, 1500));
+            const f = await con.flujoMcp(flujo);
+            if (f.estado === 'esperando') continue;
+            return imprimir(f.estado === 'conectado' ? c.acento(`  ✓ ${id} conectado · ${(f.herramientas || []).join(', ')}`) : c.rojo(`  ⎿  ${f.error || f.estado}`));
+          }
+          return imprimir(c.rojo('  ⎿  tiempo agotado'));
+        }
+        case '/diseno': {
+          const d = await con.diseno();
+          return lista(`Biblioteca de diseño · ${d.patrones.length} patrones · Mobbin ${d.mobbin ? 'conectado' : 'sin conectar (/conectar mobbin)'}`,
+            d.patrones.map(p => `  ${c.acento('●')} ${rellenar(cortar(p.nombre, 40), 41)} ${c.tenue(`${p.plataforma} · ${p.tipo} · ${(p.apps || []).slice(0, 4).join(', ')}`)}`));
+        }
         case '/panico': await con.panico(); return imprimir(c.rojo('  ■ PÁNICO: todo parado. /reanudar para seguir.'));
         case '/reanudar': await con.reanudar(); return imprimir(c.acento('  ▶ reanudado'));
         default: return imprimir(c.rojo(`  ⎿  comando desconocido: ${cab0}`) + c.tenue('  (/ayuda)'));
@@ -460,7 +478,7 @@ async function iniciarTUI(con, opciones = {}) {
   }
   function aplicarMenu() {
     const it = menu.items[menu.sel];
-    if (menu.tipo === 'cmd') { ed.poner(it.valor + (['/modelo', '/memoria', '/cwd'].includes(it.valor) ? ' ' : '')); }
+    if (menu.tipo === 'cmd') { ed.poner(it.valor + (['/modelo', '/memoria', '/cwd', '/conectar'].includes(it.valor) ? ' ' : '')); }
     else {
       const v = /\s/.test(it.valor) ? `"${it.valor}"` : it.valor;
       ed.texto = ed.texto.slice(0, it.ini) + '@' + v + (it.valor.endsWith('/') ? '' : ' ') + ed.texto.slice(ed.pos); ed.pos = it.ini + 1 + v.length + (it.valor.endsWith('/') ? 0 : 1);
