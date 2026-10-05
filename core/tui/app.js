@@ -9,6 +9,7 @@ const { spawn } = require('child_process');
 const { c, ancho, cortar, rellenar, ajustar, anchoCar, quitarAnsi } = require('./texto');
 const { renderMarkdown } = require('./markdown');
 const { Editor } = require('./editor');
+const mascota = require('./mascota');
 
 const VERBOS = ['Pensando', 'Tramando', 'Cocinando', 'Calculando', 'Maquinando', 'Rumiando', 'Forjando', 'Destilando', 'Afinando', 'Ensamblando', 'Soldando', 'Calibrando', 'Tejiendo', 'Puliendo'];
 const GIRO = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
@@ -64,6 +65,18 @@ async function iniciarTUI(con, opciones = {}) {
   const permisos = [];                               // permisos pendientes de esta sesión (el primero se muestra)
   let selPerm = 0, menu = null, selector = null, pista = '', pistaHasta = 0, ultimoCtrlC = 0, ultimoEsc = 0, verAtajos = false;
   let ultimoResultado = null, conectado = true;
+  // casco animado: la bienvenida vive en la zona viva (se mueve) hasta que sale lo primero; luego queda fija en el historial
+  let cabecera = false, felizHasta = 0, errorHasta = 0, ultimaTecla = Date.now();
+  const T0 = Date.now(), ahoraAnim = () => Date.now() - T0;
+  function estadoMascota() {
+    if (permisos.length) return 'permiso';
+    if (ocupado) return 'trabajando';
+    if (Date.now() < errorHasta) return 'error';
+    if (Date.now() < felizHasta) return 'feliz';
+    if (Date.now() - ultimaTecla > 120_000) return 'dormido';
+    return ed.texto ? 'escribiendo' : 'reposo';
+  }
+  const mirarA = () => { const { col } = ed.filaCol(); return Math.max(-1, Math.min(1, (col + 2) / Math.max(10, cols() - 8) * 2 - 1)); };
   const pegados = new Map(); let nPegado = 0;
   let altoPrev = 0, filaCursorPrev = 0, anchosPrev = [], colCursorPrev = 0, anchoPrev = cols();
 
@@ -149,7 +162,7 @@ async function iniciarTUI(con, opciones = {}) {
 
   function lineaEstado(W) {
     if (pista && Date.now() < pistaHasta) return [c.tenue('  ' + pista)];
-    const izq = verAtajos || ocupado ? '' : c.tenue('  ? atajos');
+    const izq = verAtajos || ocupado ? '' : cabecera ? c.tenue('  ? atajos') : '  ' + mascota.mini(estadoMascota(), ahoraAnim()) + c.tenue(estadoMascota() === 'dormido' ? ' zzz' : ' ? atajos');
     const m = modoPerm();
     const modo = m === 'auto' ? c.amarillo('⏵⏵ permisos automáticos') : m === 'solo-lectura' ? c.azul('⏸ solo lectura') : '';
     const der = [modo, conectado ? '' : c.rojo('● sin conexión con el núcleo'), c.tenue(ses.modelo), c.tenue(cortar(cwdCorto(ses.cwd), 34))].filter(Boolean).join(c.tenue(' · '));
@@ -164,14 +177,14 @@ async function iniciarTUI(con, opciones = {}) {
 
   function zonaViva() {
     const W = cols();
-    const L = [];
+    const L = cabecera ? lineasBienvenida() : [];
     // herramientas y subagentes en curso
     if (ocupado) {
       for (const h of vivas.values()) L.push(cortar(`${(giro % 2) ? c.tenue('●') : c.blanco('●')} ${c.negrita(nombreH(h.nombre))}${c.tenue('(' + (h.resumen || '').split('\n')[0] + ')')}`, W - 1));
       for (const a of hijos.values()) if (a.estado === 'trabajando') L.push(cortar(c.tenue(`  ⤷ ${a.nombre || a.id} · ${a.herramienta ? nombreH(a.herramienta) : 'pensando'} · ${a.pasos || 0} pasos`), W - 1));
       const seg = Math.floor((Date.now() - t0) / 1000);
       const tiempo = seg >= 60 ? `${Math.floor(seg / 60)}m ${seg % 60}s` : `${seg}s`;
-      L.push(c.acento(GIRO[giro % GIRO.length] + ' ' + verbo + '…') + c.tenue(` (${tiempo}${tokTurno ? ' · ' + miles(tokTurno) + ' tokens' : ''} · esc para interrumpir)`));
+      L.push(mascota.mini(estadoMascota(), ahoraAnim()) + ' ' + c.acento(GIRO[giro % GIRO.length] + ' ' + verbo + '…') + c.tenue(` (${tiempo}${tokTurno ? ' · ' + miles(tokTurno) + ' tokens' : ''} · esc para interrumpir)`));
     }
     for (const q of cola) L.push(cortar(c.tenue('  ⧗ en cola: ') + q.replace(/\n/g, ' ⏎ '), W - 1));
     L.push('');
@@ -212,6 +225,7 @@ async function iniciarTUI(con, opciones = {}) {
     }
     if (subir) s += `\x1b[${subir}A`;
     s += '\x1b[J';
+    if (cabecera && pendiente.length) { pendiente.unshift(...lineasBienvenida(ahoraAnim(), 'reposo')); cabecera = false; return dibujar(); }
     for (const l of pendiente) s += l + '\x1b[0m\x1b[K\r\n';
     pendiente = [];
     s += L.join('\r\n');
@@ -258,19 +272,21 @@ async function iniciarTUI(con, opciones = {}) {
     imprimir(L);
   }
 
-  function bienvenida() {
+  function lineasBienvenida(t = ahoraAnim(), estado = estadoMascota()) {
     const W = Math.min(cols() - 1, 72);
     const caja = ls => [c.acento('╭' + '─'.repeat(W - 2) + '╮'), ...ls.map(l => c.acento('│') + ' ' + rellenar(cortar(l, W - 4), W - 4) + ' ' + c.acento('│')), c.acento('╰' + '─'.repeat(W - 2) + '╯')];
-    const ojo = c.acento('●');
-    imprimir(...caja([
-      `${c.tenue('╭─────╮')}  ${c.negrita('✻ Bienvenido a ' + con.nombre)}`,
-      `${c.tenue('│')}${c.tenue('▐')}${ojo} ${ojo}${c.tenue('▌')}${c.tenue('│')}  ${c.tenue('/ayuda para comandos · ? atajos')}`,
-      `${c.tenue('╰─┬─┬─╯')}  ${c.tenue(con.modo === 'daemon' ? 'conectado al núcleo de la app' : 'núcleo en proceso (la app no está abierta)')}`,
-      '',
+    const k = mascota.casco(estado, t, mirarA());
+    const dormido = estado === 'dormido';
+    return caja([
+      `${k[0]} ${c.negrita('✻ Bienvenido a ' + con.nombre)}`,
+      `${k[1]} ${c.tenue(dormido ? 'zzz… escribe algo para despertarlo' : '/ayuda para comandos · ? atajos')}`,
+      `${k[2]} ${c.tenue(con.modo === 'daemon' ? 'conectado al núcleo de la app' : 'núcleo en proceso (la app no está abierta)')}`,
+      k[3],
       `${c.tenue('carpeta:')} ${cwdCorto(ses.cwd)}`,
       `${c.tenue('modelo: ')} ${ses.modelo}`,
-    ]));
+    ]);
   }
+  function bienvenida() { cabecera = true; dibujar(); }
 
   // ── turnos ──
   function expandir(t) {
@@ -294,6 +310,7 @@ async function iniciarTUI(con, opciones = {}) {
     vivas.clear();
     const usoAntes = (ses.uso?.entrada || 0) + (ses.uso?.salida || 0);
     const tic = setInterval(() => { giro++; dibujar(); }, 120);
+    let huboError = false;
     try {
       await con.enviar(ses.id, expandir(texto), e => {
         if (e.sesion && e.sesion !== ses.id) return;
@@ -303,12 +320,13 @@ async function iniciarTUI(con, opciones = {}) {
         else if (e.tipo === 'aviso') imprimir(c.amarillo(`  ⚠ ${e.texto}`));
         else if (e.tipo === 'compactacion') imprimir('', c.tenue(`  ✻ conversación resumida: ${miles(e.antes)} → ${miles(e.despues)} tokens · ${e.recuerdos?.length || 0} recuerdos guardados`));
         else if (e.tipo === 'skill-sugerida') imprimir(c.tenue(`  ✻ esto podría ser una skill: ${e.resumen || ''}`));
-        else if (e.tipo === 'error') imprimir('', c.rojo(/cancelad|abort/i.test(e.error) ? '  ⎿  Interrumpido. ¿Qué hago ahora?' : `● Error: ${e.error}`));
+        else if (e.tipo === 'error' && (huboError = !/cancelad|abort/i.test(e.error), true)) imprimir('', c.rojo(/cancelad|abort/i.test(e.error) ? '  ⎿  Interrumpido. ¿Qué hago ahora?' : `● Error: ${e.error}`));
         else if (e.tipo === 'fin') { ses.uso = e.uso; tokTurno = (e.uso.entrada + e.uso.salida) - usoAntes; }
       });
-    } catch (e) { imprimir('', c.rojo(`● ${e.message}`)); }
+    } catch (e) { huboError = true; imprimir('', c.rojo(`● ${e.message}`)); }
     clearInterval(tic);
     ocupado = false; vivas.clear();
+    if (huboError) errorHasta = Date.now() + 3000; else felizHasta = Date.now() + 2500;
     for (const [id, a] of hijos) if (a.estado !== 'trabajando') hijos.delete(id);
     const seg = Math.round((Date.now() - t0) / 1000);
     if (seg >= 20) imprimir(c.tenue(`  ✻ ${seg >= 60 ? Math.floor(seg / 60) + 'm ' + (seg % 60) + 's' : seg + 's'}${tokTurno ? ' · ' + miles(tokTurno) + ' tokens' : ''}`));
@@ -523,6 +541,7 @@ async function iniciarTUI(con, opciones = {}) {
 
   inp.on('keypress', async (s, k = {}) => {
     if (cerrado) return;
+    ultimaTecla = Date.now();
     if (k.name === 'paste-start') { pegando = true; bufPegado = ''; return; }
     if (k.name === 'paste-end') { pegando = false; if (!permisos.length && !selector) { pegar(bufPegado); actualizarMenu(); } bufPegado = ''; return dibujar(); }
     if (pegando) { bufPegado += k.name === 'return' || k.name === 'enter' ? '\n' : (s || ''); return; }
@@ -610,8 +629,15 @@ async function iniciarTUI(con, opciones = {}) {
     actualizarMenu(); dibujar();
   });
 
+  let firmaAnim = '';
+  const relojAnim = setInterval(() => {
+    if (cerrado || ocupado || pegando) return;
+    const t = ahoraAnim(), e = estadoMascota();
+    const firma = cabecera ? mascota.casco(e, t, mirarA()).join('') : mascota.mini(e, t);
+    if (firma !== firmaAnim) { firmaAnim = firma; dibujar(); }
+  }, 90);
+  relojAnim.unref?.();
   bienvenida();
-  dibujar();
   if (opciones.retomarElegir) comando('/sesiones');
   else if (opciones.mensaje) turno(opciones.mensaje);
 }
