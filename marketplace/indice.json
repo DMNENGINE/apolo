@@ -1,7 +1,7 @@
 {
   "formato": "apolo-marketplace/1",
   "nombre": "Marketplace de APOLO",
-  "actualizado": "2026-10-03",
+  "actualizado": "2026-10-05",
   "entradas": [
     {
       "nombre": "clima",
@@ -90,6 +90,105 @@
       "fuente": "anthropics/skills/skills/webapp-testing",
       "autor": "Anthropic",
       "etiquetas": ["web", "pruebas"]
+    },
+    {
+      "nombre": "diseno-accesibilidad",
+      "tipo": "skill",
+      "descripcion": "Accesibilidad práctica (WCAG 2.2 nivel AA) para webs y apps - contraste, teclado, foco, lectores de pantalla, formularios, tamaños táctiles, movimiento. Úsala al diseñar o revisar cualquier interfaz y siempre que se hable de accesibilidad, a11y, contraste o lectores de pantalla.",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-accesibilidad",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
+    },
+    {
+      "nombre": "diseno-checkout-pagos",
+      "tipo": "skill",
+      "descripcion": "Comercio y pagos - carrito, checkout, métodos de pago, confirmación de pedido, paywalls y pantallas de suscripción in-app. Úsala al diseñar flujos de compra, pago, planes o suscripciones.",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-checkout-pagos",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
+    },
+    {
+      "nombre": "diseno-dashboards-datos",
+      "tipo": "skill",
+      "descripcion": "Dashboards, paneles de administración, tablas de datos, gráficos, KPIs, filtros y acciones en bloque. Úsala al diseñar paneles, informes, backoffices o cualquier pantalla con muchos datos.",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-dashboards-datos",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
+    },
+    {
+      "nombre": "diseno-formularios-acceso",
+      "tipo": "skill",
+      "descripcion": "Formularios y acceso - login, registro, recuperar contraseña, verificación por código (OTP), passkeys/biometría, perfiles y cualquier formulario con validación. Úsala al diseñar o maquetar pantallas de inicio de sesión, alta de cuenta o formularios.",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-formularios-acceso",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
+    },
+    {
+      "nombre": "diseno-fundamentos",
+      "tipo": "skill",
+      "descripcion": "Base de diseño de interfaces para cualquier pantalla, web o app (espaciado, rejilla, tipografía, color, jerarquía, estados, modo oscuro, tamaños táctiles). Úsala SIEMPRE que vayas a diseñar, maquetar o revisar una interfaz, antes de escribir HTML/CSS/SwiftUI/React.",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-fundamentos",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
+    },
+    {
+      "nombre": "diseno-navegacion-estados",
+      "tipo": "skill",
+      "descripcion": "Navegación y estados de la interfaz - barra de pestañas, menú lateral, cabeceras, modales y hojas, toasts y banners, carga (esqueletos, spinners, progreso), errores, confirmaciones de acciones destructivas y deshacer. Úsala al estructurar una app o web y al diseñar feedback del sistema.",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-navegacion-estados",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
+    },
+    {
+      "nombre": "diseno-onboarding",
+      "tipo": "skill",
+      "descripcion": "Onboarding y primeros pasos - bienvenida, personalización, pedir permisos (notificaciones, ubicación, cámara), checklists de configuración, tours y estados vacíos que enseñan. Úsala al diseñar la primera experiencia de una app o producto.",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-onboarding",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
+    },
+    {
+      "nombre": "diseno-revision",
+      "tipo": "skill",
+      "descripcion": "Proceso de diseño de principio a fin y revisión crítica de una interfaz ya hecha - plan, referencias, construcción, captura de pantalla y autocrítica con heurísticas de usabilidad hasta que quede bien. Úsala para revisar, criticar o mejorar un diseño, o cuando te pidan algo \"con nivel profesional\".",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-revision",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
+    },
+    {
+      "nombre": "diseno-web-marketing",
+      "tipo": "skill",
+      "descripcion": "Webs de marketing y landing pages - hero, propuesta de valor, prueba social, características, página de precios, FAQ, llamadas a la acción y footer. Úsala al diseñar una landing, web de producto, página de precios o de lanzamiento.",
+      "fuente": "DMNENGINE/apolo/skills/diseno/diseno-web-marketing",
+      "autor": "DMN / APOLO",
+      "etiquetas": ["diseño", "ui", "ux", "oficial"],
+      "version": "1.0.0",
+      "licencia": "MIT",
+      "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/diseno"
     }
   ]
 }
