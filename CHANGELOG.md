@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.6] - 2026-10-05
+
+### Added
+- **`apolo` in your terminal**: an interactive command-line chat in the style of Claude Code (live tools, permissions with 1/2/3, pasted text, an animated helmet that blinks, follows what you type and falls asleep). `apolo -p "..."` for one-shot answers and pipes; `apolo --simple` keeps the old CLI. The installer and the one-line install add `apolo` to your PATH.
+- **opencode as an engine**: APOLO can approve or deny opencode's permission requests from the island, Discord, phone or Stream Deck, like it does with Claude Code. Install it from the tray menu.
+- **Open design skills (MIT)**: 9 skills so any agent designs with good judgment — fundamentals, accessibility, login and forms, onboarding, checkout, dashboards, marketing sites, navigation and states, and design review. Find them in Skills → Explore.
+- **Design library (optional)**: connect your own Mobbin account and APOLO can study interface patterns from real apps before designing (Control panel → Design).
+- **Linux (early)**: the app starts on Linux, with `install.sh` and the updater. Still a first version.
+
+### Fixed
+- Design panel: if the core is outdated (app not restarted) it says so instead of showing a blank page.
+
 ## [0.2.5] - 2026-10-05
 
 ### Changed
