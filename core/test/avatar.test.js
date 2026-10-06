@@ -96,6 +96,7 @@ test('API /v1/avatar: PUT/GET receta, SVG por estado, ajustes de la isla y overl
   let g = await av.http('GET', ['v1', 'avatar']);
   assert.strictEqual(g.usuario, null); assert.strictEqual(g.usarEnIsla, false, 'la skin del compañero viene APAGADA');
   assert.ok(g.motores.every(m => !m.listo && m.falta));
+  assert.strictEqual(av.paraIsla().usar, false, 'sin avatar: la isla muestra el casco 3D');
   await assert.rejects(av.http('PUT', ['v1', 'avatar', 'usuario'], { receta: { forma: 'pentagrama' } }), /receta no válida/);
   const { receta } = await av.http('PUT', ['v1', 'avatar', 'usuario'], { receta: { forma: 'nube', cuerpo: '#5ab0ff' } });
   assert.strictEqual(receta.forma, 'nube');
@@ -105,11 +106,15 @@ test('API /v1/avatar: PUT/GET receta, SVG por estado, ajustes de la isla y overl
   assert.strictEqual(g.usuario.forma, 'gota'); assert.strictEqual(g.historial.length, 2);
   const f = await av.http('GET', ['v1', 'avatar', 'svg'], {}, { quien: 'usuario', estado: 'dormido' });
   assert.ok(f.__archivo.endsWith('.svg') && fs.readFileSync(f.__archivo, 'utf8') === A.svg(g.usuario, { estado: 'dormido', animado: false }));
-  // APOLO sin receta → el preset del casco; la isla no lo usa hasta activarlo
-  assert.strictEqual(av.paraIsla().usar, false); assert.strictEqual(av.paraIsla().receta.forma, 'casco');
-  assert.strictEqual(av.paraOverlay(), null);
-  await av.http('PATCH', ['v1', 'avatar'], { usarEnIsla: true, enOverlay: true });
-  assert.strictEqual(av.paraIsla().usar, true); assert.ok(av.paraOverlay().receta);
+  // tener avatar NO quita el casco: hace falta activar "Usar avatar en lugar del casco"
+  assert.strictEqual(av.paraIsla().usar, false, 'con avatar pero sin activar: sigue el casco 3D');
+  await av.http('PATCH', ['v1', 'avatar'], { enOverlay: true });
+  assert.strictEqual(av.paraOverlay(), null, 'el overlay también necesita el interruptor de la isla');
+  await av.http('PATCH', ['v1', 'avatar'], { usarEnIsla: true });
+  assert.strictEqual(av.paraIsla().usar, true); assert.strictEqual(av.paraIsla().receta.forma, 'gota', 'sin avatar de APOLO usa el tuyo');
+  assert.strictEqual(av.paraOverlay().receta.forma, 'gota');
+  await av.http('PATCH', ['v1', 'avatar'], { usarEnIsla: false });
+  assert.strictEqual(av.paraIsla().usar, false, 'se puede volver al casco');
   await av.http('DELETE', ['v1', 'avatar', 'usuario']);
   assert.strictEqual((await av.http('GET', ['v1', 'avatar'])).usuario, null);
   await assert.rejects(av.http('GET', ['v1', 'avatar', 'svg'], {}, { quien: 'usuario' }), /sin avatar/);

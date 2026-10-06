@@ -103,9 +103,12 @@ function crearAvatar({ cfg, bus, fetchImpl } = {}) {
     const r = recetaDe(quien); if (!r) return null;
     return A.svg(r, { estado, animado, imagen: r.tipo === 'ia' ? imagenIA(r.ia.id) : undefined });
   }
-  // lo que necesita la isla / el overlay (main.js y stream): la skin de APOLO solo si el usuario la activó
-  const paraIsla = () => { const d = leer(); return { usar: !!d.usarEnIsla, receta: d.apolo || A.PRESETS[0], imagen: d.apolo?.tipo === 'ia' ? imagenIA(d.apolo.ia.id) : null }; };
-  const paraOverlay = () => { const d = leer(); return d.usarEnIsla && d.enOverlay ? { receta: d.apolo || A.PRESETS[0], imagen: d.apolo?.tipo === 'ia' ? imagenIA(d.apolo.ia.id) : null } : null; };
+  // Un solo avatar para todo (isla, panel, overlay), pero SOLO si el usuario activa "Usar avatar en lugar del casco":
+  // el casco 3D es la cara de APOLO por defecto. Activado → el avatar de APOLO; si no hay, el tuyo; si no, el preset.
+  const caraCompanero = d => d.usarEnIsla ? (d.apolo || d.usuario || A.PRESETS[0]) : null;
+  const conImagen = r => ({ receta: r, imagen: r?.tipo === 'ia' ? imagenIA(r.ia.id) : null });
+  const paraIsla = () => { const r = caraCompanero(leer()); return r ? { usar: true, ...conImagen(r) } : { usar: false, receta: A.PRESETS[0], imagen: null }; };
+  const paraOverlay = () => { const d = leer(), r = caraCompanero(d); return d.enOverlay && r ? conImagen(r) : null; };
 
   // ---------- Personaje IA ----------
   function motores() {

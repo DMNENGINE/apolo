@@ -917,10 +917,15 @@ app.whenReady().then(() => {
   win.webContents.on('did-finish-load', enviarGamer);
   nucleo.bus.on('evento', e => { if (e && e.tipo === 'gamer' && win && !win.isDestroyed()) win.webContents.send('gamer', !!e.activo); });
   enviarNombre();
-  // Estudio de Avatares: skin 2D del compañero en la isla (solo si el usuario activó "Usar avatar en lugar del casco")
+  // Estudio de Avatares: un solo avatar para todo → la isla usa TU avatar (usuario) y reemplaza al casco; se refresca al cambiarlo
   const enviarAvatar = () => { try { if (win && !win.isDestroyed() && nucleo.avatar) win.webContents.send('avatar', nucleo.avatar.paraIsla()); } catch { } };
   win.webContents.on('did-finish-load', enviarAvatar);
   nucleo.bus.on('evento', e => { if (e && e.tipo === 'avatar') enviarAvatar(); });
+  // Apariencia de la isla (estilo de cristal, fondo, borde): al cargar y cuando cambie en el panel (PATCH /v1/config {isla})
+  let aparienciaEnviada = '';
+  const enviarApariencia = forzar => { const s = JSON.stringify(nucleo.cfg.isla || {}); if (!forzar && s === aparienciaEnviada) return; aparienciaEnviada = s; if (win && !win.isDestroyed()) win.webContents.send('apariencia', nucleo.cfg.isla || {}); };
+  win.webContents.on('did-finish-load', () => enviarApariencia(true));
+  setInterval(() => enviarApariencia(false), 2000);
   // idioma: a la isla al cargar y cada vez que cambie en el panel (PATCH /v1/config {idioma} cambia nucleo.cfg en memoria)
   let idiomaEnviado = '';
   const enviarIdioma = forzar => { const l = idiomaApp(); if (!forzar && l === idiomaEnviado) return; idiomaEnviado = l; if (win && !win.isDestroyed()) win.webContents.send('idioma', l); };

@@ -66,9 +66,12 @@ async function AV_svg(receta, op = {}) {
 async function AV_aplicarGlobal() {
   const r = AV_G.datos?.usuario;
   document.body.classList.toggle('con-avatar', !!r);
-  if (!r) return document.documentElement.style.removeProperty('--av-usuario');
-  const s = await AV_svg(r, { animado: false });
-  document.documentElement.style.setProperty('--av-usuario', `url("${AVF.dataUri(s).replace(/"/g, '%22')}")`);
+  if (!r) document.documentElement.style.removeProperty('--av-usuario');
+  else {
+    const s = await AV_svg(r, { animado: false });
+    document.documentElement.style.setProperty('--av-usuario', `url("${AVF.dataUri(s).replace(/"/g, '%22')}")`);
+  }
+  try { window.refrescarCompaneros?.(); } catch { }   // el compañero del panel pasa a ser tu avatar (o vuelve al casco)
 }
 async function AV_cargarGlobal() { if (!TOKEN) return; try { AV_G.datos = await api('GET', '/avatar'); await AV_aplicarGlobal(); } catch { } }
 document.addEventListener('DOMContentLoaded', () => setTimeout(AV_cargarGlobal, 400));

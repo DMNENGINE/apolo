@@ -269,10 +269,43 @@ function modelosConocidos() {
 E.robots = new Set();
 const logRobot = [tr('> robot listo'), tr('núcleo conectado…')];
 function estadoActual() { return E.pendientes.size ? 'permiso' : E.trabajando.size ? 'trabajando' : 'reposo'; }
+// "Un solo avatar para todo": con "Usar avatar en lugar del casco" activado, el compañero del panel es ese avatar
+// (SVG con estado), no el casco 3D; misma elección que core/avatar.js caraCompanero (APOLO → el tuyo → preset).
+// Implementa la misma interfaz que el robot (setState/hud/poke/destruir) para que E.robots lo controle.
+function recetaUsuario() {
+  const d = typeof AV_G !== 'undefined' && AV_G.datos;
+  if (!d || !d.usarEnIsla) return null;
+  return d.apolo || d.usuario || (window.AvatarSVG && window.AvatarSVG.PRESETS[0]) || null;
+}
+function montarAvatarCompanero(caja) {
+  const rec = recetaUsuario();
+  if (!rec || !window.AvatarSVG) return null;
+  caja.innerHTML = '<span class="av-companero"></span>';
+  const cont = caja.firstChild;
+  let base = estadoActual(), flashT = null, muerto = false;
+  const pinta = async st => {
+    try {
+      const svg = typeof AV_svg === 'function' ? await AV_svg(rec, { estado: st, animado: true }) : window.AvatarSVG.svg(rec, { estado: st, animado: true });
+      if (!muerto) cont.innerHTML = svg;
+    } catch { }
+  };
+  const flash = (st, ms) => { clearTimeout(flashT); pinta(st); flashT = setTimeout(() => { flashT = null; pinta(base); }, ms); };
+  pinta(base);
+  const r = {
+    setFps() { }, pushLog() { },
+    setState(s) { base = s; if (!flashT) pinta(s); },
+    poke() { flash('listo', 1200); },
+    hud(_m, secs, st) { if (st) flash(st, Math.max(800, (secs || 2.5) * 1000)); },
+    destruir() { muerto = true; clearTimeout(flashT); E.robots.delete(r); },
+  };
+  caja._robot = r; E.robots.add(r);
+  return r;
+}
 // monta un robot 3D en el contenedor (que ya tiene el casco SVG de respaldo); devuelve el robot o null
 function montarRobot(caja, animacion, fps = 60) {
   if (!caja) return null;
-  if (!window.Robot3D) { addEventListener('robot3d-listo', () => { if (caja.isConnected && !caja._robot) caja._robot = montarRobot(caja, animacion, fps); }, { once: true }); return null; }
+  if (recetaUsuario() && window.AvatarSVG) return montarAvatarCompanero(caja);   // tu avatar reemplaza al casco
+  if (!window.Robot3D) { addEventListener('robot3d-listo', () => { if (caja.isConnected && !caja._robot && !recetaUsuario()) caja._robot = montarRobot(caja, animacion, fps); }, { once: true }); return null; }
   try {
     const cv = document.createElement('canvas'); cv.className = 'robot3d';
     const r = window.Robot3D.crear(cv, animacion, logRobot);
@@ -285,6 +318,25 @@ function montarRobot(caja, animacion, fps = 60) {
   } catch (e) { console.warn('robot 3D no disponible:', e.message); return null; }   // sin WebGL: se queda el SVG
 }
 function desmontarRobot(caja) { if (caja?._robot) { caja._robot.destruir(); caja._robot = null; } }
+// Contenedores de compañero del panel (sel, animación 3D de respaldo, fps, casco grande de respaldo).
+const COMPANEROS = [
+  ['#robotLado', 'raton', 30, false], ['#robotMarca', 'vitrina', 24, false],
+  ['#bvRobot', 'vitrina', 60, true], ['#robotInicio', 'vitrina', 60, true],
+  ['#robotChat', 'vitrina', 60, true], ['#robotAcerca', 'vitrina', 60, true],
+];
+// Re-monta los compañeros que estén en pantalla para que cambien entre avatar y casco al instante.
+function refrescarCompaneros() {
+  for (const [sel, anim, fps, grande] of COMPANEROS) {
+    const caja = $(sel); if (!caja) continue;
+    desmontarRobot(caja);
+    caja.innerHTML = sel === '#robotLado'
+      ? casco('').replace('class="casco ', 'id="cascoLado" class="casco ')
+      : casco(grande ? 'casco-grande' : '');
+    montarRobot(caja, anim, fps);
+  }
+  actualizarEstadoRobot();
+}
+window.refrescarCompaneros = refrescarCompaneros;
 function robotsLog(linea) { logRobot.push(linea); if (logRobot.length > 60) logRobot.shift(); for (const r of E.robots) r.pushLog(linea); }
 function robotsEstado() { const s = estadoActual(); for (const r of E.robots) r.setState(s); }
 function robotsFlash(msg, st) { for (const r of E.robots) r.hud(msg, 2.5, st); }
@@ -326,6 +378,7 @@ function conectarEventos() {
   flujo('GET', '/eventos', undefined, e => {
     if (e.tipo === 'permiso') { E.pendientes.set(e.id, e); pintarPermisos(); robotsLog(`? ${tr('permiso')}: ${NOMBRE_HERR[e.herramienta] || e.herramienta}`); }
     else if (e.tipo === 'permiso-resuelto') { E.pendientes.delete(e.id); pintarPermisos(); }
+    else if (e.tipo === 'avatar' && typeof AV_cargarGlobal === 'function') { AV_cargarGlobal().catch(() => { }); }   // AV_aplicarGlobal re-monta el compañero
     else if (e.tipo === 'tarea') { robotsLog(`⏰ ${e.tarea.nombre}`); robotsFlash(tr('⏰ TAREA'), 'listo'); }
     if (e.tipo === 'tarea') aviso(`${e.tarea.nombre}: ${String(e.texto).slice(0, 140)}`, e.subtipo === 'error');
     else if (e.sesion && e.tipo) {

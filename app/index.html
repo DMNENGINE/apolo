@@ -4,6 +4,7 @@
 <style>
   :root{
     --bg:transparent; --card:rgba(8,10,14,.74); --line:rgba(255,255,255,.08); --tx:#e6ebf2; --mut:#8b95a5;
+    --iso-blur:8px; --iso-sat:1.05; --iso-borde:1px;   /* apariencia de la nube: cristal, saturación y grosor de borde */
     --robot:91px;   /* tamaño fijo del robot en la barra */
     --ok:#3ddc84; --work:#35c8f0; --warn:#ffb020; --bad:#ff4d4d;
   }
@@ -222,6 +223,15 @@
   .card .acts .ico,.perm .ico,.nt .ico{width:13px;height:13px;vertical-align:-2px}
   #badge .ico{width:12px;height:12px;vertical-align:-1px}
   .icon{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--tx);border-radius:9px;width:30px;height:26px;cursor:pointer;font-size:13px}
+  /* ---- Apariencia de la nube flotante (estilo de cristal, fondo y borde configurables en el panel) ---- */
+  #der,.kpi,.ses,.perm,.code,.pill,.icon,.card,.nt,#answer,#bar .txt,#tchat,#hero .sum{
+    backdrop-filter:blur(var(--iso-blur)) saturate(var(--iso-sat)); -webkit-backdrop-filter:blur(var(--iso-blur)) saturate(var(--iso-sat))}
+  #der,.card,.nt,#answer,#tchat{border-width:var(--iso-borde)}
+  #answer{background:var(--card);border-color:var(--line)}   /* sigue el fondo/borde elegidos */
+  body[data-iso="liquid"] .card,body[data-iso="liquid"] #answer,body[data-iso="liquid"] #der,body[data-iso="liquid"] .nt{
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.18), 0 10px 32px rgba(0,0,0,.35)}
+  body[data-iso="solido"] #der,body[data-iso="solido"] .card,body[data-iso="solido"] .nt,body[data-iso="solido"] #answer,body[data-iso="solido"] #tchat{
+    backdrop-filter:none;-webkit-backdrop-filter:none}
 </style></head>
 <body>
 <canvas id="fx"></canvas>

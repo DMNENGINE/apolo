@@ -24,6 +24,8 @@ VISTAS['ajustes/apariencia'] = {
   pintar(v) {
     const t = leerLocal('tema', { tema: 'casco', modo: 'oscuro', acento: null });
     const idi = E.config.idioma || '';
+    const isla = E.config.isla || { estilo: 'glass', fondo: '', borde: '', bordeAncho: 1 };
+    const ISO_ESTILOS = [['glass', 'Glassmorphism'], ['liquid', 'Liquid glass'], ['solido', 'Color sólido']];
     v.innerHTML = `<div class="pagina estrecha">${cabecera('Apariencia', 'Idioma, tema, color y modo del panel.')}
       <div class="seccion">${tr('Idioma')}</div><div class="caja">${fila('Idioma', tr('Panel, isla y menú de la bandeja. Automático = el de tu sistema ({x}).', { x: I18N.idiomas[I18N.delSistema()] }),
         seg('idioma', [['', 'Automático'], ...Object.entries(I18N.idiomas)], idi))}
@@ -32,13 +34,25 @@ VISTAS['ajustes/apariencia'] = {
       <div class="seccion">${tr('Modo de color')}</div><div class="caja">${fila('Modo', 'Sistema sigue el ajuste de tu equipo.', seg('modo', [['sistema', 'Sistema'], ['claro', 'Claro'], ['oscuro', 'Oscuro']], t.modo))}</div>
       <div class="seccion">${tr('Color de acento')}</div><div class="caja pad"><div class="colores">${ACENTOS.map(c => `<button data-ac="${c}" style="background:${c}" class="${(t.acento || TEMAS[t.tema][1]) === c ? 'on' : ''}" title="${c}"></button>`).join('')}
         <button data-ac="" title="${tr('El del tema')}" style="background:conic-gradient(#2bdc7c,#5ab0ff,#ff5fa2,#f5a524,#2bdc7c)"></button></div></div>
+      <div class="seccion">${tr('Nube flotante')}</div>
+      <div class="caja pad"><div class="temas">${ISO_ESTILOS.map(([k, n]) => `<button data-iso-estilo="${k}" class="${isla.estilo === k ? 'on' : ''}">${tr(n)}</button>`).join('')}</div></div>
+      <div class="caja">${fila('Color de fondo', tr('Vacío = el del tema. Elige el color que quieras.'), `<input type="color" class="color-in" id="islaFondo" value="${esc(isla.fondo || '#0a0e14')}"><button class="btn mini" data-iso-fondo="">${tr('Por defecto')}</button>`)}
+        ${fila('Color del borde', '', `<input type="color" class="color-in" id="islaBorde" value="${esc(isla.borde || '#7fe3ff')}"><button class="btn mini" data-iso-borde="">${tr('Por defecto')}</button>`)}
+        ${fila('Grosor del borde', '', seg('islaBordeAncho', [['0', '0'], ['1', '1'], ['2', '2'], ['3', '3']], String(isla.bordeAncho ?? 1)))}</div>
       <div class="seccion">${tr('Vista previa')}</div><div class="caja pad"><div class="m-ia">${avatar(E.config.modeloPorDefecto)}<div class="cont"><div class="quien"><b>${esc(nombreModelo(E.config.modeloPorDefecto))}</b></div><div class="md">${tr('<p>Así se verán las respuestas. <b>Negritas</b>, <code>código</code> y listas:</p><ul><li>Uno</li><li>Dos</li></ul>')}</div></div></div></div></div>`;
     const set = cambio => { guardarLocal('tema', { ...leerLocal('tema', t), ...cambio }); aplicarTema(); this.pintar(v); };
+    const setIsla = async cambio => { try { E.config = await api('PATCH', '/config', { isla: { ...isla, ...cambio } }); this.pintar(v); } catch (e) { aviso(e.message, true); } };
     v.onclick = e => {
       const tm = e.target.closest('[data-tema]'); if (tm) return set({ tema: tm.dataset.tema, acento: null });
       const ac = e.target.closest('[data-ac]'); if (ac) return set({ acento: ac.dataset.ac || null });
+      const es = e.target.closest('[data-iso-estilo]'); if (es) return setIsla({ estilo: es.dataset.isoEstilo });
+      if (e.target.closest('[data-iso-fondo]')) return setIsla({ fondo: '' });
+      if (e.target.closest('[data-iso-borde]')) return setIsla({ borde: '' });
     };
-    enlazarControles(v, (id, val) => { if (id === 'modo') set({ modo: val }); if (id === 'idioma') I18N_cambiar(val); });
+    const cf = $('#islaFondo', v), cb = $('#islaBorde', v);
+    if (cf) cf.onchange = e => setIsla({ fondo: e.target.value });
+    if (cb) cb.onchange = e => setIsla({ borde: e.target.value });
+    enlazarControles(v, (id, val) => { if (id === 'modo') set({ modo: val }); if (id === 'idioma') I18N_cambiar(val); if (id === 'islaBordeAncho') setIsla({ bordeAncho: +val }); });
   },
 };
 
