@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.5] - 2026-10-05
 
 ### Changed
 - The 3D helmet is APOLO's face again by default. Using an avatar instead (island, panel and streaming overlay) is an option: Avatar Studio → "Use avatar instead of the helmet". When on, it uses APOLO's avatar, or yours if APOLO has none.
