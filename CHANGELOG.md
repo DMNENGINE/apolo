@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- The 3D helmet is APOLO's face again by default. Using an avatar instead (island, panel and streaming overlay) is an option: Avatar Studio → "Use avatar instead of the helmet". When on, it uses APOLO's avatar, or yours if APOLO has none.
+
+### Fixed
+- Do Not Disturb while gaming no longer throws away what it silences: answers, reminders, messages and urgent notices are kept with their text and shown when you stop playing.
+
 ## [0.2.4] - 2026-10-05
 
 ### Added

@@ -368,11 +368,16 @@ function notif(n) {
   robot.pushLog(n.kind === 'dm' ? `@${n.author}` : `# ${n.channel}: ${n.author}`);
   if (n.kind === 'dm' || n.mention) say(n.kind === 'dm' ? tr('Mensaje de {x}', { x: n.author }) : tr('{a} te mencionó en {g}', { a: n.author, g: n.guild }));
 }
-// Modo Gamer = No molestar: las notificaciones no aparecen; se cuentan y al salir se muestra un resumen.
+// Modo Gamer = No molestar: las notificaciones no aparecen; se guardan (con su texto) y al salir se muestran.
+// Las tarjetas ya quedan en su lista; los avisos/respuestas/mensajes solo existen aquí, así que no se pueden tirar.
 var perdidas = [];
 const CAT_PERDIDA = { mail: 'correo', dm: 'mensaje', whatsapp: 'mensaje', server: 'mención', pi: 'aviso', claude: 'aviso' };
 const catPerdida = kind => CAT_PERDIDA[kind] || 'aviso';
-function registrarPerdida(cat, quien) { perdidas.push({ cat, quien: quien || '', t: Date.now() }); robot.pushLog(tr('silenciado (jugando)')); }
+function registrarPerdida(cat, quien, texto) {
+  perdidas.push({ cat, quien: quien || '', texto: String(texto || '').trim(), t: Date.now() });
+  if (perdidas.length > 200) perdidas.shift();
+  robot.pushLog(tr('silenciado (jugando)'));
+}
 function resumenPerdidas() {
   if (!perdidas.length) return '';
   const plural = { 'correo': 'correos', 'mensaje': 'mensajes', 'mención': 'menciones', 'urgente': 'urgentes', 'aviso': 'avisos' };
@@ -382,14 +387,17 @@ function resumenPerdidas() {
 }
 function mostrarResumenPerdidas() {
   const r = resumenPerdidas(); if (!r) return;
-  const total = perdidas.length; perdidas = [];
+  const total = perdidas.length, conTexto = perdidas.filter(p => p.texto); perdidas = [];
+  const hora = t => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const lista = conTexto.map(p => `<div style="margin-top:6px"><span style="color:var(--mut)">${hora(p.t)}${p.quien ? ' · ' + esc(p.quien) : ''}</span><br>${esc(p.texto.slice(0, 400))}</div>`).join('');
   const el = $('answer');
-  el.innerHTML = `<b class="t">${esc(tr('Mientras jugabas'))}</b>${esc(tr('Silencié {n} notificación: {r}.|Silencié {n} notificaciones: {r}.', { n: total, r }))}`;
+  el.innerHTML = `<b class="t">${esc(tr('Mientras jugabas'))}</b>${esc(tr('Silencié {n} notificación: {r}.|Silencié {n} notificaciones: {r}.', { n: total, r }))}`
+    + (lista ? `<div style="max-height:220px;overflow:auto">${lista}</div>` : '');
   el.classList.add('on'); abrirUnRato(25_000);
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 90_000);
   sound.play('blip');
 }
-if (bridge.onNotif) bridge.onNotif(n => modoGamer ? registrarPerdida(catPerdida(n.kind), n.author) : notif(n));
+if (bridge.onNotif) bridge.onNotif(n => modoGamer ? registrarPerdida(catPerdida(n.kind), n.author, n.text) : notif(n));
 
 // ---------- cerebro: tarjetas de acción, urgentes, respuestas ----------
 const cards = [];
@@ -419,14 +427,14 @@ if (bridge.onCard) bridge.onCard(c => {
   notif({ kind: c.kind === 'server' ? 'server' : 'dm', guild: c.guild || '', channel: c.channel || c.kind, author: c.author || '', text: c.resumen, mention: c.prioridad === 'urgente' });
 });
 if (bridge.onUrgent) bridge.onUrgent(c => {
-  if (modoGamer) return registrarPerdida('urgente', c.author);
+  if (modoGamer) return registrarPerdida('urgente', c.author, c.resumen);
   robot.hud(tr('URGENTE'), 4, 'error'); sound.play('permiso');
   say(tr('Urgente: {x}', { x: c.resumen })); abrirUnRato(25_000);
 });
 if (bridge.onCardDone) bridge.onCardDone(id => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { cards.splice(i, 1); renderCards(); } });
 if (bridge.onThinking) bridge.onThinking(v => { if (v) robot.hud(tr('PENSANDO…'), 30, 'trabajando'); else robot.hud('', 0.01, 'reposo'); });
 if (bridge.onAnswer) bridge.onAnswer(a => {
-  if (modoGamer && !a.voz) return registrarPerdida('aviso', a.titulo);   // retenido; las respuestas habladas sí pasan
+  if (modoGamer && !a.voz) return registrarPerdida('aviso', tr(a.titulo || 'Respuesta'), a.texto);   // retenido; las respuestas habladas sí pasan
   const el = $('answer');
   el.innerHTML = `<b class="t">${esc(tr(a.titulo || 'Respuesta'))}</b>${esc(a.texto || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}`;
   el.classList.add('on'); abrirUnRato(25_000);

@@ -269,9 +269,14 @@ function modelosConocidos() {
 E.robots = new Set();
 const logRobot = [tr('> robot listo'), tr('núcleo conectado…')];
 function estadoActual() { return E.pendientes.size ? 'permiso' : E.trabajando.size ? 'trabajando' : 'reposo'; }
-// "Un solo avatar para todo": si el usuario eligió avatar, el compañero del panel es ese avatar (SVG con estado),
-// no el casco 3D. Implementa la misma interfaz que el robot (setState/hud/poke/destruir) para que E.robots lo controle.
-function recetaUsuario() { return (typeof AV_G !== 'undefined' && AV_G.datos && AV_G.datos.usuario) || null; }
+// "Un solo avatar para todo": con "Usar avatar en lugar del casco" activado, el compañero del panel es ese avatar
+// (SVG con estado), no el casco 3D; misma elección que core/avatar.js caraCompanero (APOLO → el tuyo → preset).
+// Implementa la misma interfaz que el robot (setState/hud/poke/destruir) para que E.robots lo controle.
+function recetaUsuario() {
+  const d = typeof AV_G !== 'undefined' && AV_G.datos;
+  if (!d || !d.usarEnIsla) return null;
+  return d.apolo || d.usuario || (window.AvatarSVG && window.AvatarSVG.PRESETS[0]) || null;
+}
 function montarAvatarCompanero(caja) {
   const rec = recetaUsuario();
   if (!rec || !window.AvatarSVG) return null;

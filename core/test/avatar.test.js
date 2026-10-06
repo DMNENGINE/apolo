@@ -106,11 +106,15 @@ test('API /v1/avatar: PUT/GET receta, SVG por estado, ajustes de la isla y overl
   assert.strictEqual(g.usuario.forma, 'gota'); assert.strictEqual(g.historial.length, 2);
   const f = await av.http('GET', ['v1', 'avatar', 'svg'], {}, { quien: 'usuario', estado: 'dormido' });
   assert.ok(f.__archivo.endsWith('.svg') && fs.readFileSync(f.__archivo, 'utf8') === A.svg(g.usuario, { estado: 'dormido', animado: false }));
-  // "Un solo avatar para todo": tu avatar (usuario) conduce la isla automáticamente, reemplazando al casco, sin activar nada.
-  assert.strictEqual(av.paraIsla().usar, true); assert.strictEqual(av.paraIsla().receta.forma, 'gota');
-  assert.strictEqual(av.paraOverlay(), null, 'el overlay de streaming sigue requiriendo su interruptor');
+  // tener avatar NO quita el casco: hace falta activar "Usar avatar en lugar del casco"
+  assert.strictEqual(av.paraIsla().usar, false, 'con avatar pero sin activar: sigue el casco 3D');
   await av.http('PATCH', ['v1', 'avatar'], { enOverlay: true });
-  assert.ok(av.paraOverlay().receta); assert.strictEqual(av.paraOverlay().receta.forma, 'gota');
+  assert.strictEqual(av.paraOverlay(), null, 'el overlay también necesita el interruptor de la isla');
+  await av.http('PATCH', ['v1', 'avatar'], { usarEnIsla: true });
+  assert.strictEqual(av.paraIsla().usar, true); assert.strictEqual(av.paraIsla().receta.forma, 'gota', 'sin avatar de APOLO usa el tuyo');
+  assert.strictEqual(av.paraOverlay().receta.forma, 'gota');
+  await av.http('PATCH', ['v1', 'avatar'], { usarEnIsla: false });
+  assert.strictEqual(av.paraIsla().usar, false, 'se puede volver al casco');
   await av.http('DELETE', ['v1', 'avatar', 'usuario']);
   assert.strictEqual((await av.http('GET', ['v1', 'avatar'])).usuario, null);
   await assert.rejects(av.http('GET', ['v1', 'avatar', 'svg'], {}, { quien: 'usuario' }), /sin avatar/);
