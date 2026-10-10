@@ -93,8 +93,8 @@ try {
   Info 'Electron OK'
 } finally { Pop-Location }
 
-# ---------- 4. Voz (opcional): Python + edge-tts + faster-whisper ----------
-Paso 'Voz neural y microfono (opcional)'
+# ---------- 4. Microfono (opcional): Python + faster-whisper (la voz neural ya va sin Python: main/edge-tts.js) ----------
+Paso 'Microfono: reconocimiento de voz (opcional)'
 try {
   $py = $null
   foreach ($c in 'python', 'py') { if (Tiene $c) { $out = & $c --version 2>&1; if ("$out" -match 'Python 3') { $py = $c; break } } }
@@ -105,9 +105,9 @@ try {
   }
   if ($py) {
     & $py -m pip install --quiet --disable-pip-version-check --user edge-tts faster-whisper 2>&1 | Out-Null
-    Info 'voz neural y reconocimiento de voz instalados'
-  } else { Aviso 'sin Python: APOLO usara la voz de Windows y no tendra microfono' }
-} catch { Aviso "la voz no se pudo instalar ($($_.Exception.Message)). APOLO funciona igual con la voz de Windows." }
+    Info 'reconocimiento de voz (Whisper) instalado'
+  } else { Aviso 'sin Python: APOLO habla igual con voz neural, pero el microfono usara el reconocedor de Windows' }
+} catch { Aviso "la voz no se pudo instalar ($($_.Exception.Message)). APOLO habla igual con voz neural; el microfono usara el de Windows." }
 
 # ---------- 5. Accesos directos ----------
 Paso 'Accesos directos'

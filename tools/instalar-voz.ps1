@@ -1,6 +1,6 @@
 # APOLO - voz neural y microfono (opcional). Lo lanza la bandeja: "Instalar voz y microfono (Python + Whisper)".
 # Instala Python 3.12 (winget) si falta y luego edge-tts (voz neural) + faster-whisper (reconocimiento local, CPU).
-# Sin esto APOLO usa la voz de Windows y el reconocedor de Windows (System.Speech).
+# La voz neural ya no lo necesita (main/edge-tts.js); sin esto el microfono usa el reconocedor de Windows (System.Speech).
 $ErrorActionPreference = 'Stop'
 function Tiene($c) { [bool](Get-Command $c -ErrorAction SilentlyContinue) }
 Write-Host "`n   APOLO - instalando voz y microfono`n" -ForegroundColor Green
@@ -20,6 +20,6 @@ try {
   Write-Host "`n   Listo. Reinicia APOLO (bandeja -> Salir y abrelo de nuevo) para usar la voz neural y el microfono." -ForegroundColor Green
 } catch {
   Write-Host "`n   ! $($_.Exception.Message)" -ForegroundColor Yellow
-  Write-Host '   APOLO funciona igual con la voz de Windows.' -ForegroundColor Gray
+  Write-Host '   APOLO habla igual con voz neural; el microfono usara el de Windows.' -ForegroundColor Gray
 }
 Read-Host "`nPulsa Enter para cerrar"

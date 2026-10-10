@@ -1,6 +1,6 @@
 // Voz del robot (proceso principal):
-// - TTS: 1) Fish Audio (si hay key y voz en %APPDATA%\robot-companion\voz.json) 2) edge-tts (Microsoft, voz del idioma)
-//   3) null → la isla usa la voz de Windows. Todo en mp3 con caché por texto.
+// - TTS: 1) Fish Audio (si hay key y voz en %APPDATA%\robot-companion\voz.json) 2) voz neural de Edge (main/edge-tts.js,
+//   sin Python; si falla, el paquete Python edge-tts) 3) null → la isla usa la voz de Windows. Todo en mp3 con caché por texto.
 // - Oído: Whisper (servidor Python persistente, bajo demanda) con respaldo en el reconocedor de Windows (listen.ps1).
 const fs = require('fs');
 const os = require('os');
@@ -8,6 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const { fuera } = require('../core/rutas');
+const { sintetizar } = require('./edge-tts');
 
 const VOZ_TTS_IDIOMA = { es: { voz: 'es-ES-AlvaroNeural', rate: '+8%', pitch: '+12Hz' }, en: { voz: 'en-US-AndrewNeural', rate: '+6%', pitch: '+8Hz' } };
 const RAIZ = path.join(__dirname, '..');
@@ -29,7 +30,12 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
       return true;
     } catch (e) { console.error('[voz] Fish Audio falló:', e.message); fishCaidoHasta = Date.now() + 300_000; return false; }
   }
-  const edgeTts = (text, f, VOZ_TTS = VOZ_TTS_IDIOMA.es) => new Promise(ok => {
+  // voz de Edge desde Node (sin Python); si falla (red, proxy…), el paquete Python edge-tts si está instalado
+  const edgeTts = (text, f, VOZ_TTS = VOZ_TTS_IDIOMA.es) => sintetizar(text, f, VOZ_TTS).then(() => f, e => {
+    console.error('[voz] edge-tts nativo falló:', e.message);
+    return edgeTtsPython(text, f, VOZ_TTS);
+  });
+  const edgeTtsPython = (text, f, VOZ_TTS) => new Promise(ok => {
     const p = spawn('python', ['-m', 'edge_tts', '--voice', VOZ_TTS.voz, '--rate=' + VOZ_TTS.rate, '--pitch=' + VOZ_TTS.pitch, '--text', text, '--write-media', f], { windowsHide: true });
     const t = setTimeout(() => { try { p.kill(); } catch { } ok(null); }, 12_000);
     p.on('error', () => { clearTimeout(t); ok(null); });

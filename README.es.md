@@ -96,7 +96,7 @@ Desde el icono de la bandeja:
 
 1. **Instalar hooks** — conecta Claude Code (y Gemini CLI si lo tienes). Usa `node` si está instalado; si no, APOLO ejecuta el hook él mismo.
 2. **Abrir panel de control** — el asistente de bienvenida elige modelo y canales en unos dos minutos.
-3. **Instalar voz y micrófono** *(opcional)* — instala Python, `edge-tts` y `faster-whisper` en una ventana visible. Sin esto APOLO usa la voz de Windows.
+3. **Instalar voz y micrófono** *(opcional)* — instala Python, `edge-tts` y `faster-whisper` en una ventana visible. La voz neural ya funciona sin esto; sin Whisper el micrófono usa el reconocedor de Windows.
 4. **Extensión del navegador** *(opcional)* — bandeja → *Abrir carpeta de la extensión*, luego `chrome://extensions` → Modo desarrollador → **Cargar descomprimida**, y pega el token de *Copiar token para la extensión del navegador*.
 5. **Stream Deck** *(opcional)* — ejecuta `streamdeck\instalar.ps1` desde la carpeta de la app (`resources\app.asar.unpacked\streamdeck` en la instalación .exe).
 
