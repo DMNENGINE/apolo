@@ -180,4 +180,4 @@ function buscarHistorial({ cfg, consulta, dias = 30, limite = 8 }) {
   return res.sort((a, b) => b.s - a.s || b.t - a.t).slice(0, limite);
 }
 
-module.exports = { crearMemoria, buscarHistorial, parecido, tokens, normal, raiz, TIPOS };
+module.exports = { crearMemoria, buscarHistorial, parecido, tokens, normal, raiz, TIPOS, SECRETO };

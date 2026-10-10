@@ -7,7 +7,7 @@
 //     notas }
 // Qué hace:
 //   1) backup exacto de todo en <dir>/importado/<origen>/<fecha>/ (y de la personalidad que se sustituya)
-//   2) SOUL.md (+ IDENTITY.md) → personalidad "identidad";  USER.md → personalidad "contexto"
+//   2) SOUL.md → alma, IDENTITY.md → identidad, USER.md → usuario (core/alma.js, con versión para deshacer)
 //   3) un modelo extrae hechos duraderos sobre el usuario de los .md → memoria (deduplica y bloquea secretos)
 //   4) automatizaciones → tareas del robot, PAUSADAS (las activas tú tras revisarlas: ejecutan herramientas)
 //   5) agentes → plantillas de subagente (<dir>/agentes.json; "delegar" las usa por nombre)
@@ -53,18 +53,18 @@ function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tare
     const res = { origen, backup: dirBackup, archivos: Object.keys(archivos).length, personalidad: [], creados: 0, actualizados: 0, rechazados: 0,
       tareas: [], agentes: [], skills: [], identidad: '', errores: [], notas: String(entrada.notas || '').slice(0, 2000) };
 
-    // 2) personalidad: SOUL/IDENTITY → identidad, USER → contexto (la anterior queda en el backup)
+    // 2) alma (core/alma.js): SOUL → alma, IDENTITY → identidad, USER → usuario (la anterior queda en el backup y en las versiones)
     if (personalidad) {
       const actual = Object.fromEntries(personalidad.lista().map(p => [p.id, p.contenido]));
-      const poner = (id, titulo, texto) => {
+      const poner = (id, texto) => {
         texto = texto.trim(); if (!texto) return;
         guardar(`personalidad-anterior/${id}.md`, actual[id] || '');
-        try { personalidad.guardar(id, `# ${titulo} (importado de ${origen})\n\n${texto}`.slice(0, 20000)); res.personalidad.push(id); }
+        try { personalidad.guardar(id, `${texto}\n`.slice(0, 20000), { quien: 'importacion', motivo: `importado de ${origen}` }); res.personalidad.push(id); }
         catch (e) { res.errores.push(`${id}: ${e.message}`); }
       };
-      const soul = [buscar(archivos, /^SOUL\.md$/i), buscar(archivos, /^IDENTITY\.md$/i)].filter(Boolean).join('\n\n');
-      poner('identidad', 'Identidad', soul);
-      poner('contexto', 'Sobre el usuario', buscar(archivos, /^USER\.md$/i));
+      poner('alma', buscar(archivos, /^SOUL\.md$/i));
+      poner('identidad', buscar(archivos, /^IDENTITY\.md$/i));
+      poner('usuario', buscar(archivos, /^USER\.md$/i));
     }
 
     // 3) recuerdos: de los .md/.txt (por trozos si es mucho)

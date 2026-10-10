@@ -46,12 +46,12 @@ test('migración completa: personalidad, recuerdos, tareas pausadas, agentes y s
   const r = await n.importador.importar(MIGRACION);
   // personalidad
   const p = Object.fromEntries(n.personalidad.lista().map(x => [x.id, x.contenido]));
-  assert.match(p.identidad, /Soy Jarvis/);
-  assert.match(p.contexto, /Se llama Alex/);
-  assert.deepStrictEqual(r.personalidad, ['identidad', 'contexto']);
+  assert.match(p.alma, /Soy Jarvis/);
+  assert.match(p.usuario, /Se llama Alex/);
+  assert.deepStrictEqual(r.personalidad, ['alma', 'usuario']);
   // secretos tapados en todo lo guardado y en lo que ve el modelo
-  assert.doesNotMatch(p.identidad, /MTIzNDU2/);
-  assert.match(p.identidad, /\[REDACTADO\]/);
+  assert.doesNotMatch(p.alma, /MTIzNDU2/);
+  assert.match(p.alma, /\[REDACTADO\]/);
   assert.ok(prompts.every(x => !/sk-abcdef/.test(x)));
   // recuerdos: el bueno entra, el que trae una clave lo bloquea la memoria
   assert.strictEqual(r.creados, 1);
@@ -74,7 +74,7 @@ test('migración completa: personalidad, recuerdos, tareas pausadas, agentes y s
   // backup: copia de los archivos (con rutas saneadas, nada fuera) y de la personalidad anterior
   assert.ok(fs.existsSync(path.join(r.backup, 'archivos', 'memory', '2026-09-30.md')));
   assert.ok(fs.existsSync(path.join(r.backup, 'archivos', 'fuera.md')));
-  assert.ok(fs.existsSync(path.join(r.backup, 'personalidad-anterior', 'identidad.md')));
+  assert.ok(fs.existsSync(path.join(r.backup, 'personalidad-anterior', 'alma.md')));
   assert.ok(!fs.existsSync(path.join(dir, 'fuera.md')));
   assert.strictEqual(n.importador.historial()[0].origen, 'openclaw');
 });

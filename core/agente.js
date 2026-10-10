@@ -25,10 +25,10 @@ function agentesGuardados(s, cfg) {
   return require('./importador').leerAgentes(cfg).slice(0, 20).map(a => `- ${a.nombre}: ${a.descripcion || '(sin descripción)'}`).join('\n');
 }
 
-function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '') {
+function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior = '', nombre = '') {
   const guardados = agentesGuardados(s, cfg);
   return [
-    'Eres Robot Companion, un asistente personal que trabaja en el ordenador del usuario usando herramientas.',
+    `Eres ${nombre && nombre !== 'Robot' ? nombre : 'Robot Companion'}, un asistente personal que trabaja en el ordenador del usuario usando herramientas.`,
     `${lineaIdioma(cfg)} Usa herramientas cuando hagan falta; no inventes resultados.`,
     'Si una herramienta es denegada, no la repitas igual: explica o busca otra vía.',
     'NUNCA digas que algo está hecho (aprobado, enviado, subido, generado, en cola…) si no lo has VISTO en el resultado de una herramienta. ' +
@@ -39,7 +39,8 @@ function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '') {
     'Tienes memoria permanente compartida con otros modelos: usa "recordar" cuando el usuario cuente algo duradero sobre él (sin avisar de que lo guardas salvo que pregunte), ' +
     '"buscar_memoria" o "buscar_historial" si necesitas algo que no está abajo, y corrige con "reemplaza" lo que haya cambiado.',
     recuerdos ? `LO QUE SABES DEL USUARIO (memoria):\n${recuerdos}` : 'Memoria: aún no sabes nada del usuario.',
-    personalidad ? `\nPERSONALIDAD E INSTRUCCIONES DEL USUARIO (síguelas):\n${personalidad}` : '',
+    personalidad ? `\nTU ALMA, TU IDENTIDAD, TU HUMANO E INSTRUCCIONES (eres tú; las instrucciones síguelas):\n${personalidad}` : '',
+    interior ? `\n${interior}` : '',
     guardados ? `\nAGENTES GUARDADOS (úsalos con delegar + "agente"):\n${guardados}` : '',
     skills ? `\n${skills}` : '',
     resumen ? `\nRESUMEN DE LA PARTE ANTERIOR DE ESTA CONVERSACIÓN (ya no ves esos mensajes; continúa desde aquí):\n${resumen}` : '',
@@ -72,7 +73,7 @@ function conImagenes(mensajes, sinVision) {
   return out;
 }
 
-function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, personalidad, compactador, subagentes, control, navegador, skills, consejo, turnoNoche, sandbox }) {
+function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, personalidad, compactador, subagentes, control, navegador, skills, consejo, turnoNoche, sandbox, conciencia }) {
   const enCurso = new Map();   // sesion.id -> AbortController
 
   async function enviar(s, texto, emitir = () => { }) {
@@ -96,6 +97,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       let recuerdos = ''; try { recuerdos = memoria ? await memoria.contexto(texto) : ''; } catch { }
       let pers = ''; try { pers = personalidad ? personalidad.prompt() : ''; } catch { }
       let sk = ''; try { sk = skills ? (await skills.seccion({ sesion: s, mensaje: texto })).texto : ''; } catch { }   // índice + sugeridas (o la skill ya cargada)
+      let interior = '', nombre = ''; try { if (!s.padre && s.canal !== 'eval') interior = conciencia?.()?.describir() || ''; nombre = personalidad?.nombre?.() || ''; } catch { }   // estado, metas, pensamientos, diario
       const apagadas = new Set(cfg.herramientasOff || []);
       if (s.padre || !subagentes) apagadas.add('delegar');                // los subagentes no delegan (sin recursión)
       let hayActivas = false; try { hayActivas = !!skills?.almacen.lista().some(x => x.activa); } catch { }
@@ -104,13 +106,13 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       const disponibles = new Set(herramientas.map(h => h.nombre));
       let final = '', empujones = 0, empujon = false;
       for (let paso = 0; paso < cfg.maxPasos; paso++) {
-        const base = sistema(s, recuerdos, pers, '', cfg, sk);
+        const base = sistema(s, recuerdos, pers, '', cfg, sk, interior, nombre);
         if (compactador?.hace(s, base)) {              // conversación larga: resumir lo antiguo antes de seguir
           try { const c = await compactador.compactar(s, { signal: ctl.signal }); if (c) ev('compactacion', c); }
           catch (e) { if (ctl.signal.aborted) throw e; ev('aviso', { texto: `no pude compactar la conversación: ${e.message}` }); }
         }
         const v = vista(s.mensajes);
-        const sys = sistema(s, recuerdos, pers, v.resumen, cfg, sk);
+        const sys = sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre);
         let historial = conImagenes(v.mensajes, s.sinVision);
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
         let r;
@@ -140,7 +142,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         const correr = async c => {
           const h = disponibles.has(c.name) ? porNombre[c.name] : null;
           if (!h) return `error: herramienta "${c.name}" no existe`;
-          if (s.canal === 'eval' && (typeof h.riesgo === 'function' ? h.riesgo(c.args || {}, s) : h.riesgo) !== 'lectura') return 'DENEGADO: en una evaluación solo se permiten herramientas de lectura';
+          if ((s.canal === 'eval' || s.soloLectura) && (typeof h.riesgo === 'function' ? h.riesgo(c.args || {}, s) : h.riesgo) !== 'lectura') return `DENEGADO: ${s.soloLectura ? 'en un encargo por iniciativa propia' : 'en una evaluación'} solo se permiten herramientas de lectura`;
           ev('herramienta', { id: c.id, nombre: c.name, args: c.args || {}, resumen: h.resumen(c.args || {}) });
           const p = await permisos.pedir({ h, args: c.args || {}, sesion: s, ctx: { skills } });
           if (!p.ok) return `DENEGADO: ${p.motivo}`;

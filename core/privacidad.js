@@ -45,10 +45,10 @@ function crearZip(archivos) {
 }
 
 // qué entra en la exportación (rutas relativas a cfg.dir); las carpetas se recorren enteras salvo binarios pesados
-const EXPORTAR = ['memoria.json', 'grafo.json', 'personalidad', 'sesiones', 'suenos', 'consejos', 'turno/informes', 'turno/estado.json', 'tareas.json', 'tareas_historial.jsonl', 'permisos_historial.jsonl', 'agentes.json', 'wrapped'];
+const EXPORTAR = ['memoria.json', 'grafo.json', 'personalidad', 'sesiones', 'suenos', 'consejos', 'turno/informes', 'turno/estado.json', 'tareas.json', 'tareas_historial.jsonl', 'permisos_historial.jsonl', 'agentes.json', 'wrapped', 'conciencia'];
 const SALTAR = /\.(mp4|jpg|jpeg|png|webm|bak\.json)$|[\\/]_frames[\\/]|[\\/]worktrees[\\/]/i;
 // qué se borra con "borrar todo" (la config, el token, las claves, las reglas, las skills y las automatizaciones se quedan)
-const BORRAR = ['memoria.json', 'memoria_vec.json', 'grafo.json', 'sesiones', 'suenos', 'consejos', 'turno/informes', 'tareas_historial.jsonl', 'permisos_historial.jsonl', 'capturas', 'wrapped', 'importado', 'nodos-audio'];
+const BORRAR = ['memoria.json', 'memoria_vec.json', 'grafo.json', 'sesiones', 'suenos', 'consejos', 'turno/informes', 'tareas_historial.jsonl', 'permisos_historial.jsonl', 'capturas', 'wrapped', 'importado', 'nodos-audio', 'conciencia', 'personalidad/_versiones', 'personalidad/_antes'];
 
 function recorrer(base, rel, out, max = 400 * 1024 * 1024) {
   const f = path.join(base, rel);
@@ -67,7 +67,7 @@ function crearPrivacidad({ cfg, memoria, grafo, sesiones, personalidad, registro
     for (const r of EXPORTAR) recorrer(cfg.dir, r, out);
     const archivos = out.l.map(a => ({ nombre: a.nombre, datos: fs.readFileSync(a.ruta), fecha: a.fecha }));
     archivos.unshift({ nombre: 'LEEME.txt', datos: `Exportación de tus datos de APOLO (${new Date().toISOString()}).\n` +
-      'memoria.json = recuerdos · grafo.json = entidades y relaciones · personalidad/ = identidad, instrucciones y contexto · sesiones/ = conversaciones (json + jsonl)\n' +
+      'memoria.json = recuerdos · grafo.json = entidades y relaciones · personalidad/ = alma (SOUL.md), identidad, tu ficha (USER.md), instrucciones y sus versiones · conciencia/ = estado interno, pensamientos, reflexiones, metas y diario · sesiones/ = conversaciones (json + jsonl)\n' +
       'suenos/ = informes del sueño · consejos/ · turno/ = informes del turno de noche · tareas*.json(l) · permisos_historial.jsonl\n' +
       'No incluye config.json, claves de API, tokens ni conectores.\n' });
     const zip = crearZip(archivos);
@@ -103,9 +103,9 @@ function crearPrivacidad({ cfg, memoria, grafo, sesiones, personalidad, registro
     for (const s of sesiones.lista()) sesiones.borrar(s.id);
     memoria.borrarTodo();
     grafo?.borrarTodo?.();
+    for (const k of ['usuario']) personalidad?.restablecer?.(k);       // USER.md tiene datos personales; el alma, la identidad y las instrucciones se quedan (sus versiones se borran abajo)
     for (const r of BORRAR) try { fs.rmSync(path.join(cfg.dir, r), { recursive: true, force: true }); } catch { }
     fs.mkdirSync(path.join(cfg.dir, 'sesiones'), { recursive: true });
-    for (const k of ['contexto']) personalidad?.restablecer?.(k);       // el contexto puede tener datos personales; identidad e instrucciones se quedan
     log(`BORRADO TOTAL: ${JSON.stringify(antes)}`);
     bus?.emit('evento', { tipo: 'privacidad', accion: 'borrado' });
     return { paso: 2, ok: true, borrado: antes };

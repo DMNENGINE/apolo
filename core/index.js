@@ -43,7 +43,7 @@ function crearNucleo(opciones = {}) {
       const s = sesiones.crear({ modelo, canal: 'eval', titulo: 'eval de skill' });
       try { return await agente.enviar(s, texto); } finally { sesiones.borrar(s.id); }
     } });
-  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, sandbox: () => nucleo?.sandbox, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
+  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, sandbox: () => nucleo?.sandbox, conciencia: () => nucleo?.conciencia, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
   // atajo: enviar y emitir los eventos también al bus global
   const enviar = (s, texto, emitir) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); });
   subagentes = crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar: id => agente.cancelar(id) });
@@ -155,6 +155,13 @@ function crearNucleo(opciones = {}) {
   const gamer = require('./gamer').crearGamer({ cfg, bus, permisos, so: opciones.soGamer });
   nucleo.gamer = gamer; nucleo.extensiones.gamer = { http: (...a) => gamer.http(...a) };
   gamer.restaurarPendiente().catch(e => console.log(`[gamer] no se pudo restaurar: ${e.message}`));
+  // Alma (SOUL.md/IDENTITY.md/USER.md con versiones; APOLO la evoluciona y avisa) + conciencia (estado interno, monólogo, reflexión, diario, metas)
+  require('./herramientas').registrar(personalidad.HERRAMIENTAS);
+  nucleo.extensiones.alma = { http: (...a) => personalidad.http(...a) };
+  const conciencia = require('./conciencia').crearConciencia({ cfg, bus, generarJSON: generarJSONvivo, modelo: modeloCerebro, alma: personalidad, memoria, tareas, sesiones, linea,
+    enviar: (s, t) => enviar(s, t), panico: () => panico.activo() });
+  require('./herramientas').registrar(conciencia.HERRAMIENTAS);
+  nucleo.conciencia = conciencia; nucleo.extensiones.conciencia = { http: (...a) => conciencia.http(...a) };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   return nucleo;
 }

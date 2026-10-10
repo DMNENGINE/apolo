@@ -1127,3 +1127,70 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .ds-ficha h1 { margin-top: 0; }
 .ds-ficha blockquote { margin: 0 0 12px; padding-left: 12px; border-left: 3px solid var(--acento); color: var(--txt-2); }
 @media (max-width: 700px) { .ds-mobbin, .ds-regla { flex-wrap: wrap; } .ds-fila input { min-width: 0; width: 100%; } }
+
+/* ── Mente (conciencia + alma, ui/mente.js) ── */
+.mn-pest a { display: flex; gap: 6px; align-items: center; padding: 8px 12px; color: var(--txt-2); border-bottom: 2px solid transparent; margin-bottom: -1px; text-decoration: none; white-space: nowrap; }
+.mn-pest a:hover { color: var(--txt); text-decoration: none; }
+.mn-pest a.on { color: var(--txt); border-bottom-color: var(--acento); font-weight: 600; }
+.mn-apagada { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; border-color: color-mix(in srgb, var(--aviso) 45%, var(--borde)); }
+.mn-apagada small { display: block; margin-top: 3px; }
+.mn-top { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.4fr); gap: 12px; }
+.mn-heroe { display: flex; flex-direction: column; gap: 8px; }
+.mn-sentir { font-size: 26px; font-weight: 700; text-transform: capitalize; display: flex; align-items: center; gap: 10px; }
+.mn-emo { font-size: 1.15em; line-height: 1; }
+.mn-ultimo { margin: 4px 0 0; font-size: 15px; line-height: 1.5; color: var(--txt); font-style: italic; }
+.mn-acc { margin-top: auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding-top: 10px; }
+.mn-dims { display: flex; flex-direction: column; gap: 9px; }
+.mn-barra { display: grid; grid-template-columns: 96px 1fr 44px; align-items: center; gap: 10px; font-size: 13px; }
+.mn-barra b { text-align: right; font-variant-numeric: tabular-nums; color: var(--txt-2); font-weight: 600; }
+.mn-pista { position: relative; height: 8px; border-radius: 99px; background: var(--capa-3); overflow: hidden; }
+.mn-pista.centro::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--borde-2); }
+.mn-pista i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 99px; transition: width .4s, left .4s; }
+.mn-animo { background: var(--acento); color: var(--acento); }
+.mn-energia { background: var(--aviso); color: var(--aviso); }
+.mn-curiosidad { background: var(--info); color: var(--info); }
+.mn-preocupacion { background: var(--mal); color: var(--mal); }
+.mn-vinculo { background: #c08cff; color: #c08cff; }
+.mn-leyenda span { background: none; }
+.mn-graf { width: 100%; height: 90px; margin-top: 6px; }
+.mn-graf path { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.mn-l-animo { stroke: var(--acento); } .mn-l-energia { stroke: var(--aviso); } .mn-l-preocupacion { stroke: var(--mal); opacity: .8; }
+.mn-cero { stroke: var(--borde-2); stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+.mn-leyenda { font-size: 12px; color: var(--txt-2); }
+.mn-lista { max-height: 520px; overflow: auto; }
+.mn-fila { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--borde); font-size: 13px; }
+.mn-fila:last-child, .mn-pens:last-child { border-bottom: 0; }
+.mn-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mn-pens { padding: 12px 14px; border-bottom: 1px solid var(--borde); }
+.mn-pens p { margin: 6px 0 0; line-height: 1.5; }
+.mn-pens small { display: block; margin-top: 4px; }
+.mn-pens blockquote { margin: 8px 0 0; padding-left: 10px; border-left: 3px solid var(--acento); color: var(--txt-2); }
+.mn-pens-cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mn-pens-cab small { display: inline; margin: 0; }
+.mn-diario { display: grid; grid-template-columns: 280px 1fr; gap: 12px; align-items: start; }
+.mn-dias { display: flex; flex-direction: column; padding: 8px; gap: 2px; max-height: 70vh; overflow: auto; }
+.mn-dias .btn { margin-bottom: 6px; }
+.mn-dias a { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 8px; text-decoration: none; color: inherit; }
+.mn-dias a:hover { background: var(--capa-2); } .mn-dias a.on { background: var(--capa-3); }
+.mn-pagina { max-width: 760px; line-height: 1.7; }
+.mn-pagina h2 { margin: 0 0 4px; } .mn-pagina h3 { margin: 18px 0 6px; font-size: 14px; color: var(--txt-2); }
+.mn-nueva { margin-bottom: 12px; }
+.mn-metas { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.mn-meta { display: flex; flex-direction: column; gap: 8px; }
+.mn-meta ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--txt-2); }
+.mn-meta.hecha, .mn-meta.abandonada { opacity: .65; }
+.mn-meta.abandonada b { text-decoration: line-through; }
+.mn-alma { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; align-items: start; }
+.mn-archivos { display: flex; gap: 6px; flex-wrap: wrap; }
+.mn-ayuda { margin: 10px 0; font-size: 13px; }
+.mn-editor { width: 100%; min-height: 420px; font: 13px/1.55 ui-monospace, Consolas, monospace; resize: vertical; margin-bottom: 10px; }
+.mn-cambio { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--borde); background: none; color: inherit; cursor: pointer; font: inherit; }
+.mn-cambio:hover { background: var(--capa-2); }
+.mn-motivo { font-size: 13px; color: var(--txt-2); }
+.mn-diff { max-height: 55vh; overflow: auto; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; background: var(--capa-2); padding: 10px; border-radius: 8px; }
+.mn-diff .mn-mas { color: var(--ok); } .mn-diff .mn-menos { color: var(--mal); }
+.mn-nums { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; padding: 14px 16px; border-top: 1px solid var(--borde); }
+.mn-pest { overflow-y: hidden; }
+.mn-num { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--txt-2); }
+.mn-num input[type=number] { width: 110px; }
+@media (max-width: 900px) { .mn-top, .mn-dos, .mn-diario, .mn-alma { grid-template-columns: 1fr; } .mn-fila { grid-template-columns: 1fr; gap: 2px; } }

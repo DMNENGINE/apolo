@@ -106,7 +106,7 @@ test('API: /v1/grafo, /v1/linea, /v1/privacidad (exportar zip y borrar con doble
   assert.strictEqual(ex.headers.get('content-type'), 'application/zip');
   assert.match(ex.headers.get('content-disposition'), /attachment; filename="apolo-datos-/);
   const nombres = nombresZip(Buffer.from(await ex.arrayBuffer()));
-  for (const x of ['LEEME.txt', 'memoria.json', 'grafo.json', `sesiones/${s.id}.jsonl`, 'tareas_historial.jsonl', 'personalidad/identidad.md']) assert.ok(nombres.includes(x), x + ' en ' + nombres);
+  for (const x of ['LEEME.txt', 'memoria.json', 'grafo.json', `sesiones/${s.id}.jsonl`, 'tareas_historial.jsonl', 'personalidad/SOUL.md']) assert.ok(nombres.includes(x), x + ' en ' + nombres);
   assert.ok(!nombres.some(x => /config\.json|^token$|conectores/.test(x)), nombres.join(','));
 
   // borrar: paso 1 da código; con código malo o sin la frase no borra; con todo bien, sí
