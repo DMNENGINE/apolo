@@ -96,7 +96,7 @@ From the tray icon:
 
 1. **Install hooks** — connects Claude Code (and Gemini CLI if present). It uses `node` when you have it; otherwise APOLO runs the hook itself.
 2. **Open control panel** — the welcome wizard picks a model and channels in about two minutes.
-3. **Install voice and microphone** *(optional)* — installs Python, `edge-tts` and `faster-whisper` in a visible window. The neural voice already works without it; without Whisper the microphone uses the Windows recognizer.
+3. **Install voice and microphone** *(optional)* — no longer needed: the neural voice and the microphone (whisper.cpp, downloaded automatically, ~200 MB) work without Python. This option installs the Python Whisper in case you prefer it (e.g. with an NVIDIA GPU).
 4. **Browser extension** *(optional)* — tray → *Open extension folder*, then `chrome://extensions` → Developer mode → **Load unpacked**, and paste the token from *Copy token for the browser extension*.
 5. **Stream Deck** *(optional)* — run `streamdeck\instalar.ps1` from the app folder (`resources\app.asar.unpacked\streamdeck` in the .exe install).
 

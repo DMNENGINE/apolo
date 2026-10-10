@@ -23,7 +23,7 @@ El código va en `resources/app.asar`. Lo que usan procesos externos se desempaq
 - **Hooks**: `node "<…>/app.asar.unpacked/hook/hook.js" <Evento>` si hay Node en el PATH; si no, `hook/hook.cmd`, que ejecuta `hook.js` con el propio `APOLO.exe` (`ELECTRON_RUN_AS_NODE=1`). Los hooks antiguos (copia de desarrollo `RobotCompanion/`, one-liner `APOLO/` o .exe) se reconocen y se sustituyen al reinstalarlos.
 - **Extensión**: bandeja → *Abrir carpeta de la extensión* abre la carpeta desempaquetada → *Cargar descomprimida*.
 - **Stream Deck**: `resources\app.asar.unpacked\streamdeck\instalar.ps1`.
-- **Voz (Whisper / edge-tts)**: no va en el .exe (Python + ~300 MB). Bandeja → *Instalar voz y micrófono (Python + Whisper)* abre `tools/instalar-voz.ps1` en una ventana visible.
+- **Voz y micrófono, sin Python**: la voz neural de Edge sale de Node (`main/edge-tts.js`) y el micrófono usa whisper.cpp (`main/whisper-cpp.js`: `whisper-cli.exe` + modelo small q5_1, ~200 MB en `%APPDATA%\robot-companion\whisper`, grabación con `tools/grabar.ps1`). `install.ps1` lo descarga; si no, la app lo baja sola al abrirse. Orden del micro: Whisper de Python si está instalado → whisper.cpp → reconocedor de Windows. Las notas de voz ogg/opus necesitan `ffmpeg` (o el Whisper de Python). Bandeja → *Instalar voz y micrófono (Python + Whisper)* sigue disponible como opción.
 
 ## Actualizaciones
 

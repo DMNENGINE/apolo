@@ -1,7 +1,8 @@
 // Voz del robot (proceso principal):
 // - TTS: 1) Fish Audio (si hay key y voz en %APPDATA%\robot-companion\voz.json) 2) voz neural de Edge (main/edge-tts.js,
 //   sin Python; si falla, el paquete Python edge-tts) 3) null → la isla usa la voz de Windows. Todo en mp3 con caché por texto.
-// - Oído: Whisper (servidor Python persistente, bajo demanda) con respaldo en el reconocedor de Windows (listen.ps1).
+// - Oído: 1) Whisper en Python (servidor persistente, bajo demanda) si está instalado 2) whisper.cpp (main/whisper-cpp.js,
+//   sin Python: se descarga solo) 3) el reconocedor de Windows (listen.ps1).
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -9,6 +10,7 @@ const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const { fuera } = require('../core/rutas');
 const { sintetizar } = require('./edge-tts');
+const { crearWhisperCpp } = require('./whisper-cpp');
 
 const VOZ_TTS_IDIOMA = { es: { voz: 'es-ES-AlvaroNeural', rate: '+8%', pitch: '+12Hz' }, en: { voz: 'en-US-AndrewNeural', rate: '+6%', pitch: '+8Hz' } };
 const RAIZ = path.join(__dirname, '..');
@@ -66,12 +68,16 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
     const todas = [...new Set([nombre(), ...propias, ...FIJAS, ...proyectos].map(x => String(x || '').trim()).filter(Boolean))];
     return todas.join(', ').slice(0, 600) + '.';   // initial_prompt: corto (Whisper usa como mucho ~224 tokens)
   }
+  // sin Python (o sin faster-whisper): whisper.cpp; el modelo se elige en voz.json "whisperModelo": "small" | "base"
+  const wcpp = crearWhisperCpp({ dir: () => path.join(dirDatos(), 'whisper'), idioma, vocabulario, modelo: () => VOZ_CFG().whisperModelo || 'small' });
+  let sinPython = false;                                        // el Whisper de Python se cerró sin arrancar: no reintentar
   let whisper = null, whisperReady = false, whisperWait = null, whisperBuf = '';
   function startWhisper() {
     try {
       whisper = spawn('python', [fuera(path.join(RAIZ, 'tools', 'whisper_srv.py'))], { windowsHide: true, env: { ...process.env, HF_HUB_DISABLE_SYMLINKS_WARNING: '1', PYTHONIOENCODING: 'utf-8',
         ROBOT_WHISPER_IDIOMA: idioma() || 'es', ROBOT_WHISPER_PROMPT: vocabulario() } });
-    } catch { return; }
+    } catch { sinPython = true; return; }
+    whisper.on('error', () => { sinPython = true; whisperReady = false; whisper = null; });   // sin python en el PATH (no llega 'exit')
     whisper.stdout.setEncoding('utf8');
     whisper.stdout.on('data', d => {
       whisperBuf += d; let i;
@@ -82,12 +88,16 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
         if (whisperWait) { const w = whisperWait; whisperWait = null; w(j); }
       }
     });
-    whisper.on('exit', () => { whisperReady = false; whisper = null; });
+    whisper.on('exit', () => {
+      if (!whisperReady && !sinPython) { sinPython = true; console.log('[whisper] sin Whisper de Python: se usa whisper.cpp'); }
+      whisperReady = false; whisper = null;
+    });
   }
   // Whisper bajo demanda: se carga al pulsar el micro (o Ctrl+Alt+Espacio) y se descarga tras 2 min sin usarlo (~660 MB)
   let whisperApagar = null;
   function whisperListo(ms = 25_000) {
     if (whisperReady) return Promise.resolve(true);
+    if (sinPython) return Promise.resolve(false);
     if (!whisper) startWhisper();
     return new Promise(ok => { const t0 = Date.now(); const iv = setInterval(() => { if (whisperReady || !whisper || Date.now() - t0 > ms) { clearInterval(iv); ok(whisperReady); } }, 100); });
   }
@@ -96,7 +106,10 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
   let colaWhisper = Promise.resolve();
   function transcribirArchivo(ruta) {
     const tarea = colaWhisper.then(async () => {
-      if (!await whisperListo(60_000)) return { text: '', error: 'Whisper no está disponible (¿Python y faster-whisper instalados?)' };
+      if (!await whisperListo(60_000)) {
+        if (wcpp.disponible) return wcpp.transcribir(ruta);
+        return { text: '', error: 'Whisper no está disponible (¿Python y faster-whisper instalados?)' };
+      }
       apagarWhisperLuego();
       while (whisperWait) await new Promise(ok => setTimeout(ok, 200));          // si estás usando el micro, espera
       return new Promise(ok => { whisperWait = ok; whisper.stdin.write('file ' + ruta + '\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', error: 'tiempo agotado' }); } }, 120_000); });
@@ -109,8 +122,17 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
   const listenWindows = () => (process.platform !== 'win32' ? Promise.resolve({ text: '', conf: 0, error: 'sin Whisper: bandeja → Instalar voz y micrófono' }) : new Promise(ok => execFile('powershell.exe',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(RAIZ, 'tools', 'listen.ps1'))],
     { windowsHide: true, timeout: 15000 }, (err, out) => { try { ok(JSON.parse(String(out).trim())); } catch { ok({ text: '', conf: 0, error: err ? err.message : 'sin respuesta' }); } })));
-  // micrófono de la isla: Whisper si carga, si no el reconocedor de Windows
-  async function escuchar() { const ok = await whisperListo(); apagarWhisperLuego(); return ok && !whisperWait ? listenWhisper() : listenWindows(); }
+  // micrófono de la isla: Whisper de Python si carga; si no whisper.cpp; mientras se descarga (o sin él), el reconocedor de Windows
+  async function escuchar() {
+    const ok = await whisperListo(); apagarWhisperLuego();
+    if (ok && !whisperWait) return listenWhisper();
+    if (wcpp.disponible && wcpp.listo()) return wcpp.escuchar();
+    if (wcpp.disponible) wcpp.preparar();
+    return listenWindows();
+  }
+  // al arrancar: si no hay Whisper de Python, se baja whisper.cpp en segundo plano para que el micro ya esté listo
+  if (wcpp.disponible && !wcpp.listo()) setTimeout(() => execFile('python', ['-c', 'import faster_whisper, sounddevice'], { windowsHide: true, timeout: 30_000 },
+    e => { if (e) { sinPython = true; wcpp.preparar(); } }), 20_000).unref?.();
 
   // vocabulario propio (voz.json "vocabulario"); al cambiarlo se descarga Whisper: lo usa la próxima vez que se cargue
   function leerVocabulario() { return (VOZ_CFG().vocabulario || []).map(String); }
@@ -125,8 +147,8 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
 
   return {
     generarTts, transcribirArchivo, escuchar, leerVocabulario, guardarVocabulario,
-    whisperCargado: () => whisperReady,
-    cerrar() { try { whisper && whisper.kill(); } catch { } },
+    whisperCargado: () => whisperReady || (sinPython && wcpp.listo()),
+    cerrar() { try { whisper && whisper.kill(); } catch { } wcpp.cerrar(); },
   };
 }
 

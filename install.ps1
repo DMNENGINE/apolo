@@ -93,21 +93,17 @@ try {
   Info 'Electron OK'
 } finally { Pop-Location }
 
-# ---------- 4. Microfono (opcional): Python + faster-whisper (la voz neural ya va sin Python: main/edge-tts.js) ----------
-Paso 'Microfono: reconocimiento de voz (opcional)'
+# ---------- 4. Voz y microfono: sin Python ----------
+# la voz neural sale de Node (main/edge-tts.js) y el microfono usa whisper.cpp (main/whisper-cpp.js): aqui solo se
+# descarga whisper.cpp + su modelo (~200 MB) para que el micro funcione a la primera. Si falla, APOLO lo reintenta solo.
+Paso 'Voz y microfono'
 try {
-  $py = $null
-  foreach ($c in 'python', 'py') { if (Tiene $c) { $out = & $c --version 2>&1; if ("$out" -match 'Python 3') { $py = $c; break } } }
-  if (-not $py) {
-    Info 'instalando Python 3.12 (winget)...'
-    Winget 'Python.Python.3.12'
-    if (Tiene 'python') { $py = 'python' }
-  }
-  if ($py) {
-    & $py -m pip install --quiet --disable-pip-version-check --user edge-tts faster-whisper 2>&1 | Out-Null
-    Info 'reconocimiento de voz (Whisper) instalado'
-  } else { Aviso 'sin Python: APOLO habla igual con voz neural, pero el microfono usara el reconocedor de Windows' }
-} catch { Aviso "la voz no se pudo instalar ($($_.Exception.Message)). APOLO habla igual con voz neural; el microfono usara el de Windows." }
+  $datosVoz = Join-Path $env:APPDATA 'robot-companion\whisper'
+  $js = "require(process.argv[1]).crearWhisperCpp({ dir: () => process.argv[2] }).preparar().then(ok => process.exit(ok ? 0 : 1))"
+  & node -e $js (Join-Path $Dir 'main\whisper-cpp.js') $datosVoz 2>&1 | ForEach-Object { Info $_ }
+  if ($LASTEXITCODE -eq 0) { Info 'voz neural y reconocimiento de voz listos (sin Python)' }
+  else { Aviso 'el reconocimiento de voz no se pudo descargar ahora; APOLO lo reintentara al abrirse' }
+} catch { Aviso "el reconocimiento de voz se descargara al abrir APOLO ($($_.Exception.Message))" }
 
 # ---------- 5. Accesos directos ----------
 Paso 'Accesos directos'
