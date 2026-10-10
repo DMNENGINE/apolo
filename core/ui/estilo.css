@@ -1194,3 +1194,10 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mn-num { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--txt-2); }
 .mn-num input[type=number] { width: 110px; }
 @media (max-width: 900px) { .mn-top, .mn-dos, .mn-diario, .mn-alma { grid-template-columns: 1fr; } .mn-fila { grid-template-columns: 1fr; gap: 2px; } }
+
+/* Mente → Alma: nacimiento */
+.mn-nacer{display:flex;align-items:center;gap:10px;margin-bottom:12px;justify-content:flex-end}
+.mn-nacer.on{justify-content:flex-start;border-color:color-mix(in srgb,var(--acento) 45%,transparent);background:color-mix(in srgb,var(--acento) 8%,var(--caja,transparent))}
+.mn-nacer.on .crece{display:flex;flex-direction:column;gap:3px}
+.mn-nacer.on small{color:var(--suave,inherit);opacity:.85}
+.mn-nacer-ico{font-size:26px;line-height:1}

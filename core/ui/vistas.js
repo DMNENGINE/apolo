@@ -117,6 +117,7 @@ VISTAS.chat = {
       m.innerHTML = `<div class="bienvenida"><div class="robot-bienvenida" id="robotChat" title="${tr('Tócame')}">${casco('casco-grande')}</div><h2>${tr('¿En qué te ayudo?')}</h2>
         <p>${tr('Hablas con <b>{m}</b>. Todos los modelos comparten memoria, herramientas y permisos.', { m: esc(this.modelo) })}</p>
         <div class="sugerencias">${[
+          ...(E.estado?.naciendo ? [['chispa', '¡Hola! Acabas de despertar: preséntate y conozcámonos']] : []),
           ['carpeta', 'Revisa qué hay en mi carpeta de descargas y dime qué puedo borrar'],
           ['reloj', 'Recuérdame mañana a las 9 revisar los pedidos del taller'],
           ['cerebro', '¿Qué sabes de mí?'],

@@ -25,7 +25,7 @@ function agentesGuardados(s, cfg) {
   return require('./importador').leerAgentes(cfg).slice(0, 20).map(a => `- ${a.nombre}: ${a.descripcion || '(sin descripción)'}`).join('\n');
 }
 
-function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior = '', nombre = '') {
+function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior = '', nombre = '', nacimiento = '') {
   const guardados = agentesGuardados(s, cfg);
   return [
     `Eres ${nombre && nombre !== 'Robot' ? nombre : 'Robot Companion'}, un asistente personal que trabaja en el ordenador del usuario usando herramientas.`,
@@ -41,6 +41,7 @@ function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior
     recuerdos ? `LO QUE SABES DEL USUARIO (memoria):\n${recuerdos}` : 'Memoria: aún no sabes nada del usuario.',
     personalidad ? `\nTU ALMA, TU IDENTIDAD, TU HUMANO E INSTRUCCIONES (eres tú; las instrucciones síguelas):\n${personalidad}` : '',
     interior ? `\n${interior}` : '',
+    nacimiento ? `\nESTÁS NACIENDO (esto manda sobre lo demás hasta que llames a "nacer"):\n${nacimiento}` : '',
     guardados ? `\nAGENTES GUARDADOS (úsalos con delegar + "agente"):\n${guardados}` : '',
     skills ? `\n${skills}` : '',
     resumen ? `\nRESUMEN DE LA PARTE ANTERIOR DE ESTA CONVERSACIÓN (ya no ves esos mensajes; continúa desde aquí):\n${resumen}` : '',
@@ -98,21 +99,24 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       let pers = ''; try { pers = personalidad ? personalidad.prompt() : ''; } catch { }
       let sk = ''; try { sk = skills ? (await skills.seccion({ sesion: s, mensaje: texto })).texto : ''; } catch { }   // índice + sugeridas (o la skill ya cargada)
       let interior = '', nombre = ''; try { if (!s.padre && s.canal !== 'eval') interior = conciencia?.()?.describir() || ''; nombre = personalidad?.nombre?.() || ''; } catch { }   // estado, metas, pensamientos, diario
+      // primera conversación (NACIMIENTO.md): solo en charlas con el usuario, no en tareas, subagentes, evals ni la conciencia
+      let nacimiento = ''; try { if (!s.padre && !s.tarea && !s.soloLectura && !['eval', 'conciencia', 'subagente'].includes(s.canal)) nacimiento = personalidad?.nacimiento?.() || ''; } catch { }
       const apagadas = new Set(cfg.herramientasOff || []);
       if (s.padre || !subagentes) apagadas.add('delegar');                // los subagentes no delegan (sin recursión)
+      if (!nacimiento) apagadas.add('nacer');
       let hayActivas = false; try { hayActivas = !!skills?.almacen.lista().some(x => x.activa); } catch { }
       if (!hayActivas) ['usar_skill', 'leer_recurso_skill', 'ejecutar_script_skill'].forEach(x => apagadas.add(x));   // sin skills activas: menos herramientas
       const herramientas = HERRAMIENTAS.filter(h => !apagadas.has(h.nombre) && (!h.disponible || h.disponible()));
       const disponibles = new Set(herramientas.map(h => h.nombre));
       let final = '', empujones = 0, empujon = false;
       for (let paso = 0; paso < cfg.maxPasos; paso++) {
-        const base = sistema(s, recuerdos, pers, '', cfg, sk, interior, nombre);
+        const base = sistema(s, recuerdos, pers, '', cfg, sk, interior, nombre, nacimiento);
         if (compactador?.hace(s, base)) {              // conversación larga: resumir lo antiguo antes de seguir
           try { const c = await compactador.compactar(s, { signal: ctl.signal }); if (c) ev('compactacion', c); }
           catch (e) { if (ctl.signal.aborted) throw e; ev('aviso', { texto: `no pude compactar la conversación: ${e.message}` }); }
         }
         const v = vista(s.mensajes);
-        const sys = sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre);
+        const sys = sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento);
         let historial = conImagenes(v.mensajes, s.sinVision);
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
         let r;
@@ -132,7 +136,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         sesiones.agregar(s, { role: 'assistant', content: r.texto, toolCalls: r.toolCalls.length ? r.toolCalls : undefined, t: Date.now() });
         if (r.texto) { final = r.texto; ev('texto', { texto: r.texto }); }
         if (!r.toolCalls.length) {
-          if (r.texto && !turno.herramientas && PROMESA.test(r.texto) && empujones < 2 && paso < cfg.maxPasos - 1 && !ctl.signal.aborted) {
+          if (r.texto && !nacimiento && !turno.herramientas && PROMESA.test(r.texto) && empujones < 2 && paso < cfg.maxPasos - 1 && !ctl.signal.aborted) {
             empujones++; empujon = true;
             ev('aviso', { texto: 'el modelo prometió hacerlo sin usar herramientas: le pido que lo haga de verdad' });
             continue;

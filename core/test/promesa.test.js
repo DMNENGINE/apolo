@@ -21,7 +21,7 @@ async function montar(t, responder) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nucleo-'));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
     modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } },
-    memoria: { embeddings: null },
+    memoria: { embeddings: null }, alma: { nacimiento: false },   // sin entrevista de primera conversación (ahí no se empuja)
   }));
   const { crearNucleo } = require('../index');
   return { n: crearNucleo({ dir }), recibidos };

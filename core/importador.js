@@ -65,6 +65,8 @@ function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tare
       poner('alma', buscar(archivos, /^SOUL\.md$/i));
       poner('identidad', buscar(archivos, /^IDENTITY\.md$/i));
       poner('usuario', buscar(archivos, /^USER\.md$/i));
+      // trae un asistente que ya existe: ya nació, sin entrevista de primera conversación
+      if (res.personalidad.some(x => x === 'alma' || x === 'identidad')) personalidad.terminarNacimiento?.(`importado de ${origen}`);
     }
 
     // 3) recuerdos: de los .md/.txt (por trozos si es mucho)

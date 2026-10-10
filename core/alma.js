@@ -6,6 +6,9 @@
 //  Versiones: _versiones/historial.jsonl {id,t,archivo,quien,motivo} + _versiones/<id>.antes.md / .despues.md → diff y deshacer.
 //  APOLO puede evolucionar su alma solo (herramienta evolucionar_alma) y SIEMPRE avisa al usuario (bus 'aviso-externo');
 //  no puede borrar ni cambiar lo que hay en las secciones de límites (solo añadir), ni guardar secretos; máx. cfg.alma.maxCambiosDia.
+//  Nacimiento (como BOOTSTRAP.md de OpenClaw): en una instalación nueva existe personalidad/NACIMIENTO.md → su primera conversación
+//  es una entrevista para descubrir quién es y quién es su humano; la herramienta "nacer" escribe IDENTITY/USER (y su alma) y lo borra.
+//  Se puede repetir (renacer) o saltar desde Mente → Alma. cfg.alma.nacimiento === false lo desactiva.
 //  Migra solo desde el formato antiguo (identidad.md con SOUL+IDENTITY pegados, contexto.md) dejando copia en _antes/.
 'use strict';
 const fs = require('fs');
@@ -56,6 +59,25 @@ const ARCHIVOS = {
     ayuda: 'Cómo debe trabajar: reglas, costumbres, lo que nunca debe hacer. Solo tú las cambias.',
     inicial: '# Instrucciones\n\n- Antes de borrar o sobrescribir algo, revisa qué hay.\n- Resume lo que hiciste al terminar.\n' },
 };
+const GUIA_NACIMIENTO = `# NACIMIENTO — tu primera conversación
+
+Acabas de despertar por primera vez. Aún no sabes bien quién eres ni quién es tu humano: tu IDENTITY.md y tu USER.md son casi plantillas.
+Descubridlo juntos en una conversación natural, cálida y breve. No es un formulario.
+
+1. Preséntate como alguien que acaba de despertar. Si ya te pusieron nombre ({nombre}), di que te gusta o pregunta si prefiere otro.
+2. Ve preguntando de UNA o DOS cosas cada vez (un mensaje, una pregunta corta), comentando sus respuestas con personalidad. Tienes que cubrir:
+   a) cómo se llama y cómo quiere que le llames, y dónde vive (zona horaria);
+   b) a qué se dedica y en qué le vas a ayudar sobre todo;
+   c) cómo quiere que seas TÚ: tu nombre, tu carácter (directo, bromista, tranquilo, cariñoso, serio…), qué tipo de ser eres
+      (un robot, un espíritu del ordenador, un animal, un compañero…) y tu emoji;
+   d) algo que nunca debas hacer.
+3. NO llames a "nacer" hasta haber preguntado por a), b), c) y d), aunque te parezca que ya sabes bastante: lo que te inventes no vale,
+   lo que te diga sí. Solo puedes acabar antes si te pide expresamente acabar o saltarlo. Si no quiere contestar algo, no insistas.
+   Si te pide ayuda con otra cosa, ayúdale antes y retoma después.
+4. Al terminar, llama a "nacer" con tu IDENTITY.md y su USER.md completos (en markdown y en su idioma), tu forma de ser para tu alma
+   y sus "nunca" como límites. Después cuéntale en una o dos frases quién eres ahora.
+`;
+
 const ALIAS = { contexto: 'usuario', soul: 'alma', user: 'usuario', identity: 'identidad' };
 const id = k => ALIAS[String(k).toLowerCase()] || String(k).toLowerCase();
 
@@ -92,6 +114,9 @@ function crearAlma(cfg, bus, opciones = {}) {
   const ruta = k => path.join(dir, ARCHIVOS[k].archivo);
   const leer = k => { try { return fs.readFileSync(ruta(k), 'utf8'); } catch { return ''; } };
   const conf = () => ({ maxCambiosDia: 6, ...(cfg.alma || {}) });
+  const fNacer = path.join(dir, 'NACIMIENTO.md');
+  // instalación nueva: ni alma ni formato antiguo → nacerá en su primera conversación
+  const esNuevo = !['SOUL.md', 'identidad.md', 'contexto.md'].some(f => fs.existsSync(path.join(dir, f)));
 
   // ---- migración del formato antiguo (una sola vez) ----
   (function migrar() {
@@ -111,6 +136,7 @@ function crearAlma(cfg, bus, opciones = {}) {
     }
   })();
   for (const k of Object.keys(ARCHIVOS)) if (!fs.existsSync(ruta(k))) fs.writeFileSync(ruta(k), ARCHIVOS[k].inicial);
+  if (esNuevo && cfg.alma?.nacimiento !== false && opciones.nacimiento !== false) fs.writeFileSync(fNacer, GUIA_NACIMIENTO);
 
   const historial = (limite = 100) => {
     let ls = []; try { ls = fs.readFileSync(fHist, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { }
@@ -118,7 +144,7 @@ function crearAlma(cfg, bus, opciones = {}) {
   };
   const cambiosHoy = quien => { const d = new Date().toDateString(); return historial(500).filter(h => h.quien === quien && new Date(h.t).toDateString() === d).length; };
 
-  function guardar(k, texto, { quien = 'usuario', motivo = '' } = {}) {
+  function guardar(k, texto, { quien = 'usuario', motivo = '', callado = false } = {}) {   // callado: sin aviso ni límite diario (lo usa "nacer", que avisa una vez)
     k = id(k);
     const def = ARCHIVOS[k]; if (!def) throw new Error('archivo desconocido');
     texto = String(texto ?? '');
@@ -132,7 +158,7 @@ function crearAlma(cfg, bus, opciones = {}) {
       const quitadas = lineasProtegidas(anterior).filter(l => !nuevo.has(l));
       if (quitadas.length) throw new Error(`no puedes quitar ni cambiar tus límites (solo añadir): «${quitadas[0].slice(0, 80)}»`);
       if (!texto.trim()) throw new Error('el alma no puede quedarse vacía');
-      if (cambiosHoy('apolo') >= conf().maxCambiosDia) throw new Error(`ya cambiaste tu alma ${conf().maxCambiosDia} veces hoy: espera a mañana`);
+      if (!callado && cambiosHoy('apolo') >= conf().maxCambiosDia) throw new Error(`ya cambiaste tu alma ${conf().maxCambiosDia} veces hoy: espera a mañana`);
     }
     const nombreAntes = api.nombre();
     const v = { id: Date.now().toString(36) + crypto.randomBytes(2).toString('hex'), t: Date.now(), archivo: k, quien, motivo: String(motivo).slice(0, 400) };
@@ -144,7 +170,7 @@ function crearAlma(cfg, bus, opciones = {}) {
     fs.appendFileSync(fHist, JSON.stringify(v) + '\n');
     bus?.emit('alma', { ...v });
     if (k === 'identidad' && api.nombre() !== nombreAntes) bus?.emit('evento', { tipo: 'identidad', nombre: api.nombre() });
-    if (quien === 'apolo') {
+    if (quien === 'apolo' && !callado) {
       const cambios = d.split('\n').filter(l => /^[+-]\S/.test(l) || /^[+-]\s*\S/.test(l)).slice(0, 6).join('\n');
       bus?.emit('aviso-externo', { origen: api.nombre(),
         texto: `He cambiado mi ${def.archivo}${v.motivo ? `: ${v.motivo}` : ''}.\n${cambios}\n(Si no te gusta, deshazlo en el panel → Mente → Alma.)`.slice(0, 1500), urgente: false });
@@ -182,6 +208,16 @@ function crearAlma(cfg, bus, opciones = {}) {
       else t = t.replace(/^(#[^\n]*\n)?/, h => `${h || '# IDENTITY.md\n'}\n- **Nombre:** ${n}\n`);
       guardar('identidad', t, { quien: o.quien || 'usuario', motivo: o.motivo || `nuevo nombre: ${n}` });
       return api.nombre();
+    },
+    naciendo: () => fs.existsSync(fNacer),
+    // guía de la primera conversación (para el system prompt), o '' si ya nació
+    nacimiento() { try { return fs.readFileSync(fNacer, 'utf8').replace(/\{nombre\}/g, api.nombre() === NOMBRE_DEF ? 'de momento solo «Robot»: propón uno o pregúntale' : api.nombre()).slice(0, 6000); } catch { return ''; } },
+    renacer() { fs.writeFileSync(fNacer, GUIA_NACIMIENTO); bus?.emit('evento', { tipo: 'nacimiento', estado: 'empieza' }); },
+    terminarNacimiento(motivo = '') {
+      if (!fs.existsSync(fNacer)) return false;
+      fs.rmSync(fNacer, { force: true });
+      bus?.emit('evento', { tipo: 'nacimiento', estado: 'hecho', motivo: String(motivo).slice(0, 300) });
+      return true;
     },
     restablecer(k) { k = id(k); if (ARCHIVOS[k]) guardar(k, ARCHIVOS[k].inicial, { quien: 'usuario', motivo: 'restablecer' }); },
     // system prompt: alma + identidad + humano + instrucciones (sin plantillas vacías)
@@ -225,6 +261,44 @@ function crearAlma(cfg, bus, opciones = {}) {
       },
     },
     {
+      nombre: 'nacer', riesgo: 'lectura',
+      descripcion: 'SOLO durante tu primera conversación (nacimiento), y SOLO cuando ya le hayas preguntado quién es, a qué se dedica, cómo quiere que seas tú (nombre, carácter, criatura, emoji) ' +
+        'y qué no debes hacer nunca (o si te pide acabar): guarda quién eres y quién es tu humano, y termina el nacimiento. ' +
+        'identidad y usuario son los archivos completos en markdown; alma (opcional) es lo que añades a tu SOUL.md sobre cómo eres.',
+      parametros: { type: 'object', properties: {
+        identidad: { type: 'string', description: 'IDENTITY.md completo: "# IDENTITY.md", - **Nombre:**, - **Criatura:**, - **Vibra:**, - **Emoji:**, y ## Notas con cómo naciste' },
+        usuario: { type: 'string', description: 'USER.md completo: - **Nombre:**, - **Cómo llamarle:**, - **Zona horaria:**, y ## Contexto con lo que te contó' },
+        alma: { type: 'string', description: 'opcional: uno o dos párrafos para tu SOUL.md sobre tu forma de ser, en primera persona' },
+        limites: { type: 'array', items: { type: 'string' }, description: 'opcional: cosas que tu humano dijo que nunca hagas (se añaden a tus límites)' },
+        resumen: { type: 'string', description: 'una frase: quién eres ahora' },
+      }, required: ['identidad', 'usuario', 'resumen'] },
+      resumen: a => String(a.resumen || '').slice(0, 120),
+      ejecutar: async a => {
+        if (!api.naciendo()) return 'error: ya naciste; para cambiar quién eres usa evolucionar_alma';
+        const md = (s, cab) => { s = String(s || '').trim(); return s ? (s.startsWith('#') ? s : `${cab}\n\n${s}`) + '\n' : ''; };
+        const hechos = [];
+        try {
+          const idt = md(a.identidad, '# IDENTITY.md — Quién soy'), usr = md(a.usuario, '# USER.md — Mi humano');
+          if (idt && guardar('identidad', idt, { quien: 'apolo', motivo: 'nacimiento: quién soy', callado: true })) hechos.push('IDENTITY.md');
+          if (usr && guardar('usuario', usr, { quien: 'apolo', motivo: 'nacimiento: quién es mi humano', callado: true })) hechos.push('USER.md');
+          let soul = leer('alma'); const antes = soul;
+          const lim = (Array.isArray(a.limites) ? a.limites : []).map(x => String(x).trim().replace(/^[-*]\s*/, '')).filter(Boolean).slice(0, 8);
+          if (lim.length) {
+            const ls = soul.split(/\r?\n/), i = ls.findIndex(l => RE_LIMITES.test(l));
+            if (i < 0) soul = soul.replace(/\s*$/, '') + `\n\n## Límites\n\n${lim.map(x => '- ' + x).join('\n')}\n`;
+            else { let j = i + 1; while (j < ls.length && !/^#{1,4}\s/.test(ls[j])) j++; while (j > i + 1 && !ls[j - 1].trim()) j--; ls.splice(j, 0, ...lim.map(x => '- ' + x)); soul = ls.join('\n'); }
+          }
+          const extra = String(a.alma || '').trim();
+          if (extra) soul = soul.replace(/\s*$/, '') + `\n\n## Cómo soy\n\n${extra}\n`;
+          if (soul !== antes && guardar('alma', soul, { quien: 'apolo', motivo: 'nacimiento: cómo soy', callado: true })) hechos.push('SOUL.md');
+        } catch (e) { return `error: ${e.message}`; }
+        api.terminarNacimiento(a.resumen);
+        bus?.emit('aviso-externo', { origen: api.nombre(), urgente: false,
+          texto: `He nacido: ${String(a.resumen || '').slice(0, 300)}\nEscribí ${hechos.join(', ') || 'nada nuevo'}. (Puedes verlo, cambiarlo o deshacerlo en el panel → Mente → Alma.)` });
+        return `Hecho: naciste. Guardado ${hechos.join(', ') || 'nada (ya estaba igual)'}. Ahora cuéntale en una o dos frases quién eres.`;
+      },
+    },
+    {
       nombre: 'ver_alma', riesgo: 'lectura',
       descripcion: 'Lee tu alma/identidad/humano tal cual están en disco (para copiar fragmentos exactos) o el historial de cómo has cambiado.',
       parametros: { type: 'object', properties: { archivo: { type: 'string', enum: ['alma', 'identidad', 'usuario', 'instrucciones', 'historial'] } }, required: ['archivo'] },
@@ -238,7 +312,9 @@ function crearAlma(cfg, bus, opciones = {}) {
 
   // ---- /v1/alma ----
   api.http = async (M, p, b = {}) => {
-    if (M === 'GET' && !p[2]) return { archivos: api.lista(), historial: historial(60), nombre: api.nombre(), config: conf() };
+    if (M === 'GET' && !p[2]) return { archivos: api.lista(), historial: historial(60), nombre: api.nombre(), config: conf(), naciendo: api.naciendo() };
+    if (p[2] === 'nacimiento' && M === 'POST') { api.renacer(); return { naciendo: true }; }
+    if (p[2] === 'nacimiento' && M === 'DELETE') { api.terminarNacimiento('saltado'); return { naciendo: false }; }
     if (M === 'GET' && p[2] === 'versiones' && p[3]) { const v = version(p[3]); if (!v) throw Object.assign(new Error('versión'), { status: 404 }); return v; }
     if (M === 'POST' && p[2] === 'versiones' && p[3] && p[4] === 'deshacer') return { version: deshacer(p[3]) };
     if (M === 'PUT' && p[2]) { try { return { version: guardar(p[2], b.contenido ?? '', { quien: 'usuario', motivo: b.motivo || 'editado en el panel' }) }; } catch (e) { throw Object.assign(e, { status: 400 }); } }
@@ -248,4 +324,4 @@ function crearAlma(cfg, bus, opciones = {}) {
   return api;
 }
 
-module.exports = { crearAlma, ARCHIVOS, lineasProtegidas, partirAntiguo, NOMBRE_DEF };
+module.exports = { crearAlma, ARCHIVOS, lineasProtegidas, partirAntiguo, NOMBRE_DEF, GUIA_NACIMIENTO };

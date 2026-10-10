@@ -22,6 +22,19 @@ Formato SOUL.md (compatible con OpenClaw), en `<datos>/personalidad/`:
 - Sin secretos (claves/contraseñas) y como mucho `alma.maxCambiosDia` (6) cambios suyos al día.
 - La instalación antigua (`identidad.md` con SOUL+IDENTITY pegados, `contexto.md`) se migra sola la primera vez; los originales quedan en `_antes/`.
 
+### Nacimiento (primera conversación)
+
+Como el `BOOTSTRAP.md` de OpenClaw. En una instalación nueva se crea `personalidad/NACIMIENTO.md` y su primera conversación
+(panel, isla, móvil… nunca tareas, subagentes ni la conciencia) es una entrevista corta: quién eres y a qué te dedicas,
+cómo quieres que sea él (nombre, carácter, criatura, emoji) y qué no debe hacer nunca.
+Al terminar llama a la herramienta `nacer`, que escribe `IDENTITY.md` y `USER.md`, añade a su `SOUL.md` su forma de ser
+(«## Cómo soy») y tus «nunca» en sus límites, con un solo aviso y sin gastar el tope diario. Después borra `NACIMIENTO.md`.
+
+- Mente → Alma: «Hablar con él» / «Saltar» mientras nace, y «Renacer» para repetir la entrevista. Todo queda en el historial y se puede deshacer.
+- Importar un asistente de OpenClaw (SOUL/IDENTITY) cuenta como ya nacido.
+- `cfg.alma.nacimiento: false` lo desactiva.
+- API: `POST /v1/alma/nacimiento` (renacer) · `DELETE /v1/alma/nacimiento` (saltar) · `GET /v1/alma` → `naciendo`.
+
 ## Conciencia (`core/conciencia.js`)
 
 Apagada por defecto. Se enciende en Mente → Ajustes (o `PATCH /v1/conciencia/config {activo:true}`).

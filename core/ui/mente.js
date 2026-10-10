@@ -22,6 +22,10 @@ Object.assign(I18N.dic.en, {
   'Piensa cada (min)': 'Thinks every (min)', 'Horas de silencio': 'Quiet hours', 'Mensajes al día (máx.)': 'Messages per day (max)', 'Encargos al día (máx.)': 'Tasks per day (max)',
   'Reflexionar tras los trabajos': 'Reflect after jobs', 'Escribir un diario cada noche': 'Write a diary every night', 'Hora del diario': 'Diary time', 'Modelo (vacío = el del cerebro)': 'Model (empty = brain model)',
   'Hoy: {m} mensajes, {e} encargos': 'Today: {m} messages, {e} tasks', '¿Puede hablarte ahora?': 'Can it talk to you now?', 'sí': 'yes',
+  'Está naciendo': 'Being born', 'En su próxima conversación contigo se presentará y te hará unas preguntas para descubrir quién es y quién eres tú. Luego escribirá su identidad y lo que sabe de ti.': 'In its next conversation with you it will introduce itself and ask you a few questions to discover who it is and who you are. Then it will write its identity and what it knows about you.',
+  'Hablar con él': 'Talk to it', 'Saltar': 'Skip', 'Renacer': 'Be reborn', 'Volver a conocernos desde cero': 'Get to know each other again from scratch',
+  'En su próxima conversación te hará otra vez la entrevista de la primera vez y reescribirá su identidad y lo que sabe de ti. Podrás deshacerlo aquí.': 'In its next conversation it will interview you again like the first time and rewrite its identity and what it knows about you. You can undo it here.',
+  'Saltar el nacimiento': 'Skip the birth', '¡Hola! Acabas de despertar: preséntate y conozcámonos': 'Hi! You just woke up: introduce yourself and let us get to know each other', 'No te hará la entrevista; se queda con lo que tiene ahora.': 'It will not interview you; it keeps what it has now.', 'nacimiento': 'birth',
   'Esta función necesita reiniciar APOLO (el núcleo que está corriendo es de antes). Bandeja → Salir y vuelve a abrirlo.': 'This feature needs APOLO to restart (the running core is older). Tray → Quit and open it again.',
 });
 
@@ -30,6 +34,11 @@ const MN_EMO = { contento: ['🙂', 'contento'], entusiasmado: ['🤩', 'entusia
   triste: ['😔', 'triste'], 'te-echa-de-menos': ['🥺', 'te echa de menos'], orgulloso: ['😎', 'orgulloso'], frustrado: ['😤', 'frustrado'] };
 const MN_DIM = [['animo', 'Ánimo', -1, 1], ['energia', 'Energía', 0, 1], ['curiosidad', 'Curiosidad', 0, 1], ['preocupacion', 'Preocupación', 0, 1], ['vinculo', 'Cercanía', 0, 1]];
 const MN_QUIEN = { apolo: 'él', usuario: 'tú', importacion: 'importación' };
+// nacimiento (NACIMIENTO.md): aviso mientras nace; si ya nació, "Renacer" repite la entrevista de la primera vez
+const MN_nacer = A => A.naciendo === undefined ? '' : A.naciendo
+  ? `<div class="caja pad mn-nacer on"><span class="mn-nacer-ico">🐣</span><span class="crece"><b>${tr('Está naciendo')}</b><small>${tr('En su próxima conversación contigo se presentará y te hará unas preguntas para descubrir quién es y quién eres tú. Luego escribirá su identidad y lo que sabe de ti.')}</small></span>
+      <a class="btn pri" href="#/chat">${ic('chat')}${tr('Hablar con él')}</a><button class="btn fantasma" id="mnSaltarNacer">${tr('Saltar')}</button></div>`
+  : `<div class="mn-nacer"><span class="tenue">${tr('Volver a conocernos desde cero')}</span><button class="btn mini fantasma" id="mnRenacer">🐣 ${tr('Renacer')}</button></div>`;
 const MN_hora = t => new Date(t).toLocaleString(I18N.idioma() === 'en' ? 'en' : 'es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const MN_emo = e => { const [i, t] = MN_EMO[e] || ['🙂', e || '']; return `<span class="mn-emo">${i}</span> ${esc(tr(t))}`; };
 
@@ -141,7 +150,7 @@ function MN_metas(c, C) {
 
 function MN_alma(c, A) {
   const V = VISTAS.mente, sel = V.almaSel && A.archivos.some(x => x.id === V.almaSel) ? V.almaSel : 'alma', a = A.archivos.find(x => x.id === sel);
-  c.innerHTML = `<div class="mn-alma">
+  c.innerHTML = `${MN_nacer(A)}<div class="mn-alma">
     <div class="caja pad"><div class="mn-archivos">${A.archivos.map(x => `<button class="btn ${x.id === sel ? 'pri' : 'fantasma'}" data-arch="${x.id}">${esc(x.archivo)}</button>`).join('')}</div>
       <p class="tenue mn-ayuda">${esc(tr(a.ayuda))} · <b>${tr(a.apolo ? 'Él puede cambiarlo y te avisa' : 'Solo tú')}</b></p>
       <textarea id="mnTexto" class="mn-editor" spellcheck="false">${esc(a.contenido)}</textarea>
@@ -152,6 +161,9 @@ function MN_alma(c, A) {
         <span class="mn-motivo">${esc(h.motivo || '')}</span></button>`).join('') : `<p class="tenue pad">${tr('Aún no ha cambiado nada.')}</p>`}</div></div></div>`;
   const ed = $('#mnTexto', c);
   ed.onfocus = () => { V.editando = true; }; ed.onblur = () => { V.editando = false; };
+  const sn = $('#mnSaltarNacer', c), rn = $('#mnRenacer', c);
+  if (sn) sn.onclick = async () => { if (await confirmar('Saltar el nacimiento', 'No te hará la entrevista; se queda con lo que tiene ahora.')) { await api('DELETE', '/alma/nacimiento'); if (E.estado) E.estado.naciendo = false; V.refrescar(); } };
+  if (rn) rn.onclick = async () => { if (await confirmar('Renacer', 'En su próxima conversación te hará otra vez la entrevista de la primera vez y reescribirá su identidad y lo que sabe de ti. Podrás deshacerlo aquí.')) { await api('POST', '/alma/nacimiento'); if (E.estado) E.estado.naciendo = true; V.refrescar(); } };
   $('#mnGuardar', c).onclick = async () => { try { await api('PUT', `/alma/${sel}`, { contenido: ed.value }); V.editando = false; aviso(tr('Guardado.')); V.refrescar(); } catch (e) { aviso(e.message, true); } };
   c.onclick = async e => {
     const b = e.target.closest('[data-arch]'); if (b) { V.almaSel = b.dataset.arch; V.editando = false; return MN_alma(c, A); }
