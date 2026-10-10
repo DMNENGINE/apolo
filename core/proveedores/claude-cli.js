@@ -3,6 +3,8 @@
 // { texto, herramientas: [{ nombre, argsJson }] } y el núcleo ejecuta las herramientas.
 const { execFile } = require('child_process');
 const os = require('os');
+const fs = require('fs');
+const path = require('path');
 
 const ESQUEMA = {
   type: 'object',
@@ -36,13 +38,21 @@ module.exports = (cfg) => ({
       `(nombre + argsJson con los parámetros en JSON). Un programa las ejecuta y te devuelve el resultado en el siguiente turno ` +
       `como "### RESULTADO". Nunca digas que no tienes acceso: pide la herramienta. Cuando ya tengas la respuesta final, deja "herramientas" vacío.\n` +
       `HERRAMIENTAS:\n${lista}`;
-    const args = ['-p', `${transcribir(mensajes)}\n\n(Responde al último mensaje. Si necesitas datos, pide herramientas.)`, '--model', model || 'haiku', '--output-format', 'json', '--no-session-persistence',
-      '--tools', '', '--setting-sources', '', '--strict-mcp-config', '--system-prompt', sys, '--json-schema', JSON.stringify(ESQUEMA)];
+    // la conversación va por stdin y el system prompt por archivo: en Windows la línea de comandos no pasa de ~32.000 caracteres
+    // y con el alma, las instrucciones y las herramientas se superaba → "spawn ENAMETOOLONG"
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'robot-claude-'));
+    const fSys = path.join(tmp, 'sistema.md');
+    fs.writeFileSync(fSys, sys);
+    const args = ['-p', '--model', model || 'haiku', '--output-format', 'json', '--no-session-persistence',
+      '--tools', '', '--setting-sources', '', '--strict-mcp-config', '--system-prompt-file', fSys, '--json-schema', JSON.stringify(ESQUEMA)];
     return new Promise((ok, mal) => {
-      const hijo = execFile(cfg.comando || 'claude', args, {
-        cwd: os.tmpdir(), timeout: 300_000, maxBuffer: 16 << 20, windowsHide: true,
-        env: { ...process.env, ROBOT_INTERNAL: '1' },
-      }, (err, out) => {
+      let hijo;
+      try {
+        hijo = execFile(cfg.comando || 'claude', args, {
+          cwd: os.tmpdir(), timeout: 300_000, maxBuffer: 16 << 20, windowsHide: true,
+          env: { ...process.env, ROBOT_INTERNAL: '1' },
+        }, (err, out) => {
+        try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { }
         let j; try { j = JSON.parse(out); } catch { return mal(new Error(`claude CLI: ${err ? err.message : 'salida no válida'}`)); }
         if (j.is_error) return mal(new Error(`claude CLI: ${j.result || 'error'}`));
         const r = j.structured_output || { texto: j.result || '', herramientas: [] };
@@ -54,7 +64,10 @@ module.exports = (cfg) => ({
           }),
           uso: { entrada: j.usage?.input_tokens || 0, salida: j.usage?.output_tokens || 0 },
         });
-      });
+        });
+      } catch (e) { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { } return mal(new Error(`claude CLI: ${e.message}`)); }
+      hijo.stdin.on('error', () => { });                         // si la CLI muere antes de leer, que no tumbe el proceso
+      hijo.stdin.end(`${transcribir(mensajes)}\n\n(Responde al último mensaje. Si necesitas datos, pide herramientas.)`);
       signal?.addEventListener('abort', () => hijo.kill(), { once: true });
     });
   },

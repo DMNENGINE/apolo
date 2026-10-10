@@ -43,15 +43,21 @@ function createCerebro({ dataDir, onCard, onAnswer, notifyUrgent, getSessions, n
       const p = busy.then(run); busy = p.catch(() => { }); return p;
     }
     const run = () => new Promise(ok => {
-      const args = ['-p', prompt, '--model', model || cfg.modelo, '--output-format', 'json', '--no-session-persistence',
+      const args = ['-p', '--model', model || cfg.modelo, '--output-format', 'json', '--no-session-persistence',
         '--tools', '', '--setting-sources', '', '--strict-mcp-config',
         '--system-prompt', system || 'Eres el cerebro de un robot asistente de escritorio. Respondes en español, breve y claro.'];
       if (schema) args.push('--json-schema', JSON.stringify(schema));
-      execFile('claude', args, { cwd: work, timeout: 120_000, maxBuffer: 8 << 20, windowsHide: true, shell: false, env: { ...process.env, ROBOT_INTERNAL: '1' } },
-        (err, out) => {
-          try { const j = JSON.parse(out); ok(j.structured_output ?? j.result ?? null); }
-          catch { console.error('[cerebro] llm', err ? err.message : 'salida no válida'); ok(null); }
-        });
+      // el prompt por stdin: como argumento, en Windows pasaba de ~32.000 caracteres con historiales largos (spawn ENAMETOOLONG)
+      let h;
+      try {
+        h = execFile('claude', args, { cwd: work, timeout: 120_000, maxBuffer: 8 << 20, windowsHide: true, shell: false, env: { ...process.env, ROBOT_INTERNAL: '1' } },
+          (err, out) => {
+            try { const j = JSON.parse(out); ok(j.structured_output ?? j.result ?? null); }
+            catch { console.error('[cerebro] llm', err ? err.message : 'salida no válida'); ok(null); }
+          });
+      } catch (e) { console.error('[cerebro] llm', e.message); return ok(null); }
+      h.stdin.on('error', () => { });
+      h.stdin.end(String(prompt));
     });
     const p = busy.then(run); busy = p.catch(() => { }); return p;        // de una en una
   }
