@@ -23,9 +23,11 @@ const HERR = {        // herramienta del núcleo -> nombre/forma de Claude Code 
 const comoHook = (nombre, args = {}) => (HERR[nombre] ? HERR[nombre](args) : [nombre, args]);
 
 // ---------- enrutador automático: qué destino según lo que pides ----------
-// rutas: programar → Claude Code; navegador / pc / general → modelo del núcleo (configurable en config.json → enrutador)
+// rutas: programar → Claude Code; navegador / pc / general → el modelo por defecto del núcleo (configurable en config.json → enrutador).
+// Antes iban fijas a ollama/gemma4:31b-cloud: en un PC sin Ollama la isla llamaba a un modelo que no existe.
 const CC = '@claude-code';
-const RUTAS_DEF = { programar: CC, navegador: 'ollama/gemma4:31b-cloud', pc: 'ollama/gemma4:31b-cloud', general: 'ollama/gemma4:31b-cloud' };
+const RUTAS_DEF = { programar: CC, navegador: null, pc: null, general: null };   // null = RAPIDO si está en este PC, si no cfg.modeloPorDefecto
+const RAPIDO = 'ollama/gemma4:31b-cloud';             // rápido (~1 s) y bueno con herramientas: el preferido para la isla cuando existe
 const PISTAS = [                                  // atajos sin llamar al modelo (lo obvio, al instante)
   ['navegador', /\b(gemini|google flow|flow|youtube|navegador|chrome|edge|p[aá]gina web|sitio web|https?:\/\/|www\.|\.com\b|\.org\b|desc[aá]rga(?:la|lo|r)?|s[uú]be(?:la|lo)?\s+a)\b/i],
   ['programar', /\b(c[oó]digo|bug|commit|git\b|refactor|compila|deploy|despliega|pull request|\bpr\b|tests?\b|funci[oó]n|variable|endpoint|archivo\s+\S+\.(?:js|ts|py|cs|json|html|css))/i],
@@ -102,7 +104,8 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
   }
 
   // devuelve null si el texto NO es para el núcleo (sigue el camino de Claude Code)
-  const rutas = () => ({ ...RUTAS_DEF, ...(nucleo.cfg.enrutador?.rutas || {}) });
+  const porDefecto = () => (nucleo.proveedores.disponible?.(RAPIDO) ? RAPIDO : nucleo.cfg.modeloPorDefecto);
+  const rutas = () => Object.fromEntries(Object.entries({ ...RUTAS_DEF, ...(nucleo.cfg.enrutador?.rutas || {}) }).map(([k, v]) => [k, v || porDefecto()]));
   async function enrutar(t, c) {
     const previo = st.ultimo?.[c];
     const reciente = previo && Date.now() - previo.t < 10 * 60_000;
@@ -110,7 +113,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     if (reciente && t.length < 40 && /^(s[ií]|no|ok|vale|dale|otra vez|repite|sigue|contin[uú]a|y (ahora|luego)|ahora)\b/i.test(t)) return { ruta: previo.ruta, por: 'seguimiento' };
     try {
       const { datos } = await nucleo.generarJSON({
-        modelo: nucleo.cfg.enrutador?.modelo || RUTAS_DEF.general, system: SISTEMA_RUTA, schema: ESQUEMA_RUTA,
+        modelo: nucleo.cfg.enrutador?.modelo || porDefecto(), system: SISTEMA_RUTA, schema: ESQUEMA_RUTA,
         prompt: `${reciente ? `Mensaje anterior (ruta ${previo.ruta}): ${previo.texto}\n` : ''}Mensaje: ${t}`, signal: AbortSignal.timeout(10_000),
       });
       if (datos && rutas()[datos.ruta]) return { ruta: datos.ruta, por: 'modelo' };
@@ -164,6 +167,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     else {
       const d = st.destino[c] || '@auto';                                // isla, voz y Discord van en automático salvo que elijas otra cosa
       if (d === '@auto') {
+        await nucleo.proveedores.listo?.();                            // recién arrancado: saber si está el modelo rápido
         const r = await enrutar(t, c);
         st.ultimo = { ...(st.ultimo || {}), [c]: { ruta: r.ruta, texto: t.slice(0, 300), t: Date.now() } }; guardar();
         modelo = rutas()[r.ruta]; nota = ` · ${r.ruta}`;
@@ -174,6 +178,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     }
     if (!modelo || modelo === CC) return null;
 
+    await nucleo.proveedores.listo?.();
     try { nucleo.proveedores.resolver(modelo); } catch (e) { return { ok: false, msg: `❌ ${e.message}` }; }
     const s = sesionPara(c, modelo);
     if (nucleo.agente.ocupada(s.id)) return { ok: false, msg: `⏳ ${modelo} sigue trabajando; espera a que termine.` };

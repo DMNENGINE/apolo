@@ -33,6 +33,7 @@ function validar(v, s, ruta = '') {
 function crearEstructurado(proveedores) {
   // imagenes (opcional): [{ mime, datos(base64) }] → van con la petición (modelos con visión)
   return async function generarJSON({ modelo, system, prompt, schema, signal, imagenes }) {
+    await proveedores.listo?.();
     const { api, model } = proveedores.resolver(modelo);
     const sys = `${system || ''}\n\nResponde ÚNICAMENTE con un objeto JSON válido, sin texto antes ni después y sin \`\`\`. Debe cumplir este JSON Schema:\n${JSON.stringify(schema)}`;
     let pedido = prompt, ultimoError = '';

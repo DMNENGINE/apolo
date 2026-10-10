@@ -91,6 +91,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         for (const slug of u.slugs) try { taller.registrarFallo(slug, { problema: `el usuario corrigió: ${String(texto).slice(0, 300)}`, contexto: `pidió: ${u.pregunta} | respondí: ${u.respuesta}`, sesion: s.id }); } catch { }
     }
     try {
+      await proveedores.listo?.();                                        // recién arrancado: saber qué proveedores hay antes de elegir
       const { api, model } = proveedores.resolver(s.modelo);
       sesiones.agregar(s, { role: 'user', content: texto, t: Date.now() });
       if (s.titulo === 'Nueva sesión') s.titulo = texto.slice(0, 60);
