@@ -121,7 +121,10 @@ VISTAS.avatar = {
     $('#avpSucio', this.v).textContent = tr(this.sucio ? 'Sin guardar' : 'Guardado');
     $('#avpGuardar', this.v).disabled = !this.sucio;
     $('#avpSkin', this.v).innerHTML = this.quien === 'apolo' ? `<div class="av-skin">${fila('Usar avatar en lugar del casco', 'En la isla, el casco 3D se cambia por este avatar 2D (gasta menos).', sw('avIsla', this.d.usarEnIsla))}
-      ${fila('Mostrar también en el overlay de streaming', 'Solo si usas el avatar en lugar del casco.', sw('avOverlay', this.d.enOverlay))}</div>` : '';
+      ${fila('Mostrar también en el overlay de streaming', 'Solo si usas el avatar en lugar del casco.', sw('avOverlay', this.d.enOverlay))}
+      ${fila('Cara en la isla', 'El casco o un personaje 3D animado (el personaje tiene prioridad sobre el avatar 2D).', AVP_sel3d(this.d))}
+      ${fila('Tamaño en la isla', 'Más grande o más pequeño (crece desde los pies).', AVP_tamano(this.d))}</div>` : '';
+    AVP_enlazar3d($('#avpSkin', this.v), this.d); AVP_enlazarTam($('#avpSkin', this.v), this.d);
     this.pintarEditor();
     const hoja = await Promise.all(AVF.ESTADOS.map(async e => `<figure><div>${await AV_svg(this.borr, { estado: e })}</div><figcaption>${tr(AVP_EST_TXT[e])}</figcaption></figure>`));
     $('#avpHoja', this.v).innerHTML = hoja.join('');
@@ -260,6 +263,40 @@ VISTAS.avatar = {
   alEvento(e) { if (e?.tipo === 'avatar' && !this.sucio && this.v) api('GET', '/avatar').then(d => { this.d = AV_G.datos = d; this.cargarBorrador(); this.pintarTodo(); }).catch(() => { }); },
 };
 
+// "Cara en la isla": casco (por defecto) o un personaje 3D animado de app/personajes. Botones visibles (no un
+// desplegable: en el tema oscuro las opciones del <select> nativo salían blanco sobre blanco).
+function AVP_sel3d(d) {
+  const ops = [['', 'Casco'], ...(d.personajes3d || []).map(p => [p.id, p.nombre])];
+  return seg('avP3d', ops, d.personaje3d || '');
+}
+function AVP_enlazar3d(raiz, d) {
+  const caja = raiz && raiz.querySelector('[data-seg="avP3d"]'); if (!caja) return;
+  caja.addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-v]'); if (!b) return;
+    ev.stopPropagation();
+    $$('button', caja).forEach(x => x.classList.toggle('on', x === b));
+    // "Casco" vuelve al casco de verdad: también apaga el avatar 2D en la isla (si no, se vería la skin 2D)
+    const cuerpo = b.dataset.v ? { personaje3d: b.dataset.v } : { personaje3d: null, usarEnIsla: false };
+    api('PATCH', '/avatar', cuerpo).then(r => { Object.assign(d, r); aviso('Guardado'); }).catch(e => aviso(e.message, true));
+  });
+}
+
+// "Tamaño en la isla": slider 60–160 % (lo aplica la isla a casco, avatar 2D y personaje 3D, anclado por los pies)
+function AVP_tamano(d) {
+  const v = d.tamano || 100;
+  return `<div class="av-tam" style="display:flex;align-items:center;gap:10px"><input type="range" data-tam min="60" max="160" step="5" value="${v}" style="width:170px;accent-color:var(--acento,#3ddc84)"><b data-tamv style="min-width:44px;text-align:right">${v}%</b></div>`;
+}
+function AVP_enlazarTam(raiz, d) {
+  const r = raiz && raiz.querySelector('[data-tam]'), lab = raiz && raiz.querySelector('[data-tamv]'); if (!r) return;
+  let t = 0;
+  r.addEventListener('input', ev => {
+    ev.stopPropagation(); lab.textContent = r.value + '%';
+    clearTimeout(t);                                   // se guarda al soltar o tras una pausa: la isla cambia en vivo
+    t = setTimeout(() => api('PATCH', '/avatar', { tamano: +r.value }).then(x => Object.assign(d, x)).catch(e => aviso(e.message, true)), 120);
+  });
+  r.addEventListener('change', ev => ev.stopPropagation());
+}
+
 // ---------- Configuración → Apariencia: sección "Avatares" ----------
 {
   const V = VISTAS['ajustes/apariencia'], pintar0 = V.pintar;
@@ -277,7 +314,10 @@ VISTAS.avatar = {
       el.innerHTML = fila('Tu avatar', 'Tu foto de perfil en el panel, el móvil y el Wrapped.', `${await mini(d.usuario)}${d.usuario ? '' : `<small class="tenue">${tr('sin elegir')}</small>`}<a class="btn" href="#/avatar/usuario">${ic('carita')}${tr('Editar')}</a>`)
         + fila(tr('Avatar de {n}', { n: E.estado?.nombre || 'APOLO' }), 'Una skin 2D opcional para el compañero (isla y overlay).', `${await mini(d.apolo || AVF.PRESETS[0])}<a class="btn" href="#/avatar/apolo">${ic('carita')}${tr('Editar')}</a>`)
         + fila('Usar avatar en lugar del casco', 'En la isla, el casco 3D se cambia por este avatar 2D (gasta menos).', sw('avApIsla', d.usarEnIsla))
-        + fila('Mostrar también en el overlay de streaming', 'Solo si usas el avatar en lugar del casco.', sw('avApOverlay', d.enOverlay));
+        + fila('Mostrar también en el overlay de streaming', 'Solo si usas el avatar en lugar del casco.', sw('avApOverlay', d.enOverlay))
+        + fila('Cara en la isla', 'El casco o un personaje 3D animado (el personaje tiene prioridad sobre el avatar 2D).', AVP_sel3d(d))
+        + fila('Tamaño en la isla', 'Más grande o más pequeño (crece desde los pies).', AVP_tamano(d));
+      AVP_enlazar3d(el, d); AVP_enlazarTam(el, d);
       el.addEventListener('click', ev => {
         const s = ev.target.closest('[data-sw]'); if (!s) return;
         ev.stopPropagation();                                          // lo cambio yo (no el enlazarControles de la página)

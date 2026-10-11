@@ -1,5 +1,6 @@
 // Isla: sesiones de Claude Code, subagentes, permisos y tokens, con el robot como indicador.
 import { createRobot } from './robot.js';
+import { createPersonaje } from './personaje.js';
 import { emit, COLORS, sound } from './fx.js';
 
 const $ = id => document.getElementById(id);
@@ -69,13 +70,66 @@ const rwrap = document.createElement('div'); rwrap.className = 'rwrap';
 const badge = document.createElement('div'); badge.id = 'badge';
 rwrap.append(cv, badge);
 $('mini').appendChild(rwrap);
-const robot = createRobot(cv);
+const casco = createRobot(cv);
+// ---------- personaje 3D (app/personaje.js): un GLB animado que sustituye al casco si el usuario lo elige en el panel ----------
+// `robot` reenvía cada llamada al que esté activo; el casco sigue recibiendo estado y log para volver a él sin saltos.
+// canvas NUEVO para cada personaje: tras destruir uno (forceContextLoss) su canvas ya no da contexto WebGL
+let cv3 = null;
+let personaje = null, personajeId = '', ultimoFps = 15, tamano = 100;
+// tamaño elegido en el panel (60–160 %): casco, avatar 2D y personaje crecen desde los pies, centrados; lo que pase
+// del hueco del robot sobresale (rwrap no recorta)
+function aplicarTamano(p) {
+  if (p) tamano = Math.max(60, Math.min(160, +p || 100));
+  const k = tamano / 100;
+  // más grande que su hueco: que pueda salirse de las cajas (la isla recortaba la cabeza con la barra recogida)
+  for (let e = rwrap; e && e !== document.body; e = e.parentElement) {
+    if (e.id === 'panel') continue;
+    e.style.overflow = k > 1 ? 'visible' : '';
+  }
+  // isla abajo en la pantalla (v-abajo) → crece hacia arriba desde los pies; arriba → hacia abajo desde la cabeza
+  // (encima de la isla no queda ventana cuando está pegada arriba)
+  const haciaArriba = document.body.classList.contains('v-abajo');
+  for (const el of [cv, cv3, skin]) {
+    if (!el) continue;
+    Object.assign(el.style, { position: 'absolute', inset: 'auto', width: `${k * 100}%`, height: `${k * 100}%`,
+      left: `${(1 - k) * 50}%`, top: haciaArriba ? 'auto' : '0', bottom: haciaArriba ? '0' : 'auto' });
+  }
+}
+new MutationObserver(() => { try { aplicarTamano(); } catch { } }).observe(document.body, { attributes: true, attributeFilter: ['class'] });   // try: puede saltar antes de declarar `skin`
+const robot = {};
+for (const k of Object.keys(casco)) {
+  robot[k] = (...a) => {
+    if (personaje && (k === 'setState' || k === 'pushLog')) casco[k](...a);
+    return (personaje || casco)[k](...a);
+  };
+}
+function ponerPersonaje(id) {
+  if ((id || '') === personajeId) return;
+  if (personaje) { try { personaje.destruir(); } catch { } personaje = null; }
+  if (cv3) { cv3.remove(); cv3 = null; }
+  personajeId = id || '';
+  if (personajeId) {
+    cv3 = document.createElement('canvas'); cv3.style.cssText = 'position:absolute;inset:0';
+    rwrap.insertBefore(cv3, badge); aplicarTamano();
+    try {
+      personaje = createPersonaje(cv3, `personajes/${personajeId}.glb`);
+      personaje.setState(lastState || 'reposo');
+    } catch (e) {                                       // sin WebGL o GLB roto: se queda el casco
+      console.warn('[isla] personaje 3D no disponible:', e);
+      personaje = null; personajeId = ''; cv3.remove(); cv3 = null;
+    }
+  }
+  cv.style.visibility = personaje || skinCfg.usar ? 'hidden' : '';
+}
 // ---------- skin 2D (Estudio de Avatares, core/ui/avatar.js): sustituye al casco 3D si el usuario lo activa en el panel ----------
 // El casco sigue existiendo pero oculto y a 1 fps; el avatar SVG se anima con CSS (sin canvas a 60 fps en reposo).
 const skin = document.createElement('div'); skin.className = 'skin2d'; skin.hidden = true; rwrap.insertBefore(skin, badge);
 let skinCfg = { usar: false, receta: null, imagen: null }, skinEstado = '';
-const setFpsCasco = robot.setFps.bind(robot);
-robot.setFps = f => setFpsCasco(skinCfg.usar ? 1 : f);
+robot.setFps = f => {
+  ultimoFps = f;
+  casco.setFps(skinCfg.usar || personaje ? 1 : f);
+  if (personaje) personaje.setFps(Math.min(f, 30));   // el personaje con 30 fps se ve fluido y gasta la mitad
+};
 function pintarSkin(st) {
   if (!skinCfg.usar || !window.AvatarSVG) return;
   st = st || lastState || 'reposo';
@@ -85,10 +139,16 @@ function pintarSkin(st) {
   skin.innerHTML = window.AvatarSVG.svg({ ...skinCfg.receta, fondo: { tipo: 'transparente' } }, { estado: st, imagen: skinCfg.imagen || undefined });
 }
 if (bridge.onAvatar) bridge.onAvatar(a => {
-  skinCfg = { usar: !!(a && a.usar && a.receta && window.AvatarSVG), receta: a && a.receta, imagen: a && a.imagen };
-  skin.hidden = !skinCfg.usar; cv.style.visibility = skinCfg.usar ? 'hidden' : '';
+  const p3d = a && /^[a-z0-9-]{2,32}$/.test(a.personaje3d || '') ? a.personaje3d : '';
+  aplicarTamano(a && a.tamano);
+  ponerPersonaje(p3d);
+  // el personaje 3D tiene prioridad sobre el avatar 2D
+  skinCfg = { usar: !p3d && !!(a && a.usar && a.receta && window.AvatarSVG), receta: a && a.receta, imagen: a && a.imagen };
+  skin.hidden = !skinCfg.usar; cv.style.visibility = skinCfg.usar || personaje ? 'hidden' : '';
   skinEstado = ''; pintarSkin(); ajustarFps();
 });
+// pruebas en el navegador sin Electron: app/index.html?personaje=blueguy
+{ const u = new URLSearchParams(location.search), q = u.get('personaje'); if (q) setTimeout(() => { ponerPersonaje(q); aplicarTamano(+u.get('tam') || 100); }, 50); }
 // Apariencia de la nube flotante: estilo del cristal (glass/liquid/sólido), color de fondo y borde (elegido en el panel).
 function hexRGBA(hex, a) { const n = parseInt(String(hex).slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
 function aplicarApariencia(a) {

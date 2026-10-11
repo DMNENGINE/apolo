@@ -58,6 +58,12 @@ function promptIA(opciones = {}, receta = null) {
   return L.join(' ');
 }
 
+// Personajes 3D animados para la isla (GLB en app/personajes/<id>.glb, clips por estado; ver app/personaje.js)
+const PERSONAJES_3D = {
+  blueguy: { nombre: 'BlueGuy', descripcion: 'El piloto azul de Neurova Labs: saluda, se rasca la cabeza, celebra, se marea…' },
+  turista: { nombre: 'Turista', descripcion: 'Osito naranja de vacaciones: camisa hawaiana y lentes de sol colgados.' },
+};
+
 function crearAvatar({ cfg, bus, fetchImpl } = {}) {
   const dir = path.join(cfg.dir, 'avatar'), dirIA = path.join(dir, 'ia'), dirCache = path.join(dir, 'cache'), f = path.join(dir, 'avatar.json');
   const vacio = () => ({ usuario: null, apolo: null, usarEnIsla: false, enOverlay: false, historial: [], ia: [] });
@@ -89,8 +95,17 @@ function crearAvatar({ cfg, bus, fetchImpl } = {}) {
     const d = leer();
     if (typeof b.usarEnIsla === 'boolean') d.usarEnIsla = b.usarEnIsla;
     if (typeof b.enOverlay === 'boolean') d.enOverlay = b.enOverlay;
+    if (b.tamano !== undefined) {
+      const t = Math.round(Number(b.tamano));
+      if (!(t >= 60 && t <= 160)) throw err('tamano: 60–160 (%)');
+      d.tamano = t;
+    }
+    if (b.personaje3d !== undefined) {
+      if (b.personaje3d && !PERSONAJES_3D[b.personaje3d]) throw err('personaje 3D desconocido');
+      d.personaje3d = b.personaje3d || null;
+    }
     guardar(d); avisar('ajustes');
-    return { usarEnIsla: d.usarEnIsla, enOverlay: d.enOverlay };
+    return { usarEnIsla: d.usarEnIsla, enOverlay: d.enOverlay, personaje3d: d.personaje3d || null, tamano: d.tamano || 100 };
   }
   const recetaDe = quien => { const d = leer(); return d[quien] || (quien === 'apolo' ? A.PRESETS[0] : null); };
   // data: URI de la imagen IA (para el Wrapped/overlay, que no pueden mandar el token); null si es grande o no existe
@@ -107,7 +122,11 @@ function crearAvatar({ cfg, bus, fetchImpl } = {}) {
   // el casco 3D es la cara de APOLO por defecto. Activado → el avatar de APOLO; si no hay, el tuyo; si no, el preset.
   const caraCompanero = d => d.usarEnIsla ? (d.apolo || d.usuario || A.PRESETS[0]) : null;
   const conImagen = r => ({ receta: r, imagen: r?.tipo === 'ia' ? imagenIA(r.ia.id) : null });
-  const paraIsla = () => { const r = caraCompanero(leer()); return r ? { usar: true, ...conImagen(r) } : { usar: false, receta: A.PRESETS[0], imagen: null }; };
+  // personaje 3D (app/personajes/<id>.glb) en lugar del casco: tiene prioridad sobre el avatar 2D en la isla
+  const paraIsla = () => {
+    const d = leer(), r = caraCompanero(d), p3d = PERSONAJES_3D[d.personaje3d] ? d.personaje3d : null;
+    return { ...(r ? { usar: true, ...conImagen(r) } : { usar: false, receta: A.PRESETS[0], imagen: null }), personaje3d: p3d, tamano: d.tamano || 100 };
+  };
   const paraOverlay = () => { const d = leer(), r = caraCompanero(d); return d.enOverlay && r ? conImagen(r) : null; };
 
   // ---------- Personaje IA ----------
@@ -190,7 +209,7 @@ function crearAvatar({ cfg, bus, fetchImpl } = {}) {
   // ---------- API ----------
   async function http(M, p, b = {}, q = {}) {
     const sub = p[2];
-    if (!sub && M === 'GET') { const d = leer(); return { usuario: d.usuario, apolo: d.apolo, usarEnIsla: d.usarEnIsla, enOverlay: d.enOverlay, historial: d.historial.slice(0, 20), ia: d.ia, motores: motores() }; }
+    if (!sub && M === 'GET') { const d = leer(); return { usuario: d.usuario, apolo: d.apolo, usarEnIsla: d.usarEnIsla, enOverlay: d.enOverlay, personaje3d: d.personaje3d || null, tamano: d.tamano || 100, personajes3d: Object.entries(PERSONAJES_3D).map(([id, x]) => ({ id, ...x })), historial: d.historial.slice(0, 20), ia: d.ia, motores: motores() }; }
     if (!sub && M === 'PATCH') return ajustes(b);
     if (sub === 'svg' && !p[3] && M === 'GET') {
       const quien = q.quien === 'apolo' ? 'apolo' : 'usuario', estado = A.ESTADOS.includes(q.estado) ? q.estado : 'reposo';
