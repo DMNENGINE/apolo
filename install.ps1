@@ -19,9 +19,9 @@ function RefrescarPath {
   $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 }
 function Tiene($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
-function Winget($id) {
-  if (-not (Tiene 'winget')) { throw "No encuentro winget. Instala 'App Installer' desde Microsoft Store y vuelve a intentarlo." }
-  winget install --id $id -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
+function InstalarConWinget($id) {
+  if (-not (Tiene 'winget.exe')) { throw "No encuentro winget. Instala 'App Installer' desde Microsoft Store y vuelve a intentarlo." }
+  winget.exe install --id $id -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
   RefrescarPath
 }
 
@@ -35,7 +35,7 @@ $nodeOk = $false
 if (Tiene 'node') { $v = (& node -v) -replace '^v', ''; $nodeOk = ([int]($v.Split('.')[0]) -ge 20); Info "encontrado v$v" }
 if (-not $nodeOk) {
   Info 'instalando Node.js LTS (winget)...'
-  Winget 'OpenJS.NodeJS.LTS'
+  InstalarConWinget 'OpenJS.NodeJS.LTS'
   if (-not (Tiene 'node')) { $env:Path += ';' + (Join-Path $env:ProgramFiles 'nodejs') }
   if (-not (Tiene 'node')) { throw 'Node.js no quedo instalado. Instalalo desde https://nodejs.org y vuelve a ejecutar.' }
   Info ('instalado ' + (& node -v))
