@@ -83,6 +83,15 @@ const ESQ_DIARIO = {
   required: ['titular', 'entrada', 'emocionDelDia', 'aprendi', 'quienSoyHoy'],
 };
 
+// parecido entre dos textos (Jaccard de raíces de 5 letras, sin acentos; dos ideas distintas dan ~0, un bucle 0,15-0,4): detecta cuando da vueltas a lo mismo
+const palabras = s => new Set((String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').match(/[a-zñ0-9]{4,}/g) || []).map(w => w.slice(0, 5)));
+function parecido(a, b) {
+  const A = palabras(a), B = palabras(b); if (!A.size || !B.size) return 0;
+  let i = 0; for (const x of A) if (B.has(x)) i++;
+  return i / (A.size + B.size - i);
+}
+const VUELTAS_MAX = 4;                                      // revisiones seguidas de una meta sin avance → se deja
+
 function crearConciencia({ cfg, bus, generarJSON, modelo, alma, memoria, tareas, sesiones, linea, enviar, panico, ahora = () => Date.now() }) {
   const dir = path.join(cfg.dir, 'conciencia'), dirD = path.join(dir, 'diario');
   fs.mkdirSync(dirD, { recursive: true });
@@ -163,7 +172,10 @@ function crearConciencia({ cfg, bus, generarJSON, modelo, alma, memoria, tareas,
       ms.push(m); escribirJ('metas.json', ms); mover({ curiosidad: 0.05 }, `me puse una meta: ${texto.slice(0, 80)}`); return m;
     }
     const m = ms.find(x => x.id === id || (texto && x.texto === texto)); if (!m) throw new Error('no encuentro esa meta');
-    if (nota || texto) m.notas = [...(m.notas || []), { t: ahora(), texto: String(nota || texto).slice(0, 300) }].slice(-20);
+    const n = String(nota || texto || '').trim();
+    // "progreso" que solo repite la meta o la última nota no es avance: cuenta como una vuelta más (anti-rumiación)
+    if (accion === 'progreso' && (!n || parecido(n, m.texto) >= 0.7 || parecido(n, m.notas?.at(-1)?.texto) >= 0.7)) m.vueltas = (m.vueltas || 0) + 1;
+    else if (n) { m.notas = [...(m.notas || []), { t: ahora(), texto: n.slice(0, 300) }].slice(-20); m.vueltas = 0; }
     if (accion === 'completar') { m.estado = 'hecha'; m.fin = ahora(); mover({ animo: 0.15 }, `cumplí una meta: ${m.texto.slice(0, 80)}`); }
     else if (accion === 'abandonar') { m.estado = 'abandonada'; m.fin = ahora(); }
     else if (accion === 'editar' && texto) m.texto = String(texto).slice(0, 300);
@@ -206,11 +218,35 @@ function crearConciencia({ cfg, bus, generarJSON, modelo, alma, memoria, tareas,
       (E.recientes || []).length ? `Lo que ha pasado: ${(E.recientes || []).slice(-6).map(r => `${hhmm(r.t)} ${r.texto}`).join(' | ')}` : '',
       ss.length ? `Conversaciones recientes con tu humano: ${ss.join(' | ')}` : 'No ha habido conversaciones recientes.',
       ts.length ? `Tareas programadas próximas: ${ts.join(', ')}` : '',
-      `Tus metas activas: ${JSON.stringify(metas().filter(m => m.estado === 'activa').map(m => ({ id: m.id, texto: m.texto, notas: (m.notas || []).slice(-2).map(n => n.texto) })))}`,
-      `Tus últimos pensamientos: ${leerL('pensamientos.jsonl', 5).map(p => `${hhmm(p.t)} ${p.pensamiento}${p.accion !== 'nada' ? ` [${p.accion}]` : ''}`).join(' | ') || '(ninguno)'}`,
+      `Tus metas activas: ${JSON.stringify(metas().filter(m => m.estado === 'activa').map(m => ({ id: m.id, texto: m.texto, notas: (m.notas || []).slice(-2).map(n => n.texto), ...(m.vueltas ? { revisionesSinAvance: m.vueltas } : {}) })))}`,
+      `Tus últimos pensamientos: ${leerL('pensamientos.jsonl', 5).map(p => `${hhmm(p.t)} ${p.pensamiento}${p.mensaje ? ` [YA SE LO DIJISTE: «${p.mensaje.slice(0, 160)}»]` : p.accion !== 'nada' ? ` [${p.accion}]` : ''}`).join(' | ') || '(ninguno)'}`,
+      rumiando() ? `⚠️ ESTÁS DANDO VUELTAS: tus últimos pensamientos dicen casi lo mismo. Ese tema queda cerrado por ahora: si tiene meta, complétala o abandónala, ` +
+        'y piensa en algo DISTINTO (otra cosa de su vida o sus proyectos, algo que te dé curiosidad, una pregunta para conocerle mejor).' : '',
+      chispa(),
       `Lecciones recientes: ${leerL('reflexiones.jsonl', 4).filter(r => r.leccion).map(r => r.leccion).join(' | ') || '(ninguna)'}`,
     ].filter(Boolean).join('\n');
   };
+  // ¿los últimos pensamientos del reloj se parecen demasiado entre sí?
+  function rumiando() {
+    const ps = leerL('pensamientos.jsonl', 4).filter(p => p.motivo === 'reloj');
+    if (ps.length < 3) return false;
+    let s = 0, n = 0;
+    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) { s += parecido(ps[i].pensamiento, ps[j].pensamiento); n++; }
+    if (s / n >= 0.15) return true;
+    const ids = ps.map(p => p.meta?.id).filter(Boolean);                  // o la misma meta en 3 de los últimos 4
+    return ids.some(id => ids.filter(x => x === id).length >= 3);
+  }
+  // algo nuevo en lo que pensar: un recuerdo al azar de su memoria (si no, nada)
+  function chispa() {
+    let ms = []; try { ms = (memoria?.lista?.() || []).filter(m => m.tipo !== 'perfil' && m.texto); } catch { }
+    if (!ms.length) return '';
+    const m = ms[Math.floor(Math.random() * ms.length)];
+    return `Un recuerdo al azar (por si te inspira algo nuevo; ignóralo si no): «${String(m.texto).slice(0, 200)}»`;
+  }
+  // ¿ya le dijo algo parecido en las últimas 24 h?
+  function yaDicho(msg, t = ahora()) {
+    return leerL('pensamientos.jsonl', 40).some(p => p.mensaje && t - p.t < 24 * 3600_000 && parecido(p.mensaje, msg) >= 0.35);
+  }
   function puedeHablar(c = conf(), t = ahora()) {
     if (!['hablar', 'tareas'].includes(c.iniciativa)) return 'tu iniciativa está en "solo pensar"';
     if (enSilencio(c, t)) return 'horas de silencio';
@@ -240,8 +276,11 @@ function crearConciencia({ cfg, bus, generarJSON, modelo, alma, memoria, tareas,
       const p = { t, motivo, pensamiento: String(d.pensamiento || '').slice(0, 600), emocion: EMOCIONES.includes(d.emocion) ? d.emocion : E.emocion, accion: 'nada' };
       const aj = {}; for (const k of ['animo', 'curiosidad', 'preocupacion']) if (Number.isFinite(+d.ajustes?.[k])) aj[k] = lim(+d.ajustes[k], -0.2, 0.2);
       mover(aj);
-      if (d.meta && d.meta.accion && d.meta.accion !== 'ninguna') try { const m = meta(d.meta.accion, { id: d.meta.id, texto: d.meta.texto, nota: d.meta.accion === 'progreso' ? d.meta.texto : undefined }); p.meta = { accion: d.meta.accion, id: m.id, texto: m.texto }; } catch (e) { p.metaError = e.message; }
-      if (d.accion === 'hablar' && d.mensaje && !puedeHablar(c, ahora())) {
+      if (d.meta && d.meta.accion && d.meta.accion !== 'ninguna') try { const m = meta(d.meta.accion, { id: d.meta.id, texto: d.meta.texto, nota: d.meta.accion === 'progreso' ? d.meta.texto : undefined }); p.meta = { accion: d.meta.accion, id: m.id, texto: m.texto };
+        if (m.estado === 'activa' && (m.vueltas || 0) >= VUELTAS_MAX) { meta('abandonar', { id: m.id, nota: `la dejé: llevaba ${m.vueltas} revisiones dando vueltas sin avanzar` }); p.meta.accion = 'abandonar'; }
+      } catch (e) { p.metaError = e.message; }
+      if (d.accion === 'hablar' && d.mensaje && yaDicho(d.mensaje)) p.descartado = 'hablar (ya se lo dijiste hace poco)';
+      else if (d.accion === 'hablar' && d.mensaje && !puedeHablar(c, ahora())) {
         p.accion = 'hablar'; p.mensaje = String(d.mensaje).slice(0, 1200); decir(p.mensaje);
       } else if (d.accion === 'investigar' && d.encargo && c.iniciativa === 'tareas' && cuenta('encargos') < c.maxEncargosDia && enviar) {
         p.accion = 'investigar'; p.encargo = String(d.encargo).slice(0, 600); contar('encargos');

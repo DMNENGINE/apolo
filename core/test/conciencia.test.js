@@ -178,3 +178,32 @@ test('agente: una sesión soloLectura no puede usar herramientas de escritura', 
   assert.ok(!fs.existsSync(path.join(dir, 'x.txt')));
   n.conciencia.detener();
 });
+
+test('anti-rumiación: "progreso" vacío no cuenta, la meta atascada se deja, no repite mensajes y se le avisa del bucle', async () => {
+  const META = 'Mapear el estado actual de DMN_ENGINE para proponer mejoras';
+  const PENS = [
+    'Ya tengo el mapa de DMN_ENGINE: las funciones beta son el cuello de botella para la v0.3.',
+    'Llevo horas procesando el diagnóstico de DMN_ENGINE y el cuello de botella de las funciones beta.',
+    'He dado vueltas al diagnóstico de DMN_ENGINE: las funciones beta frenan la v0.3, Demon debe saberlo.',
+    'Llevo demasiado tiempo procesando el diagnóstico de DMN_ENGINE y el bloqueo de las funciones beta.',
+    'Sigo con el diagnóstico de DMN_ENGINE y las funciones beta como cuello de botella.',
+  ];
+  const MSG = 'Tengo el diagnóstico de DMN_ENGINE: las funciones beta son el cuello de botella para la v0.3.';
+  const resp = [{ pensamiento: 'Voy a mapear DMN_ENGINE.', emocion: 'curioso', accion: 'nada', meta: { accion: 'crear', texto: META } }];
+  for (const p of PENS) resp.push(o => ({ pensamiento: p, emocion: 'entusiasmado', accion: 'hablar', mensaje: MSG,
+    meta: { accion: 'progreso', id: JSON.parse(/Tus metas activas: (.*)/.exec(o.prompt)[1])[0]?.id || 'x', texto: META } }));
+  const { c, avisos, pedidos, avanzar } = montar({ respuestas: resp, config: { minEntreMensajesMin: 0, maxMensajesDia: 50 } });
+  await c.pensar({ forzar: true });
+  for (let i = 0; i < PENS.length - 1; i++) { avanzar(30); await c.pensar({ forzar: true }); }
+  const m = c.metas()[0];
+  assert.deepStrictEqual(m.notas.map(n => n.texto), ['la dejé: llevaba 4 revisiones dando vueltas sin avanzar'], 'repetir la meta como "progreso" no es una nota');
+  assert.strictEqual(m.estado, 'abandonada', 'tras 4 vueltas sin avance la deja');
+  assert.match(pedidos.at(-1).prompt, /ESTÁS DANDO VUELTAS/);
+  assert.match(pedidos.at(-1).prompt, /YA SE LO DIJISTE/);
+  assert.strictEqual(avisos.length, 1, 'el mismo mensaje solo se dice una vez');
+  // pensamientos sobre cosas distintas no disparan el aviso
+  const otro = montar({ respuestas: ['¿Qué tal le fue a Brito con el torneo del sábado?', 'Me pregunto si la impresora terminó la pieza del aire acondicionado.',
+    'Podría proponerle ideas para el vídeo de lanzamiento de Linkcore.', 'Hoy hace buen día para salir a correr.'].map(p => ({ pensamiento: p, emocion: 'curioso', accion: 'nada' })) });
+  for (let i = 0; i < 4; i++) { otro.avanzar(30); await otro.c.pensar({ forzar: true }); }
+  assert.doesNotMatch(otro.pedidos.at(-1).prompt, /ESTÁS DANDO VUELTAS/);
+});
