@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.7] - 2026-10-11
+
+### Added
+- **Animated 3D characters in the island**: instead of the helmet, the island can show a full-body 3D character with its own animations for every state and gesture (idle, working, asking permission, waving, celebrating, happy, sad, sleeping, dizzy, surprised, thinking, yawning, running between monitors). Its head follows your cursor and it blinks. Two to start with: **BlueGuy** and **Turista**. Choose it in Avatar → "Face in the island".
+- **Size slider for the island**: make the helmet, avatar or character smaller or bigger (60–160 %). It grows away from the screen edge so it never gets cut off.
+- Any character dropped in `app/personajes/` (a `.glb` with its `.json`) shows up by itself in the character picker.
+- **APOLO's soul (SOUL.md) and inner life**: a personality APOLO can evolve, an optional "Mind" panel (mood, goals, nightly journal) and a first conversation where it gets to know you.
+
+### Changed
+- Voice and microphone no longer need Python: neural voice runs natively and speech-to-text uses whisper.cpp.
+- The default model is whatever is already installed on the PC instead of guessing.
+
+### Fixed
+- The character/helmet picker used a dropdown whose options were invisible in the dark theme; it is now a row of buttons.
+- Long prompts to Claude Code no longer fail with "spawn ENAMETOOLONG".
+- `navegador_abrir` works when Chrome has no windows open; the island session rotates after 4 h.
+
 ## [0.2.6] - 2026-10-05
 
 ### Added
