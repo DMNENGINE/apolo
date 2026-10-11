@@ -88,6 +88,10 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
 
   function sesionPara(c, modelo) {
     let s = st.sesion[c] && nucleo.sesiones.obtener(st.sesion[c]);
+    // tras unas horas sin hablar, conversación nueva: una sola sesión de días acaba con decenas de resúmenes encadenados
+    // y el modelo pierde el hilo (la memoria y el alma siguen, no viven en la sesión). cfg.sesionNuevaTrasHoras = 0 lo apaga
+    const horas = nucleo.cfg.sesionNuevaTrasHoras ?? 4;
+    if (s && horas > 0 && Date.now() - (s.actualizada || s.creada || 0) > horas * 3600_000) s = null;
     if (!s || s.modelo !== modelo) {
       s = nucleo.sesiones.crear({ modelo, cwd: nucleo.cfg.carpeta || os.homedir(), canal: c });
       st.sesion[c] = s.id; guardar();

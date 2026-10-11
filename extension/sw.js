@@ -120,7 +120,15 @@ const OPS = {
     return (await chrome.tabs.query({})).map(t => ({ id: t.id, titulo: t.title || '', url: t.url || t.pendingUrl || '', activa: !!act && t.id === act.id, delAgente: g != null && t.groupId === g }));
   },
   async abrir({ url, pestana }) {
-    const t = pestana != null ? await chrome.tabs.update(pestana, { url, active: true }) : await chrome.tabs.create({ url, active: true });
+    let t;
+    if (pestana != null) t = await chrome.tabs.update(pestana, { url, active: true });
+    else {
+      // con Chrome en segundo plano sin ventanas, tabs.create falla con "No current window": se abre una ventana nueva
+      const ventanas = await chrome.windows.getAll({ windowTypes: ['normal'] });
+      const v = ventanas.find(w => w.focused) || ventanas[0];
+      if (v) t = await chrome.tabs.create({ url, active: true, windowId: v.id });
+      else { const w = await chrome.windows.create({ url, focused: true, type: 'normal' }); t = w.tabs[0]; }
+    }
     if (pestana == null) await meterEnGrupo(t.id);
     await esperarCarga(t.id);
     const f = await chrome.tabs.get(t.id); marcar(f.id);
