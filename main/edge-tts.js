@@ -8,7 +8,9 @@ const { conectar } = require('../core/sdk/ws-cliente');
 const TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const CHROMIUM = '143.0.3650.75';
 const MAYOR = CHROMIUM.split('.')[0];
-const URL_WSS = 'wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=' + TOKEN;
+// desde octubre de 2026 speech.platform.bing.com da 403 al sintetizar; Edge 155 usa api.msedgeservices.com
+// con el mismo token como Ocp-Apim-Subscription-Key (edge-tts PR #491). La lista de voces sigue en el host antiguo.
+const URL_WSS = 'wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key=' + TOKEN;
 const URL_VOCES = 'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=' + TOKEN;
 const UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${MAYOR}.0.0.0 Safari/537.36 Edg/${MAYOR}.0.0.0`;
 
@@ -35,7 +37,7 @@ async function intentar(texto, archivo, { voz, rate = '+0%', pitch = '+0Hz', vol
   const ws = await conectar(`${URL_WSS}&ConnectionId=${id()}&Sec-MS-GEC=${gec()}&Sec-MS-GEC-Version=1-${CHROMIUM}`, {
     timeoutMs, cabeceras: {
       'Pragma': 'no-cache', 'Cache-Control': 'no-cache', 'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
-      'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9', 'Cookie': `muid=${crypto.randomBytes(16).toString('hex').toUpperCase()};`,
+      'User-Agent': UA, 'Accept-Encoding': 'gzip, deflate, br, zstd', 'Accept-Language': 'en-US,en;q=0.9', 'Cookie': `muid=${crypto.randomBytes(16).toString('hex').toUpperCase()};`,
     },
   });
   return new Promise((ok, mal) => {
