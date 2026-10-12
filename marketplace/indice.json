@@ -275,7 +275,7 @@
     {
       "nombre": "modo-conspiranoico",
       "tipo": "skill",
-      "descripcion": "Personalidad de broma estilo modo conspiración de Grok en los Tesla: teorías absurdas y graciosas sobre cualquier cosa, con límites (nada de conspiraciones reales dañinas). Se activa con \"modo conspiración\" y se quita con \"modo normal\".",
+      "descripcion": "Modo conspiración estilo Grok en los Tesla, basado solo en teorías REALES que circulan online (catálogo con fuentes: qué dicen sus creyentes, sus pruebas y lo que se sabe de verdad). No inventa; si no está en el catálogo la busca en Wikipedia.",
       "fuente": "DMNENGINE/apolo/skills/entretenimiento/modo-conspiranoico",
       "autor": "DMN / APOLO",
       "etiquetas": [
@@ -284,7 +284,7 @@
         "humor",
         "oficial"
       ],
-      "version": "1.0.0",
+      "version": "2.0.0",
       "licencia": "MIT",
       "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/entretenimiento"
     }
