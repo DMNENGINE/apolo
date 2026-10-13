@@ -101,8 +101,9 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
       } else if (t.accion.tipo === 'interna') {
         const fn = internas.get(t.accion.nombre);
         if (!fn) throw new Error(`tarea interna desconocida: ${t.accion.nombre}`);
-        const r = String(await fn() || '');
-        t.ultimoResultado = r ? r.slice(0, 500) : 'nada que hacer';
+        const v = await fn();                        // texto = se avisa; { registro } = solo queda en el historial (sin avisar)
+        const r = typeof v === 'string' ? v : '';
+        t.ultimoResultado = r ? r.slice(0, 500) : v?.registro ? String(v.registro).slice(0, 500) : 'nada que hacer';
         if (r) bus.emit('tarea', { tarea: t, tipo: 'resultado', texto: r });
       } else {
         let prompt = t.accion.texto;

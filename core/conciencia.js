@@ -388,7 +388,8 @@ function crearConciencia({ cfg, bus, generarJSON, modelo, alma, memoria, tareas,
   function detener() { clearInterval(reloj); reloj = null; bus?.off('evento', alEvento); bus?.off('panico', alPanico); bus?.off('alma', alAlma); bus?.off('actividad-usuario', alActividad); }
   function programar() {
     if (!tareas) return null;
-    tareas.registrarInterna('diario', async () => { if (conf().activo && conf().diario) { const d = await escribirDiario(); return ''; } return ''; });
+    // de madrugada no se avisa (sería hablar a las 3:45), pero el historial dice qué escribió: antes ponía "nada que hacer" y parecía que no lo hacía
+    tareas.registrarInterna('diario', async () => { if (!conf().activo || !conf().diario) return { registro: 'conciencia o diario apagados' }; const d = await escribirDiario(); return { registro: `diario del ${d.fecha} escrito: «${d.titular}»` }; });
     const m = minutos(conf().horaDiario) ?? minutos(DEF.horaDiario), cron = `${m % 60} ${Math.floor(m / 60)} * * *`;
     const ya = tareas.lista().find(t => t.accion?.tipo === 'interna' && t.accion.nombre === 'diario');
     if (!conf().activo || !conf().diario) { if (ya) tareas.borrar(ya.id); return null; }
