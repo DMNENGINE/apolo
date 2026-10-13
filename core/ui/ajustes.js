@@ -43,7 +43,7 @@ VISTAS['ajustes/apariencia'] = {
     const set = cambio => { guardarLocal('tema', { ...leerLocal('tema', t), ...cambio }); aplicarTema(); this.pintar(v); };
     const setIsla = async cambio => { try { E.config = await api('PATCH', '/config', { isla: { ...isla, ...cambio } }); this.pintar(v); } catch (e) { aviso(e.message, true); } };
     v.onclick = e => {
-      const tm = e.target.closest('[data-tema]'); if (tm) return set({ tema: tm.dataset.tema, acento: null });
+      const tm = e.target.closest('[data-tema]'); if (tm && v.contains(tm)) return set({ tema: tm.dataset.tema, acento: null });
       const ac = e.target.closest('[data-ac]'); if (ac) return set({ acento: ac.dataset.ac || null });
       const es = e.target.closest('[data-iso-estilo]'); if (es) return setIsla({ estilo: es.dataset.isoEstilo });
       if (e.target.closest('[data-iso-fondo]')) return setIsla({ fondo: '' });

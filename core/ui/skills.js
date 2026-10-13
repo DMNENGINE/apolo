@@ -124,7 +124,7 @@ VISTAS.skills = {
       this.filtro = b.dataset.v; $$('button', b.parentElement).forEach(x => x.classList.toggle('on', x === b)); this.repintar();
     };
     v.onclick = e => {
-      const mo = e.target.closest('[data-modo]');
+      const mo = e.target.closest('.sk-modo [data-modo]');                // ojo: <html> también lleva data-modo (el tema)
       if (mo) { this.ponerModo(mo.dataset.modo); return; }
       if (e.target.closest('#mkExplorar')) return;      // el marketplace tiene su propio manejador
       const rel = e.target.closest('[data-rellenar]');
