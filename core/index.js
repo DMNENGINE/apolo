@@ -95,12 +95,15 @@ function crearNucleo(opciones = {}) {
     horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
   tareas.registrarInterna('sueno', async () => { await sueno.dormir({ motivo: 'noche' }); return ''; });   // el aviso llega a la hora del briefing
   require('./herramientas').registrar([grafoMod.HERRAMIENTA]);
-  const linea = require('./linea').crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria, reuniones: () => nucleo.reuniones });
+  // lo que el usuario hace en Claude Code → memoria + línea de tiempo + diario (tarea nocturna, core/aprender-cc.js)
+  const aprenderCC = require('./aprender-cc').crearAprenderCC({ cfg, memoria, generarJSON: generarJSONvivo, modelo: modeloCerebro, tareas, registro });
+  nucleo.extensiones['aprender-claude'] = { http: (...a) => aprenderCC.http(...a) };
+  const linea = require('./linea').crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria, reuniones: () => nucleo.reuniones, aprenderCC });
   const privacidad = require('./privacidad').crearPrivacidad({ cfg, memoria, grafo, sesiones, personalidad, registro, bus });
   // Estudio de Avatares (core/avatar.js + core/ui/avatar.js) → /v1/avatar; el del usuario sale en el Wrapped
   const avatar = require('./avatar').crearAvatar({ cfg, bus });
   const wrapped = require('./wrapped').crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos, avatar: () => avatar.svgDe('usuario') });
-  Object.assign(nucleo, { grafo, sueno, linea, privacidad, wrapped });
+  Object.assign(nucleo, { grafo, sueno, linea, privacidad, wrapped, aprenderCC });
   nucleo.extensiones.sueno = { http: async (M, p, b = {}) => {
     if (!p[2] && M === 'GET') return { config: sueno.conf(), enCurso: sueno.enCurso(), informes: sueno.informes(30) };
     if ((!p[2] || p[2] === 'ejecutar') && M === 'POST') return sueno.dormir({ motivo: 'manual' });

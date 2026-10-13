@@ -5,9 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const { normal } = require('./memoria');
 
-const TIPOS = ['sesion', 'tarea', 'turno', 'consejo', 'sueno', 'permiso', 'recuerdo', 'reunion'];
+const TIPOS = ['sesion', 'tarea', 'turno', 'consejo', 'sueno', 'permiso', 'recuerdo', 'reunion', 'claude'];
 
-function crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria, reuniones }) {
+function crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria, reuniones, aprenderCC }) {
   const dirSes = path.join(cfg.dir, 'sesiones');
   const cache = new Map();                 // id → { mtime, mensajes resumidos }
   function mensajes(id) {
@@ -73,6 +73,11 @@ function crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPer
       if (!en(r.inicio) || !coincide(nq, r.titulo, r.resumen, (r.temas || []).join(' '))) continue;
       ev.push({ t: r.inicio, fin: r.fin || r.inicio, tipo: 'reunion', titulo: `Reunión: ${r.titulo}`, detalle: r.resumen || `${r.segmentos} fragmentos`, ruta: `#/reuniones/${r.id}`,
         extra: { fuente: r.fuente, tareas: r.tareas, hablantes: r.hablantes.length } });
+    }
+    if (quiero.has('claude') && aprenderCC) for (const c of aprenderCC.resumenes({ desde, hasta })) {      // sesiones de Claude Code aprendidas
+      const proy = path.basename(c.proyecto || '') || 'Claude Code';
+      if (!coincide(nq, c.resumen, proy)) continue;
+      ev.push({ t: c.inicio || c.t, fin: c.t, tipo: 'claude', titulo: `Con Claude Code · ${proy}`, detalle: c.resumen, extra: { recuerdos: c.recuerdos, sesion: c.sesion } });
     }
     if (quiero.has('sueno') && sueno) for (const s of sueno.informes(60)) {
       if (!en(s.inicio) || !coincide(nq, s.resumen, s.frase)) continue;
