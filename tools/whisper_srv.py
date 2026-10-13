@@ -2,7 +2,7 @@
 Protocolo por stdin/stdout (una línea JSON por respuesta):
   arranque  -> {"ready": true, "device": "cuda|cpu", "model": "..."}
   "listen"  -> graba del micrófono hasta que dejas de hablar y responde {"text": "...", "conf": 0.0-1.0}
-  "listen rapido" -> igual, para la llamada de la isla: corta antes (0,7 s de silencio) y transcribe con beam 1
+  "listen rapido" -> igual, para la llamada de la isla: deja pausas de hasta 1,3 s y frases de hasta 60 s y transcribe con beam 1
   "file <ruta>" -> transcribe un archivo de audio (notas de voz de Telegram/WhatsApp: ogg/opus, mp3, m4a...)
 Entorno (lo pone la app al lanzarlo):
   ROBOT_WHISPER_MODEL   modelo (small por defecto)
@@ -99,9 +99,9 @@ if __name__ == '__main__':
                 out({'text': '', 'conf': 0, 'error': str(e)})
             continue
         if line not in ('listen', 'listen rapido'): continue
-        rapido = line == 'listen rapido'                       # llamada: corta con 0,7 s de silencio, frases largas y beam 1
+        rapido = line == 'listen rapido'                       # llamada: corta con 1,3 s de silencio (0,7 cortaba a mitad de idea), frases largas y beam 1
         try:
-            audio = record(max_s=40, wait_s=8, tail_s=0.7) if rapido else record()
+            audio = record(max_s=60, wait_s=8, tail_s=1.3) if rapido else record()
             if audio is None or len(audio) < SR * 0.3:
                 out({'text': '', 'conf': 0}); continue
             text, conf, _ = transcribir(audio, IDIOMA, 1 if rapido else 5)

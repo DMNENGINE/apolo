@@ -905,7 +905,7 @@ let voiceOn = true;
 try { voiceOn = localStorage.getItem('robot-voz') !== '0'; } catch { }
 let vozAudio = null, vozTurno = 0;
 function say(text) {
-  if (!voiceOn) return;
+  if (!voiceOn || llamada.on) return;                         // en llamada solo habla la llamada (si no, "Listo, terminé…" se pisaba con la respuesta)
   const turno = ++vozTurno;
   try { speechSynthesis.cancel(); } catch { }
   if (vozAudio) { vozAudio.pause(); vozAudio = null; }
