@@ -578,10 +578,39 @@ function frasesDe(t) {                                       // trozos de ~1-2 f
   if (b.trim()) out.push(b.trim());
   return out;
 }
+// interrumpirle hablando: micro del navegador CON cancelación de eco (su propia voz se resta) mientras habla.
+// Se calibra con lo que se cuela de su voz en los primeros 0,7 s de cada respuesta; si luego hay ~0,3 s seguidos
+// claramente por encima, se calla y te escucha. localStorage 'robot-llamada-interrumpir' = '0' lo apaga.
+const oido = { stream: null, ctx: null, an: null, buf: null };
+async function abrirOido() {
+  if (localStorage.getItem('robot-llamada-interrumpir') === '0' || !navigator.mediaDevices?.getUserMedia) return;
+  try {
+    oido.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
+    oido.ctx = new AudioContext(); oido.an = oido.ctx.createAnalyser(); oido.an.fftSize = 1024;
+    oido.ctx.createMediaStreamSource(oido.stream).connect(oido.an); oido.buf = new Float32Array(oido.an.fftSize);
+  } catch (e) { console.warn('[llamada] sin interrumpir por voz:', e.message); cerrarOido(); }
+}
+function cerrarOido() {
+  try { oido.stream?.getTracks().forEach(t => t.stop()); } catch { }
+  try { oido.ctx?.close(); } catch { }
+  Object.assign(oido, { stream: null, ctx: null, an: null, buf: null });
+}
+function vigilarInterrupcion(cortar) {                        // → función para dejar de vigilar
+  if (!oido.an || !llamada.on) return () => { };
+  const nivel = () => { oido.an.getFloatTimeDomainData(oido.buf); let s = 0; for (const x of oido.buf) s += x * x; return Math.sqrt(s / oido.buf.length); };
+  const t0 = Date.now(); let base = 0, seguidos = 0;
+  const iv = setInterval(() => {
+    const r = nivel();
+    if (Date.now() - t0 < 700) { base = Math.max(base, r); return; }    // calibrar con el eco que se cuela
+    seguidos = r > Math.max(0.03, base * 3) ? seguidos + 1 : 0;
+    if (seguidos >= 6) { clearInterval(iv); robot.hud(tr('TE ESCUCHO…'), 60, 'permiso'); cortar(); }
+  }, 50);
+  return () => clearInterval(iv);
+}
 function hablarLlamada(texto) {                              // → promesa que acaba al terminar de hablar (o al cortarle)
   return new Promise(async fin => {
-    let cortado = false;
-    llamada.cortar = () => { cortado = true; if (llamada.audio) { llamada.audio.pause(); llamada.audio = null; } fin(); };
+    let cortado = false, vigia = null;
+    llamada.cortar = () => { cortado = true; if (vigia) vigia(); if (llamada.audio) { llamada.audio.pause(); llamada.audio = null; } fin(); };
     const partes = frasesDe(texto);
     const audios = partes.map(p => bridge.tts ? bridge.tts(p).catch(() => null) : Promise.resolve(null));   // todas a la vez
     robot.hud(tr('HABLANDO…'), 60, 'listo');
@@ -592,9 +621,11 @@ function hablarLlamada(texto) {                              // → promesa que 
         if (!f) { sayWin(partes[i]); const u = setInterval(() => { if (!speechSynthesis.speaking || cortado) { clearInterval(u); ok(); } }, 150); return; }
         const a = new Audio('file:///' + f.replace(/\\/g, '/')); llamada.audio = a;
         a.onended = a.onerror = () => ok(); a.play().catch(() => ok());
+        if (!vigia) a.onplaying = () => { if (!vigia && !cortado) vigia = vigilarInterrupcion(() => llamada.cortar && llamada.cortar()); };
         const v = setInterval(() => { if (cortado) { clearInterval(v); ok(); } else if (a.ended) clearInterval(v); }, 150);
       });
     }
+    if (vigia) vigia();
     llamada.audio = null; llamada.cortar = null; fin();
   });
 }
@@ -628,14 +659,14 @@ function llamar() {
   llamada.on = true; llamada.silencios = 0;
   $('llamar').classList.add('on'); document.body.classList.add('en-llamada');
   try { speechSynthesis.cancel(); } catch { } if (vozAudio) { vozAudio.pause(); vozAudio = null; }
-  sound.play('abrir'); abrirUnRato(30_000);
+  sound.play('abrir'); abrirUnRato(30_000); abrirOido();
   cicloLlamada().catch(e => { console.error('[llamada]', e); colgar(); });
 }
 function colgar() {
   if (!llamada.on) return;
   llamada.on = false;
   if (llamada.cortar) llamada.cortar();
-  llamadaRespuesta('');
+  llamadaRespuesta(''); cerrarOido();
   $('llamar').classList.remove('on'); document.body.classList.remove('en-llamada');
   robot.hud(tr('LLAMADA TERMINADA'), 2, 'reposo'); sound.play('blip');
 }
