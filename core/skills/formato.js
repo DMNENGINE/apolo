@@ -128,7 +128,7 @@ const slugDe = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const lista = v => (Array.isArray(v) ? v : v == null || v === '' ? [] : String(v).split(/\s*,\s*|\s+(?=\S)/).filter(Boolean)).map(String);
 
 // datos propios de APOLO dentro de la carpeta (estado, fallos registrados, versiones del taller): no son parte de la skill
-const PRIVADOS = new Set(['instalado.json', 'aprendizaje.jsonl', '_versiones']);
+const PRIVADOS = new Set(['instalado.json', 'aprendizaje.jsonl', '_versiones', '_datos']);   // _datos: lo que la skill aprende con el uso
 // archivos de la skill (rutas relativas con /), sin entrar en .git ni node_modules
 function listarArchivos(dir, max = 500) {
   const out = [];

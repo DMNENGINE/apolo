@@ -106,7 +106,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       if (s.padre || !subagentes) apagadas.add('delegar');                // los subagentes no delegan (sin recursión)
       if (!nacimiento) apagadas.add('nacer');
       let hayActivas = false; try { hayActivas = !!skills?.almacen.lista().some(x => x.activa); } catch { }
-      if (!hayActivas) ['usar_skill', 'leer_recurso_skill', 'ejecutar_script_skill'].forEach(x => apagadas.add(x));   // sin skills activas: menos herramientas
+      if (!hayActivas) ['usar_skill', 'leer_recurso_skill', 'anotar_skill', 'ejecutar_script_skill'].forEach(x => apagadas.add(x));   // sin skills activas: menos herramientas
       const herramientas = HERRAMIENTAS.filter(h => !apagadas.has(h.nombre) && (!h.disponible || h.disponible()));
       const disponibles = new Set(herramientas.map(h => h.nombre));
       let final = '', empujones = 0, empujon = false;

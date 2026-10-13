@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
-const { leerSkill, buscarSkills, componerSkillMd, parsearSkillMd, listarArchivos, slugDe } = require('./formato');
+const { leerSkill, buscarSkills, componerSkillMd, parsearSkillMd, listarArchivos, slugDe, PRIVADOS } = require('./formato');
 const { verificar: verificarFirma } = require('./firmar');
 
 const MAX_DESCARGA = 150 * 1024 * 1024, MAX_SKILL = 50 * 1024 * 1024, MAX_ARCHIVOS = 3000;
@@ -244,7 +244,7 @@ function crearInstalador({ almacen, cfg, escaner, tokenGithub }) {
       const diff = diffCarpetas(s.dir, x.d);
       if (!diff || !aplicar) return { diff, aplicado: false, alDia: !diff, sha: tr.sha || null };
       comprobarTamano(x.d);
-      for (const a of fs.readdirSync(s.dir)) if (a !== 'instalado.json') fs.rmSync(path.join(s.dir, a), { recursive: true, force: true });
+      for (const a of fs.readdirSync(s.dir)) if (!PRIVADOS.has(a)) fs.rmSync(path.join(s.dir, a), { recursive: true, force: true });   // conserva _datos, _versiones, aprendizaje
       copiar(x.d, s.dir);
       almacen.escribirInstalado(s.slug, { sha: tr.sha || null, hash: hashCarpeta(s.dir), version: x.s.apolo.version || '', actualizada: Date.now() });
       const r = await escanear(s.slug);

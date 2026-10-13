@@ -74,12 +74,13 @@ const HERRAMIENTAS = [
   {
     nombre: 'web', riesgo: 'lectura',
     // enviar datos (POST/PUT…, URLs largas o con texto leído) a un dominio nuevo pide permiso: core/exfil.js
-    descripcion: 'Descarga una página web y devuelve su texto. Opcional: metodo (POST, PUT…) y cuerpo para llamar a una API.',
+    descripcion: 'Descarga una página web y devuelve su texto. Con un vídeo de YouTube devuelve título, canal, descripción y la transcripción. Opcional: metodo (POST, PUT…) y cuerpo para llamar a una API.',
     parametros: { type: 'object', properties: { url: { type: 'string' }, metodo: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, cuerpo: { type: 'string' } }, required: ['url'] },
     resumen: a => `${a.metodo && a.metodo.toUpperCase() !== 'GET' ? a.metodo.toUpperCase() + ' ' : ''}${a.url}`,
     ejecutar: async (a, ctx) => {
       if (!/^https?:\/\//i.test(a.url)) return 'error: solo http(s)';
       const metodo = String(a.metodo || 'GET').toUpperCase(), cuerpo = a.cuerpo != null && !/^(GET|HEAD)$/.test(metodo) ? String(a.cuerpo) : undefined;
+      if (metodo === 'GET') { const esp = await require('./fuentes').especial(a.url, { signal: ctx.signal }); if (esp) return esp.length > 45_000 ? esp.slice(0, 45_000) + `\n…[recortado, ${esp.length - 45_000} caracteres más]` : esp; }   // YouTube (transcripción)
       const r = await fetch(a.url, { method: metodo, body: cuerpo, signal: ctx.signal,
         headers: { 'user-agent': 'RobotCompanion/0.1', ...(cuerpo !== undefined ? { 'content-type': /^\s*[[{]/.test(cuerpo) ? 'application/json' : 'text/plain; charset=utf-8' } : {}) } });
       const html = await r.text();
@@ -326,6 +327,19 @@ const HERRAMIENTAS = [
       const b = fs.readFileSync(f);
       if (b.subarray(0, 8000).includes(0)) return `[archivo binario de ${b.length} bytes: ${f}]`;
       return recortar(b.toString('utf8'));
+    },
+  },
+  {
+    nombre: 'anotar_skill', riesgo: 'escritura',
+    descripcion: 'Guarda lo que una skill aprende con el uso en su carpeta _datos/ (sobrevive a las actualizaciones). ' +
+      'modo "añadir" (por defecto) escribe al final; "reemplazar" sobrescribe. Se lee después con leer_recurso_skill ruta "_datos/<archivo>".',
+    parametros: { type: 'object', properties: { nombre: { type: 'string', description: 'slug de la skill' }, archivo: { type: 'string', description: 'nombre simple .md/.txt/.json/.jsonl, p. ej. aportadas.md' }, texto: { type: 'string' }, modo: { type: 'string', enum: ['añadir', 'reemplazar'] } }, required: ['nombre', 'archivo', 'texto'] },
+    clavePermiso: a => `skill-datos:${a.nombre}`,                     // "Permitir siempre" vale para esa skill
+    resumen: a => `${a.nombre}: _datos/${a.archivo} (${a.modo || 'añadir'})`,
+    ejecutar: async (a, ctx) => {
+      if (!ctx.skills) return 'error: las skills no están disponibles aquí';
+      const r = ctx.skills.anotar(a.nombre, a.archivo, a.texto, a.modo);
+      return `guardado en ${r.ruta} (${r.bytes} bytes)`;
     },
   },
   {

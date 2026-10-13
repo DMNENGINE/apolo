@@ -4,6 +4,7 @@
 //     escaner: opcional (tests); si no, require('./escaner') perezoso
 //     tokenGithub: () => token del conector de GitHub (opcional; nunca se imprime)
 //     ejecutarEval: async ({modelo, texto, signal}) => respuesta (taller: evals en sesiones efímeras)
+const fs = require('fs');
 const path = require('path');
 const { crearAlmacen } = require('./almacen');
 const { crearInstalador } = require('./instalar');
@@ -54,6 +55,20 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
     if (!f.startsWith(path.resolve(s.dir) + path.sep)) throw new Error('ruta fuera de la skill');
     return f;
   }
+  // datos propios de la skill en <skill>/_datos/ (lo que aprende con el uso: sobrevive a las actualizaciones,
+  // el escáner y la exportación no lo tocan). modo 'añadir' (al final) | 'reemplazar'
+  function anotar(nombre, archivo, texto, modo = 'añadir') {
+    const s = activa(nombre), a = String(archivo || '').trim();
+    if (!/^[\w.-]{1,60}\.(md|txt|json|jsonl)$/i.test(a) || a.startsWith('.')) throw new Error('archivo no válido: un nombre simple .md, .txt, .json o .jsonl (sin carpetas)');
+    const t = String(texto ?? ''); if (!t.trim()) throw new Error('texto vacío');
+    const dir = path.join(s.dir, '_datos'), f = path.join(dir, a);
+    fs.mkdirSync(dir, { recursive: true });
+    const antes = fs.existsSync(f) ? fs.statSync(f).size : 0;
+    const anadir = modo !== 'reemplazar';
+    if ((anadir ? antes : 0) + Buffer.byteLength(t) > 2 * 1024 * 1024) throw new Error('el archivo pasaría de 2 MB');
+    if (anadir) fs.appendFileSync(f, (antes ? '\n' : '') + t.replace(/\s+$/, '') + '\n'); else fs.writeFileSync(f, t);
+    return { ruta: `_datos/${a}`, bytes: fs.statSync(f).size };
+  }
   // ¿un script de esta skill debe preguntarse SIEMPRE? (sin permisos declarados o escaneo no verde)
   function motivoPreguntar(nombre) {
     const s = almacen.obtener(String(nombre || '')); if (!s) return 'skill desconocida';
@@ -63,7 +78,7 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
   }
 
   return {
-    almacen, instalador, indice, taller, marketplace, catalogo, ficha: id => marketplace.ficha(id), activa, rutaDentro, motivoPreguntar, publica,
+    almacen, instalador, indice, taller, marketplace, catalogo, ficha: id => marketplace.ficha(id), activa, rutaDentro, anotar, motivoPreguntar, publica,
     lista: () => almacen.lista().map(publica),
     obtener: slug => { const s = almacen.obtener(slug); if (!s) return null; const c = almacen.contenido(s.slug); return { ...publica(s), contenido: c?.contenido || '' }; },
     instalar: (fuente, o) => instalador.instalar(fuente, o).then(r => (r.skill ? { skill: publica(r.skill) } : r)),

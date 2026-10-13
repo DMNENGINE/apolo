@@ -106,7 +106,9 @@ function crearIndice({ cfg, almacen, embedder = null }) {
     const sug = await seleccionar(mensaje, { modelo, canal }).catch(() => []);
     let inyectada = null, cuerpo = '';
     const umbral = sk().umbralInyectar ?? 0.85;
-    if (sug[0] && sk().autoInyectar !== false && pequeno(modelo) && sug[0].confianza >= umbral) {
+    // modelos pequeños con confianza alta, o CUALQUIER modelo si saltó un disparador de la skill (los grandes a veces no la cargan)
+    const disparada = sug[0] && /^disparador/.test(sug[0].motivo) && sk().inyectarDisparadas !== false;
+    if (sug[0] && sk().autoInyectar !== false && (disparada || (pequeno(modelo) && sug[0].confianza >= umbral))) {
       const c = almacen.contenido(sug[0].slug);
       if (c) { inyectada = sug[0].slug; cuerpo = c.cuerpo.trim().slice(0, Math.max(2000, presupuesto(modelo) * 3)); almacen.contarUso(inyectada); }
     }

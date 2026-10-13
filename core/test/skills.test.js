@@ -149,12 +149,16 @@ test('índice: solo activas, presupuesto por modelo, disparadores y búsqueda h�
   // presupuesto: con poco espacio se recorta y avisa
   n.cfg.skills.presupuesto = { 'x/chico': 60 };
   assert.match(n.skills.indice.indice({ modelo: 'x/chico' }), /más \(usa ver_skills\)/);
-  // modelo local pequeño + disparador → SKILL.md inyectado; en la nube solo sugerida
+  // disparador → SKILL.md inyectado (también en la nube); con inyectarDisparadas:false en la nube solo sugerida
   const p = await n.skills.seccion({ sesion: { modelo: 'falso/mini', canal: 'cli' }, mensaje: 'tengo una factura' });
   assert.strictEqual(p.inyectada, 'facturas'); assert.match(p.texto, /YA CARGADA/); assert.match(p.texto, /^SKILLS DISPONIBLES/);
+  n.cfg.skills.inyectarDisparadas = false;
   const q = await n.skills.seccion({ sesion: { modelo: 'falso/algo-cloud', canal: 'cli' }, mensaje: 'tengo una factura' });
   assert.strictEqual(q.inyectada, null); assert.match(q.texto, /Sugeridas para este mensaje: facturas \(100%\)/);
   assert.strictEqual(n.skills.obtener('facturas').usos, 1);
+  n.cfg.skills.inyectarDisparadas = true;
+  const r = await n.skills.seccion({ sesion: { modelo: 'falso/algo-cloud', canal: 'cli' }, mensaje: 'tengo una factura' });
+  assert.strictEqual(r.inyectada, 'facturas'); assert.strictEqual(n.skills.obtener('facturas').usos, 2);
 });
 
 test('herramientas: usar_skill, leer_recurso_skill (sin salir de la carpeta), ejecutar_script_skill y permisos', async () => {
@@ -255,4 +259,25 @@ test('API del daemon: listar, instalar, activar (rojo exige forzar), escanear, a
     assert.strictEqual((await api('GET', '/skills/api-skill')).status, 404);
     assert.ok(eventos.includes('instalada') && eventos.includes('cambio') && eventos.includes('borrada'));
   } finally { servidor.close(); }
+});
+
+test('_datos: anotar_skill guarda lo aprendido y sobrevive a actualizar', async () => {
+  const { n } = nucleo();
+  const repo = tmp('repo-datos-');
+  skillEn(repo, 'aprende', { desc: 'Aprende con el uso' });
+  const { skill } = await n.skills.instalar(repo);
+  await n.skills.activar(skill.slug, true);
+  assert.throws(() => n.skills.anotar('aprende', '../fuera.md', 'x'), /no válido/);
+  assert.throws(() => n.skills.anotar('aprende', 'sub/a.md', 'x'), /no válido/);
+  n.skills.anotar('aprende', 'aportadas.md', '### Uno');
+  const r = n.skills.anotar('aprende', 'aportadas.md', '### Dos');
+  assert.strictEqual(r.ruta, '_datos/aportadas.md');
+  const f = path.join(n.skills.almacen.obtener('aprende').dir, '_datos', 'aportadas.md');
+  assert.strictEqual(fs.readFileSync(f, 'utf8'), '### Uno\n\n### Dos\n');
+  assert.strictEqual((await n.skills.actualizar('aprende')).alDia, true);          // _datos no cuenta como cambio
+  fs.appendFileSync(path.join(repo, 'aprende', 'SKILL.md'), '\nNuevo paso.\n');
+  assert.strictEqual((await n.skills.actualizar('aprende', { aplicar: true })).aplicado, true);
+  assert.match(fs.readFileSync(f, 'utf8'), /### Dos/);                               // sigue ahí tras actualizar
+  n.skills.anotar('aprende', 'aportadas.md', 'limpio', 'reemplazar');
+  assert.strictEqual(fs.readFileSync(f, 'utf8'), 'limpio');
 });
