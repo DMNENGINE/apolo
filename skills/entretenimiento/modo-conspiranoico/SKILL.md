@@ -4,7 +4,7 @@ description: Modo conspiración estilo Grok en los Tesla, basado SOLO en teoría
 license: MIT
 metadata:
   apolo:
-    version: 2.1.0
+    version: 2.1.1
     autor: DMN / APOLO
     disparadores: [modo conspiración, modo conspiracion, modo conspiranoico, conspiranoico, conspiranoica, teoría de conspiración, teoria de conspiracion, teorías de conspiración, conspiración, conspiracy, ponte paranoico, área 51, area 51, roswell, illuminati, tierra plana, alunizaje, triángulo de las bermudas, mk ultra, mkultra, efecto mandela, aprende esta teoría, aprende de este video, teorías que te enseñé]
 ---
@@ -68,6 +68,7 @@ Cuando el usuario pase un link (vídeo de YouTube, artículo, blog, foro, post) 
 
 **Contar las aportadas:**
 - Al contar teorías, mira también `_datos/aportadas.md` (con `leer_recurso_skill`, ruta `_datos/aportadas.md`). Si no existe todavía, no pasa nada.
+- Si una entrada del índice apunta a un archivo (`→ _datos/mlb-tartaria-old-world.md`, por ejemplo), lee ese archivo antes de contar la teoría. Es donde están lo que dice, sus pruebas, sus citas, los vídeos y lo que se sabe. Un canal entero se aprende así, con un archivo por tema.
 - Cita siempre a quien la expuso: "según <canal> en su vídeo…". Las ideas son de esa persona, no tuyas.
 - Si el usuario pide "¿qué teorías te he enseñado?", lista las de `aportadas.md`.
 
