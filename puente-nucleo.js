@@ -102,7 +102,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
   // motores externos con puente (Antigravity): el encargo sale por el evento 'motor'; la respuesta vuelve por MCP
   function aMotor(motor, texto, origin) {
     if (!nucleo.motores?.[motor]) return { ok: false, msg: `❌ ${motor} no está conectado. En Antigravity pídele al agente: "arranca el puente del robot" (comando en el panel → Canales).` };
-    nucleo.bus.emit('motor', { motor, texto, origen: origin === 'discord' ? 'Discord' : origin === 'telegram' ? 'Telegram' : origin === 'whatsapp' ? 'WhatsApp' : origin === 'voz' ? 'voz' : 'la isla', t: Date.now() });
+    nucleo.bus.emit('motor', { motor, texto, origen: origin === 'discord' ? 'Discord' : origin === 'telegram' ? 'Telegram' : origin === 'whatsapp' ? 'WhatsApp' : origin === 'voz' || origin === 'llamada' ? 'voz' : 'la isla', t: Date.now() });
     nucleo.registro.add('info', motor, `encargo: ${texto.slice(0, 120)}`);
     return { ok: true, msg: `📨 Encargado a **${motor}**. Te aviso cuando termine.` };
   }
@@ -170,7 +170,8 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     if ((m = t.match(/^([\w.-]+(?:\/[\w.:-]+)?)\s*:\s*([\s\S]+)$/)) && (modelo = modeloDe(m[1]))) msg = m[2].trim();
     else {
       const d = st.destino[c] || '@auto';                                // isla, voz y Discord van en automático salvo que elijas otra cosa
-      if (d === '@auto') {
+      if (origin === 'llamada') modelo = d === '@auto' || d === CC || d === '@antigravity' ? porDefecto() : d;   // en llamada: sin enrutador (1 s menos) y nunca Claude Code
+      else if (d === '@auto') {
         await nucleo.proveedores.listo?.();                            // recién arrancado: saber si está el modelo rápido
         const r = await enrutar(t, c);
         st.ultimo = { ...(st.ultimo || {}), [c]: { ruta: r.ruta, texto: t.slice(0, 300), t: Date.now() } }; guardar();
@@ -187,6 +188,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     const s = sesionPara(c, modelo);
     if (nucleo.agente.ocupada(s.id)) return { ok: false, msg: `⏳ ${modelo} sigue trabajando; espera a que termine.` };
     origen.set(s.id, origin);
+    Object.defineProperty(s, 'llamada', { value: origin === 'llamada' ? Date.now() : 0, writable: true, configurable: true, enumerable: false });   // no se guarda
     nucleo.enviar(s, msg).catch(() => { });                 // la respuesta llega por el evento 'fin'
     return { ok: true, msg: `📨 Enviado a **${modelo}**${nota}.` };
   }

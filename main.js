@@ -111,7 +111,7 @@ const voz = crearVoz({ dirDatos: () => app.getPath('userData'), idioma: () => id
 const transcribirArchivo = ruta => voz.transcribirArchivo(ruta);
 // lo que dice la isla también sale por el altavoz del ojo si la petición vino del ojo (o cfg.nodos.vozSiempre)
 ipcMain.handle('tts', async (_e, text) => { const f = await voz.generarTts(text); vozAlOjo(f); return f; });
-ipcMain.handle('listen', () => voz.escuchar());
+ipcMain.handle('listen', (_e, modo) => voz.escuchar(modo));
 
 // ---------- hooks en ~/.claude y ~/.gemini (main/hooks-config.js) ----------
 const hooksCfg = crearHooksConfig({ empaquetado: () => app.isPackaged, mensaje: o => dialog.showMessageBox(o), tr: (k, v) => tr(k, v), dirDatos: () => app.getPath('userData') });
@@ -528,7 +528,7 @@ async function startNucleo() {
       const titulo = extra.tarea ? modelo : `🤖 ${modelo}`;          // en tareas, "modelo" ya es el título
       if (esRemoto(origin)) responderA(origin, `**${titulo}**\n${texto}`);
       else if (isAway()) movil.reply(`**${titulo}**\n${texto}`);       // si no estás en la PC, también al móvil
-      if (!esRemoto(origin) && win && !win.isDestroyed()) win.webContents.send('answer', { titulo, texto, voz: origin === 'voz' || extra.tarea ? texto.slice(0, 400) : undefined });
+      if (!esRemoto(origin) && win && !win.isDestroyed()) win.webContents.send('answer', { titulo, texto, llamada: origin === 'llamada' || undefined, voz: origin === 'llamada' ? texto.slice(0, 3000) : origin === 'voz' || extra.tarea ? texto.slice(0, 400) : undefined });
     },
   });
   // canales del robot visibles en el panel

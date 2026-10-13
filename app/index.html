@@ -165,6 +165,8 @@
   #atajos code{flex:0 0 132px;color:#7fe3ff;font:12px Consolas,monospace}
   #atajos span{opacity:.75}
   #mic.on{background:rgba(255,77,77,.25);border-color:var(--bad);animation:pulse 1s infinite}
+  #llamar.on{background:rgba(255,77,77,.3);border-color:var(--bad);color:#ff6b6b;animation:pulse 1.4s infinite}
+  #llamar.on .ico{transform:rotate(135deg)}
   /* avisos de Discord: tarjetas que bajan bajo la isla y se van solas */
   #notifs{position:absolute;top:calc(var(--robot) + 12px);left:calc(50% - 170px);width:340px;display:flex;flex-direction:column;gap:6px;z-index:4;pointer-events:none}
   #island.open ~ #notifs, #island.open + #notifs{display:none}
@@ -260,7 +262,7 @@
       </div>
     </div>
     <div id="atajos" hidden></div>
-    <div id="ask"><button class="icon" id="askHelp" title="Atajos: varios modelos a la vez, consejo, cambiar de modelo…" data-i18n-attr="title"></button><input id="askIn" placeholder="Pídele algo…  (gemma + gpt: compara modelos)" data-i18n-attr="placeholder" autocomplete="off"><button class="icon" id="mic" title="Hablar (Ctrl+Alt+Espacio)" data-i18n-attr="title"></button><button class="icon" id="askGo" title="Enviar" data-i18n-attr="title"></button></div>
+    <div id="ask"><button class="icon" id="askHelp" title="Atajos: varios modelos a la vez, consejo, cambiar de modelo…" data-i18n-attr="title"></button><input id="askIn" placeholder="Pídele algo…  (gemma + gpt: compara modelos)" data-i18n-attr="placeholder" autocomplete="off"><button class="icon" id="mic" title="Hablar (Ctrl+Alt+Espacio)" data-i18n-attr="title"></button><button class="icon" id="llamar" title="Llamada: conversación seguida por voz (otra vez para colgar)" data-i18n-attr="title"></button><button class="icon" id="askGo" title="Enviar" data-i18n-attr="title"></button></div>
     <div id="toast"></div>
     <div id="answer"></div>
     <div id="cards"></div>

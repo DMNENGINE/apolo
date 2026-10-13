@@ -117,15 +117,16 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
     colaWhisper = tarea.catch(() => { });
     return tarea;
   }
-  const listenWhisper = () =>
-    new Promise(ok => { whisperWait = ok; whisper.stdin.write('listen\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', conf: 0 }); } }, 30000); });
+  const listenWhisper = modo =>
+    new Promise(ok => { whisperWait = ok; whisper.stdin.write(modo === 'llamada' ? 'listen rapido\n' : 'listen\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', conf: 0 }); } }, 30000); });
   const listenWindows = () => (process.platform !== 'win32' ? Promise.resolve({ text: '', conf: 0, error: 'sin Whisper: bandeja → Instalar voz y micrófono' }) : new Promise(ok => execFile('powershell.exe',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', fuera(path.join(RAIZ, 'tools', 'listen.ps1'))],
     { windowsHide: true, timeout: 15000 }, (err, out) => { try { ok(JSON.parse(String(out).trim())); } catch { ok({ text: '', conf: 0, error: err ? err.message : 'sin respuesta' }); } })));
   // micrófono de la isla: Whisper de Python si carga; si no whisper.cpp; mientras se descarga (o sin él), el reconocedor de Windows
-  async function escuchar() {
+  // modo 'llamada' (llamada de la isla): corta tras menos silencio y transcribe con beam 1 (≈2× más rápido)
+  async function escuchar(modo) {
     const ok = await whisperListo(); apagarWhisperLuego();
-    if (ok && !whisperWait) return listenWhisper();
+    if (ok && !whisperWait) return listenWhisper(modo);
     if (wcpp.disponible && wcpp.listo()) return wcpp.escuchar();
     if (wcpp.disponible) wcpp.preparar();
     return listenWindows();

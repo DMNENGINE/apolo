@@ -44,9 +44,15 @@ function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior
     nacimiento ? `\nESTÁS NACIENDO (esto manda sobre lo demás hasta que llames a "nacer"):\n${nacimiento}` : '',
     guardados ? `\nAGENTES GUARDADOS (úsalos con delegar + "agente"):\n${guardados}` : '',
     skills ? `\n${skills}` : '',
+    s.llamada && Date.now() - s.llamada < 10 * 60_000 ? `\n${LLAMADA}` : '',
     resumen ? `\nRESUMEN DE LA PARTE ANTERIOR DE ESTA CONVERSACIÓN (ya no ves esos mensajes; continúa desde aquí):\n${resumen}` : '',
   ].filter(Boolean).join('\n');
 }
+
+// llamada de voz desde la isla (s.llamada, no se guarda en disco): todo lo que escribe se oye
+const LLAMADA = 'ESTÁS EN UNA LLAMADA DE VOZ con el usuario: todo lo que escribas se lee en voz alta al momento. Habla como una persona en una conversación, ' +
+  'natural y cercano. Respuestas cortas (1-3 frases) salvo que pida algo largo (una historia, una explicación). Sin markdown, listas, emojis, enlaces ni código. ' +
+  'Si la transcripción de lo que dijo no tiene sentido, pide que lo repita.';
 
 // imágenes de las herramientas (capturas): al modelo solo le llegan las 2 últimas, leídas del disco en base64;
 // las antiguas se cambian por una nota para no gastar tokens. sinVision = el modelo no ve imágenes: ninguna.

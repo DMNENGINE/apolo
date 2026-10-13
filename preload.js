@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld('bridge', {
   talk: (text, origin) => ipcRenderer.invoke('talk', text, origin),
   sesChat: sid => ipcRenderer.invoke('ses-chat', sid),
   sesSend: (sid, text) => ipcRenderer.invoke('ses-send', sid, text),
-  listen: () => ipcRenderer.invoke('listen'),
+  listen: modo => ipcRenderer.invoke('listen', modo),            // modo 'llamada': corta antes y transcribe más rápido
   onSay: fn => ipcRenderer.on('say', (_e, t) => fn(t)),
   onListenKey: fn => ipcRenderer.on('listen-key', () => fn()),
   onCard: fn => ipcRenderer.on('card', (_e, c) => fn(c)),

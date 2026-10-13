@@ -2,6 +2,7 @@
 Protocolo por stdin/stdout (una línea JSON por respuesta):
   arranque  -> {"ready": true, "device": "cuda|cpu", "model": "..."}
   "listen"  -> graba del micrófono hasta que dejas de hablar y responde {"text": "...", "conf": 0.0-1.0}
+  "listen rapido" -> igual, para la llamada de la isla: corta antes (0,7 s de silencio) y transcribe con beam 1
   "file <ruta>" -> transcribe un archivo de audio (notas de voz de Telegram/WhatsApp: ogg/opus, mp3, m4a...)
 Entorno (lo pone la app al lanzarlo):
   ROBOT_WHISPER_MODEL   modelo (small por defecto)
@@ -72,9 +73,9 @@ def leer_audio(ruta):
     if not trozos: return np.zeros(0, dtype=np.float32)
     return (np.concatenate(trozos, axis=1).flatten().astype(np.float32) / 32768.0)
 
-def transcribir(audio, idioma=None):
+def transcribir(audio, idioma=None, beam=5):
     """→ (texto, confianza, info). Quita segmentos que son alucinaciones típicas o casi seguro silencio."""
-    segs, info = model.transcribe(audio, language=idioma, beam_size=5, vad_filter=True,
+    segs, info = model.transcribe(audio, language=idioma, beam_size=beam, vad_filter=True,
                                   initial_prompt=PROMPT, condition_on_previous_text=False)
     segs = [s for s in segs if not ALUCINACIONES.search(s.text) and s.no_speech_prob < 0.8]
     text = ' '.join(s.text.strip() for s in segs).strip()
@@ -97,12 +98,13 @@ if __name__ == '__main__':
             except Exception as e:
                 out({'text': '', 'conf': 0, 'error': str(e)})
             continue
-        if line != 'listen': continue
+        if line not in ('listen', 'listen rapido'): continue
+        rapido = line == 'listen rapido'                       # llamada: corta con 0,7 s de silencio, frases largas y beam 1
         try:
-            audio = record()
+            audio = record(max_s=40, wait_s=8, tail_s=0.7) if rapido else record()
             if audio is None or len(audio) < SR * 0.3:
                 out({'text': '', 'conf': 0}); continue
-            text, conf, _ = transcribir(audio, IDIOMA)
+            text, conf, _ = transcribir(audio, IDIOMA, 1 if rapido else 5)
             out({'text': text, 'conf': round(conf, 2)})
         except Exception as e:
             out({'text': '', 'conf': 0, 'error': str(e)})

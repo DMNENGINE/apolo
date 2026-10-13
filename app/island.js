@@ -18,6 +18,7 @@ const ICO = (() => {
     mudo: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
     terminal: '<path d="m4 17 6-6-6-6M12 19h8"/>',
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    llamar: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
     enviar: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>',
     copiar: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
     abrir: '<path d="M7 17 17 7M8 7h9v9"/>',
@@ -498,7 +499,8 @@ if (bridge.onAnswer) bridge.onAnswer(a => {
   const el = $('answer');
   el.innerHTML = `<b class="t">${esc(tr(a.titulo || 'Respuesta'))}</b>${esc(a.texto || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}`;
   el.classList.add('on'); abrirUnRato(25_000);
-  if (a.voz) say(a.voz);
+  if (a.llamada && llamada.on) llamadaRespuesta(a.voz || a.texto || '');   // en llamada la dice el bucle de la llamada
+  else if (a.voz) say(a.voz);
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 90_000);
 });
 $('answer').addEventListener('click', e => {
@@ -549,7 +551,7 @@ $('askGo').addEventListener('click', () => sendAsk($('askIn').value));
 $('askIn').addEventListener('keydown', e => { if (e.key === 'Enter') sendAsk($('askIn').value); });
 let listening = false;
 async function startListen() {
-  if (listening || !bridge.listen) return;
+  if (listening || llamada.on || !bridge.listen) return;           // en llamada ya está escuchando
   listening = true; $('mic').classList.add('on');
   abrirUnRato(25_000);                                         // abre la isla para que veas lo que entendió
   robot.hud(tr('TE ESCUCHO…'), 9, 'permiso'); sound.play('abrir');
@@ -562,6 +564,83 @@ async function startListen() {
 }
 $('mic').addEventListener('click', startListen);
 if (bridge.onListenKey) bridge.onListenKey(startListen);
+
+// ---------- llamada: conversación seguida por voz (botón del teléfono; no escucha hasta que la empiezas) ----------
+// bucle: escuchar (Whisper corta solo al callarte) → al modelo rápido → decir la respuesta frase a frase
+// (la 1.ª suena mientras se generan las demás) → volver a escuchar. Tocar al robot mientras habla = cortarle y hablar tú.
+// Se cuelga con el botón, diciendo "cuelga"/"adiós" o tras ~40 s sin oír nada.
+const llamada = { on: false, esperando: null, audio: null, cortar: null, silencios: 0 };
+const COLGAR = /^(cuelga|colgar|cu[eé]lgate|adi[oó]s|hasta luego|termina(r)? la llamada|corta(r)? la llamada|chao|bye)\b/i;
+function frasesDe(t) {                                       // trozos de ~1-2 frases: el primero corto para que empiece antes
+  const fr = String(t).replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').match(/[^.!?…]+[.!?…]+["')\]]*\s*|[^.!?…]+$/g) || [];
+  const out = []; let b = '';
+  for (const f of fr) { b += f; if (b.length >= (out.length ? 120 : 40)) { out.push(b.trim()); b = ''; } }
+  if (b.trim()) out.push(b.trim());
+  return out;
+}
+function hablarLlamada(texto) {                              // → promesa que acaba al terminar de hablar (o al cortarle)
+  return new Promise(async fin => {
+    let cortado = false;
+    llamada.cortar = () => { cortado = true; if (llamada.audio) { llamada.audio.pause(); llamada.audio = null; } fin(); };
+    const partes = frasesDe(texto);
+    const audios = partes.map(p => bridge.tts ? bridge.tts(p).catch(() => null) : Promise.resolve(null));   // todas a la vez
+    robot.hud(tr('HABLANDO…'), 60, 'listo');
+    for (let i = 0; i < partes.length && !cortado; i++) {
+      const f = await audios[i];
+      if (cortado || !llamada.on) break;
+      await new Promise(ok => {
+        if (!f) { sayWin(partes[i]); const u = setInterval(() => { if (!speechSynthesis.speaking || cortado) { clearInterval(u); ok(); } }, 150); return; }
+        const a = new Audio('file:///' + f.replace(/\\/g, '/')); llamada.audio = a;
+        a.onended = a.onerror = () => ok(); a.play().catch(() => ok());
+        const v = setInterval(() => { if (cortado) { clearInterval(v); ok(); } else if (a.ended) clearInterval(v); }, 150);
+      });
+    }
+    llamada.audio = null; llamada.cortar = null; fin();
+  });
+}
+function llamadaRespuesta(texto) { const w = llamada.esperando; llamada.esperando = null; if (w) w(texto); }
+async function cicloLlamada() {
+  while (llamada.on) {
+    robot.hud(tr('TE ESCUCHO…'), 60, 'permiso');
+    const r = await bridge.listen('llamada').catch(() => ({ text: '' }));
+    if (!llamada.on) break;
+    const t = String(r.text || '').trim();
+    if (!t) {
+      if (++llamada.silencios >= 5) { await hablarLlamada(tr('No te oigo. Cuelgo; llámame cuando quieras.')); return colgar(); }
+      continue;
+    }
+    llamada.silencios = 0;
+    if (COLGAR.test(t)) { await hablarLlamada(tr('Vale, hablamos luego.')); return colgar(); }
+    $('askIn').value = t;
+    robot.hud(tr('PENSANDO…'), 60, 'trabajando');
+    const resp = new Promise(ok => { llamada.esperando = ok; setTimeout(() => { if (llamada.esperando === ok) { llamada.esperando = null; ok(''); } }, 120_000); });
+    const r2 = await bridge.talk(t, 'llamada').catch(e => ({ ok: false, msg: e.message }));
+    $('askIn').value = '';
+    // no fue al modelo (orden del cerebro, error, sigue ocupado…): se dice lo que contestó y se sigue
+    const texto = r2 && r2.ok && /^📨/.test(r2.msg || '') ? await resp : (llamada.esperando = null, String(r2?.msg || '').replace(/\*\*/g, ''));
+    if (!llamada.on) break;
+    if (texto) await hablarLlamada(texto);
+  }
+}
+function llamar() {
+  if (llamada.on) return colgar();
+  if (!bridge.listen || !bridge.talk) return toast(tr('La llamada necesita el micrófono (bandeja → Instalar voz y micrófono).'));
+  llamada.on = true; llamada.silencios = 0;
+  $('llamar').classList.add('on'); document.body.classList.add('en-llamada');
+  try { speechSynthesis.cancel(); } catch { } if (vozAudio) { vozAudio.pause(); vozAudio = null; }
+  sound.play('abrir'); abrirUnRato(30_000);
+  cicloLlamada().catch(e => { console.error('[llamada]', e); colgar(); });
+}
+function colgar() {
+  if (!llamada.on) return;
+  llamada.on = false;
+  if (llamada.cortar) llamada.cortar();
+  llamadaRespuesta('');
+  $('llamar').classList.remove('on'); document.body.classList.remove('en-llamada');
+  robot.hud(tr('LLAMADA TERMINADA'), 2, 'reposo'); sound.play('blip');
+}
+$('llamar').addEventListener('click', llamar);
+rwrap.addEventListener('click', () => { if (llamada.on && llamada.cortar) llamada.cortar(); });   // tocarle mientras habla = le cortas
 if (bridge.onSay) bridge.onSay(t => { robot.hud(tr('RESPUESTA'), 4, 'listo'); say(String(t).replace(/[`*#>_]/g, '').slice(0, 400)); });
 var modoGamer = false;                                         // Modo Gamer activo → isla dormida (evento del núcleo {tipo:'gamer'})
 if (bridge.onGamer) bridge.onGamer(v => { const antes = modoGamer; modoGamer = !!v; if (!modoGamer) { lastActivity = Date.now(); if (antes) setTimeout(mostrarResumenPerdidas, 600); } render(); });
@@ -856,7 +935,7 @@ $('voz').addEventListener('click', () => { voiceOn = !voiceOn; try { localStorag
 let toastT;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 4500); }
 
-$('voz').innerHTML = ICO.voz; $('mic').innerHTML = ICO.mic; $('askGo').innerHTML = ICO.enviar; $('askHelp').innerHTML = ICO.ayuda;
+$('voz').innerHTML = ICO.voz; $('mic').innerHTML = ICO.mic; $('llamar').innerHTML = ICO.llamar; $('askGo').innerHTML = ICO.enviar; $('askHelp').innerHTML = ICO.ayuda;
 // atajos del campo de la isla: pulsar uno escribe su prefijo (el usuario no tenía forma de saber que existen)
 const ATAJOS = [
   ['gemma + gpt: ', 'varios modelos a la vez; ves todas las respuestas'],
