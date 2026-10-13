@@ -47,7 +47,7 @@ const HERRAMIENTAS = [
   },
   {
     nombre: 'escribir_archivo', riesgo: 'escritura',
-    descripcion: 'Crea o sobrescribe un archivo con el contenido dado.',
+    descripcion: 'Crea o sobrescribe un archivo con el contenido dado. Crea solo las carpetas que falten: no hace falta (ni conviene) mkdir con la shell antes.',
     parametros: { type: 'object', properties: { ruta: { type: 'string' }, contenido: { type: 'string' } }, required: ['ruta', 'contenido'] },
     resumen: a => a.ruta,
     ejecutar: async (a, ctx) => {
