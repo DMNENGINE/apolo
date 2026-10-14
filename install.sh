@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # APOLO - instalador de una linea para Linux (Ubuntu/Debian; tambien Fedora y Arch)
 #   curl -fsSL https://raw.githubusercontent.com/DMNENGINE/apolo/main/install.sh | bash
+#   (sin curl: wget -qO- https://raw.githubusercontent.com/DMNENGINE/apolo/main/install.sh | bash)
 # Descarga APOLO en ~/.local/share/APOLO, instala Node.js si falta (sin sudo, en la carpeta de APOLO), las dependencias
 # (Electron incluido), crea el acceso en el menu de aplicaciones y lo arranca.
 # Volver a ejecutarlo = actualizar (tus datos viven en ~/.config/robot-companion y no se tocan).
@@ -18,7 +19,8 @@ aviso() { printf '    \033[33m! %s\033[0m\n' "$*"; }
 tiene() { command -v "$1" >/dev/null 2>&1; }
 
 printf '\n   \033[32mAPOLO - AI desktop companion\033[0m\n   github.com/%s\n' "$REPO"
-tiene curl || { echo "Falta curl (sudo apt install curl)"; exit 1; }
+# descargas: curl o, si no está (Debian mínimo), wget
+if tiene curl; then bajar() { curl -fsSL "$@"; }; elif tiene wget; then bajar() { local h=(); [ "$1" = "-H" ] && { h=(--header="$2"); shift 2; }; wget -qO- "${h[@]}" "$1"; }; else echo "Falta curl o wget (sudo apt install curl)"; exit 1; fi
 tiene tar || { echo "Falta tar"; exit 1; }
 
 # ---------- 1. Node.js (>= 20): el del sistema o uno propio en $DIR/.node (sin sudo) ----------
@@ -32,11 +34,11 @@ elif [ -x "$NODE_DIR/bin/node" ] && [ "$(version_node "$NODE_DIR/bin/node")" -ge
 else
   case "$(uname -m)" in x86_64) ARCH=x64 ;; aarch64|arm64) ARCH=arm64 ;; armv7l) ARCH=armv7l ;; *) echo "Arquitectura no soportada: $(uname -m)"; exit 1 ;; esac
   BASE="https://nodejs.org/dist/latest-v22.x"
-  ARCHIVO=$(curl -fsSL "$BASE/SHASUMS256.txt" | awk -v a="linux-$ARCH.tar.xz" '$2 ~ a"$" {print $2; exit}')
+  ARCHIVO=$(bajar "$BASE/SHASUMS256.txt" | awk -v a="linux-$ARCH.tar.xz" '$2 ~ a"$" {print $2; exit}')
   [ -n "$ARCHIVO" ] || { echo "No encuentro Node.js 22 para $ARCH"; exit 1; }
   info "descargando $ARCHIVO (solo para APOLO, sin tocar el sistema)..."
   rm -rf "$NODE_DIR"; mkdir -p "$NODE_DIR"
-  curl -fsSL "$BASE/$ARCHIVO" | tar -xJ -C "$NODE_DIR" --strip-components=1
+  bajar "$BASE/$ARCHIVO" | tar -xJ -C "$NODE_DIR" --strip-components=1
   export PATH="$NODE_DIR/bin:$PATH"; info "instalado $(node -v)"
 fi
 
@@ -45,12 +47,12 @@ verde "Descargando APOLO en $DIR"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 # version exacta (commit) para que APOLO sepa cuando hay una actualizacion
-SHA=$(curl -fsSL -H 'User-Agent: APOLO-instalador' "https://api.github.com/repos/$REPO/commits/$RAMA" 2>/dev/null \
+SHA=$(bajar -H 'User-Agent: APOLO-instalador' "https://api.github.com/repos/$REPO/commits/$RAMA" 2>/dev/null \
   | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).sha||'')}catch{}})" || true)
 [ -n "$SHA" ] || aviso "no pude leer la version de GitHub (los avisos de actualizacion no funcionaran)"
 REF="${SHA:-$RAMA}"
 # APOLO_TARBALL=<archivo .tar.gz>: instalar desde un paquete local (pruebas antes de publicar)
-if [ -n "${APOLO_TARBALL:-}" ]; then tar -xzf "$APOLO_TARBALL" -C "$TMP"; else curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" | tar -xz -C "$TMP"; fi
+if [ -n "${APOLO_TARBALL:-}" ]; then tar -xzf "$APOLO_TARBALL" -C "$TMP"; else bajar "https://codeload.github.com/$REPO/tar.gz/$REF" | tar -xz -C "$TMP"; fi
 SRC=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d | head -1)
 # si APOLO esta abierto, cerrarlo (y sus ayudantes: Whisper, etc.) antes de reemplazar archivos
 pkill -f -- "$DIR/node_modules/electron" 2>/dev/null || true

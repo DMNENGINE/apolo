@@ -867,7 +867,21 @@ setInterval(() => {
   if (hovering && !cursorDentro && !leaveTimer && bridge.onCursor) programarCierre();
   if (ultimoPunto) probarRaton(ultimoPunto.x, ultimoPunto.y);   // la isla cambió bajo un cursor quieto (se cerró, salió una tarjeta…)
 }, 1000);
-island.addEventListener('mouseenter', () => { hovering = true; render(); });
+island.addEventListener('mouseenter', () => { if (LINUX) { cursorDentro = true; clearTimeout(leaveTimer); leaveTimer = null; } hovering = true; render(); });
+// Linux: la ventana tiene la forma de la isla (main/isla-ventana.js, setShape) y recibe el ratón de verdad. Wayland no da la
+// posición global del ratón, así que entrar/salir se sabe por los eventos normales (el polling global sería un valor viejo).
+const LINUX = bridge.plataforma === 'linux';
+island.addEventListener('mouseleave', () => { if (!LINUX) return; cursorDentro = false; if (hovering && !arrastrando) programarCierre(); });
+let formaEnviada = '';
+function enviarForma() {
+  if (!LINUX || !bridge.forma) return;
+  // durante un arrastre, la ventana entera (la sigue al cursor); si no, la caja de la isla con un margen para sombras y gestos
+  const r = arrastrando ? { left: 0, top: 0, width: innerWidth, height: innerHeight } : island.getBoundingClientRect(), m = arrastrando ? 0 : 8;
+  const rects = [{ x: Math.floor(r.left - m), y: Math.floor(r.top - m), width: Math.ceil(r.width + 2 * m), height: Math.ceil(r.height + 2 * m) }];
+  const k = JSON.stringify(rects); if (k === formaEnviada) return;
+  formaEnviada = k; bridge.forma(rects);
+}
+if (LINUX) { new ResizeObserver(enviarForma).observe(island); setInterval(enviarForma, 400); window.addEventListener('resize', enviarForma); }
 
 // ---------- clics a través: SOLO lo visible (robot, tarjetas, botones, textos con fondo, [data-solido]) captura el ratón ----------
 // La ventana es atravesable por defecto (setIgnoreMouseEvents(true, {forward})); con cada mousemove reenviado o posición del
@@ -890,6 +904,8 @@ function probarRaton(x, y) {                                // como mucho una ve
   requestAnimationFrame(() => { probarPend = false; const p = ultimoPunto; ponerInteractivo(!!gesto || arrastrando || sobreAlgoVisible(p.x, p.y)); });
 }
 document.addEventListener('mousemove', e => probarRaton(e.clientX, e.clientY));
+// Linux (Wayland): la posición global del ratón no llega ni con el cursor encima; los ojos siguen al mousemove de la propia isla
+document.addEventListener('mousemove', e => { if (bridge.plataforma === 'linux') robot.lookAtClient(e.clientX, e.clientY); });
 
 // ---------- mover la isla: mantener pulsado el robot ~0,3 s (o arrastrar desde la barra / la cabecera) y soltar donde quieras ----------
 // Un clic corto sigue siendo un clic (sacudida, 3 = mareo). Main mueve la ventana con el cursor y al soltar la coloca, la guarda y la re-ancla.
@@ -913,7 +929,7 @@ function empezarArrastre() {
   if (!gesto || arrastrando) return;
   clearTimeout(gesto.t); arrastrando = true; tragarClic = true;
   try { gesto.el.setPointerCapture(gesto.id); } catch { }
-  document.body.classList.add('arrastrando'); ponerInteractivo(true);
+  document.body.classList.add('arrastrando'); ponerInteractivo(true); enviarForma();
   bridge.arrastre('inicio');
   lastActivity = Date.now(); hacerGesto('sorpresa', 0.9, '');     // "¡me levantas!"
 }
@@ -921,12 +937,17 @@ function terminarGesto() {
   if (!gesto) return;
   clearTimeout(gesto.t); gesto = null;
   if (!arrastrando) return;
-  arrastrando = false; document.body.classList.remove('arrastrando');
+  arrastrando = false; document.body.classList.remove('arrastrando'); setTimeout(enviarForma, 50);
   bridge.arrastre('fin'); sound.play('blip');
   setTimeout(() => { tragarClic = false; }, 80);           // el click que llega justo tras soltar no cuenta (ni sacudida ni mareo)
   if (ultimoPunto) probarRaton(ultimoPunto.x, ultimoPunto.y);
 }
 ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(n => document.addEventListener(n, terminarGesto));
+// clic derecho en el robot o en la barra = el menú de la bandeja (en GNOME sin extensión no hay bandeja visible)
+document.addEventListener('contextmenu', e => {
+  if (!bridge.menuRobot || !e.target.closest || !e.target.closest('.rwrap, #bar, #hero .sum')) return;
+  e.preventDefault(); bridge.menuRobot();
+});
 window.addEventListener('blur', terminarGesto);
 document.addEventListener('click', e => { if (tragarClic) { tragarClic = false; e.stopPropagation(); e.preventDefault(); } }, true);
 island.addEventListener('mouseleave', () => { if (!bridge.onCursor) { hovering = false; setTimeout(render, 1200); } });   // en Electron lo decide el cursor global
@@ -1048,6 +1069,7 @@ if (bridge.onMudanza) bridge.onMudanza(dir => {                 // juego a panta
   setTimeout(ajustarFps, 1500);
 });
 if (bridge.onCursor) bridge.onCursor(p => {            // cursor en toda la pantalla
+  if (LINUX) { if (cursorDentro) robot.lookAtClient(p.x, p.y); return; }   // Wayland: solo vale cuando está sobre la isla
   robot.lookAtClient(p.x, p.y);
   cercania(p);
   // hover fiable: el mouseleave no llega si el cursor salta fuera de la ventana

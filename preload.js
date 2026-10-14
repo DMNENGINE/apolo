@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('bridge', {
   cardAction: (id, action, text) => ipcRenderer.invoke('card-action', id, action, text),
   decide: (id, behavior) => ipcRenderer.send('decision', id, behavior),
   interactive: on => ipcRenderer.send('interactive', on),
+  plataforma: process.platform,
+  forma: rects => ipcRenderer.send('isla-forma', rects),
+  menuRobot: () => ipcRenderer.send('menu-robot'),                                // clic derecho en el robot = menú de la bandeja                         // Linux: la ventana solo existe donde está la isla (setShape)
   onIconSize: fn => ipcRenderer.on('icon-size', (_e, px) => fn(px)),
   onNombre: fn => ipcRenderer.on('nombre', (_e, n) => fn(n)),
   onIdioma: fn => ipcRenderer.on('idioma', (_e, l) => fn(l)),

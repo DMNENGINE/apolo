@@ -8,6 +8,7 @@ const IslaGeo = require('../shared/isla-geometria.js');
 const { fuera } = require('../core/rutas');
 
 const RAIZ = path.join(__dirname, '..');
+const LINUX = process.platform === 'linux';
 
 // alPantallaCompleta({completa, proceso}) → al núcleo (co-host: modo comentarista)
 function crearIsla({ alPantallaCompleta }) {
@@ -45,21 +46,33 @@ function crearIsla({ alPantallaCompleta }) {
     layIsla = layoutElegido();                             // donde la dejó el usuario (o arriba en el centro del principal)
     win = new BrowserWindow({
       ...layIsla.ventana,
-      frame: false, transparent: true, resizable: false, movable: false,
+      frame: false, transparent: true, resizable: false, movable: false, minimizable: false,
       alwaysOnTop: true, skipTaskbar: true, hasShadow: false, focusable: true,
       backgroundColor: '#00000000',
       webPreferences: { preload: path.join(RAIZ, 'preload.js'), contextIsolation: true, nodeIntegration: false },
     });
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true);
-    win.setIgnoreMouseEvents(true, { forward: true });     // clics pasan a través salvo encima de lo VISIBLE de la isla (hit-testing en island.js)
+    // sin botón en la barra de tareas: si Windows la minimiza (Win+M, "Mostrar escritorio", Win+↓…) no habría forma de traerla → vuelve sola
+    win.on('minimize', () => { setTimeout(() => { if (viva()) { win.restore(); win.showInactive(); win.setAlwaysOnTop(true, 'screen-saver'); } }, 300); });
+    // Windows/mac: atravesable con mousemove reenviado (hit-testing en island.js). Linux: { forward } no existe y en Wayland la
+    // posición global del ratón no llega a las apps de Xwayland → la ventana recibe el ratón pero solo existe donde está la isla
+    // (setShape con los rectángulos que manda island.js); fuera, los clics pasan a lo de debajo.
+    if (LINUX) { win.setIgnoreMouseEvents(false); formaBarra(); } else win.setIgnoreMouseEvents(true, { forward: true });
     win.webContents.on('did-finish-load', () => enviarLayout(layIsla));
     win.loadFile(path.join(RAIZ, 'app', 'index.html'));
     return win;
   }
 
   // la isla decide (hit-testing) si el ratón está sobre algo visible: solo entonces la ventana deja de ser "atravesable"
-  ipcMain.on('interactive', (_e, on) => { if (viva()) win.setIgnoreMouseEvents(!on, { forward: true }); });
+  ipcMain.on('interactive', (_e, on) => { if (viva() && !LINUX) win.setIgnoreMouseEvents(!on, { forward: true }); });
+  ipcMain.on('isla-forma', (_e, rects) => {
+    if (!viva() || !LINUX || !Array.isArray(rects)) return;
+    const r = rects.slice(0, 12).map(x => ({ x: Math.max(0, x.x | 0), y: Math.max(0, x.y | 0), width: Math.max(1, x.width | 0), height: Math.max(1, x.height | 0) }));
+    try { win.setShape(r.length ? r : [{ x: 0, y: 0, width: 1, height: 1 }]); } catch { }
+  });
+  // hasta que la isla mande su forma: solo la barra (si no, la ventana entera taparía los clics de debajo)
+  function formaBarra() { if (viva() && layIsla) try { win.setShape([{ x: layIsla.barX, y: layIsla.barY, width: IslaGeo.BARRA_W, height: IslaGeo.BARRA_H }]); } catch { } }
   ipcMain.on('isla-layout-ok', () => { if (layPend) { clearTimeout(layPend); layPend = null; ponerVentana(layIsla.ventana); } });
 
   // arrastre: la isla avisa 'inicio' (pulsación larga en el robot o arrastrar la barra/cabecera) y 'fin' al soltar; aquí la ventana sigue al cursor
@@ -138,6 +151,7 @@ function crearIsla({ alPantallaCompleta }) {
   function mover(a) {
     const prim = screen.getPrimaryDisplay();
     mudada = false;
+    if (viva() && (win.isMinimized() || !win.isVisible())) { win.restore(); win.showInactive(); }   // bandeja = rescate también si quedó minimizada
     if (a === 'reset') { try { fs.unlinkSync(ISLA_POS()); } catch { } }
     if (a === 'otro') { const d = otroMonitor(prim); if (d) rodarA(d); return; }
     rodarA(sitioElegido().d, layoutElegido());

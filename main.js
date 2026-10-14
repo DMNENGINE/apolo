@@ -662,6 +662,9 @@ function trayIcon() {
   }
   return nativeImage.createFromBitmap(buf, { width: S, height: S });
 }
+// el mismo menú con clic derecho sobre el robot: en GNOME sin la extensión AppIndicator la bandeja NO se ve (Linux)
+let menuBandeja = null;
+ipcMain.on('menu-robot', () => { if (menuBandeja && win && !win.isDestroyed()) menuBandeja().popup({ window: win }); });
 function buildTray() {
   tray = new Tray(trayIcon());
   tray.setToolTip('Robot Companion');
@@ -709,6 +712,7 @@ function buildTray() {
     { type: 'separator' },
     { label: tr('Salir'), click: () => app.quit() },
   ]);
+  menuBandeja = menu;
   tray.on('click', () => tray.popUpContextMenu(menu()));
   tray.on('right-click', () => tray.popUpContextMenu(menu()));
 }
