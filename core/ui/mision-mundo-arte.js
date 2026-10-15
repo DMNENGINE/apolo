@@ -368,6 +368,7 @@ function mmPJ(L, dir, f, acc, parp) {
   const p = mmP(c), piel = L.piel || '#f1c7a0', pielS = mmTono(piel, -.2), ropa = L.ropa || '#6b6b75', ropaL = mmTono(ropa, .18), ropaS = mmTono(ropa, -.25), pant = L.pantalon || '#30344a', bota = '#2b211b', pelo = L.pelo || '#3a2414', peloL = mmTono(pelo, .25);
   const lado = dir === 'lado', atras = dir === 'arriba', anda = acc === 'anda', fase = anda ? [0, 1, 0, -1][f] : 0, y0 = !anda && f % 2 ? 1 : 0;
   if (L.especie === 'llama') { mmLlamaPJ(c, p, L, lado, atras, anda ? f : 0, y0, parp, acc); mmContorno(cv); MM_CACHE_PJ.set(k, cv); return cv; }
+  if (L.especie === 'robot') { mmRobotPJ(c, p, L, lado, atras, anda ? f : 0, y0, f, acc); mmContorno(cv); MM_CACHE_PJ.set(k, cv); return cv; }
   // detrás: capa / mochila vista de frente asoma
   if (L.capa && !atras) { p(lado ? 4 : 5, 18 + y0, lado ? 5 : 12, 13, mmTono(L.capa, -.2)); }
   // piernas o túnica
@@ -440,6 +441,10 @@ function mmPJ(L, dir, f, acc, parp) {
   } else if (L.sombrero === 'casco') {
     p(5, 2 + y0, 12, 6, S); p(6, 2 + y0, 9, 1, mmTono(S, .3)); p(4, 7 + y0, 14, 2, mmTono(S, -.2));
     if (!atras) { if (lado) { p(16, 4 + y0, 2, 3, '#fffbe0'); } else { p(9, 3 + y0, 4, 3, '#8a8f96'); p(10, 3 + y0, 2, 2, '#fffbe0'); } }
+  } else if (L.sombrero === 'gorra') {                              // gorra militar con visera e insignia
+    if (atras) p(5, 3 + y0, 12, 5, S);
+    else if (lado) { p(5, 3 + y0, 11, 4, S); p(13, 6 + y0, 6, 2, mmTono(S, -.35)); p(6, 3 + y0, 8, 1, mmTono(S, .2)); }
+    else { p(5, 2 + y0, 12, 5, S); p(5, 2 + y0, 12, 1, mmTono(S, .2)); p(4, 6 + y0, 14, 2, mmTono(S, -.35)); p(10, 3 + y0, 2, 2, '#e0b44a'); }
   } else if (L.sombrero === 'capucha') {
     if (atras) { p(4, 3 + y0, 14, 16, S); p(9, 1 + y0, 4, 2, S); }
     else if (lado) { p(4, 3 + y0, 12, 4, S); p(4, 5 + y0, 5, 13, S); p(5, 3 + y0, 8, 1, mmTono(S, .2)); }
@@ -495,6 +500,7 @@ const MM_EMBLEMA = {
   x: ['#...#', '.#.#.', '..#..', '.#.#.', '#...#'], rayo: ['..##.', '.##..', '####.', '..##.', '.##..'], franjas: ['#####', '+++++', '#####', '+++++', '#####'],
   asterisco: ['#.#.#', '.###.', '##.##', '.###.', '#.#.#'], cara: ['.###.', '#+#+#', '#####', '#+++#', '.###.'], ojo: ['.###.', '#+++#', '#+#+#', '#+++#', '.###.'],
   luna: ['.##..', '#....', '#....', '#....', '.##..'], llaves: ['.#.#.', '#...#', '#...#', '#...#', '.#.#.'],
+  medalla: ['+.+..', '.+...', '###..', '#.#..', '###..'], ticket: ['#####', '#+.+#', '#####', '#+.+#', '#####'], numero: ['#.###', '#.#.#', '#.#.#', '#.#.#', '#.###'],
 };
 
 // la llama de Ollama: lana blanca, cuello largo, orejas tiesas
@@ -806,3 +812,17 @@ mmObj('vela', 1, 1, 1, 18, c => {
   for (const x of [8, 15, 22]) { p(x, A - 2, 3, 8, '#efe4c8'); p(x, A - 2, 1, 8, '#ffffff'); }
 }, (c, X, Y, t, e, o) => { for (const [x, k] of [[9.5, 0], [16.5, 1], [23.5, 2]]) mmLlama(c, X + x, Y + 15, t + k * 333 + o.x * 91, .45); },
 (o, X, Y, t) => [{ x: X + 16, y: Y + 14, r: 95 + Math.sin(t / 110 + o.y) * 5, col: [255, 180, 90], a: .7, bloom: 10 }]);
+
+// el bot de APOLO: un robot pequeño con visor y antena
+function mmRobotPJ(c, p, L, lado, atras, f, y0, fr, acc) {
+  const m = L.ropa || '#8a95a3', mS = mmTono(m, -.25), mL = mmTono(m, .25), osc = '#2a2f36', vis = L.visor || '#7ff3ff', pata = [0, 1, 0, -1][f];
+  p(7, 28 + Math.max(0, pata), 3, 5, mS); p(12, 28 + Math.max(0, -pata), 3, 5, mS); p(6, 32, 5, 3, osc); p(11, 32, 5, 3, osc);
+  mmBisel(c, 5, 18 + y0, 12, 11, m); p(6, 19 + y0, 10, 1, mL);
+  if (!atras && !lado) { p(9, 21 + y0, 4, 3, '#0d1418'); p(10, 22 + y0, 2, 1, fr % 2 ? vis : '#2a6a74'); p(7, 26 + y0, 2, 1, '#ffcf4d'); p(13, 26 + y0, 2, 1, '#ff5470'); }
+  if (acc === 'trabaja') { p(2, 19 + y0, 3, 4, mS); p(17, 19 + y0, 3, 4, mS); p(4, 22 + y0, 4, 2, m); p(14, 22 + y0, 4, 2, m); }
+  else { p(2, 19 + y0 + pata, 3, 8, mS); p(17, 19 + y0 - pata, 3, 8, mS); p(2, 27 + y0 + pata, 3, 2, osc); p(17, 27 + y0 - pata, 3, 2, osc); }
+  p(9, 16 + y0, 4, 2, osc);
+  mmBisel(c, lado ? 6 : 4, 5 + y0, lado ? 12 : 14, 11, osc);
+  if (!atras) { if (lado) { p(12, 8 + y0, 6, 4, '#0d1418'); p(14, 9 + y0, 3, 2, vis); } else { p(6, 8 + y0, 10, 4, '#0d1418'); p(7, 9 + y0, 3, 2, vis); p(12, 9 + y0, 3, 2, vis); } }
+  p(10, 1 + y0, 2, 4, '#59626e'); p(9, -1 + y0, 4, 2, fr % 2 ? '#ff3b5c' : '#5a1a24');
+}

@@ -30,6 +30,18 @@ const MM_MODELOS = {
   opencode: ['opencode', { piel: '#f1c7a0', sombrero: 'capucha', color: '#2a2626', ropa: '#211e1e', emblema: 'llaves', emCol: '#f4f4f4', gafas: '#f4f4f4' }],
   antigravity: ['Antigravity', { piel: '#f1c7a0', estilo: 'largo', pelo: '#3a2414', ropa: '#1a73e8', capa: '#34a853', emblema: 'chispa', emCol: '#fbbc04', emCol2: '#ea4335', flota: true }],
 };
+// bots de Discord con personalidad (se reconocen por el nombre del servicio)
+const MM_BOTS = [
+  { re: /comman?der|comander/i, look: { piel: '#d9a477', estilo: 'corto', pelo: '#1c1c1c', ropa: '#4a5a2a', pantalon: '#3a4520', sombrero: 'gorra', color: '#3a4520', emblema: 'medalla', emCol: '#e0b44a', emCol2: '#c0392b' },
+    frases: ['¡Firmes!', 'Patrulla completada. Sin novedad.', 'Discord bajo control.', '¡A sus órdenes, APOLO!', 'Revisando el perímetro del servidor.', 'Orden recibida.'] },
+  { re: /ticket/i, look: { piel: '#f1c7a0', estilo: 'mono', pelo: '#6b3e1f', ropa: '#e8e8e8', ropa2: '#2b3a67', pantalon: '#2b3a67', emblema: 'ticket', emCol: '#ffcf4d', emCol2: '#2b3a67', gafas: '#9fd0ff' },
+    frases: ['¿En qué puedo ayudar?', 'Ticket atendido ✓', 'Siguiente, por favor.', 'La cola de tickets está al día.', 'Abriendo un ticket nuevo…'] },
+  { re: /apolo|robot|companion/i, look: { especie: 'robot', ropa: '#8a95a3', visor: '#7ff3ff' },
+    frases: ['Bip bup.', 'Conectado a Discord.', 'Llevo tus mensajes a APOLO.', 'Sincronizando…', 'Ping: 42 ms. Todo bien.'] },
+  { re: /fifa|brito|f[uú]tbol/i, look: { piel: '#a8714a', estilo: 'punta', pelo: '#1c1c1c', ropa: '#d62828', pantalon: '#f4f4f4', emblema: 'numero', emCol: '#ffffff', balon: true },
+    frases: ['¡Gooool!', '¿Un partidito?', 'Brito FC al ataque.', 'Tiro… ¡al palo!', '¡Qué pase!'] },
+];
+function mmBot(nombre) { return MM_BOTS.find(b => b.re.test(nombre)) || { look: { piel: MM_PIEL[mmHash(nombre) % 4], estilo: 'corto', pelo: MM_PELO[mmHash(nombre) % 6], ropa: '#5865f2', sombrero: 'gorra', color: '#404eed', emblema: 'chispa', emCol: '#ffffff' }, frases: ['En línea.', 'Trabajando en Discord.'] }; }
 const mmProveedor = modelo => String(modelo || '').split('/')[0].toLowerCase();
 function mmLookModelo(prov, tipo) {
   const m = MM_MODELOS[prov] || MM_MODELOS[{ anthropic: 'anthropic', 'claude-cli': 'claudecode', 'codex-cli': 'chatgpt', gemini: 'gemini' }[tipo]];
@@ -141,8 +153,8 @@ const MC_MUNDO = {
     if (!this.caja) return;
     if (e.tipo === 'servicios' && this.serv) {
       const antes = this.serv.estado || {}; this.serv.estado = e.estado; this.serv.revisado = e.revisado; this.repartirRacks();
-      for (const g of this.serv.grupos) for (const s of g.servicios) { const a = antes[s.id], n = e.estado[s.id]; if (a && n && a.ok !== n.ok) this.apuntar('ticker', `${s.nombre}: ${n.ok ? tr('vuelve a estar en línea') : tr('caído') + ' (' + n.detalle + ')'}`, n.ok ? '' : 'error'); }
-      return;
+      for (const g of this.serv.grupos) for (const s of g.servicios) { const a = antes[s.id], n = e.estado[s.id]; if (a && n && a.ok !== n.ok) this.ordenApolo(n.ok ? `${s.nombre} vuelve a estar en línea.` : `¡${s.nombre} se ha caído!`); if (a && n && a.ok !== n.ok) this.apuntar('ticker', `${s.nombre}: ${n.ok ? tr('vuelve a estar en línea') : tr('caído') + ' (' + n.detalle + ')'}`, n.ok ? '' : 'error'); }
+      this.poblar(); return;
     }
     if (e.tipo === 'agente' && e.agente) {
       const a = e.agente, prev = this.mc.agentes.get(a.id);
@@ -150,6 +162,11 @@ const MC_MUNDO = {
       else if (!prev && a.estado === 'trabajando') this.apuntar('ticker', `${a.nombre || a.id}: ${a.padre ? tr('subagente en marcha') : tr('empieza')}`);
       else if (prev?.estado === 'trabajando' && a.estado !== 'trabajando') this.apuntar('ticker', `${a.nombre || a.id}: ${a.estado === 'listo' ? tr('terminado') : a.estado}`);
       if (a.esperando && !prev?.esperando) this.apuntar('ticker', `${a.nombre || a.id}: ${tr('esperando tu permiso')}`, 'aviso');
+      const nom = String(a.nombre || a.id).replace(/^⏰\s*/, '').slice(0, 26), mod = mmNombreModelo(mmProveedor(a.modelo));
+      if (!prev && a.estado === 'trabajando') this.ordenApolo(a.padre ? `¡${nom}, al taller de Leonardo!` : a.tarea ? `¡A trabajar en «${nom}»!` : `¡${mod}, encárgate de «${nom}»!`);
+      else if (prev?.estado === 'trabajando' && a.estado === 'listo') this.ordenApolo(`¡Bien hecho, ${nom}!`);
+      else if (prev?.estado === 'trabajando' && a.estado === 'error') this.ordenApolo(`${nom} ha fallado… lo reviso.`);
+      if (a.esperando && !prev?.esperando) this.ordenApolo(`¡Demon! «${nom}» necesita tu permiso.`);
       queueMicrotask(() => this.poblar());
     } else if (e.tipo === 'registro') this.apuntar('log', `${e.origen}: ${e.texto}`, e.nivel);
     else if (e.tipo === 'memoria-uso') { this.est.memoria = 1; const n = Array.isArray(e.recuerdos) ? e.recuerdos.length : +e.recuerdos || 0; this.apuntar('ticker', `APOLO ${e.accion === 'escribir' ? tr('guardó en') : tr('consultó')} ${tr('la memoria')}${n ? ` (${n})` : ''}`); }
@@ -185,8 +202,14 @@ const MC_MUNDO = {
     const quiere = new Map(), ahora = Date.now(), R = MM_R;
     const look = (id, extra = {}) => { const h = mmHash(id); return { ropa: MM_ROPA[h % MM_ROPA.length], pelo: MM_PELO[(h >>> 4) % MM_PELO.length], piel: MM_PIEL[(h >>> 8) % MM_PIEL.length], estilo: MM_ESTILO[(h >>> 10) % 4],
       ...((h >>> 12) % 4 === 0 ? { sombrero: 'capucha', color: MM_ROPA[(h >>> 14) % MM_ROPA.length] } : {}), ...((h >>> 16) % 3 === 0 ? { capa: MM_ROPA[(h >>> 18) % MM_ROPA.length] } : {}), mochila: (h >>> 20) % 2 === 0, ...extra }; };
-    quiere.set('apolo', { tipo: 'apolo', nombre: 'APOLO', sala: 'principal', look: { ropa: '#4b3a8f', ropa2: '#e0b44a', pelo: '#d9d9d9', piel: '#f1c7a0', barba: '#eeeeee', sombrero: 'mago', color: '#3d2f7a', tunica: true, baston: true },
-      fijo: { x: this.orbe.x * R - 22, y: (this.orbe.y + 2) * R + 6 } });
+    quiere.set('apolo', { tipo: 'apolo', nombre: 'APOLO', sala: 'principal', look: { ropa: '#4b3a8f', ropa2: '#e0b44a', pelo: '#d9d9d9', piel: '#f1c7a0', barba: '#eeeeee', sombrero: 'mago', color: '#3d2f7a', tunica: true, baston: true, capa: '#7a1f3d' } });
+    // bots de Discord (del grupo de servicios de bots): pasean; si su servicio cae, van a la sala de servidores
+    const est = this.serv?.estado || {};
+    for (const g of this.serv?.grupos || []) for (const sv of g.servicios) {
+      if (!/bot/i.test(g.nombre + ' ' + g.id) && !/bots?/i.test(sv.nombre)) continue;
+      const b = mmBot(sv.nombre), ok = est[sv.id] ? est[sv.id].ok : true;
+      quiere.set('b:' + sv.id, { tipo: 'bot', servicio: sv, online: ok, estadoServ: est[sv.id], frases: b.frases, nombre: sv.nombre, sala: ok ? '*' : (this.porRol.servidores ? 'servidores' : '*'), look: { ...b.look } });
+    }
     // cada modelo pasea por su sala; cuando un agente lo usa, el modelo EN PERSONA va a hacer esa tarea (y vuelve al acabar)
     const mods = (this.modelos || []).slice(0, 14);
     const salaDe = a => a.padre ? 'subagentes' : a.tarea ? (this.porRol.taller ? 'taller' : 'principal') : 'principal';
@@ -211,8 +234,9 @@ const MC_MUNDO = {
     for (const [id, q] of quiere) {
       const e = this.ents.get(id);
       if (e) {
-        Object.assign(e, { agente: q.agente, plugin: q.plugin, tarea: q.tarea, modelo: q.modelo, nombre: q.nombre }); if (q.fijo) e.fijo = q.fijo; e.sale = 0;
-        if (e.sala !== q.sala) { e.sala = q.sala; e.ruta = []; e.espera = 0; }                 // le toca ir a otra sala: sale ya
+        Object.assign(e, { agente: q.agente, plugin: q.plugin, tarea: q.tarea, modelo: q.modelo, nombre: q.nombre, online: q.online, estadoServ: q.estadoServ }); if (q.fijo) e.fijo = q.fijo; e.sale = 0;
+        if (e.tipo === 'bot' && e.online === false && !e.avisoCaido) { e.avisoCaido = true; this.decir(e, '…me he caído', 4000); } else if (e.online) e.avisoCaido = false;
+        if (e.sala !== q.sala && e.tipo !== 'apolo') { e.sala = q.sala; e.ruta = []; e.espera = 0; }                 // le toca ir a otra sala: sale ya
         continue;
       }
       q.look.k = mmHash(JSON.stringify(q.look));
@@ -247,6 +271,7 @@ const MC_MUNDO = {
   mover(e, dt, t) {
     const R = MM_R, ahora = Date.now();
     if (ahora > e.proxParp) { e.parpHasta = ahora + 130; e.proxParp = ahora + 2500 + Math.random() * 4000; }
+    if (e.tipo === 'apolo') return this.moverApolo(e, dt, t);
     if (e.fijo) { e.x = e.fijo.x; e.y = e.fijo.y; if (e.fijo.dir) { e.dir = e.fijo.dir; e.izq = e.fijo.izq; } e.acc = e.trabajando ? (e.tipo === 'apolo' ? 'conjura' : 'trabaja') : 'quieto'; e.frame = e.acc === 'trabaja' ? Math.floor(t / 220) % 2 : Math.floor(t / 700) % 2; return; }
     const ocupado = e.trabajando && !e.agente?.esperando;
     if (!e.ruta.length) {
@@ -262,12 +287,55 @@ const MC_MUNDO = {
       e.espera = (ocupado ? 3000 : 1500) + Math.random() * (ocupado ? 6000 : 4000);
       return;
     }
-    const n = e.ruta[0], tx = n.x * R + R / 2, ty = n.y * R + R * .8, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), v = (e.tipo === 'plugin' ? 40 : e.tipo === 'modelo' && e.agente ? 105 : e.tipo === 'modelo' ? 44 : 56) * dt / 1000;   // a su tarea van con prisa; en su sala pasean
+    this.andar(e, dt);
+  },
+  andar(e, dt) {
+    const R = MM_R, n = e.ruta[0], tx = n.x * R + R / 2, ty = n.y * R + R * .8, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), v = (e.tipo === 'plugin' ? 40 : e.tipo === 'modelo' && e.agente ? 105 : e.tipo === 'modelo' ? 44 : e.tipo === 'apolo' ? (e.prisa ? 110 : 50) : 56) * dt / 1000;   // a su tarea van con prisa; en su sala pasean
     if (d <= v) { e.x = tx; e.y = ty; e.ruta.shift(); } else { e.x += dx / d * v; e.y += dy / d * v; }
     if (Math.abs(dx) > Math.abs(dy)) { e.dir = 'lado'; e.izq = dx < 0; } else if (Math.abs(dy) > .5) e.dir = dy < 0 ? 'arriba' : 'abajo';
     e.acc = 'anda'; e.paso = (e.paso || 0) + dt; e.frame = Math.floor(e.paso / 130) % 4;
     if (e.frame !== e.ultFrame && e.frame % 2 === 1 && this.parts.length < 500) this.parts.push({ x: e.x + (Math.random() - .5) * 6, y: e.y, vx: (Math.random() - .5) * 10, vy: -6, vida: 0, max: 500, tam: 2, col: '170,160,140', tipo: 'polvo' });
     e.ultFrame = e.frame;
+  },
+  // APOLO, el jefe: si hay trabajo va al orbe a conjurar; si no, patrulla las salas y comenta lo que ve
+  moverApolo(e, dt, t) {
+    const R = MM_R, ahora = Date.now(), o = this.orbe, puesto = { x: o.x - 1, y: o.y + 2 }, aqui = { x: Math.floor(e.x / R), y: Math.floor((e.y - 4) / R) };
+    if (ahora > e.proxParp) { e.parpHasta = ahora + 130; e.proxParp = ahora + 2500 + Math.random() * 4000; }
+    if (e.trabajando) {
+      if (aqui.x === puesto.x && aqui.y === puesto.y && !e.ruta.length) { e.acc = 'conjura'; e.dir = 'lado'; e.izq = false; e.frame = Math.floor(t / 700) % 2; e.destino = null; return; }
+      if (!e.ruta.length || e.destino !== 'orbe') { e.ruta = this.camino(aqui, puesto); e.destino = 'orbe'; e.prisa = true; if (!e.ruta.length) { e.x = puesto.x * R + R / 2; e.y = puesto.y * R + R * .8; return; } }
+      return this.andar(e, dt);
+    }
+    e.prisa = false;
+    if (e.ruta.length) return this.andar(e, dt);
+    if (e.destino && e.destino !== 'orbe') { this.decir(e, this.comentario(e.destino)); e.destino = null; e.espera = 6000 + Math.random() * 5000; }
+    else if (e.destino === 'orbe') { e.destino = null; e.espera = 3000; }
+    e.acc = 'quieto'; e.frame = Math.floor(t / 700) % 2; e.espera = (e.espera ?? 2000) - dt;
+    if (e.espera > 0) return;
+    const roles = Object.keys(this.porRol).filter(r => r !== e.ultimaSala), rol = roles[Math.floor(Math.random() * roles.length)];
+    e.ultimaSala = rol; e.destino = rol; e.ruta = this.camino(aqui, this.puntoEn(this.porRol[rol]));
+    if (!e.ruta.length) e.espera = 3000;
+  },
+  comentario(rol) {
+    const est = this.serv?.estado || {}, todos = (this.serv?.grupos || []).flatMap(g => g.servicios), caidos = todos.filter(s => est[s.id] && !est[s.id].ok);
+    const ags = [...this.mc.agentes.values()], uno = l => l[Math.floor(Math.random() * l.length)];
+    if (rol === 'servidores') return todos.length ? (caidos.length ? `${todos.length - caidos.length}/${todos.length} en línea… ¡${caidos[0].nombre} sigue caído!` : `${todos.length}/${todos.length} servicios en línea. Bien.`) : uno(['Los servidores zumban tranquilos.', 'CPU al ' + Math.round(this.est.cpu * 100) + '%. Todo en orden.']);
+    if (rol === 'taller') { const prox = (this.tareas || []).map(x => x.proxima).filter(Boolean).sort()[0]; return prox ? `Próxima tarea a las ${new Date(prox).toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' })}.` : 'El taller está listo para lo que venga.'; }
+    if (rol === 'subagentes') return uno(['Bonitos inventos, Leonardo.', '¿Quién ha tocado el ornitóptero?', 'Aquí trabajan mis subagentes.']);
+    if (rol === 'mcp') return uno(['El portal está en calma.', `${(this.mcpServ || []).filter(s => s.conectado).length} servidores MCP listos para conjurar.`, 'Que nadie toque las runas.']);
+    if (rol === 'principal') { const hechos = ags.filter(a => a.fin && Date.now() - a.fin < 6 * 3600e3).length; return hechos ? `${hechos} encargos terminados hoy. Buen equipo.` : uno(['Todo en orden.', 'El orbe está tranquilo.', 'Esperando órdenes de Demon.']); }
+    return uno(['Todo en orden.', 'Sigo de ronda.']);
+  },
+  // bocadillo de texto sobre un personaje (HTML: nítido); APOLO habla de uno en uno
+  decir(e, texto, ms = 3800) {
+    if (!e || !this.capaNombres) return;
+    if (!e.dice) { e.dice = document.createElement('span'); e.dice.className = 'mm-dice' + (e.tipo === 'apolo' ? ' jefe' : ''); this.capaNombres.append(e.dice); }
+    e.dice.textContent = texto; e.diceHasta = Date.now() + ms; e.dice.hidden = false;
+  },
+  ordenApolo(texto) {
+    const a = this.ents.get('apolo'); if (!a) return;
+    const ahora = Date.now(); if (a.diceHasta && ahora < a.diceHasta - 1500) { (this.colaApolo ||= []).push(texto); if (this.colaApolo.length > 3) this.colaApolo.shift(); return; }
+    this.decir(a, texto);
   },
   // ---------- dibujo ----------
   cuadro(t) {
@@ -314,14 +382,22 @@ const MC_MUNDO = {
       c.fillStyle = 'rgba(0,0,0,.38)'; c.beginPath(); c.ellipse(p.x, p.y, 13, 5, 0, 0, 7); c.fill();
       if (this.sel?.p === p || this.encima === p) { c.strokeStyle = this.tema.borde; c.lineWidth = 1; c.globalAlpha = alfa * (.6 + Math.sin(t / 200) * .3); c.beginPath(); c.ellipse(p.x, p.y, 18, 7, 0, 0, 7); c.stroke(); c.globalAlpha = alfa; }
       const sp = mmPJ(p.look, p.dir, p.frame, p.acc || 'quieto', ahora < p.parpHasta);
-      const E = 1.5, lev = p.look.flota ? 9 + Math.sin(t / 420) * 3 : 0, bx = Math.round(p.x - 14 * E), by = Math.round(p.y - 50 * E - lev);                       // a 1,5×: el tamaño de la referencia
+      const E = p.tipo === 'apolo' ? 1.8 : 1.5, lev = p.look.flota ? 9 + Math.sin(t / 420) * 3 : 0, bx = Math.round(p.x - 14 * E), by = Math.round(p.y - 50 * E - lev);                       // a 1,5×: el tamaño de la referencia
       if (p.dir === 'lado' && p.izq) { c.save(); c.translate(bx + 28 * E, by); c.scale(-1, 1); c.drawImage(sp, 0, 0, 28 * E, 54 * E); c.restore(); } else c.drawImage(sp, bx, by, 28 * E, 54 * E);
       c.globalAlpha = 1;
+      if (p.look.balon) {                                             // el balón va por delante de sus pies
+        const b = p.balon || (p.balon = { x: p.x + 10, y: p.y }), fx = p.x + (p.dir === 'lado' ? (p.izq ? -12 : 12) : 6), fy = p.y + (p.dir === 'abajo' ? 6 : p.dir === 'arriba' ? -4 : 1);
+        b.x += (fx - b.x) * .18; b.y += (fy - b.y) * .18; const bote = p.acc === 'anda' ? Math.abs(Math.sin(t / 140)) * 5 : 0;
+        c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(b.x, b.y + 1, 4, 1.5, 0, 0, 7); c.fill();
+        c.fillStyle = '#f4f4f4'; c.beginPath(); c.arc(b.x, b.y - 3 - bote, 3.5, 0, 7); c.fill(); c.fillStyle = '#1c1c1c'; c.fillRect(b.x - 1 | 0, b.y - 4 - bote | 0, 2, 2); c.fillRect(b.x + 1 | 0, b.y - 2 - bote | 0, 1, 1); }
+      if (p.tipo === 'bot' && p.online && Date.now() > (p.proxFrase ||= Date.now() + 4000 + Math.random() * 12000)) { this.decir(p, p.frases[Math.floor(Math.random() * p.frases.length)], 3200); p.proxFrase = Date.now() + 14000 + Math.random() * 22000; }
+      if (this.colaApolo?.length && p.tipo === 'apolo' && !(p.diceHasta > Date.now())) this.decir(p, this.colaApolo.shift());
       const cat = p.agente?.herramienta ? mmCategoria(p.agente.herramienta.nombre) : null; p.cat = cat;
       if (cat) luces.push({ x: p.x, y: p.y - 30, r: 90, col: MM_EFECTO[cat], a: .55 });
       if (p.tipo === 'modelo' && p.trabajando) luces.push({ x: p.x, y: p.y - 30, r: 60, col: mmRGB(p.look.color || p.look.ropa || '#ffffff'), a: .35 });
       if (p.look.sombrero === 'casco' && p.dir !== 'arriba') luces.push({ x: p.x + (p.dir === 'lado' ? (p.izq ? -9 : 9) : 0), y: p.y - 66, r: 46, col: [255, 240, 190], a: .45 });
-      if (p.look.baston) luces.push({ x: p.x + (p.acc === 'conjura' ? 0 : 6), y: p.y - (p.acc === 'conjura' ? 87 : 66), r: p.trabajando ? 70 : 34, col: [130, 240, 255], a: p.trabajando ? .7 : .35, bloom: p.trabajando ? 10 : 0 });
+      if (p.tipo === 'apolo') luces.push({ x: p.x, y: p.y - 40, r: 70, col: [255, 210, 120], a: .3 });          // el jefe lleva su propia luz
+      if (p.look.baston) luces.push({ x: p.x + (p.acc === 'conjura' ? 0 : 7), y: p.y - (p.acc === 'conjura' ? 104 : 80), r: p.trabajando ? 70 : 34, col: [130, 240, 255], a: p.trabajando ? .7 : .35, bloom: p.trabajando ? 10 : 0 });
     }
     // luz: ambiente + salas + fuentes → se multiplica sobre la escena
     const L = this.lc, A = this.tema.amb, lw = this.luz.width, lh = this.luz.height;
@@ -360,7 +436,7 @@ const MC_MUNDO = {
     if (!this.semilla || t - this.tRayo > 85) { this.semilla = (Math.random() * 1e6) | 0; this.tRayo = t; }
     let k = 0;
     for (const p of this.ents.values()) { if (!p.trabajando || p.tipo === 'apolo' || p.tipo === 'modelo' || p.sale || p.cat === 'web' || p.cat === 'memoria' || p.cat === 'mcp') continue; r.push([ox, oy, p.x, p.y - 33, this.semilla + k++ * 13, 1]); }
-    const a = this.ents.get('apolo'); if (a?.trabajando) r.push([a.x, a.y - 90, ox - 8, oy - 4, this.semilla + 99, .6]);
+    const a = this.ents.get('apolo'); if (a?.trabajando && a.acc === 'conjura') r.push([a.x, a.y - 104, ox - 8, oy - 4, this.semilla + 99, .7]);
     return r;
   },
   particulas(c, t, dt) {
@@ -386,21 +462,23 @@ const MC_MUNDO = {
   },
   burbuja(c, p, t) {
     const a = p.agente; let s = null;
-    if (a?.esperando) s = '!'; else if (a && a.estado !== 'trabajando') s = a.estado === 'listo' ? '✓' : '×';
+    if (p.tipo === 'bot' && p.online === false) s = '×'; else if (a?.esperando) s = '!'; else if (a && a.estado !== 'trabajando') s = a.estado === 'listo' ? '✓' : '×';
     else if (a?.herramienta) s = 'icono'; else if (p.trabajando && p.tipo !== 'apolo' && p.tipo !== 'modelo') s = '…';
     if (!s) return;
-    const alto = p.look.sombrero === 'mago' ? (p.acc === 'conjura' ? 100 : 92) : p.look.sombrero ? 70 : 66;
+    const alto = (p.look.sombrero === 'mago' ? (p.acc === 'conjura' ? 100 : 92) : p.look.sombrero ? 70 : 66) * (p.tipo === 'apolo' ? 1.2 : 1);
     c.globalAlpha = p.sale ? Math.max(0, 1 - (Date.now() - p.sale) / 1500) : 1;
     const by = p.y - alto - (p.look.flota ? 10 : 0) + (s === '!' ? Math.round(Math.sin(t / 110)) : 0);
     if (s === 'icono') mmBurbujaIcono(c, p.x + 10, by, mmCategoria(a.herramienta.nombre), t); else mmBurbuja(c, p.x + 10, by, s, t); c.globalAlpha = 1;
   },
   // nombre encima de agentes y subagentes (HTML: nítido a cualquier tamaño)
   etiqueta(p, quitar) {
-    if (!p.el && (quitar || (p.tipo !== 'agente' && p.tipo !== 'modelo'))) return;
+    if (quitar) { p.dice?.remove(); }
+    if (p.dice) { const vivo = Date.now() < p.diceHasta; p.dice.hidden = !vivo; if (vivo) { const alto = (p.look.sombrero === 'mago' ? 100 : 74) * (p.tipo === 'apolo' ? 1.2 : 1) + 22; p.dice.style.left = `${(p.x / this.W * 100).toFixed(2)}%`; p.dice.style.top = `${((p.y - alto) / this.H * 100).toFixed(2)}%`; } }
+    if (!p.el && (quitar || (p.tipo !== 'agente' && p.tipo !== 'modelo' && p.tipo !== 'apolo' && p.tipo !== 'bot'))) return;
     if (p.el && p.el.dataset.n !== p.nombre) { p.el.textContent = p.nombre.length > 28 ? p.nombre.slice(0, 27) + '…' : p.nombre; p.el.dataset.n = p.nombre; }
     if (quitar) { p.el?.remove(); return; }
-    if (!p.el) { p.el = document.createElement('span'); p.el.className = 'mm-nombre' + (p.tipo === 'modelo' ? ' modelo' : ''); if (p.tipo === 'modelo') p.el.style.setProperty('--c', p.look.especie ? '#f4f4f4' : p.look.ropa); p.el.textContent = p.nombre.length > 22 ? p.nombre.slice(0, 21) + '…' : p.nombre; this.capaNombres.append(p.el); }
-    const alto = (p.look.sombrero === 'mago' ? 100 : p.look.especie ? 82 : 74) + (p.look.flota ? 12 : 0) - (p.tipo === 'modelo' ? 0 : 0);
+    if (!p.el) { p.el = document.createElement('span'); p.el.className = 'mm-nombre' + (p.tipo === 'modelo' ? ' modelo' : p.tipo === 'apolo' ? ' jefe' : p.tipo === 'bot' ? ' bot' : ''); if (p.tipo === 'modelo') p.el.style.setProperty('--c', p.look.especie ? '#f4f4f4' : p.look.ropa); p.el.textContent = p.nombre.length > 22 ? p.nombre.slice(0, 21) + '…' : p.nombre; this.capaNombres.append(p.el); }
+    const alto = ((p.look.sombrero === 'mago' ? 100 : p.look.especie ? 82 : 74) + (p.look.flota ? 12 : 0)) * (p.tipo === 'apolo' ? 1.2 : 1);
     const abajo = p.tipo === 'modelo' && !p.agente && this.porRol.modelos && this.sala[Math.floor((p.y - 4) / MM_R) * this.m.ancho + Math.floor(p.x / MM_R)] === this.porRol.modelos.id;                                   // en su sala, el nombre va a los pies como una placa
     p.el.style.left = `${((p.x - (abajo ? 0 : 4)) / this.W * 100).toFixed(2)}%`; p.el.style.top = `${((abajo ? p.y + 12 + (p.fila % 2) * 12 : p.y - alto) / this.H * 100).toFixed(2)}%`;
     p.el.style.opacity = p.sale ? Math.max(0, 1 - (Date.now() - p.sale) / 1500) : 1;
@@ -436,6 +514,12 @@ const MC_MUNDO = {
       cuerpo = fila('Estado', usan.length ? `<span style="color:#4dff8f">${tr('trabajando')}</span>` : tr('disponible')) + fila('Agentes usándolo', usan.length) +
         (usan.length ? `<div class="mm-txt">${usan.slice(0, 5).map(a => esc(String(a.nombre || a.id))).join('<br>')}</div>` : '') +
         fila('Terminados (6 h)', ags.filter(a => a.fin && mmProveedor(a.modelo) === md.id).length);
+    } else if (h.p?.tipo === 'bot') {
+      const st = h.p.estadoServ; col = h.p.online === false ? '#ff4d6a' : '#5865f2';
+      cab = [h.p.nombre, tr('Bot de Discord')];
+      cuerpo = fila('Estado', h.p.online === false ? `<span style="color:#ff6b7d">${tr('caído')}</span>` : `<span style="color:#4dff8f">${tr('en línea')}</span>`) +
+        (st ? fila('Detalle', esc(st.detalle || '')) + fila('Desde', st.desde ? new Date(st.desde).toLocaleString(I18N.locale()) : '—') : '') +
+        `<div class="mm-txt">«${esc(h.p.frases[0])}»</div>`;
     } else if (h.p?.tipo === 'plugin') { col = '#8fdc5a'; cab = [h.p.nombre, `plugin ${h.p.plugin.version || ''}`]; cuerpo = `<div class="mm-txt">${esc(h.p.plugin.descripcion || '')}</div>${fila('Permisos', esc((h.p.plugin.permisos || []).join(', ') || '—'))}`; }
     else if (h.p?.tipo === 'tarea') { const t = h.p.tarea; col = '#f5c542'; cab = [h.p.nombre, tr('Tarea programada')]; cuerpo = `<div class="mm-txt">${esc(String(t.accion?.texto || '').slice(0, 260))}</div>${fila('Próxima', t.proxima ? new Date(t.proxima).toLocaleString(I18N.locale()) : '—')}${fila('Último resultado', esc(String(t.ultimoResultado || '—').slice(0, 80)))}`; }
     else if (h.o?.tipo === 'rack' && this.est.racks?.get(`${h.o.x},${h.o.y}`)) {
