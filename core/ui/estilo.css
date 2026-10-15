@@ -754,6 +754,11 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mv-f i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .mv-f span { color: var(--txt-3); font-size: 11px; }
 .mv-f.off { opacity: .4; }
+.mv-3d { position: absolute; inset: 0; display: block; outline: none; cursor: grab; touch-action: none; border-radius: inherit; }
+.mv-etiquetas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+.mv-etiquetas span { position: absolute; left: 0; top: 0; white-space: nowrap; color: var(--txt); font-weight: 500; text-shadow: 0 0 6px var(--capa-1, #000), 0 0 2px var(--capa-1, #000); will-change: transform; }
+.mv-etiquetas span.fuerte { font-weight: 700; color: var(--acento); }
+.mv-ayuda3d { position: absolute; right: 10px; bottom: 10px; font-size: 11px; color: var(--txt-3); pointer-events: none; text-align: right; }
 .mv-modo { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
 .mv-f .i { width: 14px; height: 14px; }
 .mv-buscar { position: absolute; right: 10px; top: 10px; width: 220px; margin: 0; }
@@ -801,7 +806,7 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .wp-nav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; color: var(--txt-2); font-variant-numeric: tabular-nums; }
 .wp-acciones { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; margin-bottom: 12px; }
 @media (max-width: 900px) {
-  .mv-grafo { grid-template-columns: 1fr; height: auto; } .mv-lienzo { height: 62vh; } .mv-filtros { max-width: calc(100% - 20px); } .mv-buscar { top: auto; bottom: 10px; left: 10px; right: auto; width: 180px; }
+  .mv-grafo { grid-template-columns: 1fr; height: auto; } .mv-lienzo { height: 62vh; } .mv-ayuda3d { display: none; } .mv-modo { bottom: 52px; } .mv-filtros { max-width: calc(100% - 20px); } .mv-buscar { top: auto; bottom: 10px; left: 10px; right: auto; width: 180px; }
   .wp-grid { grid-template-columns: 1fr; } .wp-movil { position: static; display: flex; flex-direction: column; align-items: center; } .wp-marco { height: 74vh; }
   .sv-cuerpo { padding-left: 16px; } .sv-perfil { grid-template-columns: 1fr; } .mv-pest { padding: 0 12px; }
 }

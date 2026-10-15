@@ -27,14 +27,15 @@ MV_SUB.grafo = {
   async pintar(v) {
     this.v = v;
     const d = await api('GET', '/grafo');
-    this.d = d; this.ocultos = this.ocultos || new Set(); this.modo = this.modo || 'resumen'; this.sinAntes = !!this.sinAntes;
+    this.d = d; this.ocultos = this.ocultos || new Set(); this.modo = this.modo || 'resumen'; this.sinAntes = !!this.sinAntes; this.dim = this.dim || (window.WebGLRenderingContext ? '3d' : '2d');
     const cuenta = t => d.nodos.filter(n => n.tipo === t).length;
     v.innerHTML = `<div class="pagina ancha">${cabecera('Grafo de la memoria', 'Personas, proyectos, lugares, cosas y herramientas que salen en tus recuerdos y cómo se conectan. La heurística lo actualiza al momento y el sueño REM lo afina con el modelo. Arrastra para moverte, rueda para zoom, clic en un punto para ver sus recuerdos.',
       `<span class="chip">${tr('{n} entidades', { n: d.total.entidades })}</span><span class="chip">${tr('{n} relaciones', { n: d.total.relaciones })}</span>`)}
       <div class="mv-grafo">
         <div class="mv-lienzo caja"><canvas id="mvCanvas"></canvas>
           <div class="mv-filtros">${Object.keys(MV_COLOR).map(t => `<button class="mv-f ${this.ocultos.has(t) ? 'off' : ''}" data-t="${t}"><i style="background:${MV_COLOR[t]}"></i>${tr(MV_TIPO_N[t])} <span>${cuenta(t)}</span></button>`).join('')}</div>
-          <div class="mv-modo"><button class="mv-f ${this.modo === 'resumen' ? '' : 'off'}" data-m="resumen" title="${tr('Lo más importante: los nodos con más recuerdos y relaciones')}">${tr('Resumen')}</button><button class="mv-f ${this.modo === 'todo' ? '' : 'off'}" data-m="todo">${tr('Todo')} <span>${d.nodos.length}</span></button><button class="mv-f ${this.sinAntes ? 'off' : ''}" data-m="antes" title="${tr('Lo que ya no es actual pero es parte de tu historia (borde punteado)')}">${tr('Lo de antes')} <span>${d.nodos.filter(n => n.antes).length}</span></button></div>
+          <div class="mv-modo"><button class="mv-f ${this.modo === 'resumen' ? '' : 'off'}" data-m="resumen" title="${tr('Lo más importante: los nodos con más recuerdos y relaciones')}">${tr('Resumen')}</button><button class="mv-f ${this.modo === 'todo' ? '' : 'off'}" data-m="todo">${tr('Todo')} <span>${d.nodos.length}</span></button><button class="mv-f" data-m="dim" title="${tr('Cambiar entre el espacio 3D y el plano 2D')}">${this.dim === '3d' ? '2D' : '3D'}</button><button class="mv-f ${this.sinAntes ? 'off' : ''}" data-m="antes" title="${tr('Lo que ya no es actual pero es parte de tu historia (borde punteado)')}">${tr('Lo de antes')} <span>${d.nodos.filter(n => n.antes).length}</span></button></div>
+          ${this.dim === '3d' ? `<div class="mv-ayuda3d">${tr('Arrastra: girar · clic derecho o Shift: desplazar · rueda: zoom · WASD/QE: volar')}</div>` : ''}
           <div class="mv-buscar buscador-lado">${ic('buscar')}<input id="mvQ" placeholder="${tr('Buscar entidad…')}"></div>
           <div class="mv-zoom"><button class="btn icono" data-z="1.25" title="${tr('Acercar')}">${ic('mas')}</button><button class="btn icono" data-z="0.8" title="${tr('Alejar')}"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button class="btn icono" data-z="0" title="${tr('Centrar')}">${ic('recargar')}</button></div>
           ${d.nodos.length < 2 ? `<div class="mv-vacio">${vacio('enlace', 'Aún no hay entidades. Se llenará solo a medida que el robot recuerde cosas.')}</div>` : ''}
@@ -42,12 +43,12 @@ MV_SUB.grafo = {
         <aside class="mv-detalle caja" id="mvDet"><div class="vacio">${ic('enlace')}${tr('Toca un punto del grafo para ver con qué está conectado y sus recuerdos.')}</div></aside>
       </div></div>`;
     this.montar();
-    $('.mv-filtros', v).onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; const t = b.dataset.t; this.ocultos.has(t) ? this.ocultos.delete(t) : this.ocultos.add(t); b.classList.toggle('off'); this.calentar(); };
-    $('.mv-modo', v).onclick = e => { const b = e.target.closest('[data-m]'); if (!b) return; if (b.dataset.m === 'antes') this.sinAntes = !this.sinAntes; else this.modo = b.dataset.m; this.sel = null; this.pintar(v); };
-    $('.mv-zoom', v).onclick = e => { const b = e.target.closest('[data-z]'); if (!b) return; const z = +b.dataset.z; if (!z) this.encuadrar(); else this.zoomEn(this.W / 2, this.H / 2, z); };
+    $('.mv-filtros', v).onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; const t = b.dataset.t; this.ocultos.has(t) ? this.ocultos.delete(t) : this.ocultos.add(t); b.classList.toggle('off'); this.g3 ? this.g3.refrescar() : this.calentar(); };
+    $('.mv-modo', v).onclick = e => { const b = e.target.closest('[data-m]'); if (!b) return; if (b.dataset.m === 'antes') this.sinAntes = !this.sinAntes; else if (b.dataset.m === 'dim') { this.dim = this.dim === '3d' ? '2d' : '3d'; this.g3?.destruir(); this.g3 = null; } else this.modo = b.dataset.m; this.sel = null; this.pintar(v); };
+    $('.mv-zoom', v).onclick = e => { const b = e.target.closest('[data-z]'); if (!b) return; const z = +b.dataset.z; if (this.g3) { z ? this.g3.zoom(z) : this.g3.encuadrar(); return; } if (!z) this.encuadrar(); else this.zoomEn(this.W / 2, this.H / 2, z); };
     let tq; $('#mvQ', v).oninput = e => { clearTimeout(tq); tq = setTimeout(() => { const q = e.target.value.trim().toLowerCase(); if (!q) return; const n = this.nodos.filter(x => x.nombre.toLowerCase().includes(q)).sort((a, b) => b.importancia - a.importancia)[0]; if (n) { this.abrir(n); this.enfocar(n); } }, 250); };
   },
-  salir() { cancelAnimationFrame(this.raf); this.raf = 0; this.ro?.disconnect(); this.ro = null; this.v = null; },
+  salir() { this.g3?.destruir(); this.g3 = null; cancelAnimationFrame(this.raf); this.raf = 0; this.ro?.disconnect(); this.ro = null; this.v = null; },
   montar() {
     const cv = $('#mvCanvas', this.v); if (!cv) return;
     this.cv = cv; this.ctx = cv.getContext('2d');
@@ -61,9 +62,21 @@ MV_SUB.grafo = {
     const por = new Map(this.nodos.map(n => [n.id, n]));
     this.aristas = this.d.aristas.map(a => ({ ...a, s: por.get(a.de), t: por.get(a.a), floja: a.tipo === 'relacionado' && a.peso < 2 })).filter(a => a.s && a.t);
     this.vec = new Map(); for (const a of this.aristas) { for (const [x, y] of [[a.s, a.t], [a.t, a.s]]) { if (!this.vec.has(x.id)) this.vec.set(x.id, new Set()); this.vec.get(x.id).add(y.id); } }
+    this.g3?.destruir(); this.g3 = null;
+    if (this.dim === '3d') return this.montar3d();
     this.cam = this.cam || { x: 0, y: 0, z: 1 };
     this.ajustar(); this.ro = new ResizeObserver(() => { this.ajustar(); this.dibujar(); }); this.ro.observe(cv.parentElement);
     this.eventos(); this.calentar(); setTimeout(() => this.encuadrar(), 900);
+  },
+  montar3d() {
+    const ir = () => {
+      if (!this.v || !$('#mvCanvas', this.v)) return;
+      const caja = this.cv.parentElement; this.cv.style.display = 'none';
+      const css = getComputedStyle(document.documentElement);
+      this.g3 = window.Grafo3D.crear(caja, { nodos: this.nodos, aristas: this.aristas, visible: n => this.visible(n), linea: a => this.linea(a), colores: MV_COLOR,
+        acento: css.getPropertyValue('--acento').trim() || '#2bdc7c', alTocar: n => { if (n) { this.abrir(n); this.g3.enfocar(n); } else { this.sel = null; this.g3.seleccionar(null); } } });
+    };
+    if (window.Grafo3D) ir(); else window.addEventListener('grafo3d-listo', ir, { once: true });
   },
   ajustar() {
     const cv = this.cv, r = cv.parentElement.getBoundingClientRect(), dpr = devicePixelRatio || 1;
@@ -77,7 +90,7 @@ MV_SUB.grafo = {
     return this.modo === 'todo' || n.top || (this.sel && (n === this.sel || this.vec.get(this.sel.id)?.has(n.id)));
   },
   linea(a) { return this.visible(a.s) && this.visible(a.t) && (this.modo === 'todo' || !a.floja || (this.sel && (a.s === this.sel || a.t === this.sel))); },
-  calentar() { this.alfa = 1; if (!this.raf) this.raf = requestAnimationFrame(() => this.paso()); },
+  calentar() { if (this.g3) return this.g3.refrescar(); this.alfa = 1; if (!this.raf) this.raf = requestAnimationFrame(() => this.paso()); },
   paso() {
     this.raf = 0; if (!this.v) return;
     const N = this.nodos.filter(n => this.visible(n)), A = this.aristas.filter(a => this.linea(a));
@@ -105,6 +118,7 @@ MV_SUB.grafo = {
     if (this.alfa > 0.02 || this.arrastrado) this.raf = requestAnimationFrame(() => this.paso());
   },
   dibujar() {
+    if (this.g3) return;
     const c = this.ctx, { x: cx, y: cy, z } = this.cam; if (!c) return;
     const css = getComputedStyle(document.documentElement), txt = css.getPropertyValue('--txt').trim() || '#ddd', txt3 = css.getPropertyValue('--txt-3').trim() || '#777', acento = css.getPropertyValue('--acento').trim() || '#2bdc7c';
     c.clearRect(0, 0, this.W, this.H);
@@ -147,7 +161,7 @@ MV_SUB.grafo = {
     const z = Math.max(.25, Math.min(1.6, Math.min(this.W / w, this.H / h)));
     this.cam = { z, x: -((Math.max(...xs) + Math.min(...xs)) / 2) * z, y: -((Math.max(...ys) + Math.min(...ys)) / 2) * z }; this.dibujar();
   },
-  enfocar(n) { const z = Math.max(this.cam.z, 1.3); this.cam = { z, x: -n.x * z, y: -n.y * z }; this.sel = n; this.dibujar(); },
+  enfocar(n) { if (this.g3) { this.sel = n; this.g3.seleccionar(n); return this.g3.enfocar(n); } const z = Math.max(this.cam.z, 1.3); this.cam = { z, x: -n.x * z, y: -n.y * z }; this.sel = n; this.dibujar(); },
   eventos() {
     const cv = this.cv; let ini = null, movido = false;
     const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
@@ -171,7 +185,7 @@ MV_SUB.grafo = {
     cv.onwheel = e => { e.preventDefault(); const [px, py] = pos(e); this.zoomEn(px, py, e.deltaY < 0 ? 1.15 : 1 / 1.15); };
   },
   async abrir(n) {
-    this.sel = n;
+    this.sel = n; this.g3?.seleccionar(n);
     for (const id of this.vec.get(n.id) || []) { const o = this.nodos.find(x => x.id === id); if (o && !o.top && !o.colocado) { const a = Math.random() * 6.283; o.x = n.x + Math.cos(a) * 60; o.y = n.y + Math.sin(a) * 60; o.colocado = true; } }
     this.calentar();
     const det = $('#mvDet'); if (!det) return;
