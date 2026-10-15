@@ -572,6 +572,7 @@ async function startNucleo() {
   nucleo.bus.on('panico-fin', avisarPanico);
   ipcMain.on('panico', (_e, on) => (on ? nucleo.panico.activar('isla') : nucleo.panico.reanudar('isla')));
   ipcMain.handle('panico-estado', () => nucleo.panico.estado());
+  ipcMain.on('salir-gamer', () => { if (nucleo.gamer) nucleo.gamer.desactivar({ motivo: 'desde la isla' }).catch(() => { }); });
   // FASE 3: grabando una demostración → borde rojo discontinuo + etiqueta "GRABANDO" (indicador SIEMPRE visible)
   nucleo.bus.on('evento', e => {
     if (e.tipo !== 'demo') return;

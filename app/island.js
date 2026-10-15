@@ -171,12 +171,23 @@ const center = () => { const r = rwrap.getBoundingClientRect(); return [r.left +
 let lastCode = null;                  // último cambio de código para la tarjeta "en vivo"
 
 // tocar al robot: 1 clic = sacudida; 3 clics rápidos = da vueltas con ojos de remolino; si sigues, más vueltas y más mareo
-let clicks = [], mareoHasta = 0, nivelMareo = 0;
+let clicks = [], mareoHasta = 0, nivelMareo = 0, confirmarGamerHasta = 0;
 rwrap.addEventListener('click', e => {
   e.stopPropagation();
   const now = Date.now(); clicks = clicks.filter(t => now - t < 1500); clicks.push(now);
   const [x, y] = center();
   lastActivity = now;
+  if (modoGamer && bridge.salirGamer) {                                    // Modo Gamer: la isla sigue dormida; tocar = ofrecer salir
+    clicks = [];
+    if (now < confirmarGamerHasta) {
+      confirmarGamerHasta = 0; bridge.salirGamer();
+      robot.hud(tr('MODO GAMER APAGADO'), 3, 'listo'); sound.play('blip');
+    } else {
+      confirmarGamerHasta = now + 5000;
+      robot.poke(); robot.hud(tr('🎮 MODO GAMER · TOCA OTRA VEZ PARA SALIR'), 5, 'reposo');
+    }
+    return;
+  }
   if (clicks.length >= 3) {
     nivelMareo = now < mareoHasta ? Math.min(3, nivelMareo + 1) : 1;      // seguir tocando mientras está mareado = peor
     clicks = []; mareoHasta = now + 4000 + nivelMareo * 1100;
@@ -741,8 +752,9 @@ function render() {
     const n = [...s.subs.values()].filter(x => x.running).length;
     return `<span class="orb ${s.state}" title="${esc(s.name)}">${Array.from({ length: Math.min(n, 3) }, (_, i) => `<i class="sat" style="animation-delay:${-i * .53}s"></i>`).join('')}</span>`;
   }).join('');
-  badge.className = st;
-  badge.innerHTML = st === 'trabajando' ? '<span class="dots"><i></i><i></i><i></i></span>' : { permiso: '!', listo: ICO.ok, error: ICO.x, reposo: '', dormido: 'z' }[st];
+  badge.className = st + (modoGamer ? ' gamer' : '');
+  badge.innerHTML = st === 'trabajando' ? '<span class="dots"><i></i><i></i><i></i></span>' : { permiso: '!', listo: ICO.ok, error: ICO.x, reposo: '', dormido: modoGamer ? '🎮' : 'z' }[st];
+  badge.title = modoGamer ? tr('Modo Gamer activo: toca el robot dos veces para salir') : '';
   const cur0 = working[0] || all[0];
   $('steps').textContent = cur0 && cur0.steps ? tr('paso {n}', { n: cur0.steps }) : '';
   $('steps').style.display = cur0 && cur0.steps ? '' : 'none';

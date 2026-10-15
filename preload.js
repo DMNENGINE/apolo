@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('bridge', {
   robotState: st => ipcRenderer.send('robot-state', st),
   onPoke: fn => ipcRenderer.on('poke', () => fn()),
   onGamer: fn => ipcRenderer.on('gamer', (_e, v) => fn(v)),
+  salirGamer: () => ipcRenderer.send('salir-gamer'),                             // tocar la isla 2 veces en Modo Gamer = salir
   onNotif: fn => ipcRenderer.on('notif', (_e, n) => fn(n)),
   talk: (text, origin) => ipcRenderer.invoke('talk', text, origin),
   sesChat: sid => ipcRenderer.invoke('ses-chat', sid),
