@@ -13,6 +13,7 @@
 //   POST /v1/externo/aviso {texto,urgente,origen}
 //   POST /v1/remoto/:accion              canales remotos (bot de Discord en la Pi): decidir | texto | tarjeta | resumen | ingest
 //   POST /v1/importar {robot-migracion/1} · GET /v1/importar   migración (memoria, SOUL, USER, automatizaciones, agentes, skills)
+//   GET|POST /v1/importar/chatgpt · POST …/continuar|pausar    export de ChatGPT → memoria (en segundo plano)
 //   GET  /v1/control · POST /v1/control/soltar   quién controla el ratón/teclado · pánico (suelta y cancela el turno)
 //   GET  /v1/agentes                     Mission Control: qué sesiones y subagentes trabajan ahora (+ lo de las últimas 6 h)
 //   GET  /v1/eventos                     SSE global (permisos, tareas, eventos de todas las sesiones)
@@ -284,6 +285,14 @@ function iniciar(opciones = {}) {
       if (p[1] === 'reglas') {
         if (M === 'GET') return json(res, 200, n.permisos.reglas());
         if (M === 'DELETE' && p[2] !== undefined) { const r = n.permisos.reglas()[+p[2]]; const ok = n.permisos.borrarRegla(+p[2]); if (ok) n.bus.emit('config-seguridad', { resumen: `regla borrada: ${r?.herramienta} ${r?.prefijo}` }); return json(res, ok ? 200 : 404, {}); }
+      }
+      if (p[1] === 'importar' && p[2] === 'chatgpt') {             // export oficial de ChatGPT (compactado en el panel), en segundo plano
+        try {
+          if (!p[3] && M === 'GET') return json(res, 200, n.importadorChatGPT.estado() || {});
+          if (!p[3] && M === 'POST') return json(res, 200, n.importadorChatGPT.empezar(await leer(req, 16 * 1024 * 1024)));
+          if (p[3] === 'continuar' && M === 'POST') return json(res, 200, n.importadorChatGPT.continuar());
+          if (p[3] === 'pausar' && M === 'POST') return json(res, 200, { ok: n.importadorChatGPT.pausar() });
+        } catch (e) { return json(res, 400, { error: e.message }); }
       }
       if (p[1] === 'importar') {                                   // migración desde OpenClaw u otro asistente (robot-migracion/1)
         if (M === 'GET') return json(res, 200, n.importador.historial());

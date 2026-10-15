@@ -158,4 +158,4 @@ function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tare
 // plantillas de subagente importadas (las usa la herramienta "delegar")
 function leerAgentes(cfg) { try { return JSON.parse(fs.readFileSync(path.join(cfg.dir, 'agentes.json'), 'utf8')); } catch { return []; } }
 
-module.exports = { crearImportador, limpiaRuta, leerAgentes };
+module.exports = { crearImportador, limpiaRuta, leerAgentes, tapar };

@@ -520,12 +520,26 @@ VISTAS['ajustes/importar'] = {
   datos: null, res: null,
   async pintar(v) {
     const hist = await api('GET', '/importar').catch(() => []);
+    const gpt = await api('GET', '/importar/chatgpt').catch(() => ({})), gd = this.gptDatos;
     const d = this.datos, r = this.res;
     const n = x => (Array.isArray(x) ? x.length : x ? Object.keys(x).length : 0);
     v.innerHTML = `<div class="pagina estrecha">${cabecera('Importar', 'Trae la memoria, el SOUL, las automatizaciones, los agentes y las skills de otro asistente (OpenClaw). Pídele que genere <code>robot-migracion.json</code> y suéltalo aquí.')}
       <label class="caja pad" id="zona" style="display:block;text-align:center;border-style:dashed;cursor:pointer;padding:34px 16px">
         ${ic('abajo')}<div style="margin-top:8px"><b>${tr('Suelta aquí robot-migracion.json')}</b><br><small class="tenue">${tr('o haz clic para elegirlo · máx. 8 MB · las claves y contraseñas se tapan solas')}</small></div>
         <input type="file" id="arch" accept=".json,application/json" hidden></label>
+      <div class="seccion">ChatGPT</div>
+      <p class="seccion-ayuda">${tr('En ChatGPT: Ajustes → Controles de datos → Exportar datos. Descomprime el .zip que te llega por correo y elige la carpeta. Solo se leen <b>tus</b> mensajes, aquí en el navegador; las respuestas de ChatGPT y los chats marcados «no recordar» se descartan.')}</p>
+      <div class="caja pad">${gpt.corriendo || (gpt.backup && !gpt.terminado) ? `
+        <p>${gpt.corriendo ? '⏳ ' + tr('Leyendo tus chats con el modelo del cerebro…') : '⏸️ ' + tr('Importación a medias')} · ${tr('{a} de {b} trozos', { a: gpt.hecho, b: gpt.total })} · ${tr('Recuerdos: {a} nuevos, {b} actualizados', { a: gpt.creados, b: gpt.actualizados })}</p>
+        <progress max="${gpt.total}" value="${gpt.hecho}" style="width:100%"></progress>
+        <small class="tenue">${tr('{a} conversaciones · {b} mensajes · {c} → {d}', { a: gpt.conversaciones, b: gpt.mensajes, c: esc(gpt.desde), d: esc(gpt.hasta) })}</small>
+        ${gpt.errores?.length ? `<p class="mal-txt">${gpt.errores.slice(-3).map(esc).join('<br>')}</p>` : ''}
+        <div class="flex" style="justify-content:flex-end;margin-top:10px">${gpt.corriendo ? `<button class="btn" id="gptPausar">${tr('Pausar')}</button>` : `<button class="btn pri" id="gptSeguir">${tr('Continuar')}</button>`}</div>`
+      : gd ? `
+        <p>${tr('{a} conversaciones · {b} mensajes · {c} → {d}', { a: gd.conversaciones.length, b: gd.mensajes, c: esc(gd.desde), d: esc(gd.hasta) })}${gd.saltadas ? ` · ${tr('{n} «no recordar» descartadas', { n: gd.saltadas })}` : ''}</p>
+        <small class="tenue">${tr('Va por trozos en segundo plano (puede tardar bastante); se puede pausar y continuar. Las claves se tapan solas.')}</small>
+        <div class="flex" style="justify-content:flex-end;margin-top:10px"><button class="btn" id="gptCancelar">${tr('Cancelar')}</button><button class="btn pri" id="gptGo">${ic('check')}${tr('Importar')}</button></div>`
+      : `<label class="btn">${ic('abajo')}${tr('Elegir la carpeta del export')}<input type="file" id="gptDir" webkitdirectory multiple hidden></label>`}</div>
       ${d ? `<div class="seccion">${tr('Qué trae')} <span class="n">${esc(d.origen || tr('externo'))}</span></div>
         <div class="caja">${[
           ['Archivos (memoria, SOUL, USER…)', n(d.archivos), 'Se guardan tal cual. SOUL → identidad, USER → contexto; de la memoria se sacan recuerdos con el modelo del cerebro.'],
@@ -558,6 +572,35 @@ VISTAS['ajustes/importar'] = {
     z.ondragleave = () => { z.style.borderColor = ''; };
     z.ondrop = e => { e.preventDefault(); z.style.borderColor = ''; leerArchivo(e.dataTransfer.files[0]); };
     if ($('#cancelar')) $('#cancelar').onclick = () => { this.datos = null; this.pintar(v); };
+    // ChatGPT: se compacta aquí (solo tus mensajes de la rama visible de cada chat) y el núcleo lo procesa en segundo plano
+    if ($('#gptDir')) $('#gptDir').onchange = async e => {
+      const archivos = [...e.target.files].filter(f => /^conversations(-\d+)?\.json$/.test(f.name));
+      if (!archivos.length) return aviso(tr('En esa carpeta no hay conversations.json: ¿es el export de ChatGPT descomprimido?'), true);
+      aviso(tr('Leyendo {n} archivos…', { n: archivos.length }));
+      try {
+        const convs = []; let saltadas = 0;
+        for (const f of archivos) for (const c of JSON.parse(await f.text())) {
+          if (c.is_do_not_remember) { saltadas++; continue; }
+          const mp = c.mapping || {}, u = []; let nodo = c.current_node, pasos = 0;
+          while (nodo && mp[nodo] && pasos++ < 50000) {
+            const m = mp[nodo].message;
+            if (m?.author?.role === 'user') { const t = (m.content?.parts || []).filter(x => typeof x === 'string').join(' ').trim(); if (t) u.push(t.length > 800 ? t.slice(0, 800) + '…' : t); }
+            nodo = mp[nodo].parent;
+          }
+          if (u.length) convs.push({ t: String(c.title || '').slice(0, 120), f: new Date((c.create_time || 0) * 1000).toISOString().slice(0, 10), u: u.reverse() });
+        }
+        if (!convs.length) throw new Error(tr('no hay mensajes tuyos'));
+        const fechas = convs.map(c => c.f).sort();
+        this.gptDatos = { conversaciones: convs, saltadas, mensajes: convs.reduce((s, c) => s + c.u.length, 0), desde: fechas[0], hasta: fechas[fechas.length - 1] };
+        this.pintar(v);
+      } catch (err) { aviso(tr('No pude leerlo: {x}', { x: err.message }), true); }
+    };
+    if ($('#gptCancelar')) $('#gptCancelar').onclick = () => { this.gptDatos = null; this.pintar(v); };
+    const gptAccion = async (ruta, cuerpo) => { try { await api('POST', ruta, cuerpo); this.gptDatos = null; } catch (err) { aviso(err.message, true); } this.pintar(v); };
+    if ($('#gptGo')) $('#gptGo').onclick = () => { $('#gptGo').disabled = true; gptAccion('/importar/chatgpt', { formato: 'chatgpt-export/1', conversaciones: this.gptDatos.conversaciones }); };
+    if ($('#gptSeguir')) $('#gptSeguir').onclick = () => gptAccion('/importar/chatgpt/continuar');
+    if ($('#gptPausar')) $('#gptPausar').onclick = () => gptAccion('/importar/chatgpt/pausar');
+    if (gpt.corriendo) setTimeout(() => { if (v.isConnected && location.hash.startsWith('#/ajustes/importar')) this.pintar(v); }, 4000);
     if ($('#go')) $('#go').onclick = async () => {
       const b = $('#go'); b.disabled = true; b.textContent = tr('Importando… (el modelo lee la memoria, puede tardar)');
       try { this.res = await api('POST', '/importar', this.datos); this.datos = null; aviso(tr('Importado')); }

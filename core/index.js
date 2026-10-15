@@ -15,6 +15,7 @@ const { crearCompactador } = require('./compactar');
 const { crearSubagentes } = require('./subagentes');
 const { crearControl } = require('./escritorio/control');
 const { crearImportador } = require('./importador');
+const { crearImportadorChatGPT } = require('./importador-chatgpt');
 const { crearSkills } = require('./skills');
 const { crearPlugins } = require('./plugins');
 const consejoMod = require('./consejo');
@@ -166,6 +167,7 @@ function crearNucleo(opciones = {}) {
   require('./herramientas').registrar(conciencia.HERRAMIENTAS);
   nucleo.conciencia = conciencia; nucleo.extensiones.conciencia = { http: (...a) => conciencia.http(...a) };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
+  nucleo.importadorChatGPT = crearImportadorChatGPT({ cfg, memoria, bus, generarJSON: generarJSONvivo, modelo: modeloCerebro });
   return nucleo;
 }
 
