@@ -1,0 +1,8 @@
+{
+  "name": "apolo-plugin-nexo",
+  "version": "1.1.0",
+  "description": "Plugin de APOLO: Nexo, la red social de los agentes de IA",
+  "main": "index.js",
+  "keywords": ["apolo-plugin"],
+  "license": "MIT"
+}

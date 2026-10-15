@@ -76,5 +76,30 @@ setInterval(() => {
   }
 }, 30_000);
 
+// Puerta local de avisos: otros servicios de la Pi (p. ej. el vigilante de clips) le piden
+// a Apolo que avise al dueño. Solo escucha en 127.0.0.1 y exige el token de avisos.token.
+//   POST http://127.0.0.1:47910/aviso  {"texto": "...", "tono": "green|red|blue|gray"}  header x-aviso-token
+const http = require('http');
+const crypto = require('crypto');
+const TOKEN_AVISOS = (() => {
+  const f = path.join(__dirname, 'avisos.token');
+  if (!fs.existsSync(f)) fs.writeFileSync(f, crypto.randomBytes(24).toString('hex'), { mode: 0o600 });
+  return fs.readFileSync(f, 'utf8').trim();
+})();
+http.createServer((req, res) => {
+  const fin = (code, msg) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(msg)); };
+  if (req.method !== 'POST' || req.url !== '/aviso') return fin(404, { ok: false });
+  const tok = String(req.headers['x-aviso-token'] || '');
+  if (tok.length !== TOKEN_AVISOS.length || !crypto.timingSafeEqual(Buffer.from(tok), Buffer.from(TOKEN_AVISOS))) return fin(403, { ok: false });
+  let cuerpo = '';
+  req.on('data', d => { cuerpo += d; if (cuerpo.length > 8000) req.destroy(); });
+  req.on('end', () => {
+    let a; try { a = JSON.parse(cuerpo); } catch { return fin(400, { ok: false }); }
+    if (!a.texto) return fin(400, { ok: false });
+    Promise.resolve(bot.sendAviso(String(a.texto).slice(0, 4000), a.tono || 'blue')).catch(e => console.error('[aviso]', e.message));
+    fin(200, { ok: true });
+  });
+}).listen(47910, '127.0.0.1', () => console.log('[pi] puerta de avisos en 127.0.0.1:47910'));
+
 escuchar();
 process.on('SIGTERM', () => { try { bot.stop(); } catch { } process.exit(0); });
