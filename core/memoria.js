@@ -139,14 +139,15 @@ function crearMemoria({ cfg, embedder = null }) {
     sync();
     const perfil = lista.filter(m => m.tipo === 'perfil');
     const relevantes = await buscarH(mensaje, { limite: 8, excluirPerfil: true });
-    if (relevantes.length) { for (const m of relevantes) m.usos = (m.usos || 0) + 1; guardar(); usar('leer', relevantes.map(m => m.id)); }
-    const lineas = [];
+    if (relevantes.length) { for (const m of relevantes) m.usos = (m.usos || 0) + 1; guardar(); }
+    const lineas = [], leidos = [];
     let n = 0;
     for (const m of [...perfil, ...relevantes]) {                  // el perfil usa como mucho el 60 %: lo relevante siempre cabe
       const l = `- [${m.id}·${m.tipo}${m.historico ? '·antes' : ''}] ${m.texto}`;
       if (n + l.length > (m.tipo === 'perfil' ? maxChars * 0.6 : maxChars)) { if (m.tipo === 'perfil') continue; break; }
-      lineas.push(l); n += l.length;
+      lineas.push(l); n += l.length; leidos.push(m.id);
     }
+    usar('leer', leidos);                                          // todo lo que entra al contexto (perfil incluido) → grafo en vivo
     return lineas.join('\n');
   }
 
