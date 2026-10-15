@@ -36,7 +36,49 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   const N = nodos.length;
   const colorDe = n => new THREE.Color(n.id === 'usuario' ? acento : colores[n.tipo] || '#999');
   const radio = n => n.id === 'usuario' ? 14 : 3.5 + Math.min(11, Math.sqrt(n.peso || 1) * 2.4);
-  const esferas = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshStandardMaterial({ roughness: .35, metalness: .15 }), Math.max(1, N));
+  // esfera "orbe": núcleo de luz interior que se mueve como plasma, aura en el borde (fresnel), brillo de cristal,
+  // y 'brillo' por nodo (InstancedBufferAttribute) que la enciende por dentro cuando le llega un impulso
+  const geoEsfera = new THREE.SphereGeometry(1, 32, 22);
+  const brillo = new Float32Array(Math.max(1, N));
+  geoEsfera.setAttribute('brillo', new THREE.InstancedBufferAttribute(brillo, 1));
+  const matEsfera = new THREE.ShaderMaterial({
+    uniforms: { tiempo: { value: 0 }, fondo: { value: fondo }, niebla: { value: oscuro ? 0.0011 : 0.0009 }, oscuro: { value: oscuro ? 1 : 0 } },
+    vertexShader: `
+      attribute float brillo;
+      varying vec3 vN; varying vec3 vV; varying vec3 vC; varying float vB; varying float vDist; varying vec3 vP;
+      void main() {
+        vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * mat3(instanceMatrix) * normal);
+        vV = normalize(-mv.xyz);
+        vC = instanceColor; vB = brillo; vP = position; vDist = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform float tiempo; uniform vec3 fondo; uniform float niebla; uniform float oscuro;
+      varying vec3 vN; varying vec3 vV; varying vec3 vC; varying float vB; varying float vDist; varying vec3 vP;
+      float plasma(vec3 p) {
+        return sin(p.x * 3.1 + tiempo * 1.3) * sin(p.y * 2.7 - tiempo * 1.1) * sin(p.z * 3.3 + tiempo * 0.9)
+             + 0.5 * sin(p.x * 6.0 - p.z * 5.0 + tiempo * 2.0);
+      }
+      void main() {
+        vec3 n = normalize(vN), v = normalize(vV);
+        float ndv = clamp(dot(n, v), 0.0, 1.0);
+        float borde = pow(1.0 - ndv, 2.6);
+        float centro = pow(ndv, 2.2);
+        float rem = 0.5 + 0.35 * plasma(vP * 1.2);
+        vec3 col = vC * (0.22 + 0.95 * centro * rem) + vC * vC * 0.25 * centro;                  // núcleo de luz que se mueve
+        col += mix(vC, vec3(1.0), 0.25) * borde * 1.7;                                       // aura en el borde
+        vec3 l = normalize(vec3(-0.45, 0.6, 1.0));
+        col += vec3(1.0) * pow(max(dot(reflect(-l, n), v), 0.0), 48.0) * 0.45;   // brillo de cristal
+        vec3 luz = mix(vC, vec3(1.0), 0.55);
+        col += luz * vB * (0.35 + 1.25 * centro * (0.7 + 0.6 * rem)); // el impulso la enciende por dentro
+        col += luz * vB * borde * 0.8;
+        float f = 1.0 - exp(-niebla * niebla * vDist * vDist);
+        gl_FragColor = vec4(mix(col, fondo, f), 1.0);
+      }`,
+  });
+  const esferas = new THREE.InstancedMesh(geoEsfera, matEsfera, Math.max(1, N));
+  esferas.setColorAt(0, new THREE.Color('#ffffff'));          // crea instanceColor antes de compilar (USE_INSTANCING_COLOR)
   esferas.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   escena.add(esferas);
   // halos: un punto con brillo por nodo (shader propio: tamaño por nodo, se atenúa con la distancia)
@@ -131,7 +173,10 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     n.p3 = { x: Math.cos(t) * r * R, y: y * R, z: Math.sin(t) * r * R, vx: 0, vy: 0, vz: 0 };
   });
 
-  let alfa = 1, sel = null, hover = null, vecSel = new Set();
+  let alfa = 1, sel = null, hover = null, vecSel = new Set(), aislado = null;
+  const visibleBase = visible, lineaBase = linea;
+  visible = n => aislado ? n === aislado || !!vec.get(aislado.id)?.has(n.id) : visibleBase(n);
+  linea = l => aislado ? l.s === aislado || l.t === aislado : lineaBase(l);
   const vec = new Map();
   for (const a of aristas) for (const [x, y] of [[a.s, a.t], [a.t, a.s]]) { if (!vec.has(x.id)) vec.set(x.id, new Set()); vec.get(x.id).add(y.id); }
 
@@ -150,8 +195,10 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     }
     for (const n of V) {
       const p = n.p3;
+      if (n === aislado) { p.vx = p.vy = p.vz = 0; continue; }                     // aislado: quieto, lo demás se ordena a su alrededor
       if (n.id === 'usuario') { p.x *= .9; p.y *= .9; p.z *= .9; p.vx = p.vy = p.vz = 0; continue; }
-      p.vx -= p.x * .003 * k; p.vy -= p.y * .003 * k; p.vz -= p.z * .003 * k;
+      const cx = aislado ? aislado.p3.x : 0, cy = aislado ? aislado.p3.y : 0, cz = aislado ? aislado.p3.z : 0;
+      p.vx -= (p.x - cx) * .003 * k; p.vy -= (p.y - cy) * .003 * k; p.vz -= (p.z - cz) * .003 * k;
       p.vx *= .8; p.vy *= .8; p.vz *= .8;
       const lim = 30; p.x += Math.max(-lim, Math.min(lim, p.vx)); p.y += Math.max(-lim, Math.min(lim, p.vy)); p.z += Math.max(-lim, Math.min(lim, p.vz));
     }
@@ -160,21 +207,25 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
 
   const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), v3 = new THREE.Vector3(), esc = new THREE.Vector3();
   const cBlanco = new THREE.Color('#ffffff');
-  function volcar() {
+  let solos = new Set();                                   // visibles sin ninguna línea visible: tienen vida propia
+  function volcar(t = 0) {
     const tenue = new THREE.Color().copy(fondo);
+    solos = new Set(nodos.filter(n => visible(n) && !porNodo.has(n.id)).map(n => n.id));
     vivas = []; porNodo = new Map();
     nodos.forEach((n, i) => {
       const vis = visible(n), p = n.p3, r = vis ? radio(n) * (n === sel ? 1.35 : n === hover ? 1.15 : 1) : 0;
       m4.compose(v3.set(p.x, p.y, p.z), q0, esc.set(r, r, r)); esferas.setMatrixAt(i, m4);
       const c = colorDe(n), fl = Math.min(1, n.flash || 0);
-      const apagado = (sel && n !== sel && !vecSel.has(n.id)) || n.antes;
+      const apagado = !aislado && ((sel && n !== sel && !vecSel.has(n.id)) || n.antes);
       if (apagado) c.lerp(tenue, sel && n !== sel && !vecSel.has(n.id) ? .78 : .45);
-      if (fl > .01) c.lerp(cBlanco, fl * .55);
       esferas.setColorAt(i, c);
+      const respira = solos.has(n.id) ? .18 + .16 * Math.sin(t * .0016 + i * 1.7) : 0;
+      brillo[i] = Math.min(1.6, fl * 1.2 + respira);
       hPos.set([p.x, p.y, p.z], i * 3); hCol.set([c.r, c.g, c.b], i * 3);
-      hTam[i] = vis ? r * (n === sel ? 7 : n.id === 'usuario' ? 6 : 4.2) * (apagado ? .5 : 1) * (1 + fl * 1.2) : 0;
+      hTam[i] = vis ? r * (n === sel ? 7 : n.id === 'usuario' ? 6 : 4.2) * (apagado ? .5 : 1) * (1 + fl * 1.6 + (solos.has(n.id) ? .5 + .4 * Math.sin(t * .0016 + i * 1.7) : 0)) : 0;
     });
     esferas.instanceMatrix.needsUpdate = true; if (esferas.instanceColor) esferas.instanceColor.needsUpdate = true;
+    geoEsfera.attributes.brillo.needsUpdate = true;
     hGeo.attributes.position.needsUpdate = hGeo.attributes.color.needsUpdate = hGeo.attributes.tam.needsUpdate = true;
     let k = 0;
     for (const l of aristas) {
@@ -195,7 +246,7 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   const pool = [];
   function etiquetas() {
     const W = caja.clientWidth, H = caja.clientHeight;
-    const cand = nodos.filter(n => visible(n) && (n.id === 'usuario' || n === sel || n === hover || vecSel.has(n.id) || n.top));
+    const cand = nodos.filter(n => visible(n) && (aislado || n.id === 'usuario' || n === sel || n === hover || vecSel.has(n.id) || n.top));
     const conDist = cand.map(n => ({ n, d: cam.position.distanceTo(v3.set(n.p3.x, n.p3.y, n.p3.z)) }))
       .sort((a, b) => (b.n === sel || b.n === hover) - (a.n === sel || a.n === hover) || (b.n.importancia / b.d) - (a.n.importancia / a.d)).slice(0, sel ? 50 : 34);
     let i = 0; const puestas = [];
@@ -256,7 +307,8 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     cv.focus({ preventScroll: true }); cv.setPointerCapture(e.pointerId); despierta(); vuelo = null;
     punteros.set(e.pointerId, pos(e));
     if (punteros.size === 2) { const [a, b] = [...punteros.values()]; pellizco = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }; ini = null; return; }
-    const [px, py] = pos(e); ini = { px, py, x: px, y: py, pan: e.button === 2 || e.shiftKey || e.button === 1, movido: false };
+    const [px, py] = pos(e); ini = { px, py, x: px, y: py, pan: e.button === 2 || e.shiftKey || e.button === 1, boton: e.button, movido: false };
+    if (e.pointerType === 'touch') { const yo = ini; yo.largo = setTimeout(() => { if (ini === yo && !yo.movido && punteros.size === 1) { yo.hecho = true; aislar(enPunto(px, py)); } }, 550); }
   };
   cv.onpointermove = e => {
     const p = pos(e);
@@ -272,10 +324,12 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   };
   cv.onpointerup = cv.onpointercancel = e => {
     punteros.delete(e.pointerId); if (punteros.size < 2) pellizco = null;
-    if (ini && !ini.movido && e.type === 'pointerup') { const n = enPunto(ini.px, ini.py); alTocar(n); }
+    if (ini) clearTimeout(ini.largo);
+    if (ini && !ini.movido && !ini.hecho && e.type === 'pointerup') { const n = enPunto(ini.px, ini.py); ini.boton === 2 ? aislar(n) : alTocar(n); }
     ini = null; cv.style.cursor = hover ? 'pointer' : 'grab';
   };
   cv.onwheel = e => { e.preventDefault(); acercar(e.deltaY > 0 ? 1.12 : 1 / 1.12); despierta(); vuelo = null; };
+  cv.addEventListener('keydown', e => { if (e.code === 'Escape' && aislado) aislar(null); });
   cv.onkeydown = e => { if (/^(KeyW|KeyA|KeyS|KeyD|KeyQ|KeyE|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|ShiftLeft|ShiftRight)$/.test(e.code)) { tecl.add(e.code); e.preventDefault(); despierta(); vuelo = null; } };
   cv.onkeyup = e => tecl.delete(e.code);
   cv.onblur = () => tecl.clear();
@@ -291,9 +345,22 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     if (!m.lengthSq()) return;
     m.setLength(vel); cam.position.add(m); objetivo.add(m);
   }
+  const chip = document.createElement('button'); chip.className = 'mv-aislado'; chip.hidden = true; caja.appendChild(chip);
+  chip.onclick = () => aislar(null);
+  function aislar(n) {
+    if (n && n === aislado) n = null;
+    aislado = n;
+    chip.hidden = !n; if (n) chip.textContent = `◉ ${n.nombre} · ${vec.get(n.id)?.size || 0}  ✕`;
+    if (n) {
+      for (const id of vec.get(n.id) || []) { const o = nodos.find(x => x.id === id); if (o) { const d = new THREE.Vector3().randomDirection().multiplyScalar(70 + Math.random() * 60); Object.assign(o.p3, { x: n.p3.x + d.x, y: n.p3.y + d.y, z: n.p3.z + d.z, vx: 0, vy: 0, vz: 0 }); } }
+      alfa = Math.max(alfa, .8); alTocar(n); n.flash = 1.4;
+      setTimeout(() => { if (aislado === n) { dispararDesde(n, 10); volarA(new THREE.Vector3(n.p3.x, n.p3.y, n.p3.z), 320); } }, 350);
+      setTimeout(() => { if (aislado === n) encuadrar(n.p3); }, 1900);
+    } else { alfa = Math.max(alfa, .5); alTocar(null); setTimeout(encuadrar, 300); }
+  }
   function volarA(p, dist) {
     const dir = new THREE.Vector3().copy(cam.position).sub(objetivo).normalize();
-    vuelo = { t: 0, o0: objetivo.clone(), o1: p.clone(), c0: cam.position.clone(), c1: p.clone().add(dir.multiplyScalar(dist)) };
+    vuelo = { t: 0, inicio: performance.now(), o0: objetivo.clone(), o1: p.clone(), c0: cam.position.clone(), c1: p.clone().add(dir.multiplyScalar(dist)) };
   }
 
   // ---------- bucle ----------
@@ -311,7 +378,7 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     if (alfa > .015) { simular(); if (nodos.length < 300) simular(); }
     teclado(dt);
     if (vuelo) {
-      vuelo.t = Math.min(1, vuelo.t + dt * 1.4); const s = vuelo.t * vuelo.t * (3 - 2 * vuelo.t);
+      vuelo.t = Math.min(1, (t - vuelo.inicio) / 700); const s = vuelo.t * vuelo.t * (3 - 2 * vuelo.t);
       objetivo.lerpVectors(vuelo.o0, vuelo.o1, s); cam.position.lerpVectors(vuelo.c0, vuelo.c1, s); if (vuelo.t >= 1) vuelo = null;
     } else if (t - ultimoToque > 9000 && !sel) {        // en reposo gira despacio
       const ojo = v3.copy(cam.position).sub(objetivo).applyAxisAngle(cam.up, dt * .06); cam.position.copy(objetivo).add(ojo);
@@ -319,13 +386,15 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     cam.lookAt(objetivo); cam.updateMatrixWorld();
     luz.position.copy(cam.position);
     for (const n of nodos) if (n.flash) n.flash = n.flash > .01 ? n.flash * Math.exp(-dt * 3.5) : 0;
-    volcar(); pulsar(dt); renderer.render(escena, cam); etiquetas();
+    for (const id of solos) if (Math.random() < dt * .22) { const n = nodos.find(x => x.id === id); if (n) n.flash = 1.3; }   // se encienden solos de vez en cuando
+    matEsfera.uniforms.tiempo.value = t / 1000;
+    volcar(t); pulsar(dt); renderer.render(escena, cam); etiquetas();
   }
   raf = requestAnimationFrame(bucle);
 
-  function encuadrar() {
+  function encuadrar(centro) {
     const V = nodos.filter(visible); if (!V.length) return;
-    const c = new THREE.Vector3(); for (const n of V) c.add(v3.set(n.p3.x, n.p3.y, n.p3.z)); c.divideScalar(V.length);
+    const c = new THREE.Vector3(); if (centro) c.set(centro.x, centro.y, centro.z); else { for (const n of V) c.add(v3.set(n.p3.x, n.p3.y, n.p3.z)); c.divideScalar(V.length); }
     let r = 0; for (const n of V) r = Math.max(r, c.distanceTo(v3.set(n.p3.x, n.p3.y, n.p3.z)));
     volarA(c, Math.max(160, r * 2.5));
   }
@@ -337,7 +406,8 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     enfocar(n) { if (n) volarA(new THREE.Vector3(n.p3.x, n.p3.y, n.p3.z), 200); },
     zoom(f) { acercar(1 / f); despierta(); },
     encuadrar,
-    destruir() { vivo = false; cancelAnimationFrame(raf); ro.disconnect(); renderer.dispose(); esferas.geometry.dispose(); esferas.material.dispose(); hGeo.dispose(); lGeo.dispose(); iGeo.dispose(); cv.remove(); capaEt.remove(); },
+    aislar,
+    destruir() { chip.remove(); vivo = false; cancelAnimationFrame(raf); ro.disconnect(); renderer.dispose(); hGeo.dispose(); lGeo.dispose(); iGeo.dispose(); geoEsfera.dispose(); matEsfera.dispose(); cv.remove(); capaEt.remove(); },
   };
 }
 

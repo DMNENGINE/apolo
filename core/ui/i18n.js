@@ -284,7 +284,7 @@
     'Elegir la carpeta del export': 'Pick the export folder', 'En esa carpeta no hay conversations.json: ¿es el export de ChatGPT descomprimido?': 'No conversations.json in that folder: is it the unzipped ChatGPT export?',
     'Leyendo {n} archivos…': 'Reading {n} files…', 'no hay mensajes tuyos': 'no messages of yours',
     'Continuar': 'Continue',
-    'Cambiar entre el espacio 3D y el plano 2D': 'Switch between 3D space and 2D plane', 'Arrastra: girar · clic derecho o Shift: desplazar · rueda: zoom · WASD/QE: volar': 'Drag: rotate · right click or Shift: pan · wheel: zoom · WASD/QE: fly',
+    'Cambiar entre el espacio 3D y el plano 2D': 'Switch between 3D space and 2D plane', 'Arrastra: girar · clic derecho en un punto: solo él y sus conexiones · clic derecho arrastrando o Shift: desplazar · rueda: zoom · WASD/QE: volar': 'Drag: rotate · right click a point: only it and its connections · right drag or Shift: pan · wheel: zoom · WASD/QE: fly',
     'Resumen': 'Summary', 'Lo de antes': 'The past', 'antes': 'past', 'Lo más importante: los nodos con más recuerdos y relaciones': 'The most important: nodes with the most memories and relations',
     'Lo que ya no es actual pero es parte de tu historia (borde punteado)': 'What is no longer current but is part of your story (dashed border)',
     'Importaciones anteriores': 'Previous imports', '{a} recuerdos · {b} automatizaciones · {c} agentes': '{a} memories · {b} automations · {c} agents', 'Todavía no has importado nada.': "You haven't imported anything yet.",
