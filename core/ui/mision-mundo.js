@@ -174,26 +174,22 @@ const MC_MUNDO = {
       ...((h >>> 12) % 4 === 0 ? { sombrero: 'capucha', color: MM_ROPA[(h >>> 14) % MM_ROPA.length] } : {}), ...((h >>> 16) % 3 === 0 ? { capa: MM_ROPA[(h >>> 18) % MM_ROPA.length] } : {}), mochila: (h >>> 20) % 2 === 0, ...extra }; };
     quiere.set('apolo', { tipo: 'apolo', nombre: 'APOLO', sala: 'principal', look: { ropa: '#4b3a8f', ropa2: '#e0b44a', pelo: '#d9d9d9', piel: '#f1c7a0', barba: '#eeeeee', sombrero: 'mago', color: '#3d2f7a', tunica: true, baston: true },
       fijo: { x: this.orbe.x * R - 22, y: (this.orbe.y + 2) * R + 6 } });
-    const mods = (this.modelos || []).slice(0, 14), C = { x: this.orbe.x * R + 32, y: this.orbe.y * R + 46 }, sp = this.porRol.principal;
-    const rx = Math.min(3.4 * R, (sp.w / 2 - .8) * R), ry = Math.min(2.6 * R, (sp.h / 2 - .9) * R);
-    const salaM = this.porRol.modelos, filas = salaM && mods.length > Math.floor(salaM.w * .75) && salaM.h >= 5 ? 2 : 1, porFila = Math.ceil(mods.length / filas);
+    // cada modelo pasea por su sala; cuando un agente lo usa, el modelo EN PERSONA va a hacer esa tarea (y vuelve al acabar)
+    const mods = (this.modelos || []).slice(0, 14), salaM = this.porRol.modelos ? 'modelos' : 'principal';
+    const salaDe = a => a.padre ? 'subagentes' : a.tarea ? (this.porRol.taller ? 'taller' : 'principal') : 'principal';
+    const nombreAg = a => String(a.nombre || a.id).replace(/^⏰\s*/, '');
+    const activos = [...this.mc.agentes.values()].filter(a => a.estado === 'trabajando' || a.esperando || (a.fin && ahora - a.fin < 25000))
+      .sort((a, b) => (b.estado === 'trabajando') - (a.estado === 'trabajando') || (a.inicio - b.inicio));
+    const encarna = new Map(); for (const a of activos) { const p = mmProveedor(a.modelo); if (mods.some(x => x.id === p) && !encarna.has(p)) encarna.set(p, a); }
+    const yaEn = new Set([...encarna.values()].map(a => a.id));
     mods.forEach((md, i) => {
-      let x, y, dir, s = 0;
-      if (salaM) {                                                     // su propia sala: en filas, mirando hacia abajo
-        const f = Math.floor(i / porFila), k = i % porFila, n = Math.min(porFila, mods.length - f * porFila);
-        x = (salaM.x + .5 + (k + .5) * ((salaM.w - 1) / n)) * R + (f % 2 ? R * .25 : 0); y = (salaM.y + (filas > 1 ? 2.3 + f * 1.9 : 3.1)) * R; dir = 'abajo';
-      } else {                                                         // sin sala: en corro alrededor del orbe (deja libre el hueco de APOLO)
-        const a = (200 + (i + .5) * (300 / mods.length)) * Math.PI / 180; s = Math.sin(a);
-        x = C.x + Math.cos(a) * rx; y = C.y + s * ry; dir = s < -.55 ? 'abajo' : s > .55 ? 'arriba' : 'lado';
-      }
-      quiere.set('m:' + md.id, { tipo: 'modelo', modelo: md, fila: i, nombre: mmNombreModelo(md.id, md.tipo) === md.id && md.id.length < 4 ? md.id.toUpperCase() : mmNombreModelo(md.id, md.tipo),
-        sala: 'principal', look: mmLookModelo(md.id, md.tipo), fijo: { x, y, dir, izq: x > C.x } });
+      const a = encarna.get(md.id), nm = mmNombreModelo(md.id, md.tipo) === md.id && md.id.length < 4 ? md.id.toUpperCase() : mmNombreModelo(md.id, md.tipo);
+      quiere.set('m:' + md.id, { tipo: 'modelo', modelo: md, fila: i, nombreModelo: nm, agente: a || null, nombre: a ? (nombreAg(a).toLowerCase().startsWith(nm.toLowerCase()) ? nombreAg(a) : `${nm} · ${nombreAg(a)}`) : nm, sala: a ? salaDe(a) : salaM, look: mmLookModelo(md.id, md.tipo) });
     });
-    for (const a of this.mc.agentes.values()) {
-      const vivo = a.estado === 'trabajando' || a.esperando;
-      if (!vivo && !(a.fin && ahora - a.fin < 25000)) continue;
-      const sala = a.padre ? 'subagentes' : a.tarea ? (this.porRol.taller ? 'taller' : 'principal') : 'principal';
-      quiere.set('a:' + a.id, { tipo: 'agente', agente: a, nombre: String(a.nombre || a.id).replace(/^⏰\s*/, ''), sala, nace: a.padre ? 'principal' : null,
+    for (const a of activos) {
+      if (yaEn.has(a.id)) continue;                                    // ese lo hace el modelo en persona
+      const sala = salaDe(a);
+      quiere.set('a:' + a.id, { tipo: 'agente', agente: a, nombre: nombreAg(a), sala, nace: a.padre ? 'principal' : null,
         look: { ...mmLookModelo(mmProveedor(a.modelo)), ...(a.tarea && !mmLookModelo(mmProveedor(a.modelo)).especie ? { sombrero: 'casco', color: '#f5c542' } : {}), ...(a.padre ? { mochila: true } : {}) } });
     }
     if (this.porRol.servidores) (this.plugins || []).forEach(p => quiere.set('p:' + p.nombre, { tipo: 'plugin', plugin: p, nombre: p.nombre, sala: 'servidores', look: { piel: '#7ab04f', pelo: '#4e7f33', estilo: 'calvo', ropa: '#6b4f2c', pantalon: '#4a3820', orejas: true } }));
@@ -201,7 +197,11 @@ const MC_MUNDO = {
     for (const [id, e] of this.ents) if (!quiere.has(id)) { if (!e.sale) e.sale = ahora; }
     for (const [id, q] of quiere) {
       const e = this.ents.get(id);
-      if (e) { Object.assign(e, { agente: q.agente, plugin: q.plugin, tarea: q.tarea, modelo: q.modelo, nombre: q.nombre }); if (q.fijo) e.fijo = q.fijo; e.sale = 0; continue; }
+      if (e) {
+        Object.assign(e, { agente: q.agente, plugin: q.plugin, tarea: q.tarea, modelo: q.modelo, nombre: q.nombre }); if (q.fijo) e.fijo = q.fijo; e.sale = 0;
+        if (e.sala !== q.sala) { e.sala = q.sala; e.ruta = []; e.espera = 0; }                 // le toca ir a otra sala: sale ya
+        continue;
+      }
       q.look.k = mmHash(JSON.stringify(q.look));
       const t = q.fijo ? null : (this.porRol[q.nace] && this.porRol[q.sala] ? this.puntoEn(this.porRol[q.nace]) : this.puntoEn(this.porRol[q.sala] || this.porRol.principal));
       const p = q.fijo || { x: t.x * R + R / 2, y: t.y * R + R * .8 };
@@ -244,7 +244,7 @@ const MC_MUNDO = {
       e.espera = (ocupado ? 3000 : 1500) + Math.random() * (ocupado ? 6000 : 4000);
       return;
     }
-    const n = e.ruta[0], tx = n.x * R + R / 2, ty = n.y * R + R * .8, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), v = (e.tipo === 'plugin' ? 40 : 56) * dt / 1000;
+    const n = e.ruta[0], tx = n.x * R + R / 2, ty = n.y * R + R * .8, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), v = (e.tipo === 'plugin' ? 40 : e.tipo === 'modelo' && e.agente ? 105 : e.tipo === 'modelo' ? 34 : 56) * dt / 1000;   // a su tarea van con prisa; en su sala pasean
     if (d <= v) { e.x = tx; e.y = ty; e.ruta.shift(); } else { e.x += dx / d * v; e.y += dy / d * v; }
     if (Math.abs(dx) > Math.abs(dy)) { e.dir = 'lado'; e.izq = dx < 0; } else if (Math.abs(dy) > .5) e.dir = dy < 0 ? 'arriba' : 'abajo';
     e.acc = 'anda'; e.paso = (e.paso || 0) + dt; e.frame = Math.floor(e.paso / 130) % 4;
@@ -359,11 +359,12 @@ const MC_MUNDO = {
   // nombre encima de agentes y subagentes (HTML: nítido a cualquier tamaño)
   etiqueta(p, quitar) {
     if (!p.el && (quitar || (p.tipo !== 'agente' && p.tipo !== 'modelo'))) return;
+    if (p.el && p.el.dataset.n !== p.nombre) { p.el.textContent = p.nombre.length > 28 ? p.nombre.slice(0, 27) + '…' : p.nombre; p.el.dataset.n = p.nombre; }
     if (quitar) { p.el?.remove(); return; }
     if (!p.el) { p.el = document.createElement('span'); p.el.className = 'mm-nombre' + (p.tipo === 'modelo' ? ' modelo' : ''); if (p.tipo === 'modelo') p.el.style.setProperty('--c', p.look.especie ? '#f4f4f4' : p.look.ropa); p.el.textContent = p.nombre.length > 22 ? p.nombre.slice(0, 21) + '…' : p.nombre; this.capaNombres.append(p.el); }
     const alto = (p.look.sombrero === 'mago' ? 100 : p.look.especie ? 82 : 74) + (p.look.flota ? 12 : 0) - (p.tipo === 'modelo' ? 0 : 0);
-    const abajo = p.tipo === 'modelo' && this.porRol.modelos;                                   // en su sala, el nombre va a los pies como una placa
-    p.el.style.left = `${((p.x - (abajo ? 0 : 4)) / this.W * 100).toFixed(2)}%`; p.el.style.top = `${((abajo ? p.y + 12 + (p.fila % 2) * 15 : p.y - alto) / this.H * 100).toFixed(2)}%`;
+    const abajo = p.tipo === 'modelo' && !p.agente && this.porRol.modelos && this.sala[Math.floor((p.y - 4) / MM_R) * this.m.ancho + Math.floor(p.x / MM_R)] === this.porRol.modelos.id;                                   // en su sala, el nombre va a los pies como una placa
+    p.el.style.left = `${((p.x - (abajo ? 0 : 4)) / this.W * 100).toFixed(2)}%`; p.el.style.top = `${((abajo ? p.y + 12 + (p.fila % 2) * 12 : p.y - alto) / this.H * 100).toFixed(2)}%`;
     p.el.style.opacity = p.sale ? Math.max(0, 1 - (Date.now() - p.sale) / 1500) : 1;
   },
   // ---------- interacción ----------
@@ -380,9 +381,9 @@ const MC_MUNDO = {
     const det = $('.mm-holo', this.caja), ags = [...this.mc.agentes.values()], vivos = ags.filter(a => a.estado === 'trabajando');
     let col = this.tema.borde, cab, cuerpo = '';
     const fila = (k, v) => `<div class="mm-fila"><span>${tr(k)}</span><b>${v}</b></div>`;
-    if (h.p?.tipo === 'agente') {
+    if (h.p?.agente) {
       const a = h.p.agente; col = a.esperando ? '#ff4d6a' : a.padre ? '#7fd1ff' : a.tarea ? '#f5c542' : '#a58bff';
-      cab = [h.p.nombre, `${nombreModelo(a.modelo)}${a.padre ? ` · ${tr('subagente')}` : a.tarea ? ` · ${tr('tarea programada')}` : a.canal ? ` · ${a.canal}` : ''}`];
+      cab = [h.p.tipo === 'modelo' ? String(a.nombre || a.id) : h.p.nombre, `${h.p.tipo === 'modelo' ? h.p.nombreModelo + ' · ' : ''}${nombreModelo(a.modelo)}${a.padre ? ` · ${tr('subagente')}` : a.tarea ? ` · ${tr('tarea programada')}` : a.canal ? ` · ${a.canal}` : ''}`];
       cuerpo = fila('Estado', tr(a.esperando ? 'Esperando tu permiso' : (ESTADO_AG[a.estado] || ESTADO_AG.quieto)[1])) +
         (a.herramienta ? fila('Haciendo', `${esc(NOMBRE_HERR[a.herramienta.nombre] || a.herramienta.nombre)} <small>${esc(String(a.herramienta.resumen || '').slice(0, 120))}</small>`) : a.ultimo ? fila('Último', esc(String(a.ultimo).slice(0, 160))) : '') +
         fila('Tiempo', a.inicio ? cronoTxt((a.fin || Date.now()) - a.inicio) : '—') + fila('Pasos', a.pasos || 0) + (a.uso?.entrada ? fila('Tokens', fmtK(a.uso.entrada + a.uso.salida)) : '') +
