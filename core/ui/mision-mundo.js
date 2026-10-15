@@ -175,7 +175,7 @@ const MC_MUNDO = {
     quiere.set('apolo', { tipo: 'apolo', nombre: 'APOLO', sala: 'principal', look: { ropa: '#4b3a8f', ropa2: '#e0b44a', pelo: '#d9d9d9', piel: '#f1c7a0', barba: '#eeeeee', sombrero: 'mago', color: '#3d2f7a', tunica: true, baston: true },
       fijo: { x: this.orbe.x * R - 22, y: (this.orbe.y + 2) * R + 6 } });
     // cada modelo pasea por su sala; cuando un agente lo usa, el modelo EN PERSONA va a hacer esa tarea (y vuelve al acabar)
-    const mods = (this.modelos || []).slice(0, 14), salaM = this.porRol.modelos ? 'modelos' : 'principal';
+    const mods = (this.modelos || []).slice(0, 14);
     const salaDe = a => a.padre ? 'subagentes' : a.tarea ? (this.porRol.taller ? 'taller' : 'principal') : 'principal';
     const nombreAg = a => String(a.nombre || a.id).replace(/^⏰\s*/, '');
     const activos = [...this.mc.agentes.values()].filter(a => a.estado === 'trabajando' || a.esperando || (a.fin && ahora - a.fin < 25000))
@@ -184,7 +184,7 @@ const MC_MUNDO = {
     const yaEn = new Set([...encarna.values()].map(a => a.id));
     mods.forEach((md, i) => {
       const a = encarna.get(md.id), nm = mmNombreModelo(md.id, md.tipo) === md.id && md.id.length < 4 ? md.id.toUpperCase() : mmNombreModelo(md.id, md.tipo);
-      quiere.set('m:' + md.id, { tipo: 'modelo', modelo: md, fila: i, nombreModelo: nm, agente: a || null, nombre: a ? (nombreAg(a).toLowerCase().startsWith(nm.toLowerCase()) ? nombreAg(a) : `${nm} · ${nombreAg(a)}`) : nm, sala: a ? salaDe(a) : salaM, look: mmLookModelo(md.id, md.tipo) });
+      quiere.set('m:' + md.id, { tipo: 'modelo', modelo: md, fila: i, nombreModelo: nm, agente: a || null, nombre: a ? (nombreAg(a).toLowerCase().startsWith(nm.toLowerCase()) ? nombreAg(a) : `${nm} · ${nombreAg(a)}`) : nm, sala: a ? salaDe(a) : '*', look: mmLookModelo(md.id, md.tipo) });
     });
     for (const a of activos) {
       if (yaEn.has(a.id)) continue;                                    // ese lo hace el modelo en persona
@@ -203,12 +203,17 @@ const MC_MUNDO = {
         continue;
       }
       q.look.k = mmHash(JSON.stringify(q.look));
-      const t = q.fijo ? null : (this.porRol[q.nace] && this.porRol[q.sala] ? this.puntoEn(this.porRol[q.nace]) : this.puntoEn(this.porRol[q.sala] || this.porRol.principal));
+      const t = q.fijo ? null : (this.porRol[q.nace] && this.porRol[q.sala] ? this.puntoEn(this.porRol[q.nace]) : q.sala === '*' ? this.puntoLibre() : this.puntoEn(this.porRol[q.sala] || this.porRol.principal));
       const p = q.fijo || { x: t.x * R + R / 2, y: t.y * R + R * .8 };
       this.ents.set(id, { id, ...q, x: p.x, y: p.y, ruta: [], espera: Math.random() * 2000, frame: 0, dir: q.fijo?.dir || (q.fijo ? 'lado' : 'abajo'), izq: !!q.fijo?.izq, nace: ahora, parpHasta: 0, proxParp: ahora + Math.random() * 4000 });
     }
     for (const [id, e] of this.ents) if (e.sale && ahora - e.sale > 1500) { this.ents.delete(id); this.etiqueta(e, true); }
     this.hud();
+  },
+  // una casilla libre cualquiera del mapa (salas y pasillos) para pasear
+  puntoLibre() {
+    for (let k = 0; k < 80; k++) { const i = Math.floor(Math.random() * this.g.length); if (this.g[i] === 1 && !this.bloq[i]) return { x: i % this.m.ancho, y: Math.floor(i / this.m.ancho) }; }
+    return this.puntoEn(this.porRol.principal);
   },
   puntoEn(s) {
     for (let k = 0; k < 40; k++) {
@@ -237,14 +242,14 @@ const MC_MUNDO = {
       e.frame = e.acc === 'trabaja' ? Math.floor(t / 220) % 2 : Math.floor(t / 700) % 2;
       if (e.acc === 'trabaja' && e.dir === 'arriba') e.dir = 'abajo';
       if (e.espera > 0) return;
-      const s = this.porRol[e.sala] || this.porRol.principal, dest = this.puntoEn(s);
+      const libre = e.sala === '*', s = libre ? null : this.porRol[e.sala] || this.porRol.principal, dest = libre ? this.puntoLibre() : this.puntoEn(s);   // '*': todo el mapa
       e.ruta = this.camino({ x: Math.floor(e.x / R), y: Math.floor((e.y - 4) / R) }, dest);
       const aqui = this.sala[Math.floor((e.y - 4) / R) * this.m.ancho + Math.floor(e.x / R)];
-      if (!e.ruta.length && aqui !== s.id) { e.x = dest.x * R + R / 2; e.y = dest.y * R + R * .8; e.nace = Date.now(); }   // sin pasillo hasta su sala: aparece allí
+      if (!e.ruta.length && s && aqui !== s.id) { e.x = dest.x * R + R / 2; e.y = dest.y * R + R * .8; e.nace = Date.now(); }   // sin pasillo hasta su sala: aparece allí
       e.espera = (ocupado ? 3000 : 1500) + Math.random() * (ocupado ? 6000 : 4000);
       return;
     }
-    const n = e.ruta[0], tx = n.x * R + R / 2, ty = n.y * R + R * .8, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), v = (e.tipo === 'plugin' ? 40 : e.tipo === 'modelo' && e.agente ? 105 : e.tipo === 'modelo' ? 34 : 56) * dt / 1000;   // a su tarea van con prisa; en su sala pasean
+    const n = e.ruta[0], tx = n.x * R + R / 2, ty = n.y * R + R * .8, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), v = (e.tipo === 'plugin' ? 40 : e.tipo === 'modelo' && e.agente ? 105 : e.tipo === 'modelo' ? 44 : 56) * dt / 1000;   // a su tarea van con prisa; en su sala pasean
     if (d <= v) { e.x = tx; e.y = ty; e.ruta.shift(); } else { e.x += dx / d * v; e.y += dy / d * v; }
     if (Math.abs(dx) > Math.abs(dy)) { e.dir = 'lado'; e.izq = dx < 0; } else if (Math.abs(dy) > .5) e.dir = dy < 0 ? 'arriba' : 'abajo';
     e.acc = 'anda'; e.paso = (e.paso || 0) + dt; e.frame = Math.floor(e.paso / 130) % 4;
