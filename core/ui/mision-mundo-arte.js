@@ -357,8 +357,9 @@ function mmPJ(L, dir, f, acc, parp) {
   const k = `${L.k}|${dir}|${f}|${acc}|${parp}`; if (MM_CACHE_PJ.has(k)) return MM_CACHE_PJ.get(k);
   if (MM_CACHE_PJ.size > 1500) MM_CACHE_PJ.clear();
   const cv = mmLienzo(28, 54), c = cv.getContext('2d'); c.translate(3, 16);
-  const p = mmP(c), piel = L.piel, pielS = mmTono(piel, -.2), ropa = L.ropa, ropaL = mmTono(ropa, .18), ropaS = mmTono(ropa, -.25), pant = L.pantalon || '#30344a', bota = '#2b211b', pelo = L.pelo || '#3a2414', peloL = mmTono(pelo, .25);
+  const p = mmP(c), piel = L.piel || '#f1c7a0', pielS = mmTono(piel, -.2), ropa = L.ropa || '#6b6b75', ropaL = mmTono(ropa, .18), ropaS = mmTono(ropa, -.25), pant = L.pantalon || '#30344a', bota = '#2b211b', pelo = L.pelo || '#3a2414', peloL = mmTono(pelo, .25);
   const lado = dir === 'lado', atras = dir === 'arriba', anda = acc === 'anda', fase = anda ? [0, 1, 0, -1][f] : 0, y0 = !anda && f % 2 ? 1 : 0;
+  if (L.especie === 'llama') { mmLlamaPJ(c, p, L, lado, atras, anda ? f : 0, y0, parp, acc); mmContorno(cv); MM_CACHE_PJ.set(k, cv); return cv; }
   // detrás: capa / mochila vista de frente asoma
   if (L.capa && !atras) { p(lado ? 4 : 5, 18 + y0, lado ? 5 : 12, 13, mmTono(L.capa, -.2)); }
   // piernas o túnica
@@ -380,6 +381,7 @@ function mmPJ(L, dir, f, acc, parp) {
     if (lado) { p(7, 18 + y0, 8, 10, ropa); p(7, 18 + y0, 1, 10, ropaL); p(14, 18 + y0, 1, 10, ropaS); p(7, 25 + y0, 8, 2, '#3a2a1a'); }
     else { p(5, 18 + y0, 12, 10, ropa); p(5, 18 + y0, 1, 10, ropaL); p(15, 18 + y0, 2, 10, ropaS); p(8, 18 + y0, 6, 1, L.ropa2 || ropaS); p(5, 25 + y0, 12, 2, '#3a2a1a'); if (!atras) p(10, 25 + y0, 2, 2, '#e0b44a'); }
   }
+  if (L.emblema && !atras) { const g = MM_EMBLEMA[L.emblema]; if (g) g.forEach((fila, j) => { for (let i = 0; i < 5; i++) if (fila[i] !== '.') p((lado ? 9 : 9) + i, 19 + j + y0, 1, 1, fila[i] === '#' ? L.emCol || '#ffffff' : L.emCol2 || mmTono(L.emCol || '#ffffff', -.3)); }); }
   if (atras && L.mochila) { mmBisel(c, 7, 19 + y0, 8, 8, '#7a5230'); p(7, 19 + y0, 8, 2, '#9a6b40'); }
   if (lado && L.mochila) { mmBisel(c, 3, 19 + y0, 4, 7, '#7a5230'); }
   if (atras && L.capa) { p(5, 18 + y0, 12, 14, L.capa); p(5, 18 + y0, 1, 14, mmTono(L.capa, .2)); p(16, 18 + y0, 1, 14, mmTono(L.capa, -.3)); }
@@ -406,6 +408,7 @@ function mmPJ(L, dir, f, acc, parp) {
       if (L.orejas) p(10, 13 + y0, 2, 2, pielS);
     }
   }
+  if (L.gafas && !atras) { if (lado) { p(11, 11 + y0, 7, 3, '#15161c'); p(13, 12 + y0, 4, 1, L.gafas); } else { p(5, 11 + y0, 12, 3, '#15161c'); p(6, 12 + y0, 4, 1, L.gafas); p(12, 12 + y0, 4, 1, L.gafas); } }
   // orejas de goblin
   if (L.orejas) { if (lado) { p(2, 9 + y0, 6, 2, piel); p(3, 8 + y0, 3, 1, piel); p(2, 11 + y0, 3, 1, pielS); } else { p(0, 10 + y0, 5, 2, piel); p(1, 9 + y0, 3, 1, piel); p(17, 10 + y0, 5, 2, piel); p(18, 9 + y0, 3, 1, piel); p(0, 12 + y0, 3, 1, pielS); p(19, 12 + y0, 3, 1, pielS); } }
   // pelo
@@ -475,4 +478,85 @@ function mmRayo(c, x1, y1, x2, y2, sem, fuerza = 1) {
   const trazo = (P, w, col) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); P.forEach(([x, y], i) => i ? c.lineTo(Math.round(x), Math.round(y)) : c.moveTo(Math.round(x), Math.round(y))); c.stroke(); };
   trazo(pts, 6 * fuerza, 'rgba(60,180,255,.18)'); trazo(pts, 3 * fuerza, 'rgba(120,230,255,.45)'); trazo(pts, 1, '#f2ffff');
   const b = 2 + (sem % 5), [bx, by] = pts[b]; trazo([[bx, by], [bx + (mmF(sem, 1, 72) - .5) * 26, by + (mmF(sem, 2, 72) - .2) * 22]], 1, 'rgba(200,250,255,.8)');
+}
+
+// emblemas del pecho (5×5): '#' color principal, '+' secundario
+const MM_EMBLEMA = {
+  sol: ['#.#.#', '.###.', '#####', '.###.', '#.#.#'], nudo: ['.###.', '#.+.#', '#+++#', '#.+.#', '.###.'], chispa: ['..#..', '.+#+.', '#####', '.+#+.', '..#..'],
+  ballena: ['.....', '.###+', '#####', '.###.', '..#..'], ruta: ['#..#.', '.#..#', '..###', '.#..#', '#..#.'], chip: ['+#+#+', '#####', '+#.#+', '#####', '+#+#+'],
+  x: ['#...#', '.#.#.', '..#..', '.#.#.', '#...#'], rayo: ['..##.', '.##..', '####.', '..##.', '.##..'], franjas: ['#####', '+++++', '#####', '+++++', '#####'],
+  asterisco: ['#.#.#', '.###.', '##.##', '.###.', '#.#.#'], cara: ['.###.', '#+#+#', '#####', '#+++#', '.###.'], ojo: ['.###.', '#+++#', '#+#+#', '#+++#', '.###.'],
+  luna: ['.##..', '#....', '#....', '#....', '.##..'], llaves: ['.#.#.', '#...#', '#...#', '#...#', '.#.#.'],
+};
+
+// la llama de Ollama: lana blanca, cuello largo, orejas tiesas
+function mmLlamaPJ(c, p, L, lado, atras, f, y0, parp, acc) {
+  const lana = L.ropa || '#f4f4f4', som = mmTono(lana, -.16), osc = mmTono(lana, -.32), pezu = '#2a2724', rosa = '#e8a0a8';
+  const pata = [0, 1, 0, -1][f];
+  if (lado) {
+    for (const [x, d] of [[5, pata], [8, -pata], [12, -pata], [15, pata]]) { p(x, 28 + Math.max(0, d), 2, 6 - Math.max(0, d), x < 10 ? som : lana); p(x, 33, 2, 2, pezu); }
+    p(3, 18 + y0, 15, 11, lana); for (let i = 0; i < 15; i += 2) { p(3 + i, 17 + y0, 2, 1, lana); p(3 + i, 29, 2, 1, som); } p(3, 26 + y0, 15, 3, som); p(2, 20 + y0, 1, 6, lana);
+    p(13, 8 + y0, 4, 11, lana); p(16, 9 + y0, 1, 10, som);
+    p(12, 3 + y0, 7, 8, lana); p(18, 6 + y0, 3, 4, mmTono(lana, -.06)); p(20, 8 + y0, 1, 1, pezu); p(18, 10 + y0, 2, 1, osc);
+    p(13, 0 + y0, 2, 4, lana); p(13, 1 + y0, 1, 2, rosa);
+    if (parp) p(16, 6 + y0, 2, 1, pezu); else { p(16, 5 + y0, 2, 2, pezu); p(16, 5 + y0, 1, 1, '#ffffff'); }
+    return;
+  }
+  for (const [x, d] of [[6, pata], [14, -pata]]) { p(x, 28 + Math.max(0, d), 3, 6 - Math.max(0, d), lana); p(x, 33, 3, 2, pezu); }
+  p(4, 17 + y0, 14, 12, lana); for (let i = 0; i < 14; i += 2) { p(4 + i, 16 + y0, 2, 1, lana); p(3, 18 + y0 + i % 10, 1, 2, lana); p(18, 18 + y0 + i % 10, 1, 2, som); } p(4, 26 + y0, 14, 3, som); p(16, 17 + y0, 2, 9, som);
+  p(8, 9 + y0, 6, 9, lana); p(13, 9 + y0, 1, 9, som);
+  p(6, 2 + y0, 10, 9, lana); p(15, 3 + y0, 1, 8, som);
+  p(6, -2 + y0, 2, 5, lana); p(14, -2 + y0, 2, 5, lana); p(6, -1 + y0, 1, 3, rosa); p(15, -1 + y0, 1, 3, rosa);
+  if (!atras) {
+    p(8, 7 + y0, 6, 4, mmTono(lana, -.06)); p(10, 8 + y0, 2, 1, pezu); p(9, 10 + y0, 4, 1, osc);
+    if (parp) { p(7, 5 + y0, 2, 1, pezu); p(13, 5 + y0, 2, 1, pezu); } else { p(7, 4 + y0, 2, 2, pezu); p(13, 4 + y0, 2, 2, pezu); p(7, 4 + y0, 1, 1, '#ffffff'); p(13, 4 + y0, 1, 1, '#ffffff'); }
+    if (acc === 'trabaja') p(10, 11 + y0 + (f % 2), 2, 1, rosa);
+  }
+}
+
+// iconos de herramienta (7×7) para las burbujas y su color
+const MM_ICONO = {
+  web: ['.#####.', '#.#.#.#', '#######', '#.#.#.#', '#######', '#.#.#.#', '.#####.'], shell: ['#######', '#.....#', '#.#...#', '#..#..#', '#.#.###', '#.....#', '#######'],
+  archivo: ['#####..', '#...##.', '#....##', '#.###.#', '#.....#', '#.###.#', '#######'], memoria: ['###.###', '#.##..#', '#..#..#', '#.##.##', '#..#..#', '#.##..#', '###.###'],
+  delegar: ['.#...#.', '###.###', '.#...#.', '###.###', '#.#.#.#', '.......', '.......'], vista: ['.......', '..###..', '.#...#.', '#..#..#', '.#...#.', '..###..', '.......'],
+  tarea: ['.#####.', '#..#..#', '#..#..#', '#..###.', '#.....#', '#.....#', '.#####.'], mcp: ['.#...#.', '.#...#.', '#######', '#######', '.#####.', '...#...', '...#...'],
+  otro: ['..#.#..', '.#####.', '##...##', '.#...#.', '##...##', '.#####.', '..#.#..'],
+};
+const MM_EFECTO = { web: [70, 160, 255], shell: [60, 230, 120], archivo: [240, 180, 70], memoria: [255, 60, 90], delegar: [180, 110, 255], vista: [170, 90, 255], tarea: [255, 150, 70], mcp: [60, 220, 220], otro: [120, 220, 255] };
+function mmCategoria(nombre = '') {
+  const n = String(nombre);
+  if (/^(web|WebFetch|WebSearch|archive_|navegador|google_web|fetch|buscar_web)/i.test(n)) return 'web';
+  if (/^(shell|Bash|PowerShell|run_shell|ejecutar|terminal)/i.test(n)) return 'shell';
+  if (/(memoria|recordar|olvidar|^Memoria$|buscar_historial)/i.test(n)) return 'memoria';
+  if (/^(delegar|Task|Agent)$/i.test(n)) return 'delegar';
+  if (/(pantalla|control|escritorio|computer|demostracion)/i.test(n)) return 'vista';
+  if (/(tarea|programar)/i.test(n)) return 'tarea';
+  if (/(archivo|^Read$|^Write$|^Edit$|^Glob$|^Grep$|listar|Notebook|skill)/i.test(n)) return 'archivo';
+  if (/^mcp__/.test(n)) return 'mcp';
+  return 'otro';
+}
+function mmBurbujaIcono(c, x, y, cat, t) {
+  const p = mmP(c), W = 17, H = 14, X = Math.round(x - W / 2), Y = Math.round(y - H), col = MM_EFECTO[cat] || MM_EFECTO.otro, hex = `rgb(${col[0] * .75 | 0},${col[1] * .75 | 0},${col[2] * .75 | 0})`;
+  p(X + 1, Y - 1, W - 2, H + 2, '#0d0f16'); p(X - 1, Y + 1, W + 2, H - 2, '#0d0f16'); p(X, Y, W, H, '#0d0f16');
+  p(X + 1, Y, W - 2, H, '#f7f9fc'); p(X, Y + 1, W, H - 2, '#f7f9fc'); p(X + 1, Y + H - 2, W - 2, 1, '#d4dbe6');
+  p(X + 6, Y + H, 4, 2, '#0d0f16'); p(X + 7, Y + H, 2, 1, '#f7f9fc'); p(X + 7, Y + H + 2, 2, 1, '#0d0f16');
+  const g = MM_ICONO[cat] || MM_ICONO.otro, gira = cat === 'web' ? Math.floor(t / 200) % 2 : 0;
+  g.forEach((f, j) => { for (let i = 0; i < 7; i++) if (f[(i + (j % 2 ? gira : 0)) % 7] === '#') p(X + 5 + i, Y + 3 + j, 1, 1, hex); });
+}
+// aura alrededor de quien usa una herramienta (se dibuja en modo 'lighter')
+function mmAura(c, x, y, cat, t, k = 1) {
+  const [r, g, b] = MM_EFECTO[cat] || MM_EFECTO.otro, cy = y - 30, pul = .75 + Math.sin(t / 220) * .25;
+  const gr = c.createRadialGradient(x, cy, 4, x, cy, 38); gr.addColorStop(0, `rgba(${r},${g},${b},${.32 * pul * k})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = gr; c.fillRect(x - 38, cy - 38, 76, 76);
+  c.strokeStyle = `rgba(${r},${g},${b},${.75 * k})`; c.lineWidth = 1;
+  if (cat === 'web') { for (let i = 0; i < 3; i++) { const w = Math.abs(Math.cos(t / 700 + i * 1.05)) * 22 + 2; c.beginPath(); c.ellipse(x, cy, w, 24, 0, 0, 7); c.stroke(); } c.beginPath(); c.ellipse(x, cy, 24, 8, 0, 0, 7); c.stroke(); c.beginPath(); c.ellipse(x, cy, 24, 24, 0, 0, 7); c.stroke(); }
+  else if (cat === 'delegar') { c.beginPath(); c.ellipse(x, y, 22, 8, 0, 0, 7); c.stroke(); c.setLineDash([3, 3]); c.lineDashOffset = t / 40; c.beginPath(); c.ellipse(x, y, 17, 6, 0, 0, 7); c.stroke(); c.setLineDash([]); for (let i = 0; i < 6; i++) { const a = t / 600 + i * 1.047; c.fillStyle = `rgba(${r},${g},${b},.9)`; c.fillRect(x + Math.cos(a) * 20 | 0, y + Math.sin(a) * 7 | 0, 2, 2); } }
+  else { c.setLineDash([2, 4]); c.lineDashOffset = -t / 50; c.beginPath(); c.ellipse(x, cy, 20 + Math.sin(t / 300) * 2, 26, 0, 0, 7); c.stroke(); c.setLineDash([]); }
+}
+// corriente de datos con paquetes que viajan de (x1,y1) a (x2,y2)
+function mmCorriente(c, x1, y1, x2, y2, col, t, ancho = 1) {
+  const [r, g, b] = col, cx = (x1 + x2) / 2, cy = Math.min(y1, y2) - 40 - Math.abs(x2 - x1) * .12;
+  const traza = (w, a) => { c.strokeStyle = `rgba(${r},${g},${b},${a})`; c.lineWidth = w; c.beginPath(); c.moveTo(x1, y1); c.quadraticCurveTo(cx, cy, x2, y2); c.stroke(); };
+  traza(7 * ancho, .12); traza(3 * ancho, .35); c.setLineDash([4, 6]); c.lineDashOffset = -t / 25; traza(1, .9); c.setLineDash([]);
+  for (let k = 0; k < 5; k++) { const u = (t / 900 + k / 5) % 1, x = (1 - u) * (1 - u) * x1 + 2 * (1 - u) * u * cx + u * u * x2, y = (1 - u) * (1 - u) * y1 + 2 * (1 - u) * u * cy + u * u * y2;
+    c.fillStyle = `rgba(${r},${g},${b},.5)`; c.fillRect(x - 2 | 0, y - 2 | 0, 5, 5); c.fillStyle = '#ffffff'; c.fillRect(x | 0, y | 0, 2, 2); }
 }

@@ -257,6 +257,7 @@ function startServer() {
       if (ev.session_id && (ev._ppid || ev._term)) { resolveTerminal(ev.session_id, ev); ultimaSid = ev.session_id; }
       if (talk) talk.onEvent(ev);
       ojoHook(ev);                                                    // las terminales de Claude Code también mueven el ojo
+      try { if (nucleo) nucleo.bus.emit('motor-hook', ev); } catch { }  // Mission Control: las sesiones de Claude Code/Gemini/opencode como agentes
       if (!win || win.isDestroyed()) return res.end();
       if (ev.hook_event_name === 'PermissionRequest') {
         ev._peligro = esPeligroso(ev.tool_name, ev.tool_input);

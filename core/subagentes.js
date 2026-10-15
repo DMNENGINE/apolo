@@ -47,6 +47,33 @@ function crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar }) 
   bus.on('permiso', p => { const r = p.sesion && runs.get(p.sesion); if (r) { r.esperando = p.id; emitir(r); } });
   bus.on('permiso-resuelto', p => { for (const r of runs.values()) if (r.esperando === p.id) { r.esperando = undefined; emitir(r); } });
 
+  // motores externos (Claude Code, Gemini CLI, opencode): sus hooks llegan como 'motor-hook' y se ven en Mission Control como agentes más
+  const MOTOR = { claude: ['Claude Code', 'claudecode/cli'], gemini: ['Gemini CLI', 'gemini/cli'], opencode: ['opencode', 'opencode/cli'] };
+  const detalle = i => { i = i || {}; return String(i.url || i.query || i.command || i.file_path || i.pattern || i.path || i.prompt || i.description || '').replace(/\s+/g, ' '); };
+  bus.on('motor-hook', ev => {
+    if (!ev || !ev.session_id) return;
+    const motor = MOTOR[ev._motor] ? ev._motor : 'claude', id = 'ext:' + String(ev.session_id).slice(-40), h = ev.hook_event_name;
+    let r = runs.get(id);
+    if (!r) {
+      if (h === 'SessionEnd') return;
+      const sitio = String(ev.cwd || '').split(/[\\/]/).filter(Boolean).pop() || '';
+      r = { id, padre: null, nombre: `${MOTOR[motor][0]}${sitio ? ' · ' + sitio : ''}`, modelo: MOTOR[motor][1], canal: motor, externo: motor,
+        estado: 'quieto', inicio: 0, fin: 0, pasos: 0, herramienta: null, ultimo: '', uso: { entrada: 0, salida: 0 } };
+      runs.set(id, r);
+    }
+    const tapar = t => { try { return require('./seguridad').redactar(t); } catch { return t; } };
+    if (h === 'UserPromptSubmit' || h === 'SessionStart') { if (r.estado !== 'trabajando') Object.assign(r, { estado: h === 'SessionStart' ? 'quieto' : 'trabajando', inicio: Date.now(), fin: 0, pasos: 0, herramienta: null, error: undefined }); }
+    else if (h === 'PreToolUse') Object.assign(r, { estado: 'trabajando', inicio: r.inicio || Date.now(), fin: 0, esperando: undefined, pasos: r.pasos + 1, herramienta: { nombre: String(ev.tool_name || '?'), resumen: tapar(detalle(ev.tool_input)).slice(0, 160), desde: Date.now() } });
+    else if (h === 'PostToolUse') { r.herramienta = null; r.esperando = undefined; }
+    else if (h === 'PermissionRequest') { r.esperando = 'ext'; r.estado = 'trabajando'; r.herramienta = { nombre: String(ev.tool_name || '?'), resumen: tapar(detalle(ev.tool_input)).slice(0, 160), desde: Date.now() }; }
+    else if (h === 'Stop') Object.assign(r, { estado: 'listo', fin: Date.now(), herramienta: null, esperando: undefined, ultimo: tapar(String(ev.last_assistant_message || '')).slice(0, 300) });
+    else if (h === 'StopFailure') Object.assign(r, { estado: 'error', fin: Date.now(), herramienta: null, esperando: undefined, error: String(ev.error || 'error').slice(0, 200) });
+    else if (h === 'SessionEnd') Object.assign(r, { estado: r.estado === 'trabajando' ? 'listo' : r.estado, fin: r.fin || Date.now(), herramienta: null, esperando: undefined });
+    else return;
+    if (ev._usage?.ctx) { r.uso = { entrada: ev._usage.ctx, salida: ev._usage.out || 0 }; if (ev._usage.model) r.modelo = `${motor === 'claude' ? 'claudecode' : motor}/${ev._usage.model}`; }
+    emitir(r);
+  });
+
   async function lanzar({ padre, tarea, nombre, modelo, signal }) {
     tarea = String(tarea || '').trim();
     if (!tarea) throw new Error('falta la tarea');
