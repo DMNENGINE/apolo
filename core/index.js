@@ -111,6 +111,7 @@ function crearNucleo(opciones = {}) {
     horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
   tareas.registrarInterna('sueno', async () => { await sueno.dormir({ motivo: 'noche' }); return ''; });   // el aviso llega a la hora del briefing
   require('./herramientas').registrar([grafoMod.HERRAMIENTA]);
+  require('./herramientas').registrar(require('./archive').HERRAMIENTAS);    // Internet Archive: buscar, ver, leer libros, Wayback, guardar
   // lo que el usuario hace en Claude Code → memoria + línea de tiempo + diario (tarea nocturna, core/aprender-cc.js)
   const aprenderCC = require('./aprender-cc').crearAprenderCC({ cfg, memoria, generarJSON: generarJSONvivo, modelo: modeloCerebro, tareas, registro });
   nucleo.extensiones['aprender-claude'] = { http: (...a) => aprenderCC.http(...a) };
