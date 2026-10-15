@@ -184,6 +184,8 @@ function crearNucleo(opciones = {}) {
   nucleo.conciencia = conciencia; nucleo.extensiones.conciencia = { http: (...a) => conciencia.http(...a) };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   nucleo.importadorChatGPT = crearImportadorChatGPT({ cfg, memoria, bus, generarJSON: generarJSONvivo, modelo: modeloCerebro });
+  const mundo = require('./mundo').crearMundo({ cfg, generarJSON: generarJSONvivo, modelo: modeloCerebro });   // Mission Control: mapa pixel-art (de serie o generado) → /v1/mundo
+  nucleo.extensiones.mundo = { http: (...a) => mundo.http(...a) };
   return nucleo;
 }
 

@@ -15,11 +15,15 @@ VISTAS.agentes = {
     this.v = v;
     const l = await api('GET', '/agentes');
     this.agentes = new Map(l.map(a => [a.id, a]));
-    v.innerHTML = `<div class="pagina mision">${cabecera('Mission Control', 'Quién está haciendo qué ahora mismo: conversaciones, tareas y los subagentes que lanzan. En vivo.')}
+    this.modo = leerLocal('mc.modo', 'mundo');
+    v.innerHTML = `<div class="pagina mision ${this.modo === 'mundo' ? 'ancha' : ''}">${cabecera('Mission Control', 'Quién está haciendo qué ahora mismo: conversaciones, tareas y los subagentes que lanzan. En vivo.',
+      `<span class="seg mc-modo">${[['mundo', 'Mundo'], ['lista', 'Lista']].map(([k, t]) => `<button class="${this.modo === k ? 'on' : ''}" data-modo="${k}">${tr(t)}</button>`).join('')}</span>`)}
       ${typeof CJ_pestanas === 'function' ? CJ_pestanas('agentes') : ''}
-      <div class="rejilla k" id="mcKpis"></div>
+      ${this.modo === 'mundo' ? '<div id="mcMundo"></div>' : `<div class="rejilla k" id="mcKpis"></div>
       <div class="seccion">${tr('Agentes')}</div>
-      <div id="mcLista"></div></div>`;
+      <div id="mcLista"></div>`}</div>`;
+    $('.mc-modo', v).onclick = e => { const b = e.target.closest('[data-modo]'); if (!b || b.dataset.modo === this.modo) return; guardarLocal('mc.modo', b.dataset.modo); MC_MUNDO.salir(); this.pintar(v); };
+    if (this.modo === 'mundo') MC_MUNDO.montar($('#mcMundo', v), this);
     v.onclick = async e => {
       const b = e.target.closest('[data-parar]'); if (!b) return;
       b.disabled = true;
@@ -29,8 +33,9 @@ VISTAS.agentes = {
     clearInterval(this.t);
     this.t = setInterval(() => this.relojes(), 1000);        // solo los cronómetros; el resto llega por eventos
   },
-  salir() { clearInterval(this.t); clearTimeout(this.cola); this.v = null; },
+  salir() { clearInterval(this.t); clearTimeout(this.cola); MC_MUNDO.salir(); this.v = null; },
   alEvento(e) {
+    if (this.modo === 'mundo') MC_MUNDO.alEvento(e);         // antes de actualizar: compara con el estado anterior
     if (e.tipo !== 'agente' || !e.agente) return;
     this.agentes.set(e.agente.id, e.agente);
     if (!this.cola) this.cola = setTimeout(() => { this.cola = null; this.repintar(); }, 150);

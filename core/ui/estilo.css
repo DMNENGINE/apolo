@@ -1250,3 +1250,51 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mn-nacer.on .crece{display:flex;flex-direction:column;gap:3px}
 .mn-nacer.on small{color:var(--suave,inherit);opacity:.85}
 .mn-nacer-ico{font-size:26px;line-height:1}
+
+/* ================= Mission Control → Mundo (pixel-art) ================= */
+@font-face { font-family: 'Silkscreen'; src: url('vendor/silkscreen-400.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Silkscreen'; src: url('vendor/silkscreen-700.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'VT323'; src: url('vendor/vt323.woff2') format('woff2'); font-display: swap; }
+.mc-modo { margin-left: 8px; }
+.mm { --mm-borde: #2fd1b0; --mm-panel: #0c1a1f; font-family: 'Silkscreen', monospace; color: #dff8f1; background: #0a0d12; border: 3px solid #12262a; outline: 2px solid color-mix(in srgb, var(--mm-borde) 55%, #000); border-radius: 6px; overflow: hidden; container-type: inline-size; image-rendering: pixelated; }
+.mm-barra { display: flex; align-items: center; gap: 6px; padding: 5px 6px; background: linear-gradient(#11232a, #0b171c); flex-wrap: wrap; }
+.mm-arriba { border-bottom: 2px solid color-mix(in srgb, var(--mm-borde) 45%, #000); }
+.mm-abajo { border-top: 2px solid color-mix(in srgb, var(--mm-borde) 45%, #000); }
+.mm-dato { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; background: var(--mm-panel); border: 2px solid color-mix(in srgb, var(--mm-borde) 50%, #000); font-size: clamp(9px, 1.05cqw, 13px); white-space: nowrap; box-shadow: inset 0 0 0 1px #000; }
+.mm-dato em { font-style: normal; color: #ffcf4d; }
+.mm-dato b.ok { color: #4dff8f; } .mm-dato b.aviso { color: #ffcf4d; } .mm-dato b.mal { color: #ff4d6a; animation: mm-parpadeo .8s steps(1) infinite; }
+.mm-titulo { flex: 1; text-align: center; font-weight: 700; font-size: clamp(12px, 1.9cqw, 22px); letter-spacing: .06em; color: #cffff4; text-shadow: 0 0 8px color-mix(in srgb, var(--mm-borde) 70%, transparent), 2px 2px 0 #000; padding: 2px 12px; }
+.mm-pest { display: inline-flex; gap: 4px; }
+.mm-pest button, .mm-btn { font-family: inherit; font-size: clamp(9px, 1.05cqw, 13px); color: #dff8f1; background: #123038; border: 2px solid color-mix(in srgb, var(--mm-borde) 60%, #000); padding: 4px 12px; cursor: pointer; box-shadow: inset 0 -3px 0 rgba(0,0,0,.35), inset 0 2px 0 rgba(255,255,255,.08); }
+.mm-pest button.on { background: color-mix(in srgb, var(--mm-borde) 35%, #0c1a1f); color: #fff; }
+.mm-pest button:hover, .mm-btn:hover { filter: brightness(1.25); }
+.mm-btn:active { transform: translateY(1px); box-shadow: inset 0 2px 0 rgba(0,0,0,.4); }
+.mm-btn.rojo { background: #5a1420; border-color: #b8323f; color: #ffd6db; }
+.mm-btn.rojo.fuerte { background: #8a1726; border-color: #ff4d5e; font-weight: 700; }
+.mm-btn.rojo.arma { background: #ff2d4a; color: #fff; animation: mm-parpadeo .5s steps(1) infinite; }
+.mm-btn.ic { padding: 4px 9px; }
+.mm-hueco { flex: 1; }
+.mm i[data-b] { display: inline-block; width: clamp(40px, 7cqw, 90px); height: 9px; background: #06110f; border: 1px solid #1d3d38; position: relative; }
+.mm i[data-b] b { position: absolute; left: 1px; top: 1px; bottom: 1px; width: 0; background: repeating-linear-gradient(90deg, #3dff8a 0 5px, #24b862 5px 6px); transition: width .6s steps(8); }
+.mm i[data-b].seg b { background: repeating-linear-gradient(90deg, #3dff8a 0 6px, transparent 6px 8px); }
+.mm-mapa { position: relative; width: 100%; background: #0a0d12; }
+.mm-mapa canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.mm-placa { position: absolute; transform: translateX(-50%); padding: .25cqw .9cqw; font-size: clamp(8px, 1.15cqw, 14px); font-weight: 700; color: #e8fff9; background: #0d1f24; border: 2px solid var(--mm-borde); box-shadow: 0 0 0 2px #000, 0 0 10px color-mix(in srgb, var(--mm-borde) 35%, transparent); white-space: nowrap; pointer-events: none; text-shadow: 1px 1px 0 #000; }
+.mm-panel { position: absolute; padding: .35cqw .55cqw; background: rgba(8, 22, 26, .92); border: 2px solid var(--mm-borde); box-shadow: 0 0 0 2px #000; font-size: clamp(7px, .95cqw, 12px); color: #cffff4; pointer-events: none; display: flex; flex-direction: column; gap: 4px; }
+.mm-panel > div { display: flex; align-items: center; gap: 6px; } .mm-panel .mm-c { display: block; text-align: center; line-height: 1.3; }
+.mm-panel b.ok { color: #4dff8f; }
+.mm-panel i[data-b] { width: clamp(30px, 5cqw, 64px); height: 7px; }
+.mm-nombres { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.mm-nombre { position: absolute; transform: translate(-50%, -100%); padding: 1px 6px; font-size: clamp(7px, .9cqw, 11px); color: #10131a; background: #f4f7fb; border: 1px solid #10131a; border-radius: 3px; white-space: nowrap; box-shadow: 1px 1px 0 #000; }
+.mm-ticker { position: absolute; right: .8cqw; bottom: .8cqw; width: min(330px, 30cqw); background: rgba(6, 14, 18, .92); border: 2px solid var(--mm-borde); box-shadow: 0 0 0 2px #000; font-family: 'VT323', monospace; font-size: clamp(12px, 1.35cqw, 17px); line-height: 1.15; color: #d7fff3; }
+.mm-lineas { height: clamp(70px, 10cqw, 130px); overflow: auto; padding: 4px 8px; scrollbar-width: thin; scrollbar-color: var(--mm-borde) transparent; }
+.mm-lineas div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .mm-lineas span { color: #6fa89a; }
+.mm-lineas .aviso { color: #ffcf4d; } .mm-lineas .error { color: #ff6b7d; } .mm-lineas .tenue { color: #6fa89a; }
+.mm-holo { font-family: var(--sans); }
+.mm-fila { display: flex; gap: 10px; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--holo) 18%, transparent); font-size: 13px; }
+.mm-fila span { color: var(--txt-3); flex: none; } .mm-fila b { text-align: right; font-weight: 600; min-width: 0; overflow-wrap: anywhere; } .mm-fila small { display: block; color: var(--txt-2); font-weight: 400; }
+.mm-txt { font-size: 13px; line-height: 1.45; color: var(--txt-2); margin-bottom: 6px; }
+.mm-acc { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; }
+.mm.mm-panico, .mm-panico .mm { outline-color: #ff2d4a; }
+@keyframes mm-parpadeo { 50% { opacity: .35; } }
+@media (max-width: 700px) { .mm-ticker { display: none; } .mm-panel { display: none; } .mm-arriba .mm-dato[data-d="tok"] { display: none; } }
