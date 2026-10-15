@@ -190,7 +190,7 @@ function iniciar(opciones = {}) {
       }
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram
         try {
-          let cuerpo = ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {};
+          let cuerpo = ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req, p[1] === 'mundo' ? 8e6 : 1e6) : {};   // el mundo puede venir con la imagen de referencia
           if (disp) cuerpo = p[1] === 'panico' ? { origen: `movil:${disp.nombre}` } : { texto: cuerpo.texto };   // móvil: pánico, o el encargo del turno sin carpeta ni modelo
           else if (p[1] === 'panico') cuerpo = { origen: String(cuerpo.origen || req.headers['x-cliente'] || 'panel').slice(0, 40), quien: String(cuerpo.quien || req.headers['x-cliente'] || 'panel').slice(0, 40) };
           const r = await n.extensiones[p[1]].http(M, p, cuerpo, Object.fromEntries(u.searchParams));

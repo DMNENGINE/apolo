@@ -1306,3 +1306,33 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mm-dice::after { content: ""; position: absolute; left: 50%; bottom: -7px; width: 8px; height: 6px; background: #fdfdf8; border: 2px solid #10131a; border-top: 0; border-left: 0; transform: translateX(-50%) skewX(-30deg); }
 .mm-dice.jefe { background: #fff6dc; border-color: #7a5a10; color: #3a2008; font-weight: 700; }
 @keyframes mm-dice { from { transform: translate(-50%, -80%) scale(.6); opacity: 0; } }
+
+/* ---- Mission Control: elegir / crear mundo ---- */
+.mmg-cuerpo { padding: 14px; display: flex; flex-direction: column; gap: 18px; font-family: var(--sans); }
+.mmg-cartas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.mmg-carta { background: #0c151a; border: 2px solid color-mix(in srgb, var(--mm-borde) 45%, #000); box-shadow: 0 0 0 2px #000; display: flex; flex-direction: column; transition: transform .15s, box-shadow .15s; }
+.mmg-carta:hover { transform: translateY(-3px); box-shadow: 0 0 0 2px #000, 0 0 18px color-mix(in srgb, var(--mm-borde) 45%, transparent); }
+.mmg-carta canvas { width: 100%; aspect-ratio: 480/300; display: block; image-rendering: auto; background: #05070a; }
+.mmg-pie { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 4px; color: #e8fff9; font-family: 'Silkscreen', monospace; font-size: 13px; }
+.mmg-carta .mm-btn { margin: 6px 10px 10px; }
+.mm-btn.verde { background: #0f3a28; border-color: #2fd17a; color: #d6ffe8; }
+.mmg-crear { background: #0b1418; border: 2px solid color-mix(in srgb, var(--mm-borde) 35%, #000); padding: 14px 16px; color: #d8ece6; }
+.mmg-crear h3 { margin: 0 0 10px; font-family: 'Silkscreen', monospace; font-size: 18px; color: #e8fff9; letter-spacing: .04em; }
+.mmg-modo { margin-bottom: 10px; }
+.mmg-pasos { margin: 0 0 12px 18px; padding: 0; color: #a9c4bd; font-size: 13.5px; line-height: 1.6; }
+.mmg-bloques { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px 14px; }
+.mmg-b { display: flex; flex-direction: column; gap: 4px; }
+.mmg-b > span:first-child { display: flex; gap: 8px; align-items: baseline; } .mmg-b b { font-size: 13px; color: #e8fff9; } .mmg-b small { color: #7f9a93; font-size: 11.5px; }
+.mmg-in { display: flex; gap: 6px; } .mmg-in input { flex: 1; min-width: 0; background: #060c0e; border: 1px solid #1f3a35; color: #e8fff9; padding: 7px 9px; font-size: 13px; border-radius: 3px; }
+.mmg-in input:focus { outline: 2px solid var(--mm-borde); }
+.mmg-acc { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.mmg-prompt { margin-top: 10px; background: #050a0c; border: 1px dashed #2a4a44; padding: 12px; font-size: 13px; line-height: 1.65; color: #b8d2cb; border-radius: 3px; }
+.mmg-prompt mark { background: color-mix(in srgb, var(--mm-borde) 22%, transparent); color: #fff; border-bottom: 2px solid var(--mm-borde); padding: 0 3px; cursor: pointer; border-radius: 2px; }
+.mmg-prompt mark:hover { background: color-mix(in srgb, var(--mm-borde) 40%, transparent); }
+.mmg-subir { margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 74px; border: 2px dashed #2a4a44; color: #a9c4bd; cursor: pointer; padding: 10px; text-align: center; font-size: 13.5px; }
+.mmg-subir.encima { border-color: var(--mm-borde); background: color-mix(in srgb, var(--mm-borde) 10%, transparent); }
+.mmg-subir img { height: 56px; border: 1px solid #2a4a44; vertical-align: middle; margin-right: 8px; }
+.mmg-estado { margin-top: 8px; min-height: 20px; font-size: 13.5px; color: #a9e8c9; } .mmg-estado.mal { color: #ff8a9a; }
+.mmg-giro { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: mmg-giro .8s linear infinite; vertical-align: -2px; }
+@keyframes mmg-giro { to { transform: rotate(360deg); } }
+.mm-previa { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: rgba(6, 14, 18, .94); border: 2px solid var(--mm-borde); box-shadow: 0 0 0 2px #000, 0 0 20px rgba(0,0,0,.6); color: #e8fff9; font-size: 13px; z-index: 7; flex-wrap: wrap; justify-content: center; }

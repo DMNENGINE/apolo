@@ -71,38 +71,84 @@ function mmLookModelo(prov, tipo) {
 const mmNombreModelo = (prov, tipo) => (MM_MODELOS[prov] || [])[0] || prov;
 const mmHash = s => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
+// rejilla del mapa: 0 vacío · 1 suelo · 2 pared; qué sala/suelo tiene cada casilla, qué bloquea, la lava que alumbra, el núcleo
+function mmEstructura(m) {
+  const tema = { nucleo: 'orbe', pueblo: 'humanos', particulas: 'brasas', ...(MM_TEMAS[m.tema] || MM_TEMAS.mazmorra), ...(m.estilo || {}) }, R = MM_R, A = m.ancho;
+  const g = new Uint8Array(A * m.alto), suelo = new Array(A * m.alto), sala = new Array(A * m.alto), en = (x, y) => x >= 0 && y >= 0 && x < A && y < m.alto;
+  const poner = (rc, s, id) => { for (let y = rc.y; y < rc.y + rc.h; y++) for (let x = rc.x; x < rc.x + rc.w; x++) if (en(x, y)) { const i = y * A + x; g[i] = 1; suelo[i] = s; if (id) sala[i] = id; } };
+  const sueloPasillo = { nave: 'metal', laboratorio: 'metal', oficina: 'madera', bosque: 'hierba', estacion: 'metal', colmena: 'organico', infierno: 'roca' }[m.tema] || 'tierra';
+  for (const p of m.pasillos) poner(p, sueloPasillo);
+  for (const s of m.salas) poner(s, s.suelo, s.id);
+  for (let y = 0; y < m.alto; y++) for (let x = 0; x < A; x++) if (!g[y * A + x]) {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (en(x + dx, y + dy) && g[(y + dy) * A + x + dx] === 1) { g[y * A + x] = 2; dy = dx = 2; }
+  }
+  const bloq = new Uint8Array(A * m.alto), lavaLuz = [];
+  for (const o of m.objetos) { const d = MM_OBJ[o.tipo]; if (d?.bloq) for (let y = o.y; y < o.y + d.h; y++) for (let x = o.x; x < o.x + d.w; x++) if (en(x, y)) bloq[y * A + x] = 1; }
+  for (let i = 0; i < g.length; i++) if (g[i] === 1 && suelo[i] === 'lava') { bloq[i] = 1; const x = i % A, y = Math.floor(i / A); if ((x + y * 2) % 3 === 0) lavaLuz.push({ x: x * R + R / 2, y: y * R + R / 2, f: Math.random() * 6 }); }
+  const porRol = Object.fromEntries(m.salas.map(s => [s.rol, s]));
+  const orbe = m.objetos.find(o => o.tipo === 'orbe') || (() => { const s = porRol.principal; return { x: s.x + (s.w >> 1) - 1, y: s.y + (s.h >> 1) - 1 }; })();
+  return { m, tema, g, suelo, sala, bloq, lavaLuz, porRol, orbe, W: A * R, H: m.alto * R };
+}
+// carátula de un mundo: fondo, objetos y su luz, en una imagen fija
+function mmCaratula(m, cv) {
+  const w = mmEstructura(m), T = w.tema, R = MM_R, t = 1200;
+  const est = { orbe: .7, cpu: .3, mcp: .9, memoria: 0, bahia: 1, progreso: .6, racks: new Map(), luz: T.luz, borde: T.borde, nucleo: T.nucleo, nucleoRGB: mmRGB(T.nucleoColor || '#5fd8ff') };
+  const po = m.objetos.find(o => o.tipo === 'portal'); est.portal = po ? { x: po.x * R + 48, y: po.y * R + 16 } : null;
+  const big = mmLienzo(w.W, w.H), c = big.getContext('2d'); c.imageSmoothingEnabled = false;
+  c.drawImage(mmFondo(w), 0, 0);
+  const luces = [], cosas = m.objetos.map(o => ({ o, d: MM_OBJ[o.tipo] })).filter(x => x.d).sort((a, b) => (a.d.bloq ? a.o.y + a.d.h : -1) - (b.d.bloq ? b.o.y + b.d.h : -1));
+  for (const { o, d } of cosas) { const X = o.x * R, Y = o.y * R - d.alto; c.drawImage(mmSpriteObjeto(o), X, Y); try { d.vivo?.(c, X, Y, t, est, o); } catch { } if (d.luz) luces.push(...d.luz(o, X, Y, t, est)); }
+  for (const l of w.lavaLuz) luces.push({ x: l.x, y: l.y, r: 70, col: [255, 110, 40], a: .32 });
+  const L = mmLienzo(w.W >> 1, w.H >> 1), lc = L.getContext('2d'), A = T.amb;
+  lc.fillStyle = `rgb(${A[0]},${A[1]},${A[2]})`; lc.fillRect(0, 0, L.width, L.height); lc.globalCompositeOperation = 'lighter';
+  lc.fillStyle = `rgba(255,236,210,${T.sala})`; for (const s of m.salas) lc.fillRect(s.x * R / 2, s.y * R / 2, s.w * R / 2, s.h * R / 2);
+  for (const l of luces) { const g = lc.createRadialGradient(l.x / 2, l.y / 2, 0, l.x / 2, l.y / 2, l.r / 2); g.addColorStop(0, `rgba(${l.col[0]},${l.col[1]},${l.col[2]},${l.a})`); g.addColorStop(1, 'rgba(0,0,0,0)'); lc.fillStyle = g; lc.fillRect((l.x - l.r) / 2, (l.y - l.r) / 2, l.r, l.r); }
+  c.globalCompositeOperation = 'multiply'; c.imageSmoothingEnabled = true; c.drawImage(L, 0, 0, w.W, w.H); c.globalCompositeOperation = 'source-over';
+  const x = cv.getContext('2d'); x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high'; x.drawImage(big, 0, 0, cv.width, cv.height);
+}
+
+// ---- constructor del prompt para la imagen de referencia: bloques editables y paquetes para el dado ----
+const MM_BLOQUES = [
+  ['ambientacion', 'Ambientación', 'el mundo entero: dónde está la base'], ['jefe', 'Orquestador (el jefe)', 'quién manda en el centro'],
+  ['nucleo', 'Núcleo central', 'lo que hay en el centro de la sala principal'], ['servidores', 'Sala de servidores', 'cómo son los servidores'],
+  ['taller', 'Zona de la impresora 3D', 'qué se fabrica y cómo'], ['bahia', 'Bahía de subagentes', 'dónde trabajan los subagentes'],
+  ['mcp', 'Laboratorio MCP', 'el sitio donde se conjuran las herramientas'], ['pueblo', 'Quién trabaja ahí', 'las criaturas o personas'], ['paleta', 'Paleta y luz', 'colores dominantes y tipo de luz'],
+];
+const MM_PAQUETES = [
+  { ambientacion: 'una colmena alienígena bio-orgánica dentro de un asteroide', jefe: 'un alienígena alto con túnica morada y bastón', nucleo: 'un cerebro gigante que brilla en cian lanzando rayos', servidores: 'vainas orgánicas con líquido verde brillante y criaturas dentro', taller: 'brazos robóticos que disparan láseres rosas sobre una masa verde', bahia: 'pantallas holográficas, mapas del mundo y consolas', mcp: 'un portal de materia en el suelo rodeado de runas', pueblo: 'aliens verdes y morados con antenas y robots araña', paleta: 'morado oscuro y verde tóxico, luz bioluminiscente' },
+  { ambientacion: 'el infierno, una fortaleza de roca volcánica rodeada de lava', jefe: 'un señor demonio con cuernos sentado en un trono de calaveras', nucleo: 'un cerebro en llamas sobre un altar', servidores: 'jaulas de hierro con fuego dentro y runas brillantes', taller: 'una forja con una gárgola que dispara rayos sobre un yunque al rojo', bahia: 'una cueva con braseros y pergaminos', mcp: 'un círculo de invocación con calaveras', pueblo: 'diablillos rojos con tridentes', paleta: 'negro, rojo y naranja lava, luz de fuego' },
+  { ambientacion: 'una estación científica en órbita', jefe: 'un científico de bata blanca con el pelo alborotado', nucleo: 'un holograma azul de un cerebro con rayos', servidores: 'filas de racks con luces de CPU y RAM', taller: 'impresoras 3D con brazos robóticos y cajas', bahia: 'consolas, monitores y hologramas', mcp: 'una cámara de teletransporte con brazos láser', pueblo: 'científicos, ingenieros y robots de mantenimiento', paleta: 'azul acero y cian neón, luz fría' },
+  { ambientacion: 'un submarino steampunk en el fondo del mar', jefe: 'un capitán con sombrero de copa y monóculo', nucleo: 'una esfera de cobre con engranajes y electricidad', servidores: 'calderas de vapor con manómetros', taller: 'una fragua de latón con brazos mecánicos', bahia: 'mesas de navegación con mapas y telescopios', mcp: 'una escotilla brillante en el suelo', pueblo: 'mecánicos con gafas de soldar y pulpos ayudantes', paleta: 'cobre, latón y verde mar, luz de lámparas de gas' },
+  { ambientacion: 'una ciudad cyberpunk lluviosa', jefe: 'una hacker con chaqueta de neón y visor', nucleo: 'una IA holográfica rosa dentro de un cilindro', servidores: 'torres de servidores con cables por todas partes', taller: 'un taller de implantes con brazos robóticos', bahia: 'un cibercafé con terminales', mcp: 'un portal de datos en el suelo', pueblo: 'cyborgs y drones', paleta: 'magenta, cian y negro, luces de neón y lluvia' },
+  { ambientacion: 'un templo japonés en la montaña', jefe: 'un monje sabio con kimono y báculo', nucleo: 'una perla luminosa sobre un altar de piedra', servidores: 'faroles de papel con espíritus dentro', taller: 'una forja de katanas', bahia: 'un dojo con pergaminos', mcp: 'un torii brillante sobre un estanque', pueblo: 'monjes y zorros kitsune', paleta: 'rojo laca, madera oscura y dorado, luz de farolillos' },
+  { ambientacion: 'una pirámide egipcia bajo la arena', jefe: 'un faraón con báculo y máscara dorada', nucleo: 'un ojo de Horus flotante que brilla', servidores: 'sarcófagos con jeroglíficos que brillan', taller: 'un taller de escarabajos mecánicos', bahia: 'una sala de escribas con papiros', mcp: 'un portal entre dos obeliscos', pueblo: 'momias y sacerdotes', paleta: 'arena, oro y turquesa, luz de antorchas' },
+  { ambientacion: 'una base pirata en una cueva junto al mar', jefe: 'un capitán pirata con loro y garfio', nucleo: 'un cofre del tesoro mágico que brilla', servidores: 'barriles con botellas brillantes', taller: 'un astillero con cañones', bahia: 'una taberna con mapas', mcp: 'un remolino mágico en el agua', pueblo: 'piratas y cangrejos', paleta: 'madera, azul mar y oro, luz de farolillos' },
+  { ambientacion: 'un castillo de hielo en el polo', jefe: 'una reina de hielo con corona de cristal', nucleo: 'un cristal de hielo gigante que flota', servidores: 'columnas de hielo con luces dentro', taller: 'un taller de muñecos de nieve mecánicos', bahia: 'una biblioteca congelada', mcp: 'un portal de aurora boreal', pueblo: 'pingüinos y yetis', paleta: 'blanco, azul hielo y violeta aurora, luz fría' },
+  { ambientacion: 'una nave espacial retro de los años 80', jefe: 'un capitán con uniforme y casco de cristal', nucleo: 'un reactor de plasma verde', servidores: 'ordenadores con cintas y luces parpadeantes', taller: 'una bahía de reparación de robots', bahia: 'el puente de mando con pantallas', mcp: 'un teletransportador circular', pueblo: 'astronautas y robots clásicos', paleta: 'naranja, crema y verde fósforo, luz de pantallas CRT' },
+  { ambientacion: 'una selva maya con ruinas', jefe: 'un chamán con tocado de plumas', nucleo: 'un calendario de piedra que brilla', servidores: 'tótems de piedra con jade', taller: 'una cantera con jaguares de piedra', bahia: 'un mercado con toldos', mcp: 'un cenote brillante', pueblo: 'guerreros mayas y monos', paleta: 'verde selva, piedra y jade, luz del atardecer' },
+  { ambientacion: 'una fábrica de dulces', jefe: 'un chocolatero con sombrero de copa', nucleo: 'una gran bola de chicle que gira', servidores: 'máquinas de caramelos de colores', taller: 'cintas transportadoras de pasteles', bahia: 'una sala de catas', mcp: 'un tobogán de chocolate', pueblo: 'gominolas vivientes', paleta: 'rosa, menta y chocolate, luz cálida' },
+];
+const mmPrompt = b => `Pixel art 16-bit, vista cenital (top-down) de un videojuego: el "Mission Control" de una base de agentes de IA ambientada en ${b.ambientacion}. ` +
+  `Distribución: arriba a la izquierda la SALA DE SERVIDORES con ${b.servidores}; abajo a la izquierda la ZONA DE LA IMPRESORA 3D con ${b.taller}; ` +
+  `en el centro el ÁREA DEL AGENTE PRINCIPAL DE IA con ${b.nucleo} y el orquestador, ${b.jefe}; arriba a la derecha la BAHÍA DE SUBAGENTES con ${b.bahia}; ` +
+  `abajo a la derecha el LABORATORIO MCP con ${b.mcp}. Pasillos que unen todas las salas. Personajes trabajando: ${b.pueblo}. Paleta y luz: ${b.paleta}. ` +
+  `Carteles en español sobre cada sala, HUD de juego con barras de CPU/RAM, un panel "Ticker" y botones PAUSA, E-STOP y PÁNICO. Muy detallado y nítido, formato 16:9.`;
+
 const MC_MUNDO = {
   async montar(caja, mc) {
     this.mc = mc; this.caja = caja; this.ents = new Map(); this.ticker = []; this.log = []; this.parts = []; this.pestana = this.pestana || 'ticker';
     this.est = { cpu: 0, ram: 0, ramTot: 0, orbe: 0, progreso: 0, bahia: 0, memoria: 0, mcp: 0, panico: false, luz: 'antorcha', borde: '#2fd1b0' };
     const r = await api('GET', '/mundo').catch(() => null);
     if (!r || !this.caja) return;
-    this.propio = r.propio; this.cargar(r.mundo);
+    this.propio = r.propio;
+    if (r.propio) this.cargar(r.mundo); else this.elegir();
     this.cargarDatos(); clearInterval(this.tDatos); this.tDatos = setInterval(() => this.cargarDatos(), 2500);
     clearInterval(this.tLento); this.tLento = setInterval(() => this.cargarLento(), 30000); this.cargarLento();
   },
   salir() { cancelAnimationFrame(this.raf); this.raf = 0; clearInterval(this.tDatos); clearInterval(this.tLento); this.caja = null; },
   cargar(m) {
-    this.m = m; const tema = { nucleo: 'orbe', pueblo: 'humanos', particulas: 'brasas', ...(MM_TEMAS[m.tema] || MM_TEMAS.mazmorra), ...(m.estilo || {}) }; this.tema = tema;
+    Object.assign(this, mmEstructura(m)); const tema = this.tema, R = MM_R, W = this.W, H = this.H;
     Object.assign(this.est, { luz: tema.luz, borde: tema.borde, nucleo: tema.nucleo, nucleoRGB: mmRGB(tema.nucleoColor || '#5fd8ff') });
-    const R = MM_R, W = m.ancho * R, H = m.alto * R; this.W = W; this.H = H;
-    // rejilla: 0 vacío · 1 suelo · 2 pared; y qué sala/suelo tiene cada casilla
-    const g = new Uint8Array(m.ancho * m.alto), suelo = new Array(m.ancho * m.alto), sala = new Array(m.ancho * m.alto);
-    const en = (x, y) => x >= 0 && y >= 0 && x < m.ancho && y < m.alto;
-    const poner = (rc, s, id) => { for (let y = rc.y; y < rc.y + rc.h; y++) for (let x = rc.x; x < rc.x + rc.w; x++) if (en(x, y)) { const i = y * m.ancho + x; g[i] = 1; suelo[i] = s; if (id) sala[i] = id; } };
-    const sueloPasillo = { nave: 'metal', laboratorio: 'metal', oficina: 'madera', bosque: 'hierba' }[m.tema] || 'tierra';
-    for (const p of m.pasillos) poner(p, sueloPasillo);
-    for (const s of m.salas) poner(s, s.suelo, s.id);
-    for (let y = 0; y < m.alto; y++) for (let x = 0; x < m.ancho; x++) if (!g[y * m.ancho + x]) {
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (en(x + dx, y + dy) && g[(y + dy) * m.ancho + x + dx] === 1) { g[y * m.ancho + x] = 2; dy = dx = 2; }
-    }
-    this.g = g; this.suelo = suelo; this.sala = sala;
-    this.bloq = new Uint8Array(m.ancho * m.alto);
-    for (const o of m.objetos) { const d = MM_OBJ[o.tipo]; if (d?.bloq) for (let y = o.y; y < o.y + d.h; y++) for (let x = o.x; x < o.x + d.w; x++) if (en(x, y)) this.bloq[y * m.ancho + x] = 1; }
-    this.lavaLuz = [];                                                // la lava no se pisa y alumbra
-    for (let i = 0; i < g.length; i++) if (g[i] === 1 && suelo[i] === 'lava') { this.bloq[i] = 1; const x = i % m.ancho, y = Math.floor(i / m.ancho); if ((x + y * 2) % 3 === 0) this.lavaLuz.push({ x: x * R + R / 2, y: y * R + R / 2, f: Math.random() * 6 }); }
-    this.porRol = Object.fromEntries(m.salas.map(s => [s.rol, s]));
-    this.orbe = m.objetos.find(o => o.tipo === 'orbe') || (() => { const s = this.porRol.principal; return { x: s.x + (s.w >> 1) - 1, y: s.y + (s.h >> 1) - 1 }; })();
     this.fondo = mmFondo(this);
     document.fonts?.load('700 16px Silkscreen').then(() => { if (this.m === m) this.fondo = mmFondo(this); }).catch(() => {});   // los carteles del suelo usan la fuente pixel
     const po = m.objetos.find(o => o.tipo === 'portal'); this.portal = po ? { x: po.x * R + 48, y: po.y * R + 16 } : null; this.est.portal = this.portal;
@@ -116,6 +162,7 @@ const MC_MUNDO = {
   dom() {
     const m = this.m, px = v => `${(v / m.ancho * 100).toFixed(3)}%`, py = v => `${(v / m.alto * 100).toFixed(3)}%`, s = this.porRol;
     this.caja.style.setProperty('--mm-borde', this.tema.borde);
+    this.caja.onclick = this.caja.oninput = this.caja.onchange = null;          // los de la pantalla de elegir
     this.caja.innerHTML = `<div class="mm">
       <div class="mm-barra mm-arriba"><span class="mm-dato" data-d="cpu">CPU —</span><span class="mm-dato" data-d="ram">RAM —</span><span class="mm-dato" data-d="tok">TOKENS —</span>
         <span class="mm-titulo">MISSION CONTROL</span><span class="mm-dato mm-status" data-d="status">STATUS: —</span>
@@ -166,7 +213,10 @@ const MC_MUNDO = {
   },
   // los grupos de servicios del usuario van a los racks en orden (de arriba abajo, de izquierda a derecha)
   repartirRacks() {
-    const racks = (this.m?.objetos || []).filter(o => MM_SERVIDOR.includes(o.tipo)).sort((a, b) => a.y - b.y || a.x - b.x), mapa = new Map(), est = this.serv?.estado || {};
+    const sv = this.porRol?.servidores, dentro = o => sv && o.x >= sv.x && o.x < sv.x + sv.w && o.y >= sv.y && o.y < sv.y + sv.h;
+    let racks = (this.m?.objetos || []).filter(o => MM_SERVIDOR.includes(o.tipo));
+    if (!racks.length) racks = (this.m?.objetos || []).filter(o => dentro(o) && MM_OBJ[o.tipo]?.bloq);   // sin racks: lo que haya en la sala hace de servidor (barriles, calderas…)
+    racks = racks.sort((a, b) => a.y - b.y || a.x - b.x); const mapa = new Map(), est = this.serv?.estado || {};
     (this.serv?.grupos || []).slice(0, racks.length).forEach((g, i) => mapa.set(`${racks[i].x},${racks[i].y}`, { grupo: g, rack: racks[i],
       items: g.servicios.map(s => ({ ...s, ok: est[s.id] ? est[s.id].ok : true, pendiente: !est[s.id], ...(est[s.id] || {}) })) }));
     this.est.racks = mapa;
@@ -526,7 +576,7 @@ const MC_MUNDO = {
     let mejor = null, md = 20;
     for (const p of this.ents.values()) { const d = Math.hypot(p.x - x, p.y - 30 - y); if (d < md + 8) { md = d; mejor = { p }; } }
     if (mejor) return mejor;
-    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && ['orbe', 'rack', 'vaina', 'jaula', 'impresora', 'estanteria', 'portal'].includes(o.tipo) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
+    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && (['orbe', 'rack', 'vaina', 'jaula', 'impresora', 'estanteria', 'portal'].includes(o.tipo) || this.est.racks?.has(`${o.x},${o.y}`)) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
     return null;
   },
   clic(e) { const p = this.punto(e), h = this.enPunto(p.x, p.y); if (!h) return this.cerrarHolo(); this.abrirHolo(h); },
@@ -559,7 +609,7 @@ const MC_MUNDO = {
         `<div class="mm-txt">«${esc(h.p.frases[0])}»</div>`;
     } else if (h.p?.tipo === 'plugin') { col = '#8fdc5a'; cab = [h.p.nombre, `plugin ${h.p.plugin.version || ''}`]; cuerpo = `<div class="mm-txt">${esc(h.p.plugin.descripcion || '')}</div>${fila('Permisos', esc((h.p.plugin.permisos || []).join(', ') || '—'))}`; }
     else if (h.p?.tipo === 'tarea') { const t = h.p.tarea; col = '#f5c542'; cab = [h.p.nombre, tr('Tarea programada')]; cuerpo = `<div class="mm-txt">${esc(String(t.accion?.texto || '').slice(0, 260))}</div>${fila('Próxima', t.proxima ? new Date(t.proxima).toLocaleString(I18N.locale()) : '—')}${fila('Último resultado', esc(String(t.ultimoResultado || '—').slice(0, 80)))}`; }
-    else if (MM_SERVIDOR.includes(h.o?.tipo) && this.est.racks?.get(`${h.o.x},${h.o.y}`)) {
+    else if (h.o && this.est.racks?.get(`${h.o.x},${h.o.y}`)) {
       const g = this.est.racks.get(`${h.o.x},${h.o.y}`), n = g.items.filter(x => x.ok).length; col = n < g.items.length ? '#ff4d6a' : '#3dff8a';
       cab = [g.grupo.nombre, tr('{a} de {b} en línea', { a: n, b: g.items.length })];
       cuerpo = g.items.map(s => `<div class="mm-fila"><span style="color:${s.pendiente ? '#8ea4b8' : s.ok ? '#4dff8f' : '#ff6b7d'}">● ${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.nombre)}</a>` : esc(s.nombre)}</span><b>${s.pendiente ? tr('comprobando…') : s.ok ? (s.ms ? s.ms + ' ms' : esc(s.detalle || 'ok')) : esc(s.detalle || tr('caído'))}</b></div>`).join('') +
@@ -615,7 +665,7 @@ const MC_MUNDO = {
       try { if (this.est.panico) await api('POST', '/panico/reanudar', {}); else await api('POST', '/panico', { origen: 'mission-control' }); } catch (er) { return aviso(er.message, true); }
       return this.cargarDatos();
     }
-    if (a === 'editar') return this.editor();
+    if (a === 'editar') return this.elegir();
   },
   async editarServicios() {
     const actual = await api('GET', '/servicios').catch(() => ({ grupos: [] }));
@@ -625,6 +675,89 @@ const MC_MUNDO = {
       botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Guardar', cls: 'pri', valor: v => { try { return JSON.parse($('#svJson', v).value); } catch (e) { aviso(tr('JSON no válido: ') + e.message, true); return false; } } }] });
     if (!r) return;
     try { this.serv = await api('PUT', '/servicios', r); this.repartirRacks(); aviso(tr('Servicios guardados')); setTimeout(() => this.cargarLento(), 4000); } catch (er) { aviso(er.message, true); }
+  },
+  // ---------- elegir o crear un mundo ----------
+  async elegir() {
+    if (!this.caja) return;
+    cancelAnimationFrame(this.raf); this.raf = 0; this.sel = null;
+    this.bloques = this.bloques || { ...MM_PAQUETES[0] }; this.modoCrear = this.modoCrear || 'imagen';
+    this.caja.innerHTML = `<div class="mm mmg">
+      <div class="mm-barra mm-arriba"><span class="mm-titulo">ELIGE TU MISSION CONTROL</span>${this.propio || this.m ? `<button class="mm-btn" data-g="volver">✕ ${tr('VOLVER')}</button>` : ''}</div>
+      <div class="mmg-cuerpo">
+        <div class="mmg-cartas" id="mmgCartas"><div class="suave">${tr('Cargando mundos…')}</div></div>
+        <div class="mmg-crear">
+          <h3>${tr('Crea el tuyo')}</h3>
+          <div class="seg mmg-modo"><button data-modo="imagen" class="${this.modoCrear === 'imagen' ? 'on' : ''}">1 · ${tr('Con una imagen de referencia')}</button><button data-modo="directo" class="${this.modoCrear === 'directo' ? 'on' : ''}">2 · ${tr('Directo, sin imagen')}</button></div>
+          <ol class="mmg-pasos">${this.modoCrear === 'imagen'
+            ? `<li>${tr('Edita los bloques (o tira el dado 🎲) para describir tu mundo.')}</li><li>${tr('Copia el prompt y pégalo en tu IA de imágenes: ChatGPT, Gemini, Midjourney…')}</li><li>${tr('Sube aquí la imagen que te dé: APOLO la convierte en tu Mission Control.')}</li>`
+            : `<li>${tr('Edita los bloques (o tira el dado 🎲).')}</li><li>${tr('Pulsa «Crear mundo»: APOLO lo diseña directamente con la skill mission-control, sin imagen.')}</li>`}</ol>
+          <div class="mmg-bloques">${MM_BLOQUES.map(([k, n, ay]) => `<label class="mmg-b"><span><b>${tr(n)}</b><small>${tr(ay)}</small></span><span class="mmg-in"><input data-b="${k}" value="${esc(this.bloques[k] || '')}"><button class="mm-btn ic" data-dado="${k}" title="${tr('Otro al azar')}">🎲</button></span></label>`).join('')}</div>
+          <div class="mmg-acc"><button class="mm-btn" data-g="dado">🎲 ${tr('PROMPT ALEATORIO')}</button>${this.modoCrear === 'imagen' ? `<button class="mm-btn" data-g="copiar">⧉ ${tr('COPIAR PROMPT')}</button>` : ''}</div>
+          ${this.modoCrear === 'imagen' ? `<div class="mmg-prompt" id="mmgPrompt"></div>
+          <label class="mmg-subir" id="mmgSubir"><input type="file" accept="image/png,image/jpeg,image/webp" hidden id="mmgImg"><span id="mmgImgTxt">⬆ ${tr('Suelta aquí la imagen o pulsa para elegirla')}</span></label>` : ''}
+          <div class="mmg-acc"><button class="mm-btn verde" data-g="crear">✦ ${tr(this.modoCrear === 'imagen' ? 'CREAR MUNDO DESDE LA IMAGEN' : 'CREAR MUNDO')}</button>
+            <label class="mm-btn">${tr('IMPORTAR JSON')}<input type="file" id="mmgJson" accept=".json,application/json" hidden></label>${this.m ? `<button class="mm-btn" data-g="exportar">${tr('EXPORTAR EL ACTUAL')}</button>` : ''}</div>
+          <div class="mmg-estado" id="mmgEstado"></div>
+        </div>
+      </div></div>`;
+    const $c = s => $(s, this.caja), estado = (h, mal) => { const e = $c('#mmgEstado'); e.innerHTML = h; e.classList.toggle('mal', !!mal); };
+    const pintarPrompt = () => { const p = $c('#mmgPrompt'); if (!p) return; let h = esc(mmPrompt(Object.fromEntries(MM_BLOQUES.map(([k]) => [k, `\u0001${k}\u0002`]))));
+      for (const [k] of MM_BLOQUES) h = h.replace(`\u0001${k}\u0002`, `<mark data-k="${k}" title="${tr('Clic para editar')}">${esc(this.bloques[k] || '…')}</mark>`); p.innerHTML = h; };
+    pintarPrompt();
+    // carátulas
+    api('GET', '/mundo/presets').then(async l => {
+      const cont = $c('#mmgCartas'); if (!cont) return;
+      cont.innerHTML = l.map(x => `<div class="mmg-carta" data-pre="${esc(x.id)}"><canvas width="480" height="300"></canvas><div class="mmg-pie"><b>${esc(x.nombre)}</b><span class="chip">${esc(x.tema)}</span></div><button class="mm-btn verde" data-usar="${esc(x.id)}">${tr('USAR ESTE')}</button></div>`).join('');
+      for (const x of l) { const r = await api('GET', '/mundo/presets/' + encodeURIComponent(x.id)).catch(() => null); const cv = cont.querySelector(`[data-pre="${CSS.escape(x.id)}"] canvas`); if (r && cv) { await new Promise(ok => setTimeout(ok, 0)); try { mmCaratula(r.mundo, cv); } catch (e) { console.warn('carátula', e); } this.presets = { ...(this.presets || {}), [x.id]: r.mundo }; } }
+    }).catch(e => estado(esc(e.message), true));
+    let imagen = null;
+    const leerImagen = async file => {                               // a JPEG de 1280 px como mucho: viaja ligera al modelo
+      const bmp = await createImageBitmap(file), k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height)), cv = mmLienzo(bmp.width * k | 0, bmp.height * k | 0);
+      cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height); imagen = cv.toDataURL('image/jpeg', .86);
+      $c('#mmgImgTxt').innerHTML = `<img src="${imagen}" alt=""> ${esc(file.name)} · ${tr('lista')}`;
+    };
+    this.caja.oninput = e => { const k = e.target.dataset?.b; if (k) { this.bloques[k] = e.target.value; pintarPrompt(); } };
+    this.caja.onchange = async e => {
+      if (e.target.id === 'mmgImg' && e.target.files[0]) leerImagen(e.target.files[0]).catch(er => estado(esc(er.message), true));
+      if (e.target.id === 'mmgJson' && e.target.files[0]) { try { const mj = JSON.parse(await e.target.files[0].text()); if (!mj.salas) throw new Error(tr('no es un mundo de APOLO')); this.previa(mj); } catch (er) { estado(esc(er.message), true); } }
+    };
+    const zona = $c('#mmgSubir'); if (zona) { zona.ondragover = e => { e.preventDefault(); zona.classList.add('encima'); }; zona.ondragleave = () => zona.classList.remove('encima');
+      zona.ondrop = e => { e.preventDefault(); zona.classList.remove('encima'); const fl = e.dataTransfer.files[0]; if (fl) leerImagen(fl).catch(er => estado(esc(er.message), true)); }; }
+    this.caja.onclick = async e => {
+      const t = e.target.closest('[data-g],[data-usar],[data-dado],[data-modo],mark[data-k]'); if (!t) return;
+      if (t.dataset.k) { const inp = $c(`[data-b="${t.dataset.k}"]`); inp?.focus(); inp?.select(); return; }
+      if (t.dataset.modo) { this.modoCrear = t.dataset.modo; return this.elegir(); }
+      if (t.dataset.dado) { const k = t.dataset.dado, pq = MM_PAQUETES[Math.floor(Math.random() * MM_PAQUETES.length)]; this.bloques[k] = pq[k]; $c(`[data-b="${k}"]`).value = pq[k]; return pintarPrompt(); }
+      if (t.dataset.usar) {
+        const mj = this.presets?.[t.dataset.usar] || (await api('GET', '/mundo/presets/' + encodeURIComponent(t.dataset.usar))).mundo;
+        const r = await api('PUT', '/mundo', { mundo: mj }); this.propio = true; this.cargar(r.mundo); return aviso(tr('Mundo elegido: {n}', { n: r.mundo.nombre }));
+      }
+      const g = t.dataset.g;
+      if (g === 'volver') { if (this.m) return this.cargar(this.m); const r = await api('GET', '/mundo'); return this.cargar(r.mundo); }
+      if (g === 'dado') { const pq = MM_PAQUETES[Math.floor(Math.random() * MM_PAQUETES.length)]; this.bloques = { ...pq };
+        for (const [k] of MM_BLOQUES) if (Math.random() < .12) this.bloques[k] = MM_PAQUETES[Math.floor(Math.random() * MM_PAQUETES.length)][k];   // a veces mezcla
+        for (const [k] of MM_BLOQUES) { const i = $c(`[data-b="${k}"]`); if (i) i.value = this.bloques[k]; } return pintarPrompt(); }
+      if (g === 'copiar') { try { await navigator.clipboard.writeText(mmPrompt(this.bloques)); aviso(tr('Prompt copiado: pégalo en tu IA de imágenes')); } catch { aviso(tr('No pude copiar: selecciónalo a mano'), true); } return; }
+      if (g === 'exportar') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(this.m, null, 1)], { type: 'application/json' })); a.download = 'mundo-apolo.json'; a.click(); return; }
+      if (g === 'crear') {
+        if (this.modoCrear === 'imagen' && !imagen) return estado(tr('Primero sube la imagen de referencia (o usa el modo directo).'), true);
+        t.disabled = true; estado(`<span class="mmg-giro"></span> ${tr(this.modoCrear === 'imagen' ? 'APOLO está estudiando tu imagen y diseñando el mundo… (1–2 minutos)' : 'APOLO está diseñando tu mundo… (1–2 minutos)')}`);
+        const desc = this.modoCrear === 'imagen' ? '' : MM_BLOQUES.map(([k, n]) => `${n}: ${this.bloques[k]}`).join('\n') + '\nLos nombres de las salas en español, como en la referencia habitual (Sala de servidores, Zona de la impresora 3D, Área del agente principal de IA, Bahía de subagentes, Laboratorio MCP).';
+        try { const r = await api('POST', '/mundo/generar', { descripcion: desc, ...(imagen && this.modoCrear === 'imagen' ? { imagen } : {}) }); this.previa(r.mundo); }
+        catch (er) { estado(esc(er.message) + (/visi|image/i.test(er.message) ? ' · ' + tr('el modelo cerebro no ve imágenes: usa el modo directo o elige un modelo con visión') : ''), true); t.disabled = false; }
+      }
+    };
+  },
+  // vista previa de un mundo nuevo: se ve vivo y se guarda o se descarta
+  previa(mundo) {
+    this.cargar(mundo);
+    const b = document.createElement('div'); b.className = 'mm-previa';
+    b.innerHTML = `<span>${tr('Vista previa')}: <b>${esc(mundo.nombre)}</b></span><button class="mm-btn verde" data-p="guardar">${tr('GUARDAR ESTE MUNDO')}</button><button class="mm-btn" data-p="otra">${tr('PROBAR OTRO')}</button><button class="mm-btn rojo" data-p="no">${tr('DESCARTAR')}</button>`;
+    $('.mm-mapa', this.caja).append(b);
+    b.onclick = async e => { const p = e.target.closest('[data-p]')?.dataset.p; if (!p) return;
+      if (p === 'guardar') { const r = await api('PUT', '/mundo', { mundo }); this.propio = true; this.cargar(r.mundo); aviso(tr('Mundo guardado')); }
+      else if (p === 'otra') this.elegir();
+      else { const r = await api('GET', '/mundo'); if (r.propio) this.cargar(r.mundo); else { this.m = null; this.elegir(); } } };
   },
   // ---------- crea tu mundo ----------
   async editor() {

@@ -76,7 +76,7 @@ function validar(m) {
 const ESQUEMA = {
   type: 'object', required: ['nombre', 'tema', 'ancho', 'alto', 'salas', 'pasillos', 'objetos'],
   properties: {
-    nombre: { type: 'string' }, tema: { type: 'string', enum: TEMAS }, ancho: { type: 'integer' }, alto: { type: 'integer' },
+    nombre: { type: 'string' }, tema: { type: 'string', enum: TEMAS }, ancho: { type: 'integer' }, alto: { type: 'integer' }, estilo: { type: 'object' },
     salas: { type: 'array', items: { type: 'object', required: ['id', 'nombre', 'rol', 'x', 'y', 'w', 'h', 'suelo'], properties: {
       id: { type: 'string' }, nombre: { type: 'string' }, rol: { type: 'string', enum: ROLES }, x: { type: 'integer' }, y: { type: 'integer' }, w: { type: 'integer' }, h: { type: 'integer' }, suelo: { type: 'string', enum: SUELOS } } } },
     pasillos: { type: 'array', items: { type: 'object', required: ['x', 'y', 'w', 'h'], properties: { x: { type: 'integer' }, y: { type: 'integer' }, w: { type: 'integer' }, h: { type: 'integer' } } } },
@@ -88,18 +88,31 @@ function crearMundo({ cfg, generarJSON, modelo }) {
   const f = path.join(cfg.dir, 'mundo.json');
   const leer = () => { try { return validar(JSON.parse(fs.readFileSync(f, 'utf8'))); } catch { return null; } };
 
-  async function generar(descripcion, signal) {
-    const d = txt(descripcion, 1500);
-    if (!d) throw new Error('describe cómo quieres tu mundo');
-    const { datos } = await generarJSON({ modelo: modelo(), signal, schema: ESQUEMA,
-      system: 'Diseñas el mapa de un "Mission Control" en pixel-art visto desde arriba, donde viven los agentes de IA de un asistente. Coordenadas en casillas (tiles); (0,0) arriba a la izquierda. ' +
-        'Tamaño: ancho entre 30 y 40, alto entre 18 y 24 (más grande se ve diminuto). Reglas: entre 3 y 7 salas rectangulares que NO se solapen, con al menos 2 casillas de hueco entre salas; pasillos rectangulares (ancho 2-4) que unan TODAS las salas (un pasillo toca o se mete 1 casilla en cada sala que une). ' +
-        'Roles obligatorios, una sala cada uno: "principal" (el agente principal, la más central, con un objeto "orbe" en su centro), "subagentes" (la más grande: ahí trabajan los subagentes), "servidores" (racks: el núcleo y los plugins) y "taller" (tareas programadas y el turno de noche). ' +
-        'Recomendada: "mcp" (el laboratorio donde se conjuran las herramientas MCP: 12-16 x 5-6, con un objeto "portal" (3x3) en el centro y dos "brazo" (1x2) a sus lados; puede llevar "alambique" y "caldero"). En temas antiguos, "subagentes" puede ser un taller de Leonardo (ornitoptero 3x2, tornillo 2x2, maniqui 1x2, engranajes 2x2, carro 2x2, caballete 1x2, banco 2x1, vela; codice en la pared). Otras salas: "biblioteca" (memoria) o "decor". Nombra las salas a juego con el tema y en el idioma de la descripción. ' +
-        'Objetos: colócalos DENTRO de las salas (las antorchas/lámparas pueden ir en el borde superior de una sala o de un pasillo); 25-60 objetos en total; los racks ocupan 2x2 casillas, la impresora 3x3, el orbe 2x2, el resto 1-2 casillas: deja hueco. ' +
-        'Elige suelos a juego con el tema (nave/laboratorio: metal; oficina: alfombra/madera; bosque: hierba; mazmorra/castillo: piedra/tierra).',
-      prompt: `Descripción del usuario:\n${d}\n\nEjemplo de un mundo válido (la mazmorra de serie), para que veas proporciones y formato:\n${JSON.stringify(BASE)}` });
-    return validar(datos);
+  // el catálogo y el validador de la skill mission-control: el modelo diseña con lo mismo que usa la skill
+  const CATALOGO = (() => { try { return fs.readFileSync(path.join(__dirname, '..', 'skills', 'maker', 'mission-control', 'references', 'catalogo.md'), 'utf8'); } catch { return ''; } })();
+  const validarSkill = (() => { try { return require('../skills/maker/mission-control/scripts/validar').validar; } catch { return null; } })();
+  const EJEMPLO = (() => { try { return fs.readFileSync(path.join(__dirname, 'mundos', 'infierno.json'), 'utf8'); } catch { return JSON.stringify(BASE); } })();
+
+  // genera un mundo desde una descripción, una imagen de referencia (data URL) o las dos; si el validador de la skill encuentra
+  // errores (salas a las que no se llega, objetos inventados…) se los devuelve al modelo una vez para que los arregle
+  async function generar(descripcion, signal, imagen) {
+    const d = txt(descripcion, 3000);
+    let img = null;
+    if (imagen) { const mm = String(imagen).match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/); if (!mm) throw new Error('la imagen debe ser PNG, JPG o WebP'); img = { mime: mm[1], datos: mm[2] }; }
+    if (!d && !img) throw new Error('describe cómo quieres tu mundo o sube una imagen de referencia');
+    const system = 'Diseñas el mapa de un "Mission Control" en pixel-art visto desde arriba, donde viven los agentes de IA de un asistente. Coordenadas en casillas (tiles); (0,0) arriba a la izquierda. ' +
+      'Sigue AL PIE DE LA LETRA este catálogo: solo esos temas, claves de estilo, suelos y tipos de objeto, con sus tamaños, y sus reglas de distribución.\n\n' + CATALOGO;
+    const pedir = img ? `Recrea la IMAGEN adjunta como mundo: misma distribución de salas (posición relativa), misma paleta (pon los colores en "estilo"), mismo núcleo, mismo pueblo y los objetos icónicos traducidos al catálogo. Nombres de sala tal como se leen en la imagen.${d ? `\nIndicaciones extra del usuario: ${d}` : ''}`
+      : `Descripción del usuario:\n${d}`;
+    let prompt = `${pedir}\n\nEjemplo de un mundo válido (proporciones y formato):\n${EJEMPLO}`, ultimo = null;
+    for (let intento = 0; intento < 2; intento++) {
+      const { datos } = await generarJSON({ modelo: modelo(), signal, schema: ESQUEMA, system, prompt, imagenes: img ? [img] : undefined });
+      ultimo = validar(datos);
+      const errs = validarSkill ? validarSkill(ultimo).err : [];
+      if (!errs.length) return ultimo;
+      prompt = `${pedir}\n\nTu mundo anterior tiene estos errores; corrígelos y devuelve el mundo completo:\n- ${errs.slice(0, 12).join('\n- ')}\n\nMundo anterior:\n${JSON.stringify(ultimo)}`;
+    }
+    return ultimo;                                                     // con algún aviso, pero válido para el motor
   }
 
   const dirPresets = path.join(__dirname, 'mundos');
@@ -112,7 +125,7 @@ function crearMundo({ cfg, generarJSON, modelo }) {
     if (M === 'GET' && p[2] === 'presets') { const l = presets(); if (p[3]) { const x = l.find(y => y.id === p[3]); if (!x) { const e = new Error('no existe'); e.status = 404; throw e; } return { mundo: x.mundo }; } return l.map(x => ({ id: x.id, nombre: x.mundo.nombre, tema: x.mundo.tema })); }
     if (M === 'PUT' && !p[2]) { const m = validar(cuerpo.mundo); fs.writeFileSync(f, JSON.stringify(m, null, 1)); return { mundo: m, propio: true }; }
     if (M === 'DELETE' && !p[2]) { fs.rmSync(f, { force: true }); return { mundo: BASE, propio: false }; }
-    if (M === 'POST' && p[2] === 'generar') return { mundo: await generar(cuerpo.descripcion) };
+    if (M === 'POST' && p[2] === 'generar') return { mundo: await generar(cuerpo.descripcion, undefined, cuerpo.imagen) };
     const e = new Error('no encontrado'); e.status = 404; throw e;
   }
   return { http, generar, leer };
