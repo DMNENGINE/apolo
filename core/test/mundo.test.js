@@ -12,7 +12,7 @@ test('el mundo de serie es válido y queda igual', () => {
 
 test('validar recorta medidas, descarta objetos desconocidos y roles repetidos', () => {
   const m = validar({ nombre: '<b>X</b>', tema: 'raro', ancho: 500, alto: 5, salas: [
-    { id: 'a', nombre: 'A', rol: 'principal', x: -4, y: 2, w: 900, h: 4, suelo: 'lava' },
+    { id: 'a', nombre: 'A', rol: 'principal', x: -4, y: 2, w: 900, h: 4, suelo: 'chicle' },
     { id: 'b', nombre: 'B', rol: 'subagentes', x: 3, y: 3, w: 4, h: 4 }, { id: 'c', rol: 'principal', x: 1, y: 1, w: 3, h: 3 }],
     objetos: [{ tipo: 'orbe', x: 2, y: 2 }, { tipo: 'bomba', x: 1, y: 1 }] });
   assert.strictEqual(m.ancho, 96); assert.strictEqual(m.alto, 16); assert.strictEqual(m.tema, 'mazmorra'); assert.strictEqual(m.nombre, 'bX/b');

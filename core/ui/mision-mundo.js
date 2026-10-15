@@ -42,6 +42,25 @@ const MM_BOTS = [
     frases: ['¡Gooool!', '¿Un partidito?', 'Brito FC al ataque.', 'Tiro… ¡al palo!', '¡Qué pase!'] },
 ];
 function mmBot(nombre) { return MM_BOTS.find(b => b.re.test(nombre)) || { look: { piel: MM_PIEL[mmHash(nombre) % 4], estilo: 'corto', pelo: MM_PELO[mmHash(nombre) % 6], ropa: '#5865f2', sombrero: 'gorra', color: '#404eed', emblema: 'chispa', emCol: '#ffffff' }, frases: ['En línea.', 'Trabajando en Discord.'] }; }
+// quiénes viven en el mundo según el tema: rasgos que se suman al avatar de cada uno (los modelos conservan sus colores y emblema)
+const MM_PUEBLOS = {
+  aliens: h => ({ piel: ['#8fd47a', '#a98be0', '#7fd1c4', '#c9d46f'][h % 4], ojosGrandes: true, antenas: h % 3 !== 0, estilo: 'calvo', barba: undefined }),
+  demonios: h => ({ piel: ['#c0392b', '#a93226', '#d0442f'][h % 3], cuernos: true, cola: true, orejas: true, estilo: 'calvo' }),
+  cientificos: h => ({ bata: '#eef2f5', gafas: h % 2 ? '#9fd0ff' : undefined, pelo: ['#eeeeee', '#9a9a9a', '#3a2414', '#c9a24a'][(h >>> 3) % 4] }),
+};
+const MM_JEFES = {
+  aliens: { piel: '#9fd49a', ojosGrandes: true, estilo: 'calvo', ropa: '#5a2d82', ropa2: '#e0b44a', tunica: true, baston: true, capa: '#2d1a4a', emblema: 'chispa', emCol: '#7dff9a' },
+  demonios: { piel: '#b0281e', cuernos: true, cola: true, orejas: true, estilo: 'calvo', ropa: '#5a0f0f', ropa2: '#e0b44a', tunica: true, baston: true, capa: '#1a0505', barba: '#2a0a0a' },
+  cientificos: { piel: '#f1c7a0', estilo: 'punta', pelo: '#f4f4f4', bata: '#f4f8fb', gafas: '#9fd0ff', ropa: '#5d7290', pantalon: '#2c3a50', barba: '#e8e8e8' },
+};
+const MM_BICHOS = { aliens: { piel: '#7ad46a', ojosGrandes: true, antenas: true, estilo: 'calvo', ropa: '#3a2a5a', pantalon: '#1c1a28' },
+  demonios: { piel: '#d0442f', cuernos: true, cola: true, orejas: true, estilo: 'calvo', ropa: '#2a1a1a', pantalon: '#1a1010' }, cientificos: { especie: 'robot', ropa: '#9aa6b4', visor: '#3ad7ff' } };
+function mmPueblo(look, id, pueblo) {
+  const f = MM_PUEBLOS[pueblo]; if (!f || look.especie) return look;
+  const r = { ...look, ...f(mmHash(id)) }; if (pueblo !== 'cientificos' && r.sombrero === 'capucha') delete r.sombrero;
+  return r;
+}
+const MM_SERVIDOR = ['rack', 'vaina', 'jaula'];                       // objetos que hacen de rack de servicios
 const mmProveedor = modelo => String(modelo || '').split('/')[0].toLowerCase();
 function mmLookModelo(prov, tipo) {
   const m = MM_MODELOS[prov] || MM_MODELOS[{ anthropic: 'anthropic', 'claude-cli': 'claudecode', 'codex-cli': 'chatgpt', gemini: 'gemini' }[tipo]];
@@ -64,7 +83,8 @@ const MC_MUNDO = {
   },
   salir() { cancelAnimationFrame(this.raf); this.raf = 0; clearInterval(this.tDatos); clearInterval(this.tLento); this.caja = null; },
   cargar(m) {
-    this.m = m; const tema = MM_TEMAS[m.tema] || MM_TEMAS.mazmorra; this.tema = tema; this.est.luz = tema.luz; this.est.borde = tema.borde;
+    this.m = m; const tema = { nucleo: 'orbe', pueblo: 'humanos', particulas: 'brasas', ...(MM_TEMAS[m.tema] || MM_TEMAS.mazmorra), ...(m.estilo || {}) }; this.tema = tema;
+    Object.assign(this.est, { luz: tema.luz, borde: tema.borde, nucleo: tema.nucleo, nucleoRGB: mmRGB(tema.nucleoColor || '#5fd8ff') });
     const R = MM_R, W = m.ancho * R, H = m.alto * R; this.W = W; this.H = H;
     // rejilla: 0 vacío · 1 suelo · 2 pared; y qué sala/suelo tiene cada casilla
     const g = new Uint8Array(m.ancho * m.alto), suelo = new Array(m.ancho * m.alto), sala = new Array(m.ancho * m.alto);
@@ -79,6 +99,8 @@ const MC_MUNDO = {
     this.g = g; this.suelo = suelo; this.sala = sala;
     this.bloq = new Uint8Array(m.ancho * m.alto);
     for (const o of m.objetos) { const d = MM_OBJ[o.tipo]; if (d?.bloq) for (let y = o.y; y < o.y + d.h; y++) for (let x = o.x; x < o.x + d.w; x++) if (en(x, y)) this.bloq[y * m.ancho + x] = 1; }
+    this.lavaLuz = [];                                                // la lava no se pisa y alumbra
+    for (let i = 0; i < g.length; i++) if (g[i] === 1 && suelo[i] === 'lava') { this.bloq[i] = 1; const x = i % m.ancho, y = Math.floor(i / m.ancho); if ((x + y * 2) % 3 === 0) this.lavaLuz.push({ x: x * R + R / 2, y: y * R + R / 2, f: Math.random() * 6 }); }
     this.porRol = Object.fromEntries(m.salas.map(s => [s.rol, s]));
     this.orbe = m.objetos.find(o => o.tipo === 'orbe') || (() => { const s = this.porRol.principal; return { x: s.x + (s.w >> 1) - 1, y: s.y + (s.h >> 1) - 1 }; })();
     this.fondo = mmFondo(this);
@@ -144,7 +166,7 @@ const MC_MUNDO = {
   },
   // los grupos de servicios del usuario van a los racks en orden (de arriba abajo, de izquierda a derecha)
   repartirRacks() {
-    const racks = (this.m?.objetos || []).filter(o => o.tipo === 'rack').sort((a, b) => a.y - b.y || a.x - b.x), mapa = new Map(), est = this.serv?.estado || {};
+    const racks = (this.m?.objetos || []).filter(o => MM_SERVIDOR.includes(o.tipo)).sort((a, b) => a.y - b.y || a.x - b.x), mapa = new Map(), est = this.serv?.estado || {};
     (this.serv?.grupos || []).slice(0, racks.length).forEach((g, i) => mapa.set(`${racks[i].x},${racks[i].y}`, { grupo: g, rack: racks[i],
       items: g.servicios.map(s => ({ ...s, ok: est[s.id] ? est[s.id].ok : true, pendiente: !est[s.id], ...(est[s.id] || {}) })) }));
     this.est.racks = mapa;
@@ -230,6 +252,12 @@ const MC_MUNDO = {
     }
     if (this.porRol.servidores) (this.plugins || []).forEach(p => quiere.set('p:' + p.nombre, { tipo: 'plugin', plugin: p, nombre: p.nombre, sala: 'servidores', look: { piel: '#7ab04f', pelo: '#4e7f33', estilo: 'calvo', ropa: '#6b4f2c', pantalon: '#4a3820', orejas: true } }));
     if (this.porRol.taller) (this.tareas || []).slice(0, 3).forEach(t => quiere.set('t:' + t.id, { tipo: 'tarea', tarea: t, nombre: t.nombre, sala: 'taller', look: look(t.id, { sombrero: 'casco', color: '#e8ecef', ropa: '#5d6b4a', pantalon: '#3a4030', capa: null, mochila: false }) }));
+    const pueblo = this.tema.pueblo;
+    if (pueblo && pueblo !== 'humanos') for (const [id, q] of quiere) {
+      if (q.tipo === 'apolo') q.look = { ...MM_JEFES[pueblo] };
+      else if (q.tipo === 'plugin') q.look = { ...MM_BICHOS[pueblo] };
+      else q.look = mmPueblo(q.look, id, pueblo);
+    }
     for (const [id, e] of this.ents) if (!quiere.has(id)) { if (!e.sale) e.sale = ahora; }
     for (const [id, q] of quiere) {
       const e = this.ents.get(id);
@@ -360,7 +388,7 @@ const MC_MUNDO = {
     c.globalCompositeOperation = 'source-over'; c.drawImage(this.fondo, 0, 0);
     const luces = [], borde = this.tema.borde, carteles = [], s = this.porRol;
     for (const g of (e.racks || new Map()).values()) { const n = g.items.filter(x => x.ok).length, mal = n < g.items.length;
-      carteles.push(mmCartel(c, g.rack.x * R + 32, (g.rack.y + 2) * R + 2, `${g.grupo.nombre.toUpperCase().split(" ")[0].slice(0, 9)} ${n}/${g.items.length}`, { borde: mal ? '#ff3b5c' : '#3dff8a', max: 60, brillo: mal ? .5 + Math.sin(t / 200) * .5 : 0 })); }
+      const dR = MM_OBJ[g.rack.tipo]; carteles.push(mmCartel(c, (g.rack.x + dR.w / 2) * R, (g.rack.y + dR.h) * R + 2, `${g.grupo.nombre.toUpperCase().split(" ")[0].slice(0, 9)} ${n}/${g.items.length}`, { borde: mal ? '#ff3b5c' : '#3dff8a', max: 60, brillo: mal ? .5 + Math.sin(t / 200) * .5 : 0 })); }
     if (s.servidores && [...(e.racks || new Map()).values()].some(g => g.items.some(x => !x.ok))) {   // alarma: luz roja que gira en la sala
       const sx = (s.servidores.x + s.servidores.w / 2) * R, sy = (s.servidores.y + 1.2) * R, a = t / 300;
       luces.push({ x: sx + Math.cos(a) * 40, y: sy + Math.sin(a) * 20 + 60, r: 150, col: [255, 40, 60], a: .45, bloom: 10 }); }
@@ -372,6 +400,7 @@ const MC_MUNDO = {
     const cosas = [];
     for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (!d) continue; const X = o.x * R, Y = o.y * R - d.alto; cosas.push({ o, d, X, Y, base: d.bloq ? (o.y + d.h) * R - 2 : -1 }); if (d.luz) luces.push(...d.luz(o, X, Y, t, e)); }
     for (const p of this.ents.values()) cosas.push({ p, base: p.y });
+    for (const l of this.lavaLuz || []) luces.push({ x: l.x, y: l.y, r: 70, col: [255, 110, 40], a: .32 + Math.sin(t / 400 + l.f) * .08 });
     for (const k of carteles) luces.push({ x: k.x + k.w / 2, y: k.y + k.h / 2, r: Math.max(60, k.w * .7), col: [200, 230, 225], a: .22 });
     for (const sa of this.m.salas) if (sa.nombre && sa.rol !== 'mcp') luces.push({ x: (sa.x + sa.w / 2) * R, y: sa.y * R + 18, r: 80, col: [200, 230, 225], a: .18 });
     cosas.sort((a, b) => a.base - b.base);
@@ -412,7 +441,11 @@ const MC_MUNDO = {
     // brillo (bloom), rayos y partículas: suman luz
     c.globalCompositeOperation = 'lighter';
     for (const l of luces) if (l.bloom) { const g = c.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.bloom); g.addColorStop(0, `rgba(${l.col[0]},${l.col[1]},${l.col[2]},.55)`); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(l.x - l.bloom, l.y - l.bloom, l.bloom * 2, l.bloom * 2); }
-    for (const r of rayos) mmRayo(c, r[0], r[1], r[2], r[3], r[4], r[5]);
+    for (const r of rayos) mmRayo(c, r[0], r[1], r[2], r[3], r[4], r[5], e.nucleoRGB);
+    if (String(e.nucleo).startsWith('cerebro')) {                     // el cerebro chisporrotea siempre: arcos cortos alrededor
+      const ox = this.orbe.x * R + 32, oy = this.orbe.y * R + 12, n = 3 + Math.round(e.orbe * 3);
+      for (let i = 0; i < n; i++) { const a = mmF(this.semilla, i, 90) * 6.28, d = 50 + mmF(i, this.semilla, 91) * 50; mmRayo(c, ox, oy, ox + Math.cos(a) * d, oy + Math.sin(a) * d * .7, this.semilla + i * 7, .5 + e.orbe * .4, e.nucleoRGB); }
+    }
     const ob = { x: this.orbe.x * R + 32, y: this.orbe.y * R + 14 }, libros = this.m.objetos.filter(o => o.tipo === 'estanteria');
     for (const p of this.ents.values()) {
       if (p.sale) continue;
@@ -449,7 +482,11 @@ const MC_MUNDO = {
         else if (o.tipo === 'portal' && e.mcp > .3 && Math.random() < dt / 40 && this.portal) { const a = Math.random() * 6.28, v = 20 + Math.random() * 40; P.push({ x: this.portal.x, y: this.portal.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 10, vida: 0, max: 450, tam: 1, col: Math.random() < .5 ? '255,220,255' : '170,250,255', tipo: 'chispa' }); }
         else if (o.tipo === 'impresora' && Math.random() < dt / 700) P.push({ x: o.x * R + 20 + Math.random() * 56, y: o.y * R + 50, vx: (Math.random() - .5) * 30, vy: -10, vida: 0, max: 400, tam: 1, col: '255,200,90', tipo: 'brasa' });
       }
-      if (Math.random() < dt / 300) { const s = this.m.salas[Math.random() * this.m.salas.length | 0]; P.push({ x: (s.x + Math.random() * s.w) * R, y: (s.y + Math.random() * s.h) * R, vx: (Math.random() - .5) * 4, vy: -2 - Math.random() * 3, vida: 0, max: 5000, tam: 1, col: '230,220,200', tipo: 'mota' }); }
+      const amb = this.tema.particulas, cada = amb === 'esporas' ? 90 : amb === 'chispas' ? 160 : 300;
+      if (amb !== 'ninguna' && Math.random() < dt / cada) { const s = this.m.salas[Math.random() * this.m.salas.length | 0];
+        P.push({ x: (s.x + Math.random() * s.w) * R, y: (s.y + Math.random() * s.h) * R, vx: (Math.random() - .5) * (amb === 'chispas' ? 30 : 4), vy: amb === 'brasas' ? -8 - Math.random() * 8 : -2 - Math.random() * 3, vida: 0, max: amb === 'chispas' ? 700 : 5000, tam: amb === 'esporas' ? 2 : 1,
+          col: amb === 'esporas' ? '140,255,160' : amb === 'chispas' ? '130,220,255' : this.tema.luz === 'lava' ? '255,150,60' : '230,220,200', tipo: amb === 'chispas' ? 'chispa' : 'mota' }); }
+      if (this.lavaLuz?.length && Math.random() < dt / 120) { const l = this.lavaLuz[Math.random() * this.lavaLuz.length | 0]; P.push({ x: l.x + (Math.random() - .5) * 20, y: l.y, vx: (Math.random() - .5) * 6, vy: -14 - Math.random() * 10, vida: 0, max: 1400, tam: 1, col: '255,170,60', tipo: 'brasa' }); }
     }
     for (let i = P.length - 1; i >= 0; i--) {
       const q = P[i]; q.vida += dt; if (q.vida > q.max) { P.splice(i, 1); continue; }
@@ -489,7 +526,7 @@ const MC_MUNDO = {
     let mejor = null, md = 20;
     for (const p of this.ents.values()) { const d = Math.hypot(p.x - x, p.y - 30 - y); if (d < md + 8) { md = d; mejor = { p }; } }
     if (mejor) return mejor;
-    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && ['orbe', 'rack', 'impresora', 'estanteria', 'portal'].includes(o.tipo) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
+    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && ['orbe', 'rack', 'vaina', 'jaula', 'impresora', 'estanteria', 'portal'].includes(o.tipo) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
     return null;
   },
   clic(e) { const p = this.punto(e), h = this.enPunto(p.x, p.y); if (!h) return this.cerrarHolo(); this.abrirHolo(h); },
@@ -522,13 +559,13 @@ const MC_MUNDO = {
         `<div class="mm-txt">«${esc(h.p.frases[0])}»</div>`;
     } else if (h.p?.tipo === 'plugin') { col = '#8fdc5a'; cab = [h.p.nombre, `plugin ${h.p.plugin.version || ''}`]; cuerpo = `<div class="mm-txt">${esc(h.p.plugin.descripcion || '')}</div>${fila('Permisos', esc((h.p.plugin.permisos || []).join(', ') || '—'))}`; }
     else if (h.p?.tipo === 'tarea') { const t = h.p.tarea; col = '#f5c542'; cab = [h.p.nombre, tr('Tarea programada')]; cuerpo = `<div class="mm-txt">${esc(String(t.accion?.texto || '').slice(0, 260))}</div>${fila('Próxima', t.proxima ? new Date(t.proxima).toLocaleString(I18N.locale()) : '—')}${fila('Último resultado', esc(String(t.ultimoResultado || '—').slice(0, 80)))}`; }
-    else if (h.o?.tipo === 'rack' && this.est.racks?.get(`${h.o.x},${h.o.y}`)) {
+    else if (MM_SERVIDOR.includes(h.o?.tipo) && this.est.racks?.get(`${h.o.x},${h.o.y}`)) {
       const g = this.est.racks.get(`${h.o.x},${h.o.y}`), n = g.items.filter(x => x.ok).length; col = n < g.items.length ? '#ff4d6a' : '#3dff8a';
       cab = [g.grupo.nombre, tr('{a} de {b} en línea', { a: n, b: g.items.length })];
       cuerpo = g.items.map(s => `<div class="mm-fila"><span style="color:${s.pendiente ? '#8ea4b8' : s.ok ? '#4dff8f' : '#ff6b7d'}">● ${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.nombre)}</a>` : esc(s.nombre)}</span><b>${s.pendiente ? tr('comprobando…') : s.ok ? (s.ms ? s.ms + ' ms' : esc(s.detalle || 'ok')) : esc(s.detalle || tr('caído'))}</b></div>`).join('') +
         `<div class="mm-acc"><button class="btn mini" data-serv="revisar">${ic('recargar')}${tr('Revisar ahora')}</button><button class="btn mini" data-serv="editar">${ic('editar')}${tr('Editar servicios')}</button></div>`;
     }
-    else if (h.o?.tipo === 'rack') { cab = [tr('Núcleo'), tr('Sala de servidores')]; cuerpo = fila('CPU', `${Math.round(this.est.cpu * 100)}%`) + fila('RAM', `${(this.est.ram * this.est.ramTot / 1e9).toFixed(1)} / ${(this.est.ramTot / 1e9).toFixed(0)} GB`) + fila('Plugins activos', (this.plugins || []).length); }
+    else if (MM_SERVIDOR.includes(h.o?.tipo)) { cab = [tr('Núcleo'), tr('Sala de servidores')]; cuerpo = fila('CPU', `${Math.round(this.est.cpu * 100)}%`) + fila('RAM', `${(this.est.ram * this.est.ramTot / 1e9).toFixed(1)} / ${(this.est.ramTot / 1e9).toFixed(0)} GB`) + fila('Plugins activos', (this.plugins || []).length); }
     else if (h.o?.tipo === 'impresora') { col = '#ff8a3d'; cab = [tr('Taller'), tr('Turno de noche y tareas')]; const tu = this.turno; cuerpo = fila('Turno de noche', tu?.activo ? `${Math.round(this.est.progreso * 100)}%` : tr('parado')) + fila('En cola', tu?.cola?.length || 0) + fila('Tareas activas', (this.tareas || []).length) + `<div class="mm-acc"><a class="btn mini" href="#/turno">${tr('Turno de noche')} ${ic('der')}</a></div>`; }
     else if (h.o?.tipo === 'portal') {
       col = '#c85aff'; cab = [tr('Laboratorio MCP'), tr('Donde se conjuran las herramientas MCP')];
@@ -597,6 +634,7 @@ const MC_MUNDO = {
         <textarea id="mmDesc" rows="4" style="width:100%" placeholder="${tr('Ej.: una estación espacial con el puente de mando en el centro, un hangar enorme para los subagentes, la sala de reactores y un laboratorio')}"></textarea>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button class="btn pri" id="mmGen">${ic('chispa')}${tr('Generar con APOLO')}</button>
           <button class="btn" id="mmExp">${ic('abajo')}${tr('Exportar JSON')}</button><label class="btn">${ic('arriba')}${tr('Importar JSON')}<input type="file" id="mmImp" accept=".json,application/json" hidden></label></div>
+        <div id="mmPre" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px"></div>
         <div id="mmEst" class="suave"></div>
         ${this.propio ? `<p class="suave" style="margin-bottom:0">${tr('Ahora usas tu propio mundo.')}</p>` : ''}`,
       botones: [...(this.propio ? [{ txt: 'Volver al original', valor: 'reset' }] : []), { txt: 'Cancelar', valor: null }, { txt: 'Guardar', cls: 'pri', valor: () => nuevo ? 'guardar' : (aviso(tr('Genera o importa un mundo primero'), true), false) }],
@@ -608,6 +646,8 @@ const MC_MUNDO = {
           e.target.disabled = true; est.textContent = tr('APOLO está diseñando tu mundo… (puede tardar un minuto)');
           try { probar((await api('POST', '/mundo/generar', { descripcion: d })).mundo); } catch (er) { est.textContent = er.message; } finally { e.target.disabled = false; }
         };
+        api('GET', '/mundo/presets').then(l => { $('#mmPre', v).innerHTML = l.map(x => `<button class="btn mini" data-pre="${esc(x.id)}">${esc(x.nombre)}</button>`).join(''); }).catch(() => {});
+        $('#mmPre', v).onclick = async e => { const b = e.target.closest('[data-pre]'); if (!b) return; try { probar((await api('GET', '/mundo/presets/' + encodeURIComponent(b.dataset.pre))).mundo); } catch (er) { est.textContent = er.message; } };
         $('#mmExp', v).onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(nuevo || this.m, null, 1)], { type: 'application/json' })); a.download = 'mundo-apolo.json'; a.click(); };
         $('#mmImp', v).onchange = async e => { try { const m = JSON.parse(await e.target.files[0].text()); if (!m.salas) throw new Error(tr('no es un mundo de APOLO')); probar(m); } catch (er) { est.textContent = er.message; } };
       } });

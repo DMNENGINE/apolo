@@ -1,0 +1,35 @@
+{
+ "formato": "mundo/1", "nombre": "Infierno", "tema": "infierno",
+ "estilo": { "borde": "#ff8a3d" },
+ "ancho": 39, "alto": 25,
+ "salas": [
+  { "id": "servidores", "nombre": "Sala de servidores", "rol": "servidores", "x": 1, "y": 1, "w": 12, "h": 9, "suelo": "roca" },
+  { "id": "taller", "nombre": "Zona de la impresora 3D", "rol": "taller", "x": 1, "y": 12, "w": 12, "h": 11, "suelo": "roca" },
+  { "id": "lava-taller", "nombre": "", "rol": "decor", "x": 2, "y": 19, "w": 4, "h": 2, "suelo": "lava" },
+  { "id": "lava-taller2", "nombre": "", "rol": "decor", "x": 9, "y": 19, "w": 3, "h": 3, "suelo": "lava" },
+  { "id": "principal", "nombre": "Área del agente principal de IA", "rol": "principal", "x": 16, "y": 7, "w": 11, "h": 11, "suelo": "roca" },
+  { "id": "foso-n", "nombre": "", "rol": "decor", "x": 17, "y": 9, "w": 9, "h": 1, "suelo": "lava" },
+  { "id": "foso-o", "nombre": "", "rol": "decor", "x": 17, "y": 10, "w": 1, "h": 6, "suelo": "lava" },
+  { "id": "foso-e", "nombre": "", "rol": "decor", "x": 25, "y": 10, "w": 1, "h": 6, "suelo": "lava" },
+  { "id": "foso-so", "nombre": "", "rol": "decor", "x": 17, "y": 16, "w": 3, "h": 1, "suelo": "lava" },
+  { "id": "foso-se", "nombre": "", "rol": "decor", "x": 23, "y": 16, "w": 3, "h": 1, "suelo": "lava" },
+  { "id": "subagentes", "nombre": "Bahía de subagentes", "rol": "subagentes", "x": 29, "y": 1, "w": 9, "h": 13, "suelo": "roca" },
+  { "id": "mcp", "nombre": "Laboratorio MCP", "rol": "mcp", "x": 22, "y": 19, "w": 15, "h": 5, "suelo": "roca" }
+ ],
+ "pasillos": [
+  { "x": 13, "y": 3, "w": 16, "h": 2 }, { "x": 20, "y": 5, "w": 3, "h": 2 }, { "x": 27, "y": 10, "w": 2, "h": 2 }, { "x": 6, "y": 10, "w": 2, "h": 2 },
+  { "x": 13, "y": 15, "w": 3, "h": 2 }, { "x": 24, "y": 18, "w": 2, "h": 1 }, { "x": 32, "y": 14, "w": 2, "h": 5 }
+ ],
+ "objetos": [
+  { "tipo": "jaula", "x": 2, "y": 3 }, { "tipo": "jaula", "x": 5, "y": 3 }, { "tipo": "jaula", "x": 8, "y": 3 },
+  { "tipo": "jaula", "x": 2, "y": 6 }, { "tipo": "jaula", "x": 5, "y": 6 }, { "tipo": "jaula", "x": 8, "y": 6 }, { "tipo": "brasero", "x": 11, "y": 3 }, { "tipo": "calaveras", "x": 11, "y": 7 },
+  { "tipo": "yunque", "x": 6, "y": 16 }, { "tipo": "brazo", "x": 4, "y": 15 }, { "tipo": "brazo", "x": 9, "y": 15 }, { "tipo": "brasero", "x": 2, "y": 13 }, { "tipo": "brasero", "x": 11, "y": 13 },
+  { "tipo": "calaveras", "x": 7, "y": 21 },
+  { "tipo": "orbe", "x": 20, "y": 11 }, { "tipo": "calaveras", "x": 18, "y": 10 }, { "tipo": "calaveras", "x": 24, "y": 10 }, { "tipo": "brasero", "x": 18, "y": 14 }, { "tipo": "brasero", "x": 24, "y": 14 },
+  { "tipo": "brasero", "x": 30, "y": 4 }, { "tipo": "brasero", "x": 34, "y": 4 }, { "tipo": "mesa", "x": 30, "y": 8 }, { "tipo": "yunque", "x": 34, "y": 8 }, { "tipo": "caldero", "x": 32, "y": 11 }, { "tipo": "calaveras", "x": 36, "y": 11 },
+  { "tipo": "portal", "x": 27, "y": 20 }, { "tipo": "brazo", "x": 25, "y": 20 }, { "tipo": "brazo", "x": 31, "y": 20 }, { "tipo": "caldero", "x": 23, "y": 21 }, { "tipo": "brasero", "x": 35, "y": 21 }, { "tipo": "calaveras", "x": 34, "y": 20 },
+  { "tipo": "antorcha", "x": 15, "y": 2 }, { "tipo": "antorcha", "x": 26, "y": 2 }, { "tipo": "antorcha", "x": 17, "y": 6 }, { "tipo": "antorcha", "x": 25, "y": 6 },
+  { "tipo": "antorcha", "x": 2, "y": 11 }, { "tipo": "antorcha", "x": 10, "y": 11 }, { "tipo": "antorcha", "x": 31, "y": 0 }, { "tipo": "antorcha", "x": 35, "y": 0 },
+  { "tipo": "antorcha", "x": 23, "y": 18 }, { "tipo": "antorcha", "x": 35, "y": 18 }, { "tipo": "antorcha", "x": 4, "y": 0 }, { "tipo": "antorcha", "x": 9, "y": 0 }
+ ]
+}

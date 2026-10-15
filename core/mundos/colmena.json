@@ -1,0 +1,30 @@
+{
+ "formato": "mundo/1", "nombre": "Colmena alienígena", "tema": "colmena",
+ "estilo": { "nucleoColor": "#5fd8ff", "borde": "#7dff9a" },
+ "ancho": 39, "alto": 25,
+ "salas": [
+  { "id": "servidores", "nombre": "Sala de servidores", "rol": "servidores", "x": 1, "y": 1, "w": 12, "h": 9, "suelo": "organico" },
+  { "id": "taller", "nombre": "Zona de la impresora 3D", "rol": "taller", "x": 1, "y": 12, "w": 12, "h": 11, "suelo": "organico" },
+  { "id": "principal", "nombre": "Área del agente principal de IA", "rol": "principal", "x": 16, "y": 7, "w": 11, "h": 11, "suelo": "organico" },
+  { "id": "subagentes", "nombre": "Bahía de subagentes", "rol": "subagentes", "x": 29, "y": 1, "w": 9, "h": 13, "suelo": "rejilla" },
+  { "id": "mcp", "nombre": "Laboratorio MCP", "rol": "mcp", "x": 22, "y": 19, "w": 15, "h": 5, "suelo": "organico" }
+ ],
+ "pasillos": [
+  { "x": 13, "y": 3, "w": 16, "h": 2 }, { "x": 20, "y": 5, "w": 3, "h": 2 }, { "x": 27, "y": 10, "w": 2, "h": 2 }, { "x": 6, "y": 10, "w": 2, "h": 2 },
+  { "x": 13, "y": 15, "w": 3, "h": 2 }, { "x": 24, "y": 18, "w": 2, "h": 1 }, { "x": 32, "y": 14, "w": 2, "h": 5 }
+ ],
+ "objetos": [
+  { "tipo": "vaina", "x": 2, "y": 3 }, { "tipo": "vaina", "x": 5, "y": 3 }, { "tipo": "vaina", "x": 8, "y": 3 }, { "tipo": "vaina", "x": 11, "y": 3 },
+  { "tipo": "vaina", "x": 3, "y": 6 }, { "tipo": "vaina", "x": 7, "y": 6 }, { "tipo": "tentaculos", "x": 11, "y": 7 },
+  { "tipo": "impresora", "x": 5, "y": 15 }, { "tipo": "brazo", "x": 3, "y": 15 }, { "tipo": "brazo", "x": 9, "y": 15 }, { "tipo": "tanque", "x": 11, "y": 13 }, { "tipo": "tanque", "x": 2, "y": 13 },
+  { "tipo": "caldero", "x": 2, "y": 20 }, { "tipo": "tentaculos", "x": 11, "y": 20 },
+  { "tipo": "orbe", "x": 20, "y": 11 }, { "tipo": "holo", "x": 17, "y": 9 }, { "tipo": "holo", "x": 25, "y": 9 }, { "tipo": "consola", "x": 17, "y": 15 }, { "tipo": "consola", "x": 24, "y": 15 },
+  { "tipo": "tentaculos", "x": 16, "y": 12 }, { "tipo": "tentaculos", "x": 26, "y": 13 },
+  { "tipo": "holo", "x": 30, "y": 3 }, { "tipo": "holo", "x": 33, "y": 3 }, { "tipo": "holo", "x": 36, "y": 3 }, { "tipo": "pc", "x": 30, "y": 6 }, { "tipo": "consola", "x": 34, "y": 7 },
+  { "tipo": "pc", "x": 35, "y": 10 }, { "tipo": "tanque", "x": 30, "y": 10 },
+  { "tipo": "portal", "x": 27, "y": 20 }, { "tipo": "brazo", "x": 25, "y": 20 }, { "tipo": "brazo", "x": 31, "y": 20 }, { "tipo": "alambique", "x": 22, "y": 20 }, { "tipo": "caldero", "x": 34, "y": 21 }, { "tipo": "tentaculos", "x": 36, "y": 20 },
+  { "tipo": "antorcha", "x": 15, "y": 2 }, { "tipo": "antorcha", "x": 26, "y": 2 }, { "tipo": "antorcha", "x": 17, "y": 6 }, { "tipo": "antorcha", "x": 25, "y": 6 },
+  { "tipo": "antorcha", "x": 2, "y": 11 }, { "tipo": "antorcha", "x": 10, "y": 11 }, { "tipo": "antorcha", "x": 31, "y": 0 }, { "tipo": "antorcha", "x": 35, "y": 0 },
+  { "tipo": "antorcha", "x": 23, "y": 18 }, { "tipo": "antorcha", "x": 35, "y": 18 }, { "tipo": "antorcha", "x": 4, "y": 0 }, { "tipo": "antorcha", "x": 9, "y": 0 }
+ ]
+}

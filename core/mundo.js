@@ -5,9 +5,9 @@ const fs = require('fs');
 const path = require('path');
 
 const ROLES = ['servidores', 'principal', 'subagentes', 'taller', 'mcp', 'modelos', 'biblioteca', 'decor'];
-const SUELOS = ['piedra', 'tierra', 'madera', 'metal', 'hierba', 'alfombra'];
-const TEMAS = ['mazmorra', 'nave', 'oficina', 'castillo', 'bosque', 'laboratorio'];
-const OBJETOS = ['rack', 'antorcha', 'orbe', 'impresora', 'mesa', 'pc', 'estanteria', 'planta', 'barril', 'cofre', 'telescopio', 'cuadro', 'consola', 'tanque', 'sofa', 'caja', 'lampara', 'cables', 'portal', 'brazo', 'alambique', 'caldero', 'ornitoptero', 'tornillo', 'maniqui', 'caballete', 'engranajes', 'carro', 'codice', 'banco', 'vela'];
+const SUELOS = ['piedra', 'tierra', 'madera', 'metal', 'hierba', 'alfombra', 'organico', 'roca', 'lava', 'rejilla'];
+const TEMAS = ['mazmorra', 'nave', 'oficina', 'castillo', 'bosque', 'laboratorio', 'colmena', 'infierno', 'estacion'];
+const OBJETOS = ['rack', 'antorcha', 'orbe', 'impresora', 'mesa', 'pc', 'estanteria', 'planta', 'barril', 'cofre', 'telescopio', 'cuadro', 'consola', 'tanque', 'sofa', 'caja', 'lampara', 'cables', 'portal', 'brazo', 'alambique', 'caldero', 'ornitoptero', 'tornillo', 'maniqui', 'caballete', 'engranajes', 'carro', 'codice', 'banco', 'vela', 'vaina', 'jaula', 'holo', 'brasero', 'calaveras', 'tuberias', 'tentaculos', 'yunque'];
 
 const BASE = {
   formato: 'mundo/1', nombre: 'Mazmorra de APOLO', tema: 'mazmorra', ancho: 37, alto: 26,
@@ -37,6 +37,19 @@ const BASE = {
   ],
 };
 
+// estilo: ajustes finos del tema (paleta, muros, núcleo, quiénes viven ahí, partículas); todo opcional y en lista blanca
+const ESTILO = { muro: ['ladrillo', 'panel', 'azulejo', 'yeso', 'tronco', 'organico', 'roca'], luz: ['antorcha', 'neon', 'lampara', 'lava', 'bio'],
+  nucleo: ['orbe', 'cerebro', 'cerebro-fuego'], pueblo: ['humanos', 'aliens', 'demonios', 'cientificos'], particulas: ['brasas', 'esporas', 'chispas', 'ninguna'],
+  deco: ['mazmorra', 'nave', 'oficina', 'colmena', 'infierno'] };
+function validarEstilo(e) {
+  if (!e || typeof e !== 'object') return undefined;
+  const o = {}, HEX = /^#[0-9a-f]{6}$/i;
+  for (const [k, l] of Object.entries(ESTILO)) if (l.includes(e[k])) o[k] = e[k];
+  for (const k of ['pared', 'borde', 'acento', 'nucleoColor']) if (HEX.test(String(e[k] || ''))) o[k] = e[k];
+  for (const k of ['fondo', 'amb']) if (Array.isArray(e[k]) && e[k].length === 3 && e[k].every(n => Number.isInteger(n) && n >= 0 && n <= 255)) o[k] = e[k];
+  if (typeof e.sala === 'number' && isFinite(e.sala)) o.sala = Math.max(0, Math.min(.5, e.sala));
+  return Object.keys(o).length ? o : undefined;
+}
 const ent = (v, min, max, def) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
 const txt = (v, max, def = '') => String(v ?? def).replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, max) || def;
 
@@ -49,11 +62,12 @@ function validar(m) {
   const salas = (Array.isArray(m.salas) ? m.salas : []).slice(0, 12).map((s, i) => {
     const rol = ROLES.includes(s.rol) ? s.rol : 'decor';
     if (rol !== 'decor' && vistos.has(rol)) return null; vistos.add(rol);
-    return { id: txt(s.id, 30, `sala${i}`).replace(/[^\w-]/g, '') || `sala${i}`, nombre: txt(s.nombre, 40, 'Sala'), rol, ...rect(s), suelo: SUELOS.includes(s.suelo) ? s.suelo : 'piedra' };
+    return { id: txt(s.id, 30, `sala${i}`).replace(/[^\w-]/g, '') || `sala${i}`, nombre: rol === 'decor' && !String(s.nombre || '').trim() ? '' : txt(s.nombre, 40, 'Sala'), rol, ...rect(s), suelo: SUELOS.includes(s.suelo) ? s.suelo : 'piedra' };
   }).filter(Boolean);
   for (const rol of ['principal', 'subagentes']) if (!salas.some(s => s.rol === rol)) throw new Error(`falta una sala con rol "${rol}"`);
+  const estilo = validarEstilo(m.estilo);
   return {
-    formato: 'mundo/1', nombre: txt(m.nombre, 60, 'Mi mundo'), tema: TEMAS.includes(m.tema) ? m.tema : 'mazmorra', ancho, alto, salas,
+    formato: 'mundo/1', nombre: txt(m.nombre, 60, 'Mi mundo'), tema: TEMAS.includes(m.tema) ? m.tema : 'mazmorra', ...(estilo ? { estilo } : {}), ancho, alto, salas,
     pasillos: (Array.isArray(m.pasillos) ? m.pasillos : []).slice(0, 30).map(rect),
     objetos: (Array.isArray(m.objetos) ? m.objetos : []).filter(o => OBJETOS.includes(o?.tipo)).slice(0, 120).map(o => ({ tipo: o.tipo, x: ent(o.x, 0, ancho - 1, 0), y: ent(o.y, 0, alto - 1, 0) })),
   };
@@ -88,8 +102,14 @@ function crearMundo({ cfg, generarJSON, modelo }) {
     return validar(datos);
   }
 
+  const dirPresets = path.join(__dirname, 'mundos');
+  const dirUsuario = path.join(cfg.dir, 'mundos');                 // la galería del usuario (la skill mission-control guarda aquí)
+  const de = d => { let l = []; try { l = fs.readdirSync(d).filter(x => x.endsWith('.json')); } catch { }
+    return l.map(x => { try { return { id: x.slice(0, -5).replace(/[^\w-]/g, ''), mundo: validar(JSON.parse(fs.readFileSync(path.join(d, x), 'utf8'))) }; } catch { return null; } }).filter(Boolean); };
+  const presets = () => { const vistos = new Set(), l = [{ id: 'mazmorra', mundo: BASE }, ...de(dirPresets), ...de(dirUsuario)]; return l.filter(x => !vistos.has(x.id) && vistos.add(x.id)); };
   async function http(M, p, cuerpo) {
     if (M === 'GET' && !p[2]) { const m = leer(); return { mundo: m || BASE, propio: !!m }; }
+    if (M === 'GET' && p[2] === 'presets') { const l = presets(); if (p[3]) { const x = l.find(y => y.id === p[3]); if (!x) { const e = new Error('no existe'); e.status = 404; throw e; } return { mundo: x.mundo }; } return l.map(x => ({ id: x.id, nombre: x.mundo.nombre, tema: x.mundo.tema })); }
     if (M === 'PUT' && !p[2]) { const m = validar(cuerpo.mundo); fs.writeFileSync(f, JSON.stringify(m, null, 1)); return { mundo: m, propio: true }; }
     if (M === 'DELETE' && !p[2]) { fs.rmSync(f, { force: true }); return { mundo: BASE, propio: false }; }
     if (M === 'POST' && p[2] === 'generar') return { mundo: await generar(cuerpo.descripcion) };
@@ -98,4 +118,4 @@ function crearMundo({ cfg, generarJSON, modelo }) {
   return { http, generar, leer };
 }
 
-module.exports = { crearMundo, validar, BASE, ROLES, SUELOS, TEMAS, OBJETOS };
+module.exports = { crearMundo, validar, BASE, ROLES, SUELOS, TEMAS, OBJETOS, ESTILO };
