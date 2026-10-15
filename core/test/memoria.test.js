@@ -110,3 +110,12 @@ test('contexto: un perfil enorme no echa fuera lo relevante', async () => {
   assert.match(c, /10\.0\.0\.5/);
   assert.ok(c.length <= 2500 + 60);
 });
+
+test('lo histórico no se pisa con lo nuevo y sale marcado como "antes"', async () => {
+  const { mem } = nueva();
+  const viejo = mem.recordar({ texto: 'En 2024 su PC tenía una tarjeta RTX 4080', tipo: 'hecho' });
+  mem.editar(viejo.id, { historico: true });
+  const nuevo = mem.recordar({ texto: 'Su PC tiene una tarjeta RTX 5060', tipo: 'hecho' });
+  assert.strictEqual(nuevo.accion, 'creada');
+  assert.match(await mem.contexto('tarjeta del pc'), /·antes\] En 2024/);
+});

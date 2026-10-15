@@ -1,5 +1,6 @@
 // Memoria persistente compartida por todos los modelos y canales.
 // <dir>/memoria.json: [{ id, texto, tipo, creada, actualizada, usos, origen }]
+//   historico: true = ya no es actual pero es parte de su historia (texto en pasado; textoOriginal y fecha del dato)
 //   tipo: perfil (quién es el usuario: va SIEMPRE en el contexto) | preferencia | proyecto | persona | hecho | patron (lo deduce el sueño REM)
 // Búsqueda híbrida: léxica propia (tokens sin acentos, sin palabras vacías, con prefijos y peso por rareza)
 // + semántica con embeddings (vectores.js) si hay modelo; los vectores van en <dir>/memoria_vec.json.
@@ -74,7 +75,7 @@ function crearMemoria({ cfg, embedder = null }) {
     if (SECRETO.test(texto)) throw new Error('parece una contraseña o clave: no se guardan secretos en la memoria');
     if (!TIPOS.includes(tipo)) tipo = 'hecho';
     let m = reemplaza && lista.find(x => x.id === reemplaza);
-    if (!m && !nuevo) m = lista.find(x => x.tipo === tipo && parecido(x.texto, texto) >= 0.6);
+    if (!m && !nuevo) m = lista.find(x => x.tipo === tipo && !x.historico && parecido(x.texto, texto) >= 0.6);   // lo histórico (de antes) no se pisa: es su continuidad
     if (m) { Object.assign(m, { texto, tipo, actualizada: Date.now(), origen: origen || m.origen }); guardar(); indexarLuego(); return { ...m, accion: 'actualizada' }; }
     m = { id: crypto.randomUUID().slice(0, 6), texto, tipo, creada: Date.now(), actualizada: Date.now(), usos: 0, origen };
     lista.push(m); guardar(); indexarLuego();
@@ -137,7 +138,7 @@ function crearMemoria({ cfg, embedder = null }) {
     const lineas = [];
     let n = 0;
     for (const m of [...perfil, ...relevantes]) {                  // el perfil usa como mucho el 60 %: lo relevante siempre cabe
-      const l = `- [${m.id}·${m.tipo}] ${m.texto}`;
+      const l = `- [${m.id}·${m.tipo}${m.historico ? '·antes' : ''}] ${m.texto}`;
       if (n + l.length > (m.tipo === 'perfil' ? maxChars * 0.6 : maxChars)) { if (m.tipo === 'perfil') continue; break; }
       lineas.push(l); n += l.length;
     }
@@ -148,7 +149,7 @@ function crearMemoria({ cfg, embedder = null }) {
   function editar(id, campos = {}) {
     sync(); const m = lista.find(x => x.id === id); if (!m) return null;
     if (campos.texto !== undefined) { const t = String(campos.texto).trim(); if (!t || SECRETO.test(t)) throw new Error('texto no válido'); m.texto = t.slice(0, 600); }
-    for (const k of ['tipo', 'usos', 'origen', 'fusionados']) if (campos[k] !== undefined) m[k] = k === 'tipo' && !TIPOS.includes(campos[k]) ? m.tipo : campos[k];
+    for (const k of ['tipo', 'usos', 'origen', 'fusionados', 'historico', 'textoOriginal', 'fecha']) if (campos[k] !== undefined) m[k] = k === 'tipo' && !TIPOS.includes(campos[k]) ? m.tipo : campos[k];
     m.actualizada = campos.actualizada || Date.now(); guardar(); indexarLuego(); return { ...m };
   }
   // borra todo (privacidad): memoria y vectores
