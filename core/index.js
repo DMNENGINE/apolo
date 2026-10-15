@@ -186,6 +186,8 @@ function crearNucleo(opciones = {}) {
   nucleo.importadorChatGPT = crearImportadorChatGPT({ cfg, memoria, bus, generarJSON: generarJSONvivo, modelo: modeloCerebro });
   const mundo = require('./mundo').crearMundo({ cfg, generarJSON: generarJSONvivo, modelo: modeloCerebro });   // Mission Control: mapa pixel-art (de serie o generado) → /v1/mundo
   nucleo.extensiones.mundo = { http: (...a) => mundo.http(...a) };
+  const servicios = require('./servicios').crearServicios({ cfg, bus, log: (nivel, texto) => registro.add(nivel, 'servicios', texto) });   // webs, bots y apps del usuario → racks de Mission Control
+  nucleo.servicios = servicios; nucleo.extensiones.servicios = { http: (...a) => servicios.http(...a) }; servicios.empezar();
   return nucleo;
 }
 

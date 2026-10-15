@@ -76,7 +76,7 @@ const MC_MUNDO = {
     this.luz = mmLienzo(W >> 1, H >> 1); this.lc = this.luz.getContext('2d');
     this.vin = mmLienzo(W, H); const vc = this.vin.getContext('2d'), gv = vc.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.hypot(W, H) * .58);
     gv.addColorStop(0, 'rgba(0,0,0,0)'); gv.addColorStop(1, 'rgba(0,0,0,.38)'); vc.fillStyle = gv; vc.fillRect(0, 0, W, H);
-    this.dom(); this.ents.clear(); this.parts = []; this.poblar();
+    this.dom(); this.ents.clear(); this.parts = []; this.poblar(); this.repartirRacks();
     if (!this.raf) this.raf = requestAnimationFrame(t => this.cuadro(t));
   },
   dom() {
@@ -121,6 +121,7 @@ const MC_MUNDO = {
       const [pl, ta, tu, es, ca, mr] = await Promise.all([api('GET', '/plugins').catch(() => ({ plugins: [] })), api('GET', '/tareas').catch(() => []), api('GET', '/turno').catch(() => null),
         api('GET', '/estado').catch(() => null), api('GET', '/canales').catch(() => []), api('GET', '/mcp-remotos').catch(() => null)]);
       this.mcpServ = mr?.servidores || []; MM_MCP_IDS = this.mcpServ.filter(x => x.conectado).map(x => x.id);
+      const sv = await api('GET', '/servicios').catch(() => null); if (sv) { this.serv = sv; this.repartirRacks(); }
       this.modelos = (es?.proveedores || []).filter(x => x.listo).map(x => ({ id: x.nombre, tipo: x.tipo }));
       for (const c of ca || []) if (c.tipo === 'motor' && c.estado === 'activo' && !this.modelos.some(x => x.id === c.id)) this.modelos.push({ id: c.id, tipo: 'motor', puente: true });
       this.plugins = (pl.plugins || []).filter(x => x.activo).slice(0, 8); this.tareas = (ta || []).filter(x => x.activa); this.turno = tu;
@@ -129,8 +130,20 @@ const MC_MUNDO = {
       this.poblar(); this.hud();
     } catch { }
   },
+  // los grupos de servicios del usuario van a los racks en orden (de arriba abajo, de izquierda a derecha)
+  repartirRacks() {
+    const racks = (this.m?.objetos || []).filter(o => o.tipo === 'rack').sort((a, b) => a.y - b.y || a.x - b.x), mapa = new Map(), est = this.serv?.estado || {};
+    (this.serv?.grupos || []).slice(0, racks.length).forEach((g, i) => mapa.set(`${racks[i].x},${racks[i].y}`, { grupo: g, rack: racks[i],
+      items: g.servicios.map(s => ({ ...s, ok: est[s.id] ? est[s.id].ok : true, pendiente: !est[s.id], ...(est[s.id] || {}) })) }));
+    this.est.racks = mapa;
+  },
   alEvento(e) {
     if (!this.caja) return;
+    if (e.tipo === 'servicios' && this.serv) {
+      const antes = this.serv.estado || {}; this.serv.estado = e.estado; this.serv.revisado = e.revisado; this.repartirRacks();
+      for (const g of this.serv.grupos) for (const s of g.servicios) { const a = antes[s.id], n = e.estado[s.id]; if (a && n && a.ok !== n.ok) this.apuntar('ticker', `${s.nombre}: ${n.ok ? tr('vuelve a estar en línea') : tr('caído') + ' (' + n.detalle + ')'}`, n.ok ? '' : 'error'); }
+      return;
+    }
     if (e.tipo === 'agente' && e.agente) {
       const a = e.agente, prev = this.mc.agentes.get(a.id);
       if (a.herramienta && a.herramienta.nombre !== prev?.herramienta?.nombre) this.apuntar('ticker', `${a.nombre || a.id}: ${NOMBRE_HERR[a.herramienta.nombre] || a.herramienta.nombre} ${a.herramienta.resumen || ''}`);
@@ -277,14 +290,18 @@ const MC_MUNDO = {
     const enUso = new Set(vivos.map(a => mmProveedor(a.modelo)));
     for (const x of this.ents.values()) { x.trabajando = x.agente ? x.agente.estado === 'trabajando' : x.tipo === 'apolo' ? vivos.length > 0 : x.tipo === 'modelo' ? enUso.has(x.modelo.id) || (x.modelo.puente && false) : false; this.mover(x, dt, t); }
     c.globalCompositeOperation = 'source-over'; c.drawImage(this.fondo, 0, 0);
-    const borde = this.tema.borde, carteles = [], s = this.porRol;
-    if (s.servidores) carteles.push(mmCartel(c, (s.servidores.x + s.servidores.w / 2) * R, (s.servidores.y + s.servidores.h - 1) * R + 6, 'NÚCLEO', { borde, max: s.servidores.w * R, barras: [['CPU', e.cpu], ['RAM', e.ram]] }));
+    const luces = [], borde = this.tema.borde, carteles = [], s = this.porRol;
+    for (const g of (e.racks || new Map()).values()) { const n = g.items.filter(x => x.ok).length, mal = n < g.items.length;
+      carteles.push(mmCartel(c, g.rack.x * R + 32, (g.rack.y + 2) * R + 2, `${g.grupo.nombre.toUpperCase().split(" ")[0].slice(0, 9)} ${n}/${g.items.length}`, { borde: mal ? '#ff3b5c' : '#3dff8a', max: 60, brillo: mal ? .5 + Math.sin(t / 200) * .5 : 0 })); }
+    if (s.servidores && [...(e.racks || new Map()).values()].some(g => g.items.some(x => !x.ok))) {   // alarma: luz roja que gira en la sala
+      const sx = (s.servidores.x + s.servidores.w / 2) * R, sy = (s.servidores.y + 1.2) * R, a = t / 300;
+      luces.push({ x: sx + Math.cos(a) * 40, y: sy + Math.sin(a) * 20 + 60, r: 150, col: [255, 40, 60], a: .45, bloom: 10 }); }
     if (s.taller) { const prox = (this.tareas || []).map(x => x.proxima).filter(Boolean).sort()[0], tu = this.turno;
       carteles.push(mmCartel(c, (s.taller.x + s.taller.w / 2) * R, (s.taller.y + s.taller.h - 1) * R + 6, tu?.activo ? `TURNO DE NOCHE ${Math.round(e.progreso * 100)}%` : `TAREAS ${(this.tareas || []).length}${prox ? ' · PRÓXIMA ' + new Date(prox).toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' }) : ''}`, { borde, max: s.taller.w * R })); }
     if (s.mcp) { const vivo = e.mcp > .25 && this.ultConjuro;
       carteles.push(mmCartel(c, (s.mcp.x + s.mcp.w / 2) * R, (s.mcp.y + s.mcp.h - 1) * R + 6, vivo ? '✦ ' + this.ultConjuro.txt.toUpperCase() : (s.mcp.nombre || 'LABORATORIO MCP').toUpperCase(), { borde: vivo ? '#c85aff' : borde, max: s.mcp.w * R, brillo: vivo ? .6 + Math.sin(t / 160) * .4 : 0 })); }
     // objetos de pared primero; luego lo que está en el suelo y los personajes, ordenados por su base
-    const luces = [], cosas = [];
+    const cosas = [];
     for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (!d) continue; const X = o.x * R, Y = o.y * R - d.alto; cosas.push({ o, d, X, Y, base: d.bloq ? (o.y + d.h) * R - 2 : -1 }); if (d.luz) luces.push(...d.luz(o, X, Y, t, e)); }
     for (const p of this.ents.values()) cosas.push({ p, base: p.y });
     for (const k of carteles) luces.push({ x: k.x + k.w / 2, y: k.y + k.h / 2, r: Math.max(60, k.w * .7), col: [200, 230, 225], a: .22 });
@@ -421,6 +438,12 @@ const MC_MUNDO = {
         fila('Terminados (6 h)', ags.filter(a => a.fin && mmProveedor(a.modelo) === md.id).length);
     } else if (h.p?.tipo === 'plugin') { col = '#8fdc5a'; cab = [h.p.nombre, `plugin ${h.p.plugin.version || ''}`]; cuerpo = `<div class="mm-txt">${esc(h.p.plugin.descripcion || '')}</div>${fila('Permisos', esc((h.p.plugin.permisos || []).join(', ') || '—'))}`; }
     else if (h.p?.tipo === 'tarea') { const t = h.p.tarea; col = '#f5c542'; cab = [h.p.nombre, tr('Tarea programada')]; cuerpo = `<div class="mm-txt">${esc(String(t.accion?.texto || '').slice(0, 260))}</div>${fila('Próxima', t.proxima ? new Date(t.proxima).toLocaleString(I18N.locale()) : '—')}${fila('Último resultado', esc(String(t.ultimoResultado || '—').slice(0, 80)))}`; }
+    else if (h.o?.tipo === 'rack' && this.est.racks?.get(`${h.o.x},${h.o.y}`)) {
+      const g = this.est.racks.get(`${h.o.x},${h.o.y}`), n = g.items.filter(x => x.ok).length; col = n < g.items.length ? '#ff4d6a' : '#3dff8a';
+      cab = [g.grupo.nombre, tr('{a} de {b} en línea', { a: n, b: g.items.length })];
+      cuerpo = g.items.map(s => `<div class="mm-fila"><span style="color:${s.pendiente ? '#8ea4b8' : s.ok ? '#4dff8f' : '#ff6b7d'}">● ${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(s.nombre)}</a>` : esc(s.nombre)}</span><b>${s.pendiente ? tr('comprobando…') : s.ok ? (s.ms ? s.ms + ' ms' : esc(s.detalle || 'ok')) : esc(s.detalle || tr('caído'))}</b></div>`).join('') +
+        `<div class="mm-acc"><button class="btn mini" data-serv="revisar">${ic('recargar')}${tr('Revisar ahora')}</button><button class="btn mini" data-serv="editar">${ic('editar')}${tr('Editar servicios')}</button></div>`;
+    }
     else if (h.o?.tipo === 'rack') { cab = [tr('Núcleo'), tr('Sala de servidores')]; cuerpo = fila('CPU', `${Math.round(this.est.cpu * 100)}%`) + fila('RAM', `${(this.est.ram * this.est.ramTot / 1e9).toFixed(1)} / ${(this.est.ramTot / 1e9).toFixed(0)} GB`) + fila('Plugins activos', (this.plugins || []).length); }
     else if (h.o?.tipo === 'impresora') { col = '#ff8a3d'; cab = [tr('Taller'), tr('Turno de noche y tareas')]; const tu = this.turno; cuerpo = fila('Turno de noche', tu?.activo ? `${Math.round(this.est.progreso * 100)}%` : tr('parado')) + fila('En cola', tu?.cola?.length || 0) + fila('Tareas activas', (this.tareas || []).length) + `<div class="mm-acc"><a class="btn mini" href="#/turno">${tr('Turno de noche')} ${ic('der')}</a></div>`; }
     else if (h.o?.tipo === 'portal') {
@@ -436,6 +459,9 @@ const MC_MUNDO = {
     void det.offsetWidth; det.classList.add('on'); this.posHolo = null; this.seguirHolo();
     det.onclick = async ev => {
       if (ev.target.closest('.mv-holo-x')) return this.cerrarHolo();
+      const sb = ev.target.closest('[data-serv]');
+      if (sb?.dataset.serv === 'revisar') { sb.disabled = true; try { const r = await api('POST', '/servicios/revisar', {}); this.serv = r; this.repartirRacks(); this.abrirHolo(this.sel || h); } catch (er) { aviso(er.message, true); } return; }
+      if (sb?.dataset.serv === 'editar') return this.editarServicios();
       const b = ev.target.closest('[data-parar]'); if (!b) return; b.disabled = true;
       try { await api('POST', `/sesiones/${b.dataset.parar}/cancelar`); aviso(tr('Detenido')); } catch (er) { aviso(er.message, true); b.disabled = false; }
     };
@@ -469,6 +495,15 @@ const MC_MUNDO = {
       return this.cargarDatos();
     }
     if (a === 'editar') return this.editor();
+  },
+  async editarServicios() {
+    const actual = await api('GET', '/servicios').catch(() => ({ grupos: [] }));
+    const r = await modal({ titulo: 'Tus servicios en línea', ancho: 720,
+      cuerpo: `<p class="suave" style="margin-top:0">${tr('Cada grupo es un rack de la sala de servidores (hasta 8 servicios por rack). Un servicio puede ser una web (url), una unidad systemd o una app de pm2 en una máquina por SSH con clave (ssh + unidad / pm2), la máquina sola (ssh) o un puerto (tcp "host:puerto").')}</p>
+        <textarea id="svJson" rows="18" style="width:100%;font-family:var(--mono, monospace);font-size:12px">${esc(JSON.stringify({ grupos: actual.grupos }, null, 1))}</textarea>`,
+      botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Guardar', cls: 'pri', valor: v => { try { return JSON.parse($('#svJson', v).value); } catch (e) { aviso(tr('JSON no válido: ') + e.message, true); return false; } } }] });
+    if (!r) return;
+    try { this.serv = await api('PUT', '/servicios', r); this.repartirRacks(); aviso(tr('Servicios guardados')); setTimeout(() => this.cargarLento(), 4000); } catch (er) { aviso(er.message, true); }
   },
   // ---------- crea tu mundo ----------
   async editor() {

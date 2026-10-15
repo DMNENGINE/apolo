@@ -179,10 +179,17 @@ mmObj('rack', 2, 2, 1, 16, (c, v) => {
   p(6, 2, 1, 74, '#4a5563'); p(54, 14, 2, 60, '#2b5f9a'); p(56, 20, 1, 54, '#9a2b2b');
   p(8, 76, 6, 3, '#0b0e12'); p(50, 76, 6, 3, '#0b0e12');
 }, (c, X, Y, t, e, o) => {
-  for (let u = 0; u < 8; u++) { const y = Y + 14 + u * 7;
-    for (let l = 0; l < 2; l++) { const on = Math.sin(t / (70 + mmF(o.x, u, l) * 300) + mmF(o.y, u, l) * 9) > .72 - e.cpu * 1.3; c.fillStyle = on ? (l ? '#4fd8ff' : u % 3 ? '#39ff8a' : '#ffcf4d') : '#13261b'; c.fillRect(X + 12 + l * 2, y + 2, 1, 2); }
+  const g = e.racks?.get(`${o.x},${o.y}`);                         // un rack = un grupo de servicios del usuario; un servidor = un servicio
+  for (let u = 0; u < 8; u++) { const y = Y + 14 + u * 7, s = g?.items[u];
+    if (g && !s) { c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(X + 10, y + 1, 44, 4); continue; }          // ranura vacía
+    if (s && !s.ok) {                                              // caído: el servidor entero parpadea en rojo
+      const on = Math.floor(t / 260 + u) % 2; c.fillStyle = on ? '#ff2d4a' : '#4a0d16'; c.fillRect(X + 12, y + 2, 3, 2);
+      c.fillStyle = `rgba(255,40,70,${on ? .35 : .12})`; c.fillRect(X + 9, y, 46, 6); continue; }
+    for (let l = 0; l < 2; l++) { const on = s ? (l === 0 || Math.sin(t / (60 + mmF(o.x, u, l) * 200) + mmF(o.y, u, l) * 9) > .2) : Math.sin(t / (70 + mmF(o.x, u, l) * 300) + mmF(o.y, u, l) * 9) > .72 - e.cpu * 1.3;
+      c.fillStyle = on ? (l ? '#4fd8ff' : s ? '#39ff8a' : u % 3 ? '#39ff8a' : '#ffcf4d') : '#13261b'; c.fillRect(X + 12 + l * 2, y + 2, 1, 2); }
     if (Math.sin(t / 400 + u + o.x) > .3) { c.fillStyle = 'rgba(80,220,255,.55)'; c.fillRect(X + 21, y + 2, (Math.sin(t / 150 + u) * .5 + .5) * 20 | 0, 1); } }
-}, (o, X, Y, t, e) => [{ x: X + 32, y: Y + 40, r: 64, col: [60, 190, 255], a: .16 + e.cpu * .2 }]);
+}, (o, X, Y, t, e) => { const g = e.racks?.get(`${o.x},${o.y}`), mal = g && g.items.some(s => !s.ok);
+  return [{ x: X + 32, y: Y + 40, r: mal ? 80 : 64, col: mal ? [255, 50, 70] : [60, 190, 255], a: mal ? .35 + Math.sin(t / 200) * .15 : .16 + e.cpu * .2 }]; });
 
 mmObj('orbe', 2, 2, 1, 0, c => {
   const p = mmP(c); c.fillStyle = 'rgba(0,0,0,.45)'; c.beginPath(); c.ellipse(32, 58, 30, 6, 0, 0, 7); c.fill();
