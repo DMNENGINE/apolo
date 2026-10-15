@@ -441,6 +441,8 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     refrescar() { alfa = Math.max(alfa, .5); },
     seleccionar(n) { sel = n; vecSel = n ? vec.get(n.id) || new Set() : new Set(); if (n) { n.flash = 1.4; setTimeout(() => sel === n && dispararDesde(n, 8), 60); } if (n) for (const id of vecSel) { const o = nodos.find(x => x.id === id); if (o && !o.top && !o.colocado3) { const d = new THREE.Vector3().randomDirection().multiplyScalar(55); Object.assign(o.p3, { x: n.p3.x + d.x, y: n.p3.y + d.y, z: n.p3.z + d.z }); o.colocado3 = true; } } alfa = Math.max(alfa, .25); },
     enfocar(n) { if (n) volarA(new THREE.Vector3(n.p3.x, n.p3.y, n.p3.z), 200); },
+    // dónde cae un nodo en la pantalla (px dentro de la caja); delante = no está detrás de la cámara
+    pantalla(n) { const p = new THREE.Vector3(n.p3.x, n.p3.y, n.p3.z).project(cam); return { x: (p.x + 1) / 2 * cv.clientWidth, y: (1 - p.y) / 2 * cv.clientHeight, delante: p.z < 1 }; },
     zoom(f) { acercar(1 / f); despierta(); },
     encuadrar,
     aislar, actividad,

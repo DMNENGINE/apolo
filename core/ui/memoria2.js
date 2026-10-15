@@ -39,8 +39,9 @@ MV_SUB.grafo = {
           <div class="mv-buscar buscador-lado">${ic('buscar')}<input id="mvQ" placeholder="${tr('Buscar entidad…')}"></div>
           <div class="mv-zoom"><button class="btn icono" data-z="1.25" title="${tr('Acercar')}">${ic('mas')}</button><button class="btn icono" data-z="0.8" title="${tr('Alejar')}"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button class="btn icono" data-z="0" title="${tr('Centrar')}">${ic('recargar')}</button></div>
           ${d.nodos.length < 2 ? `<div class="mv-vacio">${vacio('enlace', 'Aún no hay entidades. Se llenará solo a medida que el robot recuerde cosas.')}</div>` : ''}
+          <svg class="mv-haz" hidden><line/><circle r="7"/></svg>
+          <div class="mv-holo" id="mvDet" hidden></div>
         </div>
-        <aside class="mv-detalle caja" id="mvDet"><div class="vacio">${ic('enlace')}${tr('Toca un punto del grafo para ver con qué está conectado y sus recuerdos.')}</div></aside>
       </div></div>`;
     this.montar();
     $('.mv-filtros', v).onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; const t = b.dataset.t; this.ocultos.has(t) ? this.ocultos.delete(t) : this.ocultos.add(t); b.classList.toggle('off'); this.g3 ? this.g3.refrescar() : this.calentar(); };
@@ -49,7 +50,7 @@ MV_SUB.grafo = {
     let tq; $('#mvQ', v).oninput = e => { clearTimeout(tq); tq = setTimeout(() => { const q = e.target.value.trim().toLowerCase(); if (!q) return; const n = this.nodos.filter(x => x.nombre.toLowerCase().includes(q)).sort((a, b) => b.importancia - a.importancia)[0]; if (n) { this.abrir(n); this.enfocar(n); } }, 250); };
   },
   alEvento(e) { if (e.tipo === 'memoria-uso') this.g3?.actividad(e); },
-  salir() { this.g3?.destruir(); this.g3 = null; cancelAnimationFrame(this.raf); this.raf = 0; this.ro?.disconnect(); this.ro = null; this.v = null; },
+  salir() { cancelAnimationFrame(this.rafHolo); this.rafHolo = 0; this.g3?.destruir(); this.g3 = null; cancelAnimationFrame(this.raf); this.raf = 0; this.ro?.disconnect(); this.ro = null; this.v = null; },
   montar() {
     const cv = $('#mvCanvas', this.v); if (!cv) return;
     this.cv = cv; this.ctx = cv.getContext('2d');
@@ -75,7 +76,7 @@ MV_SUB.grafo = {
       const caja = this.cv.parentElement; this.cv.style.display = 'none';
       const css = getComputedStyle(document.documentElement);
       this.g3 = window.Grafo3D.crear(caja, { nodos: this.nodos, aristas: this.aristas, visible: n => this.visible(n), linea: a => this.linea(a), colores: MV_COLOR,
-        acento: css.getPropertyValue('--acento').trim() || '#2bdc7c', alTocar: n => { if (n) { this.abrir(n); this.g3.enfocar(n); } else { this.sel = null; this.g3.seleccionar(null); } } });
+        acento: css.getPropertyValue('--acento').trim() || '#2bdc7c', alTocar: n => { if (n) { this.abrir(n); this.g3.enfocar(n); } else { this.sel = null; this.g3.seleccionar(null); this.cerrarHolo(); } } });
     };
     if (window.Grafo3D) ir(); else window.addEventListener('grafo3d-listo', ir, { once: true });
   },
@@ -181,7 +182,7 @@ MV_SUB.grafo = {
     };
     cv.onpointerup = e => {
       const n = ini?.n; this.arrastrado = null; ini = null; cv.style.cursor = 'grab';
-      if (!movido) { if (n) this.abrir(n); else { this.sel = null; this.dibujar(); } }
+      if (!movido) { if (n) this.abrir(n); else { this.sel = null; this.dibujar(); this.cerrarHolo(); } }
     };
     cv.onwheel = e => { e.preventDefault(); const [px, py] = pos(e); this.zoomEn(px, py, e.deltaY < 0 ? 1.15 : 1 / 1.15); };
   },
@@ -190,15 +191,63 @@ MV_SUB.grafo = {
     for (const id of this.vec.get(n.id) || []) { const o = this.nodos.find(x => x.id === id); if (o && !o.top && !o.colocado) { const a = Math.random() * 6.283; o.x = n.x + Math.cos(a) * 60; o.y = n.y + Math.sin(a) * 60; o.colocado = true; } }
     this.calentar();
     const det = $('#mvDet'); if (!det) return;
-    det.innerHTML = `<div class="vacio">${tr('Cargando…')}</div>`;
+    // tarjeta holográfica junto al punto: se enciende como un holograma (línea → tarjeta) y lo sigue al mover la cámara
+    const col = n.id === 'usuario' ? getComputedStyle(document.documentElement).getPropertyValue('--acento').trim() || '#2bdc7c' : MV_COLOR[n.tipo] || '#5ab0ff';
+    clearTimeout(this.tHolo); det.hidden = false; det.classList.remove('on', 'sale'); det.style.setProperty('--holo', col);
+    det.innerHTML = `<div class="mv-holo-c"><div class="mv-holo-cab"><div class="mv-ent"><i style="background:${col}"></i><div><b>${esc(n.nombre)}</b><small>${tr('Cargando…')}</small></div></div><button class="mv-holo-x" title="${tr('Cerrar')}">×</button></div></div>`;
+    void det.offsetWidth; det.classList.add('on');
+    this.seguirHolo();
+    const pedido = this.pedidoHolo = n.id;
     try {
       const r = await api('GET', '/grafo/' + encodeURIComponent(n.id));
-      det.innerHTML = `<div class="mv-ent"><i style="background:${n.id === 'usuario' ? 'var(--acento)' : MV_COLOR[r.entidad.tipo]}"></i><div><b>${esc(r.entidad.nombre)}</b><small>${esc(tr(MV_TIPO_N[r.entidad.tipo] || r.entidad.tipo))}${r.entidad.alias?.length ? ` · ${esc(r.entidad.alias.join(', '))}` : ''}</small></div></div>
-        ${r.vecinos.length ? `<div class="seccion">${tr('Conectado con')} <span class="n">${r.vecinos.length}</span></div><div class="mv-vecinos">${r.vecinos.slice(0, 24).map(x => `<button class="chip" data-id="${esc(x.id)}" title="${esc(x.relacion)}"><i style="background:${MV_COLOR[x.tipo] || '#999'}"></i>${esc(x.nombre)}${x.relacion && x.relacion !== 'relacionado' ? ` <em>· ${esc(x.relacion)}</em>` : ''}</button>`).join('')}</div>` : ''}
-        <div class="seccion">${tr('Recuerdos')} <span class="n">${r.recuerdos.length}</span></div>
-        ${r.recuerdos.length ? r.recuerdos.map(m => `<div class="mv-rec"><span class="chip">${esc(tr(m.tipo))}</span>${m.historico ? ` <span class="chip">${tr('antes')}</span>` : ''} ${esc(m.texto)}</div>`).join('') : `<div class="tenue">${tr('Sin recuerdos directos.')}</div>`}`;
-      det.onclick = e => { const b = e.target.closest('[data-id]'); if (!b) return; const x = this.nodos.find(y => y.id === b.dataset.id); if (x) { this.enfocar(x); this.abrir(x); } };
-    } catch (e) { det.innerHTML = vacio('info', esc(e.message)); }
+      if (this.pedidoHolo !== pedido || det.hidden) return;
+      let k = 0; const d = () => `style="--i:${k++}"`;
+      det.querySelector('.mv-holo-c').innerHTML = `<div class="mv-holo-cab" ${d()}><div class="mv-ent"><i style="background:${col}"></i><div><b>${esc(r.entidad.nombre)}</b><small>${esc(tr(MV_TIPO_N[r.entidad.tipo] || r.entidad.tipo))}${r.entidad.alias?.length ? ` · ${esc(r.entidad.alias.join(', '))}` : ''}</small></div></div><button class="mv-holo-x" title="${tr('Cerrar')}">×</button></div>
+        <div class="mv-holo-cuerpo">
+        ${r.vecinos.length ? `<div class="mv-holo-sec" ${d()}>${tr('Conectado con')} <span>${r.vecinos.length}</span></div><div class="mv-vecinos" ${d()}>${r.vecinos.slice(0, 24).map(x => `<button class="chip" data-id="${esc(x.id)}" title="${esc(x.relacion)}"><i style="background:${MV_COLOR[x.tipo] || '#999'}"></i>${esc(x.nombre)}${x.relacion && x.relacion !== 'relacionado' ? ` <em>· ${esc(x.relacion)}</em>` : ''}</button>`).join('')}</div>` : ''}
+        <div class="mv-holo-sec" ${d()}>${tr('Recuerdos')} <span>${r.recuerdos.length}</span></div>
+        ${r.recuerdos.length ? r.recuerdos.map(m => `<div class="mv-rec" ${k < 14 ? d() : ''}><span class="chip">${esc(tr(m.tipo))}</span>${m.historico ? ` <span class="chip">${tr('antes')}</span>` : ''} ${esc(m.texto)}</div>`).join('') : `<div class="tenue" ${d()}>${tr('Sin recuerdos directos.')}</div>`}
+        </div>`;
+    } catch (e) { det.querySelector('.mv-holo-c').insertAdjacentHTML('beforeend', `<div class="mv-holo-cuerpo">${vacio('info', esc(e.message))}</div>`); }
+    det.onclick = e => {
+      if (e.target.closest('.mv-holo-x')) { this.sel = null; this.g3 ? this.g3.seleccionar(null) : this.dibujar(); return this.cerrarHolo(); }
+      const b = e.target.closest('[data-id]'); if (!b) return; const x = this.nodos.find(y => y.id === b.dataset.id); if (x) { this.enfocar(x); this.abrir(x); }
+    };
+  },
+  cerrarHolo() {
+    const det = this.v && $('#mvDet', this.v); if (!det || det.hidden) return;
+    this.pedidoHolo = null; det.classList.add('sale');
+    const haz = $('.mv-haz', this.v); if (haz) haz.hidden = true;
+    clearTimeout(this.tHolo); this.tHolo = setTimeout(() => { det.hidden = true; det.classList.remove('on', 'sale'); cancelAnimationFrame(this.rafHolo); this.rafHolo = 0; this.posHolo = null; }, 260);
+  },
+  // cada frame: la tarjeta se coloca al lado del punto (o al otro lado si no cabe) y el haz los une
+  seguirHolo() {
+    if (this.rafHolo) return;
+    const paso = () => {
+      this.rafHolo = 0;
+      const det = this.v && $('#mvDet', this.v), n = this.sel; if (!det || det.hidden || det.classList.contains('sale')) return;
+      const caja = det.parentElement, W = caja.clientWidth, H = caja.clientHeight, cw = det.offsetWidth, ch = det.offsetHeight, haz = $('.mv-haz', this.v);
+      const p = !n ? null : this.g3 ? this.g3.pantalla(n) : { x: W / 2 + this.cam.x + n.x * this.cam.z, y: H / 2 + this.cam.y + n.y * this.cam.z, delante: true };
+      let x, y, lado = 1;
+      if (W < 640 || !p) { x = 10; y = H - ch - 10; }                          // móvil: abajo, a lo ancho
+      else {
+        x = p.x + 80; if (x + cw > W - 10) { x = p.x - 80 - cw; lado = -1; }
+        x = Math.max(10, Math.min(W - cw - 10, x)); y = Math.max(52, Math.min(H - ch - 52, p.y - ch * .3));
+      }
+      const h = this.posHolo || (this.posHolo = { x, y }), suave = .22;
+      h.x += (x - h.x) * suave; h.y += (y - h.y) * suave;
+      det.style.transform = `translate(${h.x.toFixed(1)}px, ${h.y.toFixed(1)}px)`; det.classList.toggle('izq', lado < 0);
+      if (haz) {
+        const ver = p && p.delante && W >= 640; haz.hidden = !ver;
+        if (ver) {
+          const bx = lado > 0 ? h.x : h.x + cw, by = Math.max(h.y + 18, Math.min(h.y + ch - 18, p.y));
+          const [l, c] = haz.children; l.setAttribute('x1', p.x); l.setAttribute('y1', p.y); l.setAttribute('x2', bx); l.setAttribute('y2', by); c.setAttribute('cx', p.x); c.setAttribute('cy', p.y);
+          haz.style.setProperty('--holo', det.style.getPropertyValue('--holo'));
+        }
+      }
+      this.rafHolo = requestAnimationFrame(paso);
+    };
+    this.rafHolo = requestAnimationFrame(paso);
   },
 };
 
