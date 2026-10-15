@@ -41,12 +41,15 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   const geoEsfera = new THREE.SphereGeometry(1, 32, 22);
   const brillo = new Float32Array(Math.max(1, N));
   geoEsfera.setAttribute('brillo', new THREE.InstancedBufferAttribute(brillo, 1));
+  const rojez = new Float32Array(Math.max(1, N));
+  geoEsfera.setAttribute('rojez', new THREE.InstancedBufferAttribute(rojez, 1));
   const matEsfera = new THREE.ShaderMaterial({
-    uniforms: { tiempo: { value: 0 }, fondo: { value: fondo }, niebla: { value: oscuro ? 0.0011 : 0.0009 }, oscuro: { value: oscuro ? 1 : 0 } },
+    uniforms: { tiempo: { value: 0 }, fondo: { value: fondo }, niebla: { value: oscuro ? 0.0011 : 0.0009 }, oscuro: { value: oscuro ? 1 : 0 }, lejos: { value: 0 } },
     vertexShader: `
-      attribute float brillo;
-      varying vec3 vN; varying vec3 vV; varying vec3 vC; varying float vB; varying float vDist; varying vec3 vP;
+      attribute float brillo; attribute float rojez;
+      varying vec3 vN; varying vec3 vV; varying vec3 vC; varying float vB; varying float vDist; varying vec3 vP; varying float vR;
       void main() {
+        vR = rojez;
         vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
         vN = normalize(normalMatrix * mat3(instanceMatrix) * normal);
         vV = normalize(-mv.xyz);
@@ -54,8 +57,8 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
-      uniform float tiempo; uniform vec3 fondo; uniform float niebla; uniform float oscuro;
-      varying vec3 vN; varying vec3 vV; varying vec3 vC; varying float vB; varying float vDist; varying vec3 vP;
+      uniform float tiempo; uniform vec3 fondo; uniform float niebla; uniform float oscuro; uniform float lejos;
+      varying vec3 vN; varying vec3 vV; varying vec3 vC; varying float vB; varying float vDist; varying vec3 vP; varying float vR;
       float plasma(vec3 p) {
         return sin(p.x * 3.1 + tiempo * 1.3) * sin(p.y * 2.7 - tiempo * 1.1) * sin(p.z * 3.3 + tiempo * 0.9)
              + 0.5 * sin(p.x * 6.0 - p.z * 5.0 + tiempo * 2.0);
@@ -70,11 +73,12 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
         col += mix(vC, vec3(1.0), 0.25) * borde * 1.7;                                       // aura en el borde
         vec3 l = normalize(vec3(-0.45, 0.6, 1.0));
         col += vec3(1.0) * pow(max(dot(reflect(-l, n), v), 0.0), 48.0) * 0.45;   // brillo de cristal
-        vec3 luz = mix(vC, vec3(1.0), 0.55);
+        vec3 luz = mix(mix(vC, vec3(1.0), 0.55), vec3(1.0, 0.18, 0.26), clamp(vR, 0.0, 1.0));   // APOLO la tocó: luz roja
         col += luz * vB * (0.35 + 1.25 * centro * (0.7 + 0.6 * rem)); // el impulso la enciende por dentro
         col += luz * vB * borde * 0.8;
+        col *= 1.0 + lejos * 0.55;                                      // de lejos brillan más: si no, se apagan
         float f = 1.0 - exp(-niebla * niebla * vDist * vDist);
-        gl_FragColor = vec4(mix(col, fondo, f), 1.0);
+        gl_FragColor = vec4(mix(col, fondo, f * 0.85), 1.0);
       }`,
   });
   const esferas = new THREE.InstancedMesh(geoEsfera, matEsfera, Math.max(1, N));
@@ -88,7 +92,7 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   const halos = new THREE.Points(hGeo, new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: mezcla, vertexColors: true,
     uniforms: { escala: { value: 1 }, fuerza: { value: oscuro ? .9 : .45 } },
-    vertexShader: 'attribute float tam; varying vec3 vC; uniform float escala; void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = tam * escala * 300.0 / -mv.z; gl_Position = projectionMatrix * mv; }',
+    vertexShader: 'attribute float tam; varying vec3 vC; uniform float escala; void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = tam > 0.0 ? max(5.0, tam * escala * 300.0 / -mv.z) : 0.0; gl_Position = projectionMatrix * mv; }',
     fragmentShader: 'varying vec3 vC; uniform float fuerza; void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float a = pow(max(0.0, 1.0 - d), 2.2) * fuerza; if (a < 0.01) discard; gl_FragColor = vec4(vC, a); }',
   }));
   escena.add(halos);
@@ -117,15 +121,17 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   impulsosMalla.frustumCulled = false;
   escena.add(impulsosMalla);
   const cImp = new THREE.Color(acento).lerp(new THREE.Color('#ffffff'), oscuro ? .35 : 0);
-  const impulsos = [];                                   // { l, desde (nodo), t, gen }
+  const impulsos = [];                                   // { l, desde (nodo), t, gen, rojo }
+  const cRojo = new THREE.Color('#ff2d4a');
   let vivas = [], porNodo = new Map(), acumulado = 0;
-  function disparar(l, desde, gen = 0) {
-    if (impulsos.length >= MAX_IMP || !l) return;
-    impulsos.push({ l, desde, t: 0, gen });
+  function disparar(l, desde, gen = 0, rojo = false) {
+    if (!l || (impulsos.length >= MAX_IMP && !rojo)) return;
+    if (impulsos.length >= MAX_IMP) impulsos.splice(impulsos.findIndex(p => !p.rojo), 1);   // los rojos (APOLO de verdad) tienen prioridad
+    impulsos.push({ l, desde, t: 0, gen, rojo });
   }
-  function dispararDesde(n, cuantos, gen = 0, salvo = null) {
+  function dispararDesde(n, cuantos, gen = 0, salvo = null, rojo = false) {
     const ls = (porNodo.get(n.id) || []).filter(l => l !== salvo);
-    for (let i = 0; i < cuantos && ls.length; i++) disparar(ls.splice(Math.floor(Math.random() * ls.length), 1)[0], n, gen);
+    for (let i = 0; i < cuantos && ls.length; i++) disparar(ls.splice(Math.floor(Math.random() * ls.length), 1)[0], n, gen, rojo);
   }
   function pulsar(dt) {
     // en reposo: chispas sueltas por la red; con algo seleccionado, ese nodo "piensa" más
@@ -142,8 +148,9 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
       if (p.t >= 1 || !linea(p.l)) {
         impulsos.splice(i, 1);
         if (p.t >= 1) {
-          hasta.flash = Math.min(1.4, (hasta.flash || 0) + .9);
-          if (p.gen < 4 && Math.random() < (hasta.id === 'usuario' ? .35 : .6)) dispararDesde(hasta, Math.random() < .35 ? 2 : 1, p.gen + 1, p.l);
+          if (!p.rojo) hasta.flash = Math.min(1.4, (hasta.flash || 0) + .9);
+          if (p.rojo) { hasta.rojo = 1.5; if (p.gen < 2 && hasta.id !== 'usuario') dispararDesde(hasta, 2, p.gen + 1, p.l, true); }
+          else if (p.gen < 4 && Math.random() < (hasta.id === 'usuario' ? .35 : .6)) dispararDesde(hasta, Math.random() < .35 ? 2 : 1, p.gen + 1, p.l);
         }
       }
     }
@@ -151,12 +158,12 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     iTam.fill(0);
     impulsos.forEach((p, i) => {
       const a = p.desde.p3, b = (p.desde === p.l.s ? p.l.t : p.l.s).p3;
-      const fuerza = 1 - p.gen * .14;
+      const fuerza = (1 - p.gen * .14) * (p.rojo ? 1.6 : 1), cc = p.rojo ? cRojo : cImp;
       for (let k = 0; k < ESTELA; k++) {
         const t = Math.max(0, p.t - k * .016), j = i * ESTELA + k, desv = 1 - k / ESTELA;
         iPos[j * 3] = a.x + (b.x - a.x) * t; iPos[j * 3 + 1] = a.y + (b.y - a.y) * t; iPos[j * 3 + 2] = a.z + (b.z - a.z) * t;
         const br = fuerza * desv * (oscuro ? 1 : .9);
-        iCol[j * 3] = cImp.r * br; iCol[j * 3 + 1] = cImp.g * br; iCol[j * 3 + 2] = cImp.b * br;
+        iCol[j * 3] = cc.r * br; iCol[j * 3 + 1] = cc.g * br; iCol[j * 3 + 2] = cc.b * br;
         iTam[j] = (k === 0 ? 64 : 42 * desv) * fuerza;
       }
     });
@@ -175,8 +182,9 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
 
   let alfa = 1, sel = null, hover = null, vecSel = new Set(), aislado = null;
   const visibleBase = visible, lineaBase = linea;
-  visible = n => aislado ? n === aislado || !!vec.get(aislado.id)?.has(n.id) : visibleBase(n);
-  linea = l => aislado ? l.s === aislado || l.t === aislado : lineaBase(l);
+  const activo = n => n.activoHasta > performance.now();
+  visible = n => aislado ? n === aislado || !!vec.get(aislado.id)?.has(n.id) : visibleBase(n) || activo(n);
+  linea = l => aislado ? l.s === aislado || l.t === aislado : lineaBase(l) || ((activo(l.s) || activo(l.t)) && visible(l.s) && visible(l.t) && (l.s.id === 'usuario' || l.t.id === 'usuario'));
   const vec = new Map();
   for (const a of aristas) for (const [x, y] of [[a.s, a.t], [a.t, a.s]]) { if (!vec.has(x.id)) vec.set(x.id, new Set()); vec.get(x.id).add(y.id); }
 
@@ -207,7 +215,7 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
 
   const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), v3 = new THREE.Vector3(), esc = new THREE.Vector3();
   const cBlanco = new THREE.Color('#ffffff');
-  let solos = new Set();                                   // visibles sin ninguna línea visible: tienen vida propia
+  let solos = new Set(), lejos = 0, ahora = 0;                                   // visibles sin ninguna línea visible: tienen vida propia
   function volcar(t = 0) {
     const tenue = new THREE.Color().copy(fondo);
     solos = new Set(nodos.filter(n => visible(n) && !porNodo.has(n.id)).map(n => n.id));
@@ -218,21 +226,22 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
       const c = colorDe(n), fl = Math.min(1, n.flash || 0);
       const apagado = !aislado && ((sel && n !== sel && !vecSel.has(n.id)) || n.antes);
       if (apagado) c.lerp(tenue, sel && n !== sel && !vecSel.has(n.id) ? .78 : .45);
+      const ro = Math.min(1, n.rojo || 0); if (ro > .01) c.lerp(cRojo, ro * .85); rojez[i] = ro;
       esferas.setColorAt(i, c);
       const respira = solos.has(n.id) ? .18 + .16 * Math.sin(t * .0016 + i * 1.7) : 0;
-      brillo[i] = Math.min(1.6, fl * 1.2 + respira);
+      brillo[i] = Math.min(1.8, fl * 1.2 + respira + ro * 1.2);
       hPos.set([p.x, p.y, p.z], i * 3); hCol.set([c.r, c.g, c.b], i * 3);
       hTam[i] = vis ? r * (n === sel ? 7 : n.id === 'usuario' ? 6 : 4.2) * (apagado ? .5 : 1) * (1 + fl * 1.6 + (solos.has(n.id) ? .5 + .4 * Math.sin(t * .0016 + i * 1.7) : 0)) : 0;
     });
     esferas.instanceMatrix.needsUpdate = true; if (esferas.instanceColor) esferas.instanceColor.needsUpdate = true;
-    geoEsfera.attributes.brillo.needsUpdate = true;
+    geoEsfera.attributes.brillo.needsUpdate = geoEsfera.attributes.rojez.needsUpdate = true;
     hGeo.attributes.position.needsUpdate = hGeo.attributes.color.needsUpdate = hGeo.attributes.tam.needsUpdate = true;
     let k = 0;
     for (const l of aristas) {
       const vis = linea(l), a = l.s.p3, b = l.t.p3;
       if (vis) { vivas.push(l); for (const n of [l.s, l.t]) { if (!porNodo.has(n.id)) porNodo.set(n.id, []); porNodo.get(n.id).push(l); } }
       const on = sel && (l.s === sel || l.t === sel), aTu = l.s.id === 'usuario' || l.t.id === 'usuario';
-      const fuerza = !vis ? 0 : on ? 1 : sel ? .05 : aTu ? .1 : Math.min(.55, .16 + l.peso * .09);
+      const fuerza = (!vis ? 0 : on ? 1 : sel ? .05 : aTu ? .1 : Math.min(.55, .16 + l.peso * .09)) * (1 + lejos * .8);
       const c = (on ? cAcento : cTenue);
       if (vis) lPos.set([a.x, a.y, a.z, b.x, b.y, b.z], k * 6); else lPos.fill(0, k * 6, k * 6 + 6);   // oculta = longitud cero (la niebla aditiva las haría asomar)
       // con mezcla aditiva el "alfa" va en el color; en tema claro se aclara hacia el fondo
@@ -345,6 +354,27 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     if (!m.lengthSq()) return;
     m.setLength(vel); cam.position.add(m); objetivo.add(m);
   }
+  const registroEl = document.createElement('div'); registroEl.className = 'mv-actividad'; caja.appendChild(registroEl);
+  const porId = new Map(nodos.map(n => [n.id, n]));
+  function actividad({ accion, entidades = [] } = {}) {
+    const ns = entidades.map(id => porId.get(id)).filter(Boolean);
+    const tu = porId.get('usuario');
+    const fin = performance.now() + 12000;
+    ns.forEach((n, k) => {
+      n.activoHasta = fin;
+      setTimeout(() => {                                      // escalonado: se ve el recorrido
+        const l = aristas.find(a => (a.s === tu && a.t === n) || (a.t === tu && a.s === n));
+        if (l && tu) disparar(l, tu, 0, true); else { n.rojo = 1.5; dispararDesde(n, 2, 1, null, true); }
+      }, 80 + k * 90);
+    });
+    if (tu) tu.rojo = 1.2;
+    const linea = document.createElement('div');
+    linea.innerHTML = `<b>${accion === 'escribir' ? '✎ APOLO guardó' : '◉ APOLO leyó'}</b> ${ns.slice(0, 6).map(n => n.nombre).join(' · ') || '(recuerdos sin entidades)'}${ns.length > 6 ? ` +${ns.length - 6}` : ''}`;
+    registroEl.prepend(linea);
+    while (registroEl.children.length > 4) registroEl.lastChild.remove();
+    setTimeout(() => linea.classList.add('fuera'), 9000); setTimeout(() => linea.remove(), 10500);
+    alfa = Math.max(alfa, .2);
+  }
   const chip = document.createElement('button'); chip.className = 'mv-aislado'; chip.hidden = true; caja.appendChild(chip);
   chip.onclick = () => aislar(null);
   function aislar(n) {
@@ -385,9 +415,16 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     }
     cam.lookAt(objetivo); cam.updateMatrixWorld();
     luz.position.copy(cam.position);
-    for (const n of nodos) if (n.flash) n.flash = n.flash > .01 ? n.flash * Math.exp(-dt * 3.5) : 0;
+    for (const n of nodos) { if (n.flash) n.flash = n.flash > .01 ? n.flash * Math.exp(-dt * 3.5) : 0; if (n.rojo) n.rojo = n.rojo > .01 ? n.rojo * Math.exp(-dt * 1.2) : 0; }
+    ahora = t;
     for (const id of solos) if (Math.random() < dt * .22) { const n = nodos.find(x => x.id === id); if (n) n.flash = 1.3; }   // se encienden solos de vez en cuando
     matEsfera.uniforms.tiempo.value = t / 1000;
+    const dCam = cam.position.distanceTo(objetivo);
+    lejos = Math.max(0, Math.min(1, (dCam - 600) / 1600));
+    matEsfera.uniforms.lejos.value = lejos;
+    const densidad = (oscuro ? 0.0011 : 0.0009) * Math.max(.2, Math.min(1, 650 / dCam));   // la niebla acompaña al zoom
+    matEsfera.uniforms.niebla.value = densidad; escena.fog.density = densidad;
+    halos.material.uniforms.fuerza.value = (oscuro ? .9 : .45) * (1 + lejos * .45);
     volcar(t); pulsar(dt); renderer.render(escena, cam); etiquetas();
   }
   raf = requestAnimationFrame(bucle);
@@ -406,8 +443,8 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     enfocar(n) { if (n) volarA(new THREE.Vector3(n.p3.x, n.p3.y, n.p3.z), 200); },
     zoom(f) { acercar(1 / f); despierta(); },
     encuadrar,
-    aislar,
-    destruir() { chip.remove(); vivo = false; cancelAnimationFrame(raf); ro.disconnect(); renderer.dispose(); hGeo.dispose(); lGeo.dispose(); iGeo.dispose(); geoEsfera.dispose(); matEsfera.dispose(); cv.remove(); capaEt.remove(); },
+    aislar, actividad,
+    destruir() { chip.remove(); registroEl.remove(); vivo = false; cancelAnimationFrame(raf); ro.disconnect(); renderer.dispose(); hGeo.dispose(); lGeo.dispose(); iGeo.dispose(); geoEsfera.dispose(); matEsfera.dispose(); cv.remove(); capaEt.remove(); },
   };
 }
 

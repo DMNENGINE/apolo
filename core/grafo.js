@@ -229,9 +229,14 @@ function crearGrafo({ cfg, memoria }) {
     return { entidad: { id: e.id, nombre: e.nombre, tipo: e.tipo, alias: e.alias }, vecinos, recuerdos: recuerdos.map(r => ({ ...r, historico: !!lista.find(m => m.id === r.id)?.historico })) };
   }
   function borrarTodo() { g = vacio(); guardar(); }
+  // entidades que salen en estos recuerdos (para la actividad en vivo); sin "Tú"
+  function entidadesDe(ids) {
+    sync(); const s = new Set(ids);
+    return Object.values(g.entidades).filter(e => e.id !== 'usuario' && e.recuerdos.some(id => s.has(id))).map(e => e.id);
+  }
   function resumen() { sync(); return { entidades: Object.keys(g.entidades).length, relaciones: g.relaciones.length }; }
 
-  return { actualizar, datos, explorar, incorporar, pendientesLLM, candidatos, borrarTodo, resumen, TIPOS };
+  return { actualizar, datos, explorar, entidadesDe, incorporar, pendientesLLM, candidatos, borrarTodo, resumen, TIPOS };
 }
 
 // herramienta del agente

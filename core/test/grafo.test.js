@@ -129,3 +129,19 @@ test('ruido fuera del grafo: años, siglas genéricas, inicios de frase', () => 
   for (const x of ['2025', 'ID', 'IPs', 'VIP', 'IP 192.168.1.124', 'Entre 2024', 'Hasta 2026', 'Utiliza Windows', 'de Cuba', 'Tools']) assert.ok(esRuido(x), x);
   for (const x of ['APOLO', 'Raspberry Pi 5', 'DMNSHOP', 'Cuba', 'RTX 5060', 'Power Truck Services']) assert.ok(!esRuido(x), x);
 });
+
+test('uso de la memoria en vivo: leer y escribir llegan al bus con sus entidades', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'uso-'));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ memoria: { embeddings: null } }));
+  const { crearNucleo } = require('../index');
+  const n = crearNucleo({ dir, escaner: { escanear: async () => ({ nivel: 'verde', hallazgos: [], resumen: '', explicacion: '' }) } });
+  t.after(() => n.tareas.detener?.());
+  const ev = []; n.bus.on('memoria-uso', e => ev.push(e));
+  n.memoria.recordar({ texto: 'Tiene una Raspberry Pi 5 con el bot CONTROL-COMANDER', tipo: 'hecho' });
+  await new Promise(ok => setTimeout(ok, 400));
+  await n.memoria.contexto('qué hace la raspberry pi');
+  await new Promise(ok => setTimeout(ok, 400));
+  assert.deepStrictEqual(ev.map(e => e.accion), ['escribir', 'leer']);
+  assert.ok(ev[0].entidades.includes('raspberry-pi-5'), JSON.stringify(ev[0]));
+  assert.ok(ev[1].entidades.length >= 1);
+});

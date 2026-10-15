@@ -162,7 +162,7 @@ const HERRAMIENTAS = [
     descripcion: 'Busca en la memoria permanente datos guardados sobre el usuario.',
     parametros: { type: 'object', properties: { consulta: { type: 'string' } }, required: ['consulta'] },
     resumen: a => a.consulta,
-    ejecutar: async (a, ctx) => (await ctx.memoria.buscarH(a.consulta, { limite: 10 })).map(m => `${m.id} · ${m.tipo} · ${m.texto}`).join('\n') || '(nada guardado sobre eso)',
+    ejecutar: async (a, ctx) => { const r = await ctx.memoria.buscarH(a.consulta, { limite: 10 }); ctx.memoria.usar?.('leer', r.map(m => m.id)); return r.map(m => `${m.id} · ${m.tipo} · ${m.texto}`).join('\n') || '(nada guardado sobre eso)'; },
   },
   {
     nombre: 'olvidar', riesgo: 'lectura',

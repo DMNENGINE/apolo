@@ -48,6 +48,7 @@ MV_SUB.grafo = {
     $('.mv-zoom', v).onclick = e => { const b = e.target.closest('[data-z]'); if (!b) return; const z = +b.dataset.z; if (this.g3) { z ? this.g3.zoom(z) : this.g3.encuadrar(); return; } if (!z) this.encuadrar(); else this.zoomEn(this.W / 2, this.H / 2, z); };
     let tq; $('#mvQ', v).oninput = e => { clearTimeout(tq); tq = setTimeout(() => { const q = e.target.value.trim().toLowerCase(); if (!q) return; const n = this.nodos.filter(x => x.nombre.toLowerCase().includes(q)).sort((a, b) => b.importancia - a.importancia)[0]; if (n) { this.abrir(n); this.enfocar(n); } }, 250); };
   },
+  alEvento(e) { if (e.tipo === 'memoria-uso') this.g3?.actividad(e); },
   salir() { this.g3?.destruir(); this.g3 = null; cancelAnimationFrame(this.raf); this.raf = 0; this.ro?.disconnect(); this.ro = null; this.v = null; },
   montar() {
     const cv = $('#mvCanvas', this.v); if (!cv) return;

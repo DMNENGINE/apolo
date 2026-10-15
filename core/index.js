@@ -92,6 +92,21 @@ function crearNucleo(opciones = {}) {
   // FASE 4: memoria v2 — grafo, fases de sueño, línea de tiempo, privacidad y Wrapped
   const grafo = grafoMod.crearGrafo({ cfg, memoria });
   memoria.grafo = grafo;                                          // la herramienta explorar_grafo lo encuentra por ctx.memoria
+  {                                                               // uso de la memoria en vivo → impulsos rojos en el grafo 3D del panel
+    const cola = { leer: new Set(), escribir: new Set() }; let temp = null;
+    memoria.alUsar((accion, ids) => {
+      for (const id of ids) cola[accion]?.add(id);
+      temp = temp || setTimeout(() => {
+        temp = null;
+        if (cola.escribir.size) try { grafo.actualizar(); } catch { }   // lo nuevo entra al grafo antes de avisar
+        for (const accion of ['leer', 'escribir']) {
+          const ids = [...cola[accion]]; cola[accion].clear(); if (!ids.length) continue;
+          bus.emit('memoria-uso', { accion, recuerdos: ids.length, entidades: grafo.entidadesDe(ids).slice(0, 40) });
+        }
+      }, 250);
+      temp.unref?.();
+    });
+  }
   const sueno = require('./sueno').crearSueno({ cfg, bus, memoria, grafo, generarJSON: generarJSONvivo, modelo: modeloCerebro, registro, tareas,
     horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
   tareas.registrarInterna('sueno', async () => { await sueno.dormir({ motivo: 'noche' }); return ''; });   // el aviso llega a la hora del briefing

@@ -76,9 +76,9 @@ function crearMemoria({ cfg, embedder = null }) {
     if (!TIPOS.includes(tipo)) tipo = 'hecho';
     let m = reemplaza && lista.find(x => x.id === reemplaza);
     if (!m && !nuevo) m = lista.find(x => x.tipo === tipo && !x.historico && parecido(x.texto, texto) >= 0.6);   // lo histórico (de antes) no se pisa: es su continuidad
-    if (m) { Object.assign(m, { texto, tipo, actualizada: Date.now(), origen: origen || m.origen }); guardar(); indexarLuego(); return { ...m, accion: 'actualizada' }; }
+    if (m) { Object.assign(m, { texto, tipo, actualizada: Date.now(), origen: origen || m.origen }); guardar(); indexarLuego(); usar('escribir', [m.id]); return { ...m, accion: 'actualizada' }; }
     m = { id: crypto.randomUUID().slice(0, 6), texto, tipo, creada: Date.now(), actualizada: Date.now(), usos: 0, origen };
-    lista.push(m); guardar(); indexarLuego();
+    lista.push(m); guardar(); indexarLuego(); usar('escribir', [m.id]);
     return { ...m, accion: 'creada' };
   }
 
@@ -129,12 +129,17 @@ function crearMemoria({ cfg, embedder = null }) {
     }).filter(Boolean).sort((a, b) => b.s - a.s).slice(0, limite).map(x => x.m);
   }
 
+  // uso en vivo (para ver en el grafo cómo el modelo toca la memoria): alUsar(fn(accion, ids)); usar('leer'|'escribir', ids)
+  let oyenteUso = null;
+  const usar = (accion, ids) => { if (oyenteUso && ids?.length) try { oyenteUso(accion, ids); } catch { } };
+  const alUsar = f => { oyenteUso = f; };
+
   // bloque para el system prompt: perfil siempre + lo relevante para el mensaje actual
   async function contexto(mensaje, { maxChars = 2500 } = {}) {
     sync();
     const perfil = lista.filter(m => m.tipo === 'perfil');
     const relevantes = await buscarH(mensaje, { limite: 8, excluirPerfil: true });
-    if (relevantes.length) { for (const m of relevantes) m.usos = (m.usos || 0) + 1; guardar(); }
+    if (relevantes.length) { for (const m of relevantes) m.usos = (m.usos || 0) + 1; guardar(); usar('leer', relevantes.map(m => m.id)); }
     const lineas = [];
     let n = 0;
     for (const m of [...perfil, ...relevantes]) {                  // el perfil usa como mucho el 60 %: lo relevante siempre cabe
@@ -155,7 +160,7 @@ function crearMemoria({ cfg, embedder = null }) {
   // borra todo (privacidad): memoria y vectores
   function borrarTodo() { sync(); const n = lista.length; lista = []; guardar(); vecs = { modelo: embedder?.id, v: {} }; cache.clear(); try { fs.unlinkSync(fv); } catch { } return n; }
 
-  return { recordar, olvidar, editar, borrarTodo, vector: id => { sync(); const m = lista.find(x => x.id === id); return m && vecs.v[id]?.h === hash(m.texto) ? vector(id) : null; },
+  return { recordar, olvidar, editar, borrarTodo, usar, alUsar, vector: id => { sync(); const m = lista.find(x => x.id === id); return m && vecs.v[id]?.h === hash(m.texto) ? vector(id) : null; },
     buscar, buscarH, contexto, indexar, semantica: () => (embedder ? { modelo: embedder.id, indexados: Object.keys(vecs.v).length } : null), lista: () => { sync(); return lista; }, TIPOS };
 }
 

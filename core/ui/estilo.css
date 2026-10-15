@@ -758,6 +758,10 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mv-etiquetas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
 .mv-etiquetas span { position: absolute; left: 0; top: 0; white-space: nowrap; color: var(--txt); font-weight: 500; text-shadow: 0 0 6px var(--capa-1, #000), 0 0 2px var(--capa-1, #000); will-change: transform; }
 .mv-etiquetas span.fuerte { font-weight: 700; color: var(--acento); }
+.mv-actividad { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; max-width: 70%; }
+.mv-actividad div { padding: 4px 12px; border-radius: 99px; font-size: 12px; color: var(--txt); background: color-mix(in srgb, #ff2d4a 16%, var(--capa-2)); border: 1px solid color-mix(in srgb, #ff2d4a 55%, transparent); box-shadow: 0 0 16px color-mix(in srgb, #ff2d4a 30%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; transition: opacity 1.4s; }
+.mv-actividad div b { color: #ff6b7d; margin-right: 4px; }
+.mv-actividad div.fuera { opacity: 0; }
 .mv-aislado { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); padding: 6px 14px; border-radius: 99px; border: 1px solid var(--acento); background: color-mix(in srgb, var(--capa-2) 80%, transparent); color: var(--txt); font-size: 12.5px; font-weight: 600; cursor: pointer; backdrop-filter: blur(6px); box-shadow: 0 0 18px color-mix(in srgb, var(--acento) 35%, transparent); }
 .mv-ayuda3d { position: absolute; right: 10px; bottom: 10px; font-size: 11px; color: var(--txt-3); pointer-events: none; text-align: right; }
 .mv-modo { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; }

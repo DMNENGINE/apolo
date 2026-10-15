@@ -325,11 +325,12 @@ function iniciar(opciones = {}) {
           for (const x of cola.splice(0)) if (Date.now() - x.t < 15 * 60_000) rem(x.e);
           n.bus.on('remoto', rem);
         }
-        const a = e => enviar({ tipo: 'permiso', ...e }), b = e => enviar({ tipo: 'permiso-resuelto', ...e }), c = e => enviar(e), d = e => enviar({ ...e, tipo: 'tarea', subtipo: e.tipo }), ag = e => enviar({ tipo: 'agente', agente: e }), ctl = e => enviar({ ...e, tipo: 'control' });
+        const a = e => enviar({ tipo: 'permiso', ...e }), b = e => enviar({ tipo: 'permiso-resuelto', ...e }), c = e => enviar(e), d = e => enviar({ ...e, tipo: 'tarea', subtipo: e.tipo }), ag = e => enviar({ tipo: 'agente', agente: e }), ctl = e => enviar({ ...e, tipo: 'control' }), mu = e => enviar({ ...e, tipo: 'memoria-uso' });
+        n.bus.on('memoria-uso', mu);
         n.bus.on('permiso', a); n.bus.on('permiso-resuelto', b); n.bus.on('evento', c); n.bus.on('tarea', d); n.bus.on('agente', ag); n.bus.on('control', ctl);
         const hk = () => enviar({ tipo: 'permisos-externos' }); n.bus.on('nodo-permiso', hk); n.bus.on('nodo-refrescar', hk);   // permisos de los hooks de Claude Code (main.js)
         const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
-        req.on('close', () => { clearInterval(ping); n.bus.off('permiso', a); n.bus.off('permiso-resuelto', b); n.bus.off('evento', c); n.bus.off('tarea', d); n.bus.off('agente', ag); n.bus.off('control', ctl); n.bus.off('registro', g); n.bus.off('nodo-permiso', hk); n.bus.off('nodo-refrescar', hk);
+        req.on('close', () => { clearInterval(ping); n.bus.off('permiso', a); n.bus.off('permiso-resuelto', b); n.bus.off('evento', c); n.bus.off('tarea', d); n.bus.off('agente', ag); n.bus.off('control', ctl); n.bus.off('memoria-uso', mu); n.bus.off('registro', g); n.bus.off('nodo-permiso', hk); n.bus.off('nodo-refrescar', hk);
           if (esRemoto) { n.bus.off('remoto', rem); n.remotos--; n.bus.emit('remoto-conexion', { conectados: n.remotos }); }
           if (esMotor) {
             n.bus.off('motor', mot); n.motores[cliente]--;
