@@ -101,3 +101,12 @@ test('semántica: si los embeddings fallan, cae a la búsqueda léxica', async (
   mem.recordar({ texto: 'Su Raspberry Pi 5 está en 10.0.0.5', tipo: 'hecho' });
   assert.match((await mem.buscarH('la raspberry'))[0].texto, /10.0.0.5/);
 });
+
+test('contexto: un perfil enorme no echa fuera lo relevante', async () => {
+  const { mem } = nueva();
+  for (let i = 0; i < 60; i++) mem.recordar({ texto: `Dato de perfil número ${i} sobre gustos variados ${'x'.repeat(60)}`, tipo: 'perfil', nuevo: true });
+  mem.recordar({ texto: 'Su Raspberry Pi 5 está en 10.0.0.5', tipo: 'hecho' });
+  const c = await mem.contexto('reinicia la raspberry');
+  assert.match(c, /10\.0\.0\.5/);
+  assert.ok(c.length <= 2500 + 60);
+});

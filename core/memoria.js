@@ -136,9 +136,9 @@ function crearMemoria({ cfg, embedder = null }) {
     if (relevantes.length) { for (const m of relevantes) m.usos = (m.usos || 0) + 1; guardar(); }
     const lineas = [];
     let n = 0;
-    for (const m of [...perfil, ...relevantes]) {
+    for (const m of [...perfil, ...relevantes]) {                  // el perfil usa como mucho el 60 %: lo relevante siempre cabe
       const l = `- [${m.id}·${m.tipo}] ${m.texto}`;
-      if (n + l.length > maxChars) break;
+      if (n + l.length > (m.tipo === 'perfil' ? maxChars * 0.6 : maxChars)) { if (m.tipo === 'perfil') continue; break; }
       lineas.push(l); n += l.length;
     }
     return lineas.join('\n');

@@ -17,7 +17,7 @@ const MAX_HECHOS = 15;
 const REINTENTOS = 2;
 const ESQUEMA = {
   type: 'object',
-  properties: { hechos: { type: 'array', items: { type: 'object', properties: { texto: { type: 'string' }, tipo: { type: 'string', enum: ['perfil', 'preferencia', 'proyecto', 'persona', 'hecho'] } }, required: ['texto', 'tipo'] } } },
+  properties: { hechos: { type: 'array', items: { type: 'object', properties: { texto: { type: 'string' }, tipo: { type: 'string', enum: ['preferencia', 'proyecto', 'persona', 'hecho'] } }, required: ['texto', 'tipo'] } } },
   required: ['hechos'],
 };
 
@@ -123,8 +123,8 @@ function crearImportadorChatGPT({ cfg, memoria, generarJSON, modelo, bus }) {
           e.pausado = true;
           break;
         }
-        for (const h of (r.hechos || []).slice(0, MAX_HECHOS)) {
-          try { const m = memoria.recordar({ texto: h.texto, tipo: h.tipo, origen: 'importado de chatgpt' }); m.accion === 'creada' ? e.creados++ : e.actualizados++; }
+        for (const h of (r.hechos || []).slice(0, MAX_HECHOS)) {             // perfil → hecho: el perfil va siempre en el contexto y cientos lo llenarían
+          try { const m = memoria.recordar({ texto: h.texto, tipo: h.tipo === 'perfil' ? 'hecho' : h.tipo, origen: 'importado de chatgpt' }); m.accion === 'creada' ? e.creados++ : e.actualizados++; }
           catch { e.rechazados++; }                            // secretos, vacíos, demasiado largos
         }
         e.hecho = i + 1;

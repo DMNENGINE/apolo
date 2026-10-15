@@ -67,3 +67,10 @@ test('si el modelo falla se pausa y "continuar" sigue donde se quedó', async t 
   assert.strictEqual(imp.estado(), null);
   assert.ok(fs.existsSync(path.join(e.backup, '_resultado.json')));
 });
+
+test('lo que el modelo marca como perfil entra como hecho (el perfil va siempre en el contexto)', async t => {
+  const { imp, recuerdos } = montar(t, async () => ({ datos: { hechos: [{ texto: 'Vive en Miami', tipo: 'perfil' }] } }));
+  imp.empezar({ formato: 'chatgpt-export/1', conversaciones: [conv('2025-01-01', 1)] });
+  await imp.esperar();
+  assert.deepStrictEqual(recuerdos.map(h => h.tipo), ['hecho']);
+});
