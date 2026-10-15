@@ -754,6 +754,7 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mv-f i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .mv-f span { color: var(--txt-3); font-size: 11px; }
 .mv-f.off { opacity: .4; }
+.mv-modo { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
 .mv-f .i { width: 14px; height: 14px; }
 .mv-buscar { position: absolute; right: 10px; top: 10px; width: 220px; margin: 0; }
 .mv-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 4px; }

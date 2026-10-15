@@ -27,13 +27,14 @@ MV_SUB.grafo = {
   async pintar(v) {
     this.v = v;
     const d = await api('GET', '/grafo');
-    this.d = d; this.ocultos = this.ocultos || new Set();
+    this.d = d; this.ocultos = this.ocultos || new Set(); this.modo = this.modo || 'resumen'; this.sinAntes = !!this.sinAntes;
     const cuenta = t => d.nodos.filter(n => n.tipo === t).length;
     v.innerHTML = `<div class="pagina ancha">${cabecera('Grafo de la memoria', 'Personas, proyectos, lugares, cosas y herramientas que salen en tus recuerdos y cómo se conectan. La heurística lo actualiza al momento y el sueño REM lo afina con el modelo. Arrastra para moverte, rueda para zoom, clic en un punto para ver sus recuerdos.',
       `<span class="chip">${tr('{n} entidades', { n: d.total.entidades })}</span><span class="chip">${tr('{n} relaciones', { n: d.total.relaciones })}</span>`)}
       <div class="mv-grafo">
         <div class="mv-lienzo caja"><canvas id="mvCanvas"></canvas>
           <div class="mv-filtros">${Object.keys(MV_COLOR).map(t => `<button class="mv-f ${this.ocultos.has(t) ? 'off' : ''}" data-t="${t}"><i style="background:${MV_COLOR[t]}"></i>${tr(MV_TIPO_N[t])} <span>${cuenta(t)}</span></button>`).join('')}</div>
+          <div class="mv-modo"><button class="mv-f ${this.modo === 'resumen' ? '' : 'off'}" data-m="resumen" title="${tr('Lo más importante: los nodos con más recuerdos y relaciones')}">${tr('Resumen')}</button><button class="mv-f ${this.modo === 'todo' ? '' : 'off'}" data-m="todo">${tr('Todo')} <span>${d.nodos.length}</span></button><button class="mv-f ${this.sinAntes ? 'off' : ''}" data-m="antes" title="${tr('Lo que ya no es actual pero es parte de tu historia (borde punteado)')}">${tr('Lo de antes')} <span>${d.nodos.filter(n => n.antes).length}</span></button></div>
           <div class="mv-buscar buscador-lado">${ic('buscar')}<input id="mvQ" placeholder="${tr('Buscar entidad…')}"></div>
           <div class="mv-zoom"><button class="btn icono" data-z="1.25" title="${tr('Acercar')}">${ic('mas')}</button><button class="btn icono" data-z="0.8" title="${tr('Alejar')}"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button class="btn icono" data-z="0" title="${tr('Centrar')}">${ic('recargar')}</button></div>
           ${d.nodos.length < 2 ? `<div class="mv-vacio">${vacio('enlace', 'Aún no hay entidades. Se llenará solo a medida que el robot recuerde cosas.')}</div>` : ''}
@@ -42,8 +43,9 @@ MV_SUB.grafo = {
       </div></div>`;
     this.montar();
     $('.mv-filtros', v).onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; const t = b.dataset.t; this.ocultos.has(t) ? this.ocultos.delete(t) : this.ocultos.add(t); b.classList.toggle('off'); this.calentar(); };
+    $('.mv-modo', v).onclick = e => { const b = e.target.closest('[data-m]'); if (!b) return; if (b.dataset.m === 'antes') this.sinAntes = !this.sinAntes; else this.modo = b.dataset.m; this.sel = null; this.pintar(v); };
     $('.mv-zoom', v).onclick = e => { const b = e.target.closest('[data-z]'); if (!b) return; const z = +b.dataset.z; if (!z) this.encuadrar(); else this.zoomEn(this.W / 2, this.H / 2, z); };
-    let tq; $('#mvQ', v).oninput = e => { clearTimeout(tq); tq = setTimeout(() => { const q = e.target.value.trim().toLowerCase(); if (!q) return; const n = this.nodos.find(x => x.nombre.toLowerCase().includes(q)); if (n) { this.enfocar(n); this.abrir(n); } }, 250); };
+    let tq; $('#mvQ', v).oninput = e => { clearTimeout(tq); tq = setTimeout(() => { const q = e.target.value.trim().toLowerCase(); if (!q) return; const n = this.nodos.filter(x => x.nombre.toLowerCase().includes(q)).sort((a, b) => b.importancia - a.importancia)[0]; if (n) { this.abrir(n); this.enfocar(n); } }, 250); };
   },
   salir() { cancelAnimationFrame(this.raf); this.raf = 0; this.ro?.disconnect(); this.ro = null; this.v = null; },
   montar() {
@@ -54,8 +56,10 @@ MV_SUB.grafo = {
       const p = prev.get(n.id); const a = i * 2.399, r = 40 + 14 * Math.sqrt(i);
       return { ...n, x: p?.x ?? Math.cos(a) * r, y: p?.y ?? Math.sin(a) * r, vx: 0, vy: 0, r: n.id === 'usuario' ? 16 : 5 + Math.min(14, Math.sqrt(n.peso || 1) * 3.2), fijo: n.id === 'usuario' };
     });
+    const top = new Set([...this.nodos].sort((a, b) => b.importancia - a.importancia).slice(0, 120).map(n => n.id));
+    for (const n of this.nodos) n.top = top.has(n.id);
     const por = new Map(this.nodos.map(n => [n.id, n]));
-    this.aristas = this.d.aristas.map(a => ({ ...a, s: por.get(a.de), t: por.get(a.a) })).filter(a => a.s && a.t);
+    this.aristas = this.d.aristas.map(a => ({ ...a, s: por.get(a.de), t: por.get(a.a), floja: a.tipo === 'relacionado' && a.peso < 2 })).filter(a => a.s && a.t);
     this.vec = new Map(); for (const a of this.aristas) { for (const [x, y] of [[a.s, a.t], [a.t, a.s]]) { if (!this.vec.has(x.id)) this.vec.set(x.id, new Set()); this.vec.get(x.id).add(y.id); } }
     this.cam = this.cam || { x: 0, y: 0, z: 1 };
     this.ajustar(); this.ro = new ResizeObserver(() => { this.ajustar(); this.dibujar(); }); this.ro.observe(cv.parentElement);
@@ -66,11 +70,17 @@ MV_SUB.grafo = {
     this.W = r.width; this.H = r.height; cv.width = r.width * dpr; cv.height = r.height * dpr; cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   },
-  visible(n) { return !this.ocultos.has(n.tipo) || n.id === 'usuario'; },
+  // en Resumen se ve lo importante; al tocar un punto también todos sus vecinos
+  visible(n) {
+    if (n.id === 'usuario') return true;
+    if (this.ocultos.has(n.tipo) || (this.sinAntes && n.antes)) return false;
+    return this.modo === 'todo' || n.top || (this.sel && (n === this.sel || this.vec.get(this.sel.id)?.has(n.id)));
+  },
+  linea(a) { return this.visible(a.s) && this.visible(a.t) && (this.modo === 'todo' || !a.floja || (this.sel && (a.s === this.sel || a.t === this.sel))); },
   calentar() { this.alfa = 1; if (!this.raf) this.raf = requestAnimationFrame(() => this.paso()); },
   paso() {
     this.raf = 0; if (!this.v) return;
-    const N = this.nodos.filter(n => this.visible(n)), A = this.aristas.filter(a => this.visible(a.s) && this.visible(a.t));
+    const N = this.nodos.filter(n => this.visible(n)), A = this.aristas.filter(a => this.linea(a));
     const k = this.alfa;
     // repulsión (n² está bien para unos cientos de nodos)
     for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) {
@@ -101,9 +111,9 @@ MV_SUB.grafo = {
     c.save(); c.translate(this.W / 2 + cx, this.H / 2 + cy); c.scale(z, z);
     const sel = this.sel, vec = sel ? this.vec.get(sel.id) || new Set() : null, hov = this.hover;
     for (const a of this.aristas) {
-      if (!this.visible(a.s) || !this.visible(a.t)) continue;
-      const on = sel && (a.s === sel || a.t === sel);
-      c.strokeStyle = on ? acento : txt3; c.globalAlpha = sel ? (on ? .9 : .08) : Math.min(.55, .18 + a.peso * .08);
+      if (!this.linea(a)) continue;
+      const on = sel && (a.s === sel || a.t === sel), radio = a.s.id === 'usuario' || a.t.id === 'usuario';
+      c.strokeStyle = on ? acento : txt3; c.globalAlpha = sel ? (on ? .9 : .05) : radio ? .07 : Math.min(.5, .14 + a.peso * .08);   // las líneas a Tú casi transparentes: si no, todo es una rueda
       c.lineWidth = (on ? 2 : 1) * Math.min(3, .6 + a.peso * .4) / Math.sqrt(z);
       c.beginPath(); c.moveTo(a.s.x, a.s.y); c.lineTo(a.t.x, a.t.y); c.stroke();
     }
@@ -114,9 +124,10 @@ MV_SUB.grafo = {
       const col = n.id === 'usuario' ? acento : MV_COLOR[n.tipo] || '#999';
       c.globalAlpha = tenue ? .18 : 1;
       if (n === sel || n === hov || n.id === 'usuario') { c.shadowColor = col; c.shadowBlur = 18; }
+      if (n.antes) { c.globalAlpha *= .55; c.setLineDash([3 / z, 3 / z]); c.strokeStyle = col; c.lineWidth = 1.6 / z; c.beginPath(); c.arc(n.x, n.y, n.r + 2.5 / z, 0, 6.283); c.stroke(); c.setLineDash([]); }
       c.fillStyle = col; c.beginPath(); c.arc(n.x, n.y, n.r, 0, 6.283); c.fill(); c.shadowBlur = 0;
       if (n === sel) { c.strokeStyle = txt; c.lineWidth = 2 / z; c.beginPath(); c.arc(n.x, n.y, n.r + 4 / z, 0, 6.283); c.stroke(); }
-      const etiqueta = n.r >= 9 || z > 1.35 || n === sel || n === hov || (vec && vec.has(n.id));
+      const etiqueta = n.r >= 10 || (n.top && z > 1.1) || z > 1.8 || n === sel || n === hov || (vec && vec.has(n.id));
       if (etiqueta && !tenue) {
         c.font = `${n.id === 'usuario' ? 700 : 500} ${Math.max(10, 12 / Math.sqrt(z))}px ${css.getPropertyValue('--sans') || 'sans-serif'}`;
         c.fillStyle = txt; c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(n.nombre, n.x, n.y + n.r + 4);
@@ -160,7 +171,9 @@ MV_SUB.grafo = {
     cv.onwheel = e => { e.preventDefault(); const [px, py] = pos(e); this.zoomEn(px, py, e.deltaY < 0 ? 1.15 : 1 / 1.15); };
   },
   async abrir(n) {
-    this.sel = n; this.dibujar();
+    this.sel = n;
+    for (const id of this.vec.get(n.id) || []) { const o = this.nodos.find(x => x.id === id); if (o && !o.top && !o.colocado) { const a = Math.random() * 6.283; o.x = n.x + Math.cos(a) * 60; o.y = n.y + Math.sin(a) * 60; o.colocado = true; } }
+    this.calentar();
     const det = $('#mvDet'); if (!det) return;
     det.innerHTML = `<div class="vacio">${tr('Cargando…')}</div>`;
     try {
@@ -168,7 +181,7 @@ MV_SUB.grafo = {
       det.innerHTML = `<div class="mv-ent"><i style="background:${n.id === 'usuario' ? 'var(--acento)' : MV_COLOR[r.entidad.tipo]}"></i><div><b>${esc(r.entidad.nombre)}</b><small>${esc(tr(MV_TIPO_N[r.entidad.tipo] || r.entidad.tipo))}${r.entidad.alias?.length ? ` · ${esc(r.entidad.alias.join(', '))}` : ''}</small></div></div>
         ${r.vecinos.length ? `<div class="seccion">${tr('Conectado con')} <span class="n">${r.vecinos.length}</span></div><div class="mv-vecinos">${r.vecinos.slice(0, 24).map(x => `<button class="chip" data-id="${esc(x.id)}" title="${esc(x.relacion)}"><i style="background:${MV_COLOR[x.tipo] || '#999'}"></i>${esc(x.nombre)}${x.relacion && x.relacion !== 'relacionado' ? ` <em>· ${esc(x.relacion)}</em>` : ''}</button>`).join('')}</div>` : ''}
         <div class="seccion">${tr('Recuerdos')} <span class="n">${r.recuerdos.length}</span></div>
-        ${r.recuerdos.length ? r.recuerdos.map(m => `<div class="mv-rec"><span class="chip">${esc(tr(m.tipo))}</span> ${esc(m.texto)}</div>`).join('') : `<div class="tenue">${tr('Sin recuerdos directos.')}</div>`}`;
+        ${r.recuerdos.length ? r.recuerdos.map(m => `<div class="mv-rec"><span class="chip">${esc(tr(m.tipo))}</span>${m.historico ? ` <span class="chip">${tr('antes')}</span>` : ''} ${esc(m.texto)}</div>`).join('') : `<div class="tenue">${tr('Sin recuerdos directos.')}</div>`}`;
       det.onclick = e => { const b = e.target.closest('[data-id]'); if (!b) return; const x = this.nodos.find(y => y.id === b.dataset.id); if (x) { this.enfocar(x); this.abrir(x); } };
     } catch (e) { det.innerHTML = vacio('info', esc(e.message)); }
   },

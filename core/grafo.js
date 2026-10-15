@@ -23,6 +23,15 @@ const LUGARES = new Set('usa españa mexico cuba miami madrid barcelona texas fl
 const NO_ENTIDAD = new Set(('el la los las un una de del y o en es su sus le lo al por para con sin que se mi tu yo él ella ellos usuario prefiere tiene usa quiere le gusta ' +
   'lunes martes miércoles jueves viernes sábado domingo enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre hoy ayer mañana ' +
   'the a an and or of in on to is its he she they user prefers likes').split(' '));
+// ruido: años, números, siglas y palabras genéricas que la heurística cogía como nombres propios ("2025", "ID", "IPs", "Tools")
+const GENERICAS = new Set(('id ids ip ips vip hud ia ai pc pcs api apis app apps ui ux gb mb tb kb rgb usb hdmi url urls web dm dms bot bots tools tool ' +
+  'users user test tests projects project skills docs carpeta archivo archivos mod mods server servidor ok faq pro plus max mini beta demo v1 v2 v3 x y z si no sí ultra hd fps cpu gpu ram ssd json html css pdf zip exe dll').split(' '));
+// "Entre 2024", "Hasta 2026", "Utiliza Windows": inicios de frase, no nombres
+const VERBO_INICIAL = /^(de|del|entre|hasta|desde|en|antes|durante|utiliza|usa|usaba|utilizaba|tiene|tenia|posee|poseia|trabaja|trabajaba|busca|buscaba|desarrolla|desarrollaba|gestiona|gestionaba|prefiere|quiere|es|era|fue|ha|habia)\s/;
+const esRuido = nombre => {
+  const n = normal(nombre).trim();
+  return !n || GENERICAS.has(n) || VERBO_INICIAL.test(n) || /^[\d.,:/-]+$/.test(n) || /^(19|20)\d\d(s)?$/.test(n) || /^ips?\s+[\d.]+$/.test(n) || n.length < 2;
+};
 
 function crearGrafo({ cfg, memoria }) {
   const f = path.join(cfg.dir, 'grafo.json');
@@ -73,7 +82,7 @@ function crearGrafo({ cfg, memoria }) {
   // candidatos: herramientas conocidas, nombres propios (secuencias en Mayúscula que no abren frase), entidades ya conocidas
   function candidatos(texto) {
     const out = new Map();
-    const add = (nombre, tipo) => { const k = slug(nombre); if (k && k.length > 1 && !NO_ENTIDAD.has(normal(nombre))) if (!out.has(k) || out.get(k).tipo === 'cosa') out.set(k, { nombre, tipo }); };
+    const add = (nombre, tipo) => { const k = slug(nombre); if (k && k.length > 1 && !NO_ENTIDAD.has(normal(nombre)) && !esRuido(nombre)) if (!out.has(k) || out.get(k).tipo === 'cosa') out.set(k, { nombre, tipo }); };
     const n = normal(texto);
     // escrito como en el texto si aparece así ("MuJoCo"), si no Capitalizado
     const original = p => { const i = n.indexOf(p); const o = i >= 0 ? texto.slice(i, i + p.length) : ''; return o && normal(o) === p && /[A-Z]/.test(o) ? o : p === 'threejs' ? 'three.js' : p.length <= 3 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1); };
@@ -136,7 +145,7 @@ function crearGrafo({ cfg, memoria }) {
   function podar(vivos) {
     for (const e of Object.values(g.entidades)) e.recuerdos = e.recuerdos.filter(id => vivos.has(id));
     for (const r of g.relaciones) { r.recuerdos = r.recuerdos.filter(id => vivos.has(id)); r.peso = r.recuerdos.length; }
-    for (const [id, e] of Object.entries(g.entidades)) if (id !== 'usuario' && !e.recuerdos.length) delete g.entidades[id];
+    for (const [id, e] of Object.entries(g.entidades)) if (id !== 'usuario' && (!e.recuerdos.length || esRuido(e.nombre))) delete g.entidades[id];
     g.relaciones = g.relaciones.filter(r => r.peso > 0 && g.entidades[r.de] && g.entidades[r.a]);
     for (const k of ['heur', 'llm']) for (const id of Object.keys(g[k])) if (!vivos.has(id)) delete g[k][id];
   }
@@ -169,7 +178,7 @@ function crearGrafo({ cfg, memoria }) {
     const antes = new Set(Object.keys(g.entidades));
     for (const x of (datos.entidades || []).slice(0, 80)) {
       const nom = String(x?.nombre || '').trim();
-      if (!nom || NO_ENTIDAD.has(normal(nom))) continue;
+      if (!nom || NO_ENTIDAD.has(normal(nom)) || esRuido(nom)) continue;
       const esYo = /^(el )?usuario$|^yo$|^t[uú]$/i.test(nom);
       const e = esYo ? usuario() : asegurar(nom, x.tipo, 'llm');
       if (!e) continue;
@@ -194,7 +203,12 @@ function crearGrafo({ cfg, memoria }) {
   // ---------- consultas ----------
   function datos({ min = 0 } = {}) {
     actualizar();
-    const nodos = Object.values(g.entidades).map(e => ({ id: e.id, nombre: e.nombre, tipo: e.tipo, peso: e.recuerdos.length, fuente: e.fuente }));
+    const hist = new Set(memoria.lista().filter(m => m.historico).map(m => m.id));
+    const grado = {}; for (const r of g.relaciones) if (r.tipo !== 'relacionado' || r.peso > 1) { grado[r.de] = (grado[r.de] || 0) + 1; grado[r.a] = (grado[r.a] || 0) + 1; }
+    // importancia: recuerdos + relaciones con sentido; lo que solo sacó la heurística como "cosa" pesa menos
+    const nodos = Object.values(g.entidades).map(e => ({ id: e.id, nombre: e.nombre, tipo: e.tipo, peso: e.recuerdos.length, fuente: e.fuente,
+      antes: e.recuerdos.length > 0 && e.recuerdos.every(id => hist.has(id)),
+      importancia: e.id === 'usuario' ? 1e9 : (e.recuerdos.length * 2 + (grado[e.id] || 0)) * (e.tipo === 'cosa' && e.fuente !== 'llm' ? 0.5 : 1) }));
     const aristas = g.relaciones.filter(r => r.peso >= min).map(r => ({ de: r.de, a: r.a, tipo: r.tipo, peso: r.peso }));
     return { nodos, aristas, total: { entidades: nodos.length, relaciones: aristas.length, recuerdos: memoria.lista().length } };
   }
@@ -212,7 +226,7 @@ function crearGrafo({ cfg, memoria }) {
       return { id: o.id, nombre: o.nombre, tipo: o.tipo, relacion: r.tipo, peso: r.peso };
     }).sort((a, b) => b.peso - a.peso);
     const recuerdos = e.recuerdos.map(id => lista.find(m => m.id === id)).filter(Boolean).map(m => ({ id: m.id, texto: m.texto, tipo: m.tipo, actualizada: m.actualizada }));
-    return { entidad: { id: e.id, nombre: e.nombre, tipo: e.tipo, alias: e.alias }, vecinos, recuerdos };
+    return { entidad: { id: e.id, nombre: e.nombre, tipo: e.tipo, alias: e.alias }, vecinos, recuerdos: recuerdos.map(r => ({ ...r, historico: !!lista.find(m => m.id === r.id)?.historico })) };
   }
   function borrarTodo() { g = vacio(); guardar(); }
   function resumen() { sync(); return { entidades: Object.keys(g.entidades).length, relaciones: g.relaciones.length }; }
@@ -237,4 +251,4 @@ const HERRAMIENTA = {
   },
 };
 
-module.exports = { crearGrafo, HERRAMIENTA, slug, TIPOS };
+module.exports = { esRuido, crearGrafo, HERRAMIENTA, slug, TIPOS };

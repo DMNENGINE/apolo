@@ -284,6 +284,8 @@
     'Elegir la carpeta del export': 'Pick the export folder', 'En esa carpeta no hay conversations.json: ¿es el export de ChatGPT descomprimido?': 'No conversations.json in that folder: is it the unzipped ChatGPT export?',
     'Leyendo {n} archivos…': 'Reading {n} files…', 'no hay mensajes tuyos': 'no messages of yours',
     'Continuar': 'Continue',
+    'Resumen': 'Summary', 'Lo de antes': 'The past', 'antes': 'past', 'Lo más importante: los nodos con más recuerdos y relaciones': 'The most important: nodes with the most memories and relations',
+    'Lo que ya no es actual pero es parte de tu historia (borde punteado)': 'What is no longer current but is part of your story (dashed border)',
     'Importaciones anteriores': 'Previous imports', '{a} recuerdos · {b} automatizaciones · {c} agentes': '{a} memories · {b} automations · {c} agents', 'Todavía no has importado nada.': "You haven't imported anything yet.",
     'Demasiado grande (máx. 8 MB)': 'Too big (max 8 MB)', 'no parece un robot-migracion.json': "doesn't look like a robot-migracion.json", 'No pude leerlo: {x}': "Couldn't read it: {x}", 'Importando… (el modelo lee la memoria, puede tardar)': 'Importing… (the model reads the memory, may take a while)', 'Importado': 'Imported',
     'Notificaciones, repos, issues y PRs. Crear o comentar pide permiso.': 'Notifications, repos, issues and PRs. Creating or commenting asks for permission.', 'Token personal (github_pat_… o ghp_…)': 'Personal token (github_pat_… or ghp_…)',

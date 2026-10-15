@@ -123,3 +123,9 @@ test('API: /v1/grafo, /v1/linea, /v1/privacidad (exportar zip y borrar con doble
   assert.ok(fs.existsSync(path.join(dir, 'config.json')) && fs.existsSync(path.join(dir, 'token')));
   assert.strictEqual((await api('POST', '/privacidad/borrar', { codigo: p1.codigo, frase: 'BORRAR TODO' })).r.status, 409);   // el código no sirve dos veces
 });
+
+test('ruido fuera del grafo: años, siglas genéricas, inicios de frase', () => {
+  const { esRuido } = require('../grafo');
+  for (const x of ['2025', 'ID', 'IPs', 'VIP', 'IP 192.168.1.124', 'Entre 2024', 'Hasta 2026', 'Utiliza Windows', 'de Cuba', 'Tools']) assert.ok(esRuido(x), x);
+  for (const x of ['APOLO', 'Raspberry Pi 5', 'DMNSHOP', 'Cuba', 'RTX 5060', 'Power Truck Services']) assert.ok(!esRuido(x), x);
+});
