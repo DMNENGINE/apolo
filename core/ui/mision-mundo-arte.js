@@ -691,3 +691,118 @@ function mmCartel(c, cx, y, texto, { borde = '#2fd1b0', max = 400, brillo = 0, b
   });
   return { x: X, y: Y, w: W, h: H };
 }
+
+// ---------- taller de Leonardo (bahía de subagentes) ----------
+const MM_SEPIA = '#6b4423', MM_LINO = '#e2d3ae', MM_PERG = '#e8d9b0';
+mmObj('ornitoptero', 3, 2, 1, 26, c => {
+  const p = mmP(c), A = 26; c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(48, A + 58, 40, 6, 0, 0, 7); c.fill();
+  c.strokeStyle = '#5a3a1e'; c.lineWidth = 2; for (const [x1, x2] of [[30, 22], [66, 74]]) { c.beginPath(); c.moveTo(x1, A + 30); c.lineTo(x2, A + 60); c.stroke(); }
+  mmBisel(c, 34, A + 20, 28, 12, '#8a5a32'); p(36, A + 23, 24, 1, '#5a3a1e'); p(36, A + 28, 24, 1, '#5a3a1e');
+  c.strokeStyle = '#3a2a1a'; c.lineWidth = 1; for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(38 + i * 7, A + 20); c.lineTo(48, A + 4); c.stroke(); }
+  mmBisel(c, 45, A + 2, 6, 6, '#a8703f');
+}, (c, X, Y, t, e) => {
+  const A = 26, ang = Math.sin(t / (e.bahia ? 260 : 800)) * (e.bahia ? .5 : .25);
+  for (const lado of [-1, 1]) {
+    const sx = X + 48 + lado * 12, sy = Y + A + 22, L = 46, tipX = sx + lado * L * Math.cos(ang), tipY = sy - L * Math.sin(ang) * 1 - 6;
+    const pts = [[sx, sy]]; for (let i = 1; i <= 5; i++) { const f = i / 5; pts.push([sx + (tipX - sx) * f, sy + (tipY - sy) * f + Math.sin(f * Math.PI) * -6 + (i === 5 ? 0 : 0)]); }
+    c.fillStyle = 'rgba(226,211,174,.88)'; c.beginPath(); c.moveTo(sx, sy); pts.forEach(([x, y]) => c.lineTo(x, y));
+    for (let i = 5; i >= 0; i--) { const f = i / 5, x = sx + (tipX - sx) * f, y = sy + (tipY - sy) * f; c.lineTo(x, y + 8 + Math.sin(f * Math.PI) * 10 - f * 4 + (i % 2 ? 3 : 0)); } c.closePath(); c.fill();
+    c.strokeStyle = '#5a3a1e'; c.lineWidth = 1.5; c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.stroke();
+    c.lineWidth = 1; for (let i = 1; i <= 5; i++) { const f = i / 5, x = sx + (tipX - sx) * f, y = sy + (tipY - sy) * f; c.beginPath(); c.moveTo(x, y + Math.sin(f * Math.PI) * -6); c.lineTo(x - lado * 2, y + 8 + Math.sin(f * Math.PI) * 10 - f * 4); c.stroke(); }
+  }
+}, null);
+
+mmObj('tornillo', 2, 2, 1, 30, c => {
+  const p = mmP(c), A = 30; c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(32, A + 56, 28, 6, 0, 0, 7); c.fill();
+  c.fillStyle = '#7a4f2c'; c.beginPath(); c.ellipse(32, A + 50, 28, 8, 0, 0, 7); c.fill(); c.fillStyle = '#9a6b40'; c.beginPath(); c.ellipse(32, A + 48, 28, 8, 0, 0, 7); c.fill();
+  c.strokeStyle = '#5a3a1e'; c.lineWidth = 1; for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; c.beginPath(); c.moveTo(32, A + 48); c.lineTo(32 + Math.cos(a) * 26, A + 48 + Math.sin(a) * 7); c.stroke(); }
+  for (const x of [10, 54]) p(x, A + 36, 2, 12, '#5a3a1e');
+  p(31, 2, 3, A + 46, '#6b4423');
+}, (c, X, Y, t, e) => {
+  const A = 30, cx = X + 32, fase = t / (e.bahia ? 180 : 600);
+  for (let k = 0; k < 6; k++) {                                      // la espiral de lino, girando
+    const y = Y + A + 36 - k * 8, r = 26 - k * 3.3, a0 = fase + k * .9;
+    c.fillStyle = k % 2 ? 'rgba(226,211,174,.92)' : 'rgba(205,188,150,.92)';
+    c.beginPath(); c.ellipse(cx, y, r, r * .3, 0, a0 % (Math.PI * 2), a0 % (Math.PI * 2) + Math.PI * 1.3); c.lineTo(cx, y - 8); c.closePath(); c.fill();
+    c.strokeStyle = '#a3402c'; c.lineWidth = 1; c.beginPath(); c.ellipse(cx, y, r, r * .3, 0, a0 % (Math.PI * 2), a0 % (Math.PI * 2) + Math.PI * 1.3); c.stroke();
+  }
+  c.fillStyle = '#6b4423'; c.fillRect(cx - 1, Y + 2, 3, A + 34);
+}, null);
+
+mmObj('maniqui', 1, 2, 1, 22, c => {
+  const p = mmP(c), A = 22; c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(16, A + 60, 13, 3, 0, 0, 7); c.fill();
+  mmBisel(c, 6, A + 54, 20, 6, '#6b4423'); p(15, A + 40, 2, 15, '#5a3a1e');
+}, (c, X, Y, t) => {
+  const A = 22, cx = X + 16, cy = Y + A + 22, p = mmP(c), w = '#c8955a', wS = '#9a6b40', j = '#7a4f2c';
+  const giro = Math.cos(t / 1400);                                     // el anillo del hombre de Vitruvio gira como un giroscopio
+  c.strokeStyle = '#c9a24a'; c.lineWidth = 2; c.beginPath(); c.ellipse(cx, cy, Math.abs(giro) * 18 + 1, 20, 0, 0, 7); c.stroke();
+  c.strokeStyle = 'rgba(201,162,74,.6)'; c.lineWidth = 1; c.strokeRect(cx - 14, cy - 15, 28, 33);
+  p(cx - 3, cy - 18, 6, 6, w); p(cx - 2, cy - 12, 4, 2, wS); p(cx - 3, cy - 10, 6, 11, w); p(cx + 2, cy - 10, 1, 11, wS);
+  p(cx - 14, cy - 9, 11, 2, w); p(cx + 3, cy - 9, 11, 2, w); p(cx - 15, cy - 9, 2, 2, j); p(cx + 13, cy - 9, 2, 2, j); p(cx - 4, cy - 9, 2, 2, j); p(cx + 2, cy - 9, 2, 2, j);
+  p(cx - 4, cy + 1, 3, 12, w); p(cx + 1, cy + 1, 3, 12, w); p(cx - 4, cy + 6, 3, 2, j); p(cx + 1, cy + 6, 3, 2, j);
+  p(cx - 7, cy + 12, 3, 3, w); p(cx + 4, cy + 12, 3, 3, w);
+}, null);
+
+mmObj('caballete', 1, 2, 1, 18, c => {
+  const p = mmP(c), A = 18; c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(16, A + 60, 13, 3, 0, 0, 7); c.fill();
+  c.strokeStyle = '#6b4423'; c.lineWidth = 2; for (const [x1, x2] of [[10, 4], [22, 28], [16, 16]]) { c.beginPath(); c.moveTo(x1, A + 6); c.lineTo(x2, A + 62); c.stroke(); }
+  p(3, A + 38, 26, 3, '#7a4f2c');
+  mmBisel(c, 2, 4, 28, A + 32, '#8a5a32'); p(4, 6, 24, A + 28, '#3c4a2c');                 // retrato al estilo renacentista
+  p(4, 6, 24, 10, '#5b6a42'); p(4, 22, 24, 6, '#4a5636');
+  p(11, 12, 10, 12, '#d9b38a'); p(10, 10, 12, 4, '#3a2414'); p(9, 12, 3, 14, '#3a2414'); p(20, 12, 3, 14, '#3a2414');
+  p(13, 16, 2, 1, '#2a1a0e'); p(17, 16, 2, 1, '#2a1a0e'); p(14, 20, 4, 1, '#a0644a');
+  p(8, 26, 16, A + 8, '#2e2418'); p(12, 34, 8, 4, '#d9b38a'); p(10, 26, 12, 3, '#d9b38a');
+}, null, null);
+
+mmObj('engranajes', 2, 2, 1, 14, c => {
+  const p = mmP(c), A = 14; c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(4, A + 58, 58, 4);
+  mmBisel(c, 2, A + 4, 4, 56, '#6b4423'); mmBisel(c, 58, A + 4, 4, 56, '#6b4423'); mmBisel(c, 2, A + 52, 60, 6, '#7a4f2c'); mmBisel(c, 2, A, 60, 5, '#7a4f2c');
+}, (c, X, Y, t, e) => {
+  const A = 14, v = (e.bahia ? 3 : 1) * t / 1000;
+  const rueda = (cx, cy, r, n, ang, col) => {
+    c.fillStyle = col; c.beginPath();
+    for (let i = 0; i < n * 2; i++) { const a = ang + i / (n * 2) * Math.PI * 2, rr = i % 2 ? r : r + 3; c.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+    c.closePath(); c.fill(); c.strokeStyle = '#3a2410'; c.lineWidth = 1; c.stroke();
+    c.fillStyle = mmTono(col, -.25); c.beginPath(); c.arc(cx, cy, r * .55, 0, 7); c.fill();
+    c.strokeStyle = mmTono(col, .2); for (let i = 0; i < 4; i++) { const a = ang + i * Math.PI / 2; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * r * .9, cy + Math.sin(a) * r * .9); c.stroke(); }
+    c.fillStyle = '#3a2410'; c.fillRect(cx - 2, cy - 2, 4, 4);
+  };
+  rueda(X + 22, Y + A + 26, 14, 12, v, '#b07c4a'); rueda(X + 45, Y + A + 18, 9, 8, -v * 14 / 9 + .2, '#c8955a'); rueda(X + 44, Y + A + 40, 8, 7, -v * 14 / 8, '#9a6b40');
+}, null);
+
+mmObj('carro', 2, 2, 1, 14, c => {
+  const p = mmP(c), A = 14; c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(32, A + 56, 30, 7, 0, 0, 7); c.fill();
+  for (let k = 0; k < 7; k++) { const w = 58 - k * 7, y = A + 50 - k * 6; c.fillStyle = k % 2 ? '#8a5a32' : '#9a6b40'; c.beginPath(); c.ellipse(32, y, w / 2, 7 - k * .5, 0, Math.PI, 0); c.fill(); c.fillStyle = mmTono(k % 2 ? '#8a5a32' : '#9a6b40', -.25); c.fillRect(32 - w / 2, y, w, 2); }
+  for (let i = 0; i < 5; i++) { const a = Math.PI * (.15 + i * .175), x = 32 + Math.cos(a) * 26, y = A + 46 - Math.sin(a) * 4; p(x - 2, y - 2, 4, 3, '#1c140c'); p(x - 1, y - 1, 2, 1, '#59626e'); }
+  mmBisel(c, 26, 2, 12, A - 2, '#7a4f2c'); p(28, 4, 8, 3, '#1c140c'); p(31, 0, 2, 3, '#c9a24a');
+}, null, null);
+
+mmObj('codice', 2, 1, 0, 0, c => {
+  const p = mmP(c);
+  for (const [x, r] of [[2, -.06], [32, .05]]) {
+    c.save(); c.translate(x + 14, 15); c.rotate(r); p(-13, -12, 27, 24, MM_PERG); p(-13, -12, 27, 1, '#f4ead0'); p(13, -12, 1, 24, '#c9b88a');
+    c.strokeStyle = '#7a5230'; c.lineWidth = 1;
+    if (x === 2) { c.beginPath(); c.arc(0, 0, 9, 0, 7); c.stroke(); c.strokeRect(-8, -8, 16, 17); c.beginPath(); c.moveTo(0, -6); c.lineTo(0, 4); c.moveTo(-9, -3); c.lineTo(9, -3); c.moveTo(-6, -5); c.lineTo(6, -1); c.moveTo(0, 4); c.lineTo(-4, 9); c.moveTo(0, 4); c.lineTo(4, 9); c.stroke(); }
+    else { c.beginPath(); c.arc(-4, -3, 5, 0, 7); c.stroke(); for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; c.beginPath(); c.moveTo(-4 + Math.cos(a) * 5, -3 + Math.sin(a) * 5); c.lineTo(-4 + Math.cos(a) * 7, -3 + Math.sin(a) * 7); c.stroke(); }
+      c.beginPath(); c.moveTo(3, -8); c.quadraticCurveTo(9, -10, 11, -4); c.stroke(); }
+    for (let k = 0; k < 3; k++) p(-10, 6 + k * 2, 8 + (k * 5) % 9, 1, 'rgba(90,58,30,.6)');   // escritura en espejo
+    p(-1, -12, 2, 2, '#8a2b2b'); c.restore();
+  }
+}, null, null);
+
+mmObj('banco', 2, 1, 1, 14, c => {
+  const p = mmP(c), A = 14; c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(4, 28 + A, 58, 4);
+  p(5, 16 + A, 4, 14, '#4a2e16'); p(55, 16 + A, 4, 14, '#4a2e16'); p(5, 24 + A, 54, 2, '#5a3a1e'); mmBisel(c, 2, 6 + A, 60, 11, '#9a6b40'); p(2, 15 + A, 60, 3, '#6b4423');
+  p(6, 2 + A, 18, 3, '#b8c0c9'); for (let i = 0; i < 6; i++) p(7 + i * 3, 5 + A, 1, 1, '#8a96a3'); p(22, 1 + A, 6, 5, '#6b4423');
+  p(32, 3 + A, 2, 8, '#6b4423'); p(29, 1 + A, 8, 3, '#59626e');
+  c.strokeStyle = '#8a96a3'; c.beginPath(); c.moveTo(44, 10 + A); c.lineTo(48, 1 + A); c.lineTo(52, 10 + A); c.stroke();
+  c.strokeStyle = '#c9a24a'; c.beginPath(); c.arc(56, 6 + A, 3, 0, 7); c.stroke();
+  for (const [x, y] of [[12, 12], [16, 13], [40, 12]]) { p(x, y + A, 3, 1, '#e0b47a'); }
+}, null, null);
+
+mmObj('vela', 1, 1, 1, 18, c => {
+  const p = mmP(c), A = 18; c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(16, A + 29, 8, 2, 0, 0, 7); c.fill();
+  p(15, A + 4, 2, 24, '#3a3a40'); p(10, A + 26, 12, 3, '#2a2a30'); p(8, A + 6, 16, 2, '#3a3a40');
+  for (const x of [8, 15, 22]) { p(x, A - 2, 3, 8, '#efe4c8'); p(x, A - 2, 1, 8, '#ffffff'); }
+}, (c, X, Y, t, e, o) => { for (const [x, k] of [[9.5, 0], [16.5, 1], [23.5, 2]]) mmLlama(c, X + x, Y + 15, t + k * 333 + o.x * 91, .45); },
+(o, X, Y, t) => [{ x: X + 16, y: Y + 14, r: 95 + Math.sin(t / 110 + o.y) * 5, col: [255, 180, 90], a: .7, bloom: 10 }]);
