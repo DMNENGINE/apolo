@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.9] - 2026-10-15
+
+### Added
+- **Mission Control world**: a live pixel-art map next to the classic list (Mundo | Lista). APOLO is the boss wizard: he conjures at the core when there is work and otherwise patrols the rooms commenting on what he sees and giving orders in speech bubbles. Every real agent is a character with its model's avatar (Claude, ChatGPT, Gemini, an Ollama llama, DeepSeek…); connected models roam the whole map and walk to their task when used. Subagents go to Leonardo's workshop, scheduled tasks to the 3D-printer room, plugins are goblins in the server room.
+- **Claude Code, Gemini CLI and opencode sessions** show up in Mission Control as agents (state, tool, pending permission, model, tokens).
+- **Tool effects**: web search sends a data stream from the core and wraps the agent in a globe aura; memory, subagents, terminal, files, screen and MCP each have their own aura and bubble icon; MCP calls light up the **MCP lab** (floor portal, robotic arms firing lasers, an object materialising).
+- **Your online services in the server racks**: websites (HTTP), systemd units and pm2 apps over SSH, TCP ports — checked every minute, LED per service, floor plate per rack, red alarm when something goes down. Discord bots get their own avatar and personality and walk around.
+- Dynamic lighting, particles, floor signs, holographic cards on tap, HUD with CPU/RAM/tokens, E-STOP and panic.
+- **Create your own world**: describe it and APOLO generates it, or pick one from the gallery (Dungeon, Alien hive, Inferno, Science station). New **mission-control skill** turns a reference image into a world (validate, screenshot, compare, apply).
+- **Internet Archive tools**: search archive.org, read books page by page or search inside them, Wayback Machine snapshots, download items.
+
+### Changed
+- Memory graph: the side panel is gone; tapping a node opens a holographic card next to it.
+
 ## [0.2.8] - 2026-10-15
 
 ### Added
