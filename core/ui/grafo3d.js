@@ -60,6 +60,66 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   escena.add(lineas);
   esferas.frustumCulled = halos.frustumCulled = lineas.frustumCulled = false;   // se mueven cada fotograma
   const cTenue = new THREE.Color(css.getPropertyValue('--txt-3').trim() || '#777');
+
+  // ---------- impulsos nerviosos: viajan por las conexiones; al llegar el nodo destella y a veces dispara más (cascada) ----------
+  const MAX_IMP = 260, ESTELA = 14;
+  const iPos = new Float32Array(MAX_IMP * ESTELA * 3), iCol = new Float32Array(MAX_IMP * ESTELA * 3), iTam = new Float32Array(MAX_IMP * ESTELA);
+  const iGeo = new THREE.BufferGeometry();
+  iGeo.setAttribute('position', new THREE.BufferAttribute(iPos, 3)); iGeo.setAttribute('color', new THREE.BufferAttribute(iCol, 3)); iGeo.setAttribute('tam', new THREE.BufferAttribute(iTam, 1));
+  const impulsosMalla = new THREE.Points(iGeo, new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: mezcla, vertexColors: true,
+    uniforms: { escala: { value: 1 } },
+    vertexShader: 'attribute float tam; varying vec3 vC; uniform float escala; void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = tam > 0.0 ? max(5.0, tam * escala * 300.0 / -mv.z) : 0.0; gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'varying vec3 vC; void main(){ float d = length(gl_PointCoord - 0.5) * 2.0; float nucleo = smoothstep(0.35, 0.0, d); float a = pow(max(0.0, 1.0 - d), 2.0) + nucleo; if (a < 0.02) discard; gl_FragColor = vec4(mix(vC * 1.5, vec3(1.0), nucleo * 0.7), min(1.0, a)); }',
+  }));
+  impulsosMalla.frustumCulled = false;
+  escena.add(impulsosMalla);
+  const cImp = new THREE.Color(acento).lerp(new THREE.Color('#ffffff'), oscuro ? .35 : 0);
+  const impulsos = [];                                   // { l, desde (nodo), t, gen }
+  let vivas = [], porNodo = new Map(), acumulado = 0;
+  function disparar(l, desde, gen = 0) {
+    if (impulsos.length >= MAX_IMP || !l) return;
+    impulsos.push({ l, desde, t: 0, gen });
+  }
+  function dispararDesde(n, cuantos, gen = 0, salvo = null) {
+    const ls = (porNodo.get(n.id) || []).filter(l => l !== salvo);
+    for (let i = 0; i < cuantos && ls.length; i++) disparar(ls.splice(Math.floor(Math.random() * ls.length), 1)[0], n, gen);
+  }
+  function pulsar(dt) {
+    // en reposo: chispas sueltas por la red; con algo seleccionado, ese nodo "piensa" más
+    acumulado += dt * (sel ? 30 : 20);
+    while (acumulado >= 1 && vivas.length) {
+      acumulado--;
+      if (sel && Math.random() < .65) dispararDesde(sel, 1);
+      else { const l = vivas[Math.floor(Math.random() * vivas.length)]; disparar(l, Math.random() < .5 ? l.s : l.t); }
+    }
+    for (let i = impulsos.length - 1; i >= 0; i--) {
+      const p = impulsos[i], a = p.desde.p3, hasta = p.desde === p.l.s ? p.l.t : p.l.s, b = hasta.p3;
+      const largo = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) || 1;
+      p.t += dt * 200 / largo * (1 + p.gen * .15);
+      if (p.t >= 1 || !linea(p.l)) {
+        impulsos.splice(i, 1);
+        if (p.t >= 1) {
+          hasta.flash = Math.min(1.4, (hasta.flash || 0) + .9);
+          if (p.gen < 4 && Math.random() < (hasta.id === 'usuario' ? .35 : .6)) dispararDesde(hasta, Math.random() < .35 ? 2 : 1, p.gen + 1, p.l);
+        }
+      }
+    }
+    // al buffer: cabeza grande y estela que se apaga
+    iTam.fill(0);
+    impulsos.forEach((p, i) => {
+      const a = p.desde.p3, b = (p.desde === p.l.s ? p.l.t : p.l.s).p3;
+      const fuerza = 1 - p.gen * .14;
+      for (let k = 0; k < ESTELA; k++) {
+        const t = Math.max(0, p.t - k * .016), j = i * ESTELA + k, desv = 1 - k / ESTELA;
+        iPos[j * 3] = a.x + (b.x - a.x) * t; iPos[j * 3 + 1] = a.y + (b.y - a.y) * t; iPos[j * 3 + 2] = a.z + (b.z - a.z) * t;
+        const br = fuerza * desv * (oscuro ? 1 : .9);
+        iCol[j * 3] = cImp.r * br; iCol[j * 3 + 1] = cImp.g * br; iCol[j * 3 + 2] = cImp.b * br;
+        iTam[j] = (k === 0 ? 64 : 42 * desv) * fuerza;
+      }
+    });
+    iGeo.attributes.position.needsUpdate = iGeo.attributes.color.needsUpdate = iGeo.attributes.tam.needsUpdate = true;
+  }
   const cAcento = new THREE.Color(acento);
 
   // ---------- posiciones iniciales: esfera de Fibonacci, lo importante más cerca del centro ----------
@@ -99,23 +159,27 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   }
 
   const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion(), v3 = new THREE.Vector3(), esc = new THREE.Vector3();
+  const cBlanco = new THREE.Color('#ffffff');
   function volcar() {
     const tenue = new THREE.Color().copy(fondo);
+    vivas = []; porNodo = new Map();
     nodos.forEach((n, i) => {
       const vis = visible(n), p = n.p3, r = vis ? radio(n) * (n === sel ? 1.35 : n === hover ? 1.15 : 1) : 0;
       m4.compose(v3.set(p.x, p.y, p.z), q0, esc.set(r, r, r)); esferas.setMatrixAt(i, m4);
-      const c = colorDe(n);
+      const c = colorDe(n), fl = Math.min(1, n.flash || 0);
       const apagado = (sel && n !== sel && !vecSel.has(n.id)) || n.antes;
       if (apagado) c.lerp(tenue, sel && n !== sel && !vecSel.has(n.id) ? .78 : .45);
+      if (fl > .01) c.lerp(cBlanco, fl * .55);
       esferas.setColorAt(i, c);
       hPos.set([p.x, p.y, p.z], i * 3); hCol.set([c.r, c.g, c.b], i * 3);
-      hTam[i] = vis ? r * (n === sel ? 7 : n.id === 'usuario' ? 6 : 4.2) * (apagado ? .5 : 1) : 0;
+      hTam[i] = vis ? r * (n === sel ? 7 : n.id === 'usuario' ? 6 : 4.2) * (apagado ? .5 : 1) * (1 + fl * 1.2) : 0;
     });
     esferas.instanceMatrix.needsUpdate = true; if (esferas.instanceColor) esferas.instanceColor.needsUpdate = true;
     hGeo.attributes.position.needsUpdate = hGeo.attributes.color.needsUpdate = hGeo.attributes.tam.needsUpdate = true;
     let k = 0;
     for (const l of aristas) {
       const vis = linea(l), a = l.s.p3, b = l.t.p3;
+      if (vis) { vivas.push(l); for (const n of [l.s, l.t]) { if (!porNodo.has(n.id)) porNodo.set(n.id, []); porNodo.get(n.id).push(l); } }
       const on = sel && (l.s === sel || l.t === sel), aTu = l.s.id === 'usuario' || l.t.id === 'usuario';
       const fuerza = !vis ? 0 : on ? 1 : sel ? .05 : aTu ? .1 : Math.min(.55, .16 + l.peso * .09);
       const c = (on ? cAcento : cTenue);
@@ -237,7 +301,7 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
   function tamaño() {
     const w = caja.clientWidth, h = caja.clientHeight; if (!w || !h) return;
     renderer.setSize(w, h, false); cv.style.width = w + 'px'; cv.style.height = h + 'px';
-    cam.aspect = w / h; cam.updateProjectionMatrix(); halos.material.uniforms.escala.value = h / 900 * (renderer.getPixelRatio());
+    cam.aspect = w / h; cam.updateProjectionMatrix(); halos.material.uniforms.escala.value = impulsosMalla.material.uniforms.escala.value = h / 900 * (renderer.getPixelRatio());
   }
   const ro = new ResizeObserver(tamaño); ro.observe(caja); tamaño();
   function bucle(t) {
@@ -254,7 +318,8 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
     }
     cam.lookAt(objetivo); cam.updateMatrixWorld();
     luz.position.copy(cam.position);
-    volcar(); renderer.render(escena, cam); etiquetas();
+    for (const n of nodos) if (n.flash) n.flash = n.flash > .01 ? n.flash * Math.exp(-dt * 3.5) : 0;
+    volcar(); pulsar(dt); renderer.render(escena, cam); etiquetas();
   }
   raf = requestAnimationFrame(bucle);
 
@@ -268,11 +333,11 @@ function crear(caja, { nodos, aristas, visible, linea, colores, acento, alTocar 
 
   return {
     refrescar() { alfa = Math.max(alfa, .5); },
-    seleccionar(n) { sel = n; vecSel = n ? vec.get(n.id) || new Set() : new Set(); if (n) for (const id of vecSel) { const o = nodos.find(x => x.id === id); if (o && !o.top && !o.colocado3) { const d = new THREE.Vector3().randomDirection().multiplyScalar(55); Object.assign(o.p3, { x: n.p3.x + d.x, y: n.p3.y + d.y, z: n.p3.z + d.z }); o.colocado3 = true; } } alfa = Math.max(alfa, .25); },
+    seleccionar(n) { sel = n; vecSel = n ? vec.get(n.id) || new Set() : new Set(); if (n) { n.flash = 1.4; setTimeout(() => sel === n && dispararDesde(n, 8), 60); } if (n) for (const id of vecSel) { const o = nodos.find(x => x.id === id); if (o && !o.top && !o.colocado3) { const d = new THREE.Vector3().randomDirection().multiplyScalar(55); Object.assign(o.p3, { x: n.p3.x + d.x, y: n.p3.y + d.y, z: n.p3.z + d.z }); o.colocado3 = true; } } alfa = Math.max(alfa, .25); },
     enfocar(n) { if (n) volarA(new THREE.Vector3(n.p3.x, n.p3.y, n.p3.z), 200); },
     zoom(f) { acercar(1 / f); despierta(); },
     encuadrar,
-    destruir() { vivo = false; cancelAnimationFrame(raf); ro.disconnect(); renderer.dispose(); esferas.geometry.dispose(); esferas.material.dispose(); hGeo.dispose(); lGeo.dispose(); cv.remove(); capaEt.remove(); },
+    destruir() { vivo = false; cancelAnimationFrame(raf); ro.disconnect(); renderer.dispose(); esferas.geometry.dispose(); esferas.material.dispose(); hGeo.dispose(); lGeo.dispose(); iGeo.dispose(); cv.remove(); capaEt.remove(); },
   };
 }
 
