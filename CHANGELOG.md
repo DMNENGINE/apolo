@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.8] - 2026-10-15
+
+### Added
+- **Import your ChatGPT history**: Settings → Import → ChatGPT → pick the unzipped export folder. Only *your* messages are read, in the browser (ChatGPT's replies and chats marked "don't remember" are dropped); the brain model turns them into memories in the background, with pause/continue and keys masked automatically.
+- **3D memory graph**: a free-flying 3D space (rotate on every axis, pan, zoom, fly with WASD/QE, touch gestures) with glowing orb nodes, stars and depth. Tap a node and the camera flies to it; **right click (long press on phone) isolates a node with only its connections**. A 2D button keeps the flat view.
+- **Nerve impulses**: light pulses travel along the connections, nodes light up from inside when one arrives and fire on in cascades; lone nodes breathe and spark on their own.
+- **APOLO live in the graph**: **red impulses show in real time which memories APOLO reads or saves** while it answers you, with a "APOLO read / saved …" log.
+- **Memories of the past**: memories that are no longer current can stay as part of your story (shown as "past", dashed in the graph) instead of being deleted; new facts never overwrite them.
+- Graph **Summary** view (the ~120 most important nodes) and a **The past** toggle.
+
+### Changed
+- The always-on profile now takes at most 60 % of the memory context, so relevant memories always fit.
+
+### Fixed
+- The graph no longer turns years, generic acronyms (ID, IP, VIP…) or sentence starts ("Between 2024", "Uses Windows") into nodes; existing ones are cleaned up automatically.
+- The 3D graph no longer goes dark when you zoom far out.
+
 ## [0.2.7] - 2026-10-11
 
 ### Added
