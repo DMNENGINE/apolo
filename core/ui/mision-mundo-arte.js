@@ -522,9 +522,13 @@ const MM_ICONO = {
   tarea: ['.#####.', '#..#..#', '#..#..#', '#..###.', '#.....#', '#.....#', '.#####.'], mcp: ['.#...#.', '.#...#.', '#######', '#######', '.#####.', '...#...', '...#...'],
   otro: ['..#.#..', '.#####.', '##...##', '.#...#.', '##...##', '.#####.', '..#.#..'],
 };
-const MM_EFECTO = { web: [70, 160, 255], shell: [60, 230, 120], archivo: [240, 180, 70], memoria: [255, 60, 90], delegar: [180, 110, 255], vista: [170, 90, 255], tarea: [255, 150, 70], mcp: [60, 220, 220], otro: [120, 220, 255] };
+const MM_EFECTO = { web: [70, 160, 255], shell: [60, 230, 120], archivo: [240, 180, 70], memoria: [255, 60, 90], delegar: [180, 110, 255], vista: [170, 90, 255], tarea: [255, 150, 70], mcp: [200, 90, 255], otro: [120, 220, 255] };
+let MM_MCP_IDS = [];                                    // servidores MCP remotos conectados (sus herramientas son <id>_<herramienta>)
+const mmEsMcp = n => /^mcp__/.test(n) || MM_MCP_IDS.some(id => n.startsWith(id + '_'));
+function mmEtiquetaMcp(n) { n = String(n || ''); const m = n.match(/^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/); if (m) return `${m[1]} · ${m[2]}`; const id = MM_MCP_IDS.find(i => n.startsWith(i + '_')); return id ? `${id} · ${n.slice(id.length + 1)}` : n; }
 function mmCategoria(nombre = '') {
   const n = String(nombre);
+  if (mmEsMcp(n)) return 'mcp';
   if (/^(web|WebFetch|WebSearch|archive_|navegador|google_web|fetch|buscar_web)/i.test(n)) return 'web';
   if (/^(shell|Bash|PowerShell|run_shell|ejecutar|terminal)/i.test(n)) return 'shell';
   if (/(memoria|recordar|olvidar|^Memoria$|buscar_historial)/i.test(n)) return 'memoria';
@@ -532,7 +536,6 @@ function mmCategoria(nombre = '') {
   if (/(pantalla|control|escritorio|computer|demostracion)/i.test(n)) return 'vista';
   if (/(tarea|programar)/i.test(n)) return 'tarea';
   if (/(archivo|^Read$|^Write$|^Edit$|^Glob$|^Grep$|listar|Notebook|skill)/i.test(n)) return 'archivo';
-  if (/^mcp__/.test(n)) return 'mcp';
   return 'otro';
 }
 function mmBurbujaIcono(c, x, y, cat, t) {
@@ -560,3 +563,99 @@ function mmCorriente(c, x1, y1, x2, y2, col, t, ancho = 1) {
   for (let k = 0; k < 5; k++) { const u = (t / 900 + k / 5) % 1, x = (1 - u) * (1 - u) * x1 + 2 * (1 - u) * u * cx + u * u * x2, y = (1 - u) * (1 - u) * y1 + 2 * (1 - u) * u * cy + u * u * y2;
     c.fillStyle = `rgba(${r},${g},${b},.5)`; c.fillRect(x - 2 | 0, y - 2 | 0, 5, 5); c.fillStyle = '#ffffff'; c.fillRect(x | 0, y | 0, 2, 2); }
 }
+
+// ---------- laboratorio MCP ----------
+// e.mcp (0..1) = cuánto se está conjurando ahora; e.portal = { x, y } punto donde se materializa (encima del portal)
+mmObj('portal', 3, 3, 1, 0, c => {
+  const p = mmP(c), cx = 48, cy = 50;
+  c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(cx, cy + 4, 47, 30, 0, 0, 7); c.fill();
+  c.fillStyle = '#3a3f48'; c.beginPath(); c.ellipse(cx, cy, 46, 29, 0, 0, 7); c.fill();
+  c.strokeStyle = '#5d6672'; c.lineWidth = 2; c.beginPath(); c.ellipse(cx, cy - 1, 45, 28, 0, Math.PI * 1.05, Math.PI * 1.95); c.stroke();
+  c.strokeStyle = '#23272e'; c.beginPath(); c.ellipse(cx, cy + 1, 45, 28, 0, .1, Math.PI - .1); c.stroke();
+  for (let i = 0; i < 12; i++) { const ang = i / 12 * Math.PI * 2, x = cx + Math.cos(ang) * 41, y = cy + Math.sin(ang) * 25.5; c.save(); c.translate(x, y); c.rotate(ang + Math.PI / 2); p(-2, -2, 4, 1, '#23272e'); p(-1, -1, 1, 3, '#23272e'); p(1, 0, 1, 2, '#23272e'); c.restore(); }
+  c.fillStyle = '#0b0a14'; c.beginPath(); c.ellipse(cx, cy, 36, 22, 0, 0, 7); c.fill();
+  c.strokeStyle = '#2a2433'; c.lineWidth = 1; c.beginPath(); c.ellipse(cx, cy, 36, 22, 0, 0, 7); c.stroke();
+}, (c, X, Y, t, e) => {
+  const k = e.mcp || 0, cx = X + 48, cy = Y + 50, vel = 1 + k * 4;
+  c.save(); c.globalCompositeOperation = 'lighter';
+  const g = c.createRadialGradient(cx, cy, 2, cx, cy, 36); g.addColorStop(0, `rgba(210,120,255,${.25 + k * .6})`); g.addColorStop(.6, `rgba(70,220,210,${.12 + k * .3})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.beginPath(); c.ellipse(cx, cy, 36, 22, 0, 0, 7); c.fill();
+  for (let i = 0; i < 6; i++) {                                      // vórtice: anillos que giran en sentidos alternos
+    const rx = 34 - i * 5.5, col = i % 2 ? `rgba(70,240,220,${.25 + k * .6})` : `rgba(215,90,255,${.25 + k * .6})`;
+    c.strokeStyle = col; c.lineWidth = 1; c.setLineDash([3 + i, 4]); c.lineDashOffset = (i % 2 ? 1 : -1) * t / (60 / vel);
+    c.beginPath(); c.ellipse(cx, cy, rx, rx * .62, 0, 0, 7); c.stroke();
+  }
+  c.setLineDash([]);
+  for (let j = 0; j < 22; j++) {                                     // materia que cae en espiral hacia el centro
+    const u = ((t / 1600) * vel + j / 22) % 1, r = 34 * (1 - u), ang = j * 2.4 + u * 9;
+    c.fillStyle = j % 2 ? `rgba(130,255,240,${(.3 + k * .7) * (1 - u * .5)})` : `rgba(230,140,255,${(.3 + k * .7) * (1 - u * .5)})`;
+    c.fillRect(cx + Math.cos(ang) * r | 0, cy + Math.sin(ang) * r * .62 | 0, 2, 2);
+  }
+  for (let i = 0; i < 12; i++) {                                     // runas: se encienden en ola cuando se conjura
+    const ang = i / 12 * Math.PI * 2, x = cx + Math.cos(ang) * 41, y = cy + Math.sin(ang) * 25.5, ola = (Math.sin(t / 160 - i * .9) * .5 + .5);
+    c.fillStyle = `rgba(200,120,255,${.12 + k * ola * .85})`; c.fillRect(x - 2 | 0, y - 2 | 0, 4, 4);
+  }
+  if (k > .05) {
+    for (let q = 0; q < 2; q++) { const u = (t / 1500 + q / 2) % 1; c.strokeStyle = `rgba(220,120,255,${k * (1 - u) * .8})`; c.beginPath(); c.ellipse(cx, cy - u * 40, 30 - u * 12, (30 - u * 12) * .45, 0, 0, 7); c.stroke(); }
+    const col = c.createLinearGradient(cx, cy, cx, cy - 70); col.addColorStop(0, `rgba(160,240,255,${k * .5})`); col.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = col; c.fillRect(cx - 9, cy - 70, 18, 70);
+    // lo que se materializa: un cubo que gira y pasa de malla a sólido
+    const fase = (t % 4200) / 4200, s = 7 + k * 5, a1 = t / 500, a2 = t / 900, oy = cy - 34 + Math.sin(t / 300) * 2;
+    const V = [-1, 1].flatMap(x => [-1, 1].flatMap(y => [-1, 1].map(z => [x, y, z]))).map(([x, y, z]) => {
+      const x1 = x * Math.cos(a1) - z * Math.sin(a1), z1 = x * Math.sin(a1) + z * Math.cos(a1), y1 = y * Math.cos(a2) - z1 * Math.sin(a2);
+      return [cx + x1 * s, oy + y1 * s]; });
+    const caras = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]];
+    c.fillStyle = `rgba(150,230,255,${fase * .22 * k})`; for (const f of caras) { c.beginPath(); f.forEach((v, i) => i ? c.lineTo(...V[v]) : c.moveTo(...V[v])); c.closePath(); c.fill(); }
+    c.strokeStyle = `rgba(230,250,255,${.5 + k * .5})`; c.lineWidth = 1;
+    for (const [i, j] of [[0, 1], [1, 3], [3, 2], [2, 0], [4, 5], [5, 7], [7, 6], [6, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) { c.beginPath(); c.moveTo(...V[i]); c.lineTo(...V[j]); c.stroke(); }
+    if (fase > .93) { c.strokeStyle = `rgba(255,255,255,${(1 - fase) * 12 * k})`; c.beginPath(); c.arc(cx, oy, 6 + (fase - .93) * 300, 0, 7); c.stroke(); }
+  }
+  c.restore();
+}, (o, X, Y, t, e) => { const k = e.mcp || 0; return [{ x: X + 48, y: Y + 48, r: 90 + k * 130, col: k > .3 ? [150, 210, 255] : [160, 90, 255], a: .5 + k * .5, bloom: 12 + k * 22 }]; });
+
+mmObj('brazo', 1, 2, 1, 20, c => {
+  const p = mmP(c), A = 20; c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.ellipse(16, A + 60, 14, 4, 0, 0, 7); c.fill();
+  mmBisel(c, 4, A + 48, 24, 12, '#3a414c'); mmBisel(c, 7, A + 40, 18, 9, '#4f5864'); p(9, A + 43, 14, 1, '#ffb347'); p(9, A + 45, 14, 1, '#2a2f36');
+  c.fillStyle = '#5d6774'; c.beginPath(); c.arc(16, A + 38, 6, 0, 7); c.fill(); c.fillStyle = '#8a95a3'; c.beginPath(); c.arc(15, A + 37, 3, 0, 7); c.fill();
+}, (c, X, Y, t, e, o) => {
+  const A = 20, k = e.mcp || 0, sx = X + 16, sy = Y + A + 38, T = e.portal || { x: sx, y: sy - 40 };
+  const quieto = { x: sx + (Math.sin(t / 900 + o.x) * 8), y: sy - 46 }, tx = k > .2 ? T.x : quieto.x, ty = k > .2 ? T.y : quieto.y;
+  const ang = Math.atan2(ty - sy, tx - sx), dir = Math.cos(ang) >= 0 ? -1 : 1, a1 = ang + dir * .75;
+  const L1 = 20, ex = sx + Math.cos(a1) * L1, ey = sy + Math.sin(a1) * L1, a2 = Math.atan2(ty - ey, tx - ex), hx = ex + Math.cos(a2) * 15, hy = ey + Math.sin(a2) * 15;
+  const seg = (x1, y1, x2, y2) => { for (const [w, col] of [[7, '#1c2027'], [5, '#7d8896'], [2, '#b9c3cf']]) { c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round'; c.beginPath(); c.moveTo(x1, y1 - (w === 2 ? 1 : 0)); c.lineTo(x2, y2 - (w === 2 ? 1 : 0)); c.stroke(); } };
+  seg(sx, sy, ex, ey); seg(ex, ey, hx, hy); c.lineCap = 'butt';
+  c.fillStyle = '#2a2f36'; c.beginPath(); c.arc(ex, ey, 4, 0, 7); c.fill(); c.fillStyle = '#ffb347'; c.fillRect(ex - 1, ey - 1, 2, 2);
+  c.save(); c.translate(hx, hy); c.rotate(a2); mmBisel(c, -3, -4, 9, 8, '#3a414c'); c.fillStyle = k > .2 ? (o.x % 2 ? '#ff5470' : '#5ff6ff') : '#3a2030'; c.fillRect(5, -2, 2, 4); c.restore();
+  if (k > .2) {                                                      // láser al punto de creación
+    const col = o.x % 2 ? [255, 70, 100] : [80, 245, 255], fl = .7 + Math.sin(t / 30 + o.x) * .3, lx = hx + Math.cos(a2) * 6, ly = hy + Math.sin(a2) * 6;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const [w, al] of [[6, .15], [3, .4], [1, 1]]) { c.strokeStyle = w === 1 ? '#ffffff' : `rgba(${col[0]},${col[1]},${col[2]},${al * k * fl})`; c.lineWidth = w; c.beginPath(); c.moveTo(lx, ly); c.lineTo(T.x, T.y); c.stroke(); }
+    const g = c.createRadialGradient(T.x, T.y, 0, T.x, T.y, 9); g.addColorStop(0, `rgba(255,255,255,${.8 * k})`); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(T.x - 9, T.y - 9, 18, 18);
+    c.restore();
+  }
+}, (o, X, Y, t, e) => (e.mcp || 0) > .2 ? [{ x: X + 16, y: Y + 40, r: 50, col: o.x % 2 ? [255, 80, 110] : [80, 240, 255], a: .5 * e.mcp }] : []);
+
+mmObj('alambique', 2, 1, 1, 18, c => {
+  const p = mmP(c), A = 18; c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(4, 28 + A, 58, 4);
+  p(6, 18 + A, 4, 12, '#4a2e16'); p(54, 18 + A, 4, 12, '#4a2e16'); mmBisel(c, 2, 8 + A, 60, 11, '#7a4f2c'); p(2, 18 + A, 60, 2, '#5a3a1e');
+  p(10, 2 + A, 3, 7, '#3b3f45'); p(8, 8 + A, 7, 1, '#59626e');
+  c.fillStyle = 'rgba(200,240,255,.35)'; c.beginPath(); c.arc(12, A - 4, 7, 0, 7); c.fill(); p(10, A - 16, 4, 6, 'rgba(200,240,255,.4)');
+  c.strokeStyle = '#c9a24a'; c.lineWidth = 1; c.beginPath(); c.moveTo(13, A - 15); c.quadraticCurveTo(30, A - 22, 34, A - 8); for (let i = 0; i < 4; i++) c.arc(36, A - 6 + i * 3, 3, Math.PI, 0); c.stroke();
+  c.fillStyle = 'rgba(200,240,255,.35)'; c.fillRect(42, A - 6, 10, 12); p(41, A - 7, 12, 1, 'rgba(230,250,255,.6)');
+  p(54, A - 2, 5, 9, 'rgba(255,140,200,.55)'); p(55, A - 4, 3, 2, '#8a5a32');
+}, (c, X, Y, t) => {
+  const p = mmP(c), A = 18;
+  c.fillStyle = 'rgba(70,230,140,.8)'; c.beginPath(); c.arc(X + 12, Y + A - 3, 5.5, 0, Math.PI); c.fill();
+  for (let i = 0; i < 3; i++) { const u = (t / 700 + i / 3) % 1; p(X + 9 + i * 3, Y + A - 3 - u * 8 | 0, 1, 1, '#c8ffe0'); }
+  p(X + 43, Y + A + 1, 8, 5, 'rgba(180,90,255,.75)'); if (Math.floor(t / 300) % 3 === 0) p(X + 46, Y + A, 1, 1, '#f0d0ff');
+  mmLlama(c, X + 11.5, Y + A + 8, t, .35);
+}, (o, X, Y) => [{ x: X + 14, y: Y + 14, r: 46, col: [80, 255, 160], a: .35 }]);
+
+mmObj('caldero', 1, 1, 1, 8, c => {
+  const p = mmP(c), A = 8; c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.ellipse(16, 30 + A, 13, 3, 0, 0, 7); c.fill();
+  p(6, 26 + A, 3, 5, '#1c1c22'); p(23, 26 + A, 3, 5, '#1c1c22');
+  c.fillStyle = '#26262e'; c.beginPath(); c.ellipse(16, 18 + A, 13, 11, 0, 0, Math.PI); c.fill(); c.fillRect(3, 10 + A, 26, 8);
+  c.fillStyle = '#3a3a44'; c.beginPath(); c.ellipse(16, 10 + A, 13, 4, 0, 0, 7); c.fill(); p(5, 12 + A, 2, 10, '#4a4a56');
+}, (c, X, Y, t) => {
+  const A = 8; c.fillStyle = '#3fd27a'; c.beginPath(); c.ellipse(X + 16, Y + 10 + A, 11, 3, 0, 0, 7); c.fill();
+  for (let i = 0; i < 4; i++) { const u = (t / 500 + i * .27) % 1; c.fillStyle = `rgba(190,255,200,${1 - u})`; c.beginPath(); c.arc(X + 9 + i * 5, Y + 10 + A - u * 2, 1 + u * 1.5, 0, 7); c.fill(); }
+}, (o, X, Y) => [{ x: X + 16, y: Y + 14, r: 50, col: [70, 255, 130], a: .4 }]);

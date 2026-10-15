@@ -1299,3 +1299,4 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 @keyframes mm-parpadeo { 50% { opacity: .35; } }
 @media (max-width: 700px) { .mm-ticker { display: none; } .mm-panel { display: none; } .mm-arriba .mm-dato[data-d="tok"] { display: none; } }
 .mm-nombre.modelo { font-size: clamp(6px, .72cqw, 9px); padding: 0 4px; background: color-mix(in srgb, var(--c, #fff) 22%, #0d1116); color: #f2f6fa; border-color: color-mix(in srgb, var(--c, #fff) 80%, #000); box-shadow: 0 0 6px color-mix(in srgb, var(--c, #fff) 45%, transparent), 1px 1px 0 #000; font-weight: 700; }
+.mm-conjuro { position: absolute; transform: translate(-50%, -100%); padding: 2px 8px; font-size: clamp(7px, .85cqw, 11px); font-weight: 700; color: #f6e9ff; background: rgba(40, 10, 60, .85); border: 1px solid #c85aff; box-shadow: 0 0 12px rgba(200, 90, 255, .6); white-space: nowrap; pointer-events: none; letter-spacing: .05em; animation: mm-parpadeo 1.6s steps(1) infinite; }

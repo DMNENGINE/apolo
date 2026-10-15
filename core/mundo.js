@@ -4,10 +4,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROLES = ['servidores', 'principal', 'subagentes', 'taller', 'modelos', 'biblioteca', 'decor'];
+const ROLES = ['servidores', 'principal', 'subagentes', 'taller', 'mcp', 'modelos', 'biblioteca', 'decor'];
 const SUELOS = ['piedra', 'tierra', 'madera', 'metal', 'hierba', 'alfombra'];
 const TEMAS = ['mazmorra', 'nave', 'oficina', 'castillo', 'bosque', 'laboratorio'];
-const OBJETOS = ['rack', 'antorcha', 'orbe', 'impresora', 'mesa', 'pc', 'estanteria', 'planta', 'barril', 'cofre', 'telescopio', 'cuadro', 'consola', 'tanque', 'sofa', 'caja', 'lampara', 'cables'];
+const OBJETOS = ['rack', 'antorcha', 'orbe', 'impresora', 'mesa', 'pc', 'estanteria', 'planta', 'barril', 'cofre', 'telescopio', 'cuadro', 'consola', 'tanque', 'sofa', 'caja', 'lampara', 'cables', 'portal', 'brazo', 'alambique', 'caldero'];
 
 const BASE = {
   formato: 'mundo/1', nombre: 'Mazmorra de APOLO', tema: 'mazmorra', ancho: 37, alto: 26,
@@ -16,7 +16,7 @@ const BASE = {
     { id: 'taller', nombre: 'Zona de la impresora 3D', rol: 'taller', x: 1, y: 11, w: 11, h: 9, suelo: 'piedra' },
     { id: 'principal', nombre: 'Área del agente principal de IA', rol: 'principal', x: 15, y: 6, w: 11, h: 10, suelo: 'piedra' },
     { id: 'subagentes', nombre: 'Bahía de subagentes', rol: 'subagentes', x: 28, y: 1, w: 8, h: 14, suelo: 'tierra' },
-    { id: 'modelos', nombre: 'Sala de modelos', rol: 'modelos', x: 21, y: 20, w: 15, h: 5, suelo: 'alfombra' },
+    { id: 'mcp', nombre: 'Laboratorio MCP', rol: 'mcp', x: 21, y: 20, w: 15, h: 5, suelo: 'piedra' },
   ],
   pasillos: [
     { x: 12, y: 3, w: 16, h: 2 }, { x: 19, y: 5, w: 3, h: 1 }, { x: 26, y: 10, w: 2, h: 2 }, { x: 5, y: 9, w: 2, h: 2 },
@@ -32,7 +32,7 @@ const BASE = {
     { tipo: 'barril', x: 35, y: 1 }, { tipo: 'cofre', x: 28, y: 13 }, { tipo: 'planta', x: 35, y: 9 }, { tipo: 'cables', x: 31, y: 1 },
     { tipo: 'antorcha', x: 14, y: 2 }, { tipo: 'antorcha', x: 25, y: 2 }, { tipo: 'antorcha', x: 29, y: 0 }, { tipo: 'antorcha', x: 34, y: 0 },
     { tipo: 'antorcha', x: 16, y: 5 }, { tipo: 'antorcha', x: 23, y: 5 }, { tipo: 'antorcha', x: 2, y: 10 }, { tipo: 'antorcha', x: 8, y: 10 },
-    { tipo: 'antorcha', x: 13, y: 16 }, { tipo: 'antorcha', x: 27, y: 16 }, { tipo: 'antorcha', x: 36, y: 7 }, { tipo: 'antorcha', x: 26, y: 9 }, { tipo: 'antorcha', x: 25, y: 19 }, { tipo: 'antorcha', x: 33, y: 19 }, { tipo: 'planta', x: 21, y: 23 }, { tipo: 'planta', x: 35, y: 23 },
+    { tipo: 'antorcha', x: 13, y: 16 }, { tipo: 'antorcha', x: 27, y: 16 }, { tipo: 'antorcha', x: 36, y: 7 }, { tipo: 'antorcha', x: 26, y: 9 }, { tipo: 'antorcha', x: 25, y: 19 }, { tipo: 'antorcha', x: 33, y: 19 }, { tipo: 'portal', x: 27, y: 21 }, { tipo: 'brazo', x: 25, y: 21 }, { tipo: 'brazo', x: 31, y: 21 }, { tipo: 'alambique', x: 21, y: 21 }, { tipo: 'caldero', x: 23, y: 23 }, { tipo: 'tanque', x: 34, y: 21 }, { tipo: 'estanteria', x: 32, y: 23 },
   ],
 };
 
@@ -80,7 +80,7 @@ function crearMundo({ cfg, generarJSON, modelo }) {
       system: 'Diseñas el mapa de un "Mission Control" en pixel-art visto desde arriba, donde viven los agentes de IA de un asistente. Coordenadas en casillas (tiles); (0,0) arriba a la izquierda. ' +
         'Tamaño: ancho entre 30 y 40, alto entre 18 y 24 (más grande se ve diminuto). Reglas: entre 3 y 7 salas rectangulares que NO se solapen, con al menos 2 casillas de hueco entre salas; pasillos rectangulares (ancho 2-4) que unan TODAS las salas (un pasillo toca o se mete 1 casilla en cada sala que une). ' +
         'Roles obligatorios, una sala cada uno: "principal" (el agente principal, la más central, con un objeto "orbe" en su centro), "subagentes" (la más grande: ahí trabajan los subagentes), "servidores" (racks: el núcleo y los plugins) y "taller" (tareas programadas y el turno de noche). ' +
-        'Recomendada: "modelos" (ancha y poco alta, 10-14 x 4-6: ahí están los modelos de IA conectados en fila). Otras salas: "biblioteca" (memoria) o "decor". Nombra las salas a juego con el tema y en el idioma de la descripción. ' +
+        'Recomendada: "mcp" (el laboratorio donde se conjuran las herramientas MCP: 12-16 x 5-6, con un objeto "portal" (3x3) en el centro y dos "brazo" (1x2) a sus lados; puede llevar "alambique" y "caldero"). Otras salas: "biblioteca" (memoria) o "decor". Nombra las salas a juego con el tema y en el idioma de la descripción. ' +
         'Objetos: colócalos DENTRO de las salas (las antorchas/lámparas pueden ir en el borde superior de una sala o de un pasillo); 25-60 objetos en total; los racks ocupan 2x2 casillas, la impresora 3x3, el orbe 2x2, el resto 1-2 casillas: deja hueco. ' +
         'Elige suelos a juego con el tema (nave/laboratorio: metal; oficina: alfombra/madera; bosque: hierba; mazmorra/castillo: piedra/tierra).',
       prompt: `Descripción del usuario:\n${d}\n\nEjemplo de un mundo válido (la mazmorra de serie), para que veas proporciones y formato:\n${JSON.stringify(BASE)}` });

@@ -43,7 +43,7 @@ const mmHash = s => { let h = 2166136261; for (const c of String(s)) h = Math.im
 const MC_MUNDO = {
   async montar(caja, mc) {
     this.mc = mc; this.caja = caja; this.ents = new Map(); this.ticker = []; this.log = []; this.parts = []; this.pestana = this.pestana || 'ticker';
-    this.est = { cpu: 0, ram: 0, ramTot: 0, orbe: 0, progreso: 0, bahia: 0, memoria: 0, panico: false, luz: 'antorcha', borde: '#2fd1b0' };
+    this.est = { cpu: 0, ram: 0, ramTot: 0, orbe: 0, progreso: 0, bahia: 0, memoria: 0, mcp: 0, panico: false, luz: 'antorcha', borde: '#2fd1b0' };
     const r = await api('GET', '/mundo').catch(() => null);
     if (!r || !this.caja) return;
     this.propio = r.propio; this.cargar(r.mundo);
@@ -70,6 +70,7 @@ const MC_MUNDO = {
     this.porRol = Object.fromEntries(m.salas.map(s => [s.rol, s]));
     this.orbe = m.objetos.find(o => o.tipo === 'orbe') || (() => { const s = this.porRol.principal; return { x: s.x + (s.w >> 1) - 1, y: s.y + (s.h >> 1) - 1 }; })();
     this.fondo = mmFondo(this);
+    const po = m.objetos.find(o => o.tipo === 'portal'); this.portal = po ? { x: po.x * R + 48, y: po.y * R + 16 } : null; this.est.portal = this.portal;
     // luz: mapa a media resolución (se suaviza al escalar) y viñeta fija
     this.luz = mmLienzo(W >> 1, H >> 1); this.lc = this.luz.getContext('2d');
     this.vin = mmLienzo(W, H); const vc = this.vin.getContext('2d'), gv = vc.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.hypot(W, H) * .58);
@@ -85,9 +86,10 @@ const MC_MUNDO = {
         <span class="mm-titulo">MISSION CONTROL</span><span class="mm-dato mm-status" data-d="status">STATUS: —</span>
         <span class="mm-pest"><button data-p="ticker" class="${this.pestana === 'ticker' ? 'on' : ''}">TICKER</button><button data-p="log" class="${this.pestana === 'log' ? 'on' : ''}">LOG</button></span></div>
       <div class="mm-mapa" style="aspect-ratio:${m.ancho}/${m.alto}"><canvas width="${this.W}" height="${this.H}"></canvas>
-        ${m.salas.filter(x => x.nombre).map(x => `<div class="mm-placa" style="left:${px(x.x + x.w / 2)};top:${py(x.y + .15)}">${esc(x.nombre).toUpperCase()}</div>`).join('')}
+        ${m.salas.filter(x => x.nombre).map(x => `<div class="mm-placa" style="left:${px(x.x + x.w / 2)};top:${py(x.rol === 'mcp' ? x.y + x.h - .85 : x.y + .15)}">${esc(x.nombre).toUpperCase()}</div>`).join('')}
         ${s.servidores ? `<div class="mm-panel" style="left:${px(s.servidores.x + s.servidores.w - 2.3)};top:${py(s.servidores.y + 2.6)}"><div>CPU <i data-b="cpu"><b></b></i></div><div>RAM <i data-b="ram"><b></b></i></div></div>` : ''}
         ${s.taller ? `<div class="mm-panel" style="left:${px(s.taller.x + s.taller.w - 3.6)};top:${py(s.taller.y + 2.2)}"><div class="mm-c" data-d="taller">TAREAS:<br>—</div></div>` : ''}
+        ${this.portal ? `<div class="mm-conjuro" style="left:${px(this.portal.x / MM_R)};top:${py(this.portal.y / MM_R - .75)}" hidden></div>` : ''}
         <div class="mm-nombres"></div>
         <div class="mm-ticker"><div class="mm-lineas"></div></div>
         <div class="mm-holo mv-holo" hidden></div>
@@ -119,8 +121,9 @@ const MC_MUNDO = {
   async cargarLento() {
     if (!this.caja) return;
     try {
-      const [pl, ta, tu, es, ca] = await Promise.all([api('GET', '/plugins').catch(() => ({ plugins: [] })), api('GET', '/tareas').catch(() => []), api('GET', '/turno').catch(() => null),
-        api('GET', '/estado').catch(() => null), api('GET', '/canales').catch(() => [])]);
+      const [pl, ta, tu, es, ca, mr] = await Promise.all([api('GET', '/plugins').catch(() => ({ plugins: [] })), api('GET', '/tareas').catch(() => []), api('GET', '/turno').catch(() => null),
+        api('GET', '/estado').catch(() => null), api('GET', '/canales').catch(() => []), api('GET', '/mcp-remotos').catch(() => null)]);
+      this.mcpServ = mr?.servidores || []; MM_MCP_IDS = this.mcpServ.filter(x => x.conectado).map(x => x.id);
       this.modelos = (es?.proveedores || []).filter(x => x.listo).map(x => ({ id: x.nombre, tipo: x.tipo }));
       for (const c of ca || []) if (c.tipo === 'motor' && c.estado === 'activo' && !this.modelos.some(x => x.id === c.id)) this.modelos.push({ id: c.id, tipo: 'motor', puente: true });
       this.plugins = (pl.plugins || []).filter(x => x.activo).slice(0, 8); this.tareas = (ta || []).filter(x => x.activa); this.turno = tu;
@@ -269,6 +272,12 @@ const MC_MUNDO = {
     const c = this.c, e = this.est, R = MM_R, ahora = Date.now(), vivos = [...this.mc.agentes.values()].filter(a => a.estado === 'trabajando');
     e.orbe += ((vivos.length ? Math.min(1, .5 + vivos.length * .15) : .1) - e.orbe) * Math.min(1, dt / 600);
     e.memoria *= Math.exp(-dt / 900); e.bahia = vivos.filter(a => a.padre).length;
+    const conjura = vivos.find(a => a.herramienta && mmEsMcp(a.herramienta.nombre));             // alguien usa una herramienta MCP: el laboratorio se activa
+    if (conjura) { this.ultConjuro = { txt: mmEtiquetaMcp(conjura.herramienta.nombre), t: Date.now() }; }
+    const activoMcp = this.ultConjuro && Date.now() - this.ultConjuro.t < 2500;
+    e.mcp += ((activoMcp ? 1 : 0) - e.mcp) * Math.min(1, dt / (activoMcp ? 350 : 900));
+    const cj = this.portal && $('.mm-conjuro', this.caja);
+    if (cj) { const ver = e.mcp > .25 && this.ultConjuro; cj.hidden = !ver; if (ver && cj.dataset.t !== this.ultConjuro.txt) { cj.dataset.t = this.ultConjuro.txt; cj.textContent = '✦ ' + this.ultConjuro.txt.toUpperCase(); } }
     const enUso = new Set(vivos.map(a => mmProveedor(a.modelo)));
     for (const x of this.ents.values()) { x.trabajando = x.agente ? x.agente.estado === 'trabajando' : x.tipo === 'apolo' ? vivos.length > 0 : x.tipo === 'modelo' ? enUso.has(x.modelo.id) || (x.modelo.puente && false) : false; this.mover(x, dt, t); }
     c.globalCompositeOperation = 'source-over'; c.drawImage(this.fondo, 0, 0);
@@ -313,6 +322,7 @@ const MC_MUNDO = {
       if (p.cat) {
         mmAura(c, p.x, p.y, p.cat, t);
         if (p.cat === 'web') mmCorriente(c, ob.x, ob.y, p.x, p.y - 34, MM_EFECTO.web, t, 1.2);
+        else if (p.cat === 'mcp' && this.portal) mmCorriente(c, p.x, p.y - 34, this.portal.x, this.portal.y + 40, MM_EFECTO.mcp, t, 1.1);
         else if (p.cat === 'memoria' && libros.length) { const l = libros.reduce((a, b) => Math.hypot(a.x * R - p.x, a.y * R - p.y) < Math.hypot(b.x * R - p.x, b.y * R - p.y) ? a : b); mmCorriente(c, l.x * R + 32, l.y * R + 10, p.x, p.y - 34, MM_EFECTO.memoria, t); e.memoria = Math.max(e.memoria, .7); }
       }
       if (p.agente?.esperando) { c.strokeStyle = `rgba(255,60,90,${.5 + Math.sin(t / 150) * .4})`; c.lineWidth = 2; c.beginPath(); c.ellipse(p.x, p.y, 20, 8, 0, 0, 7); c.stroke(); }
@@ -328,7 +338,7 @@ const MC_MUNDO = {
     const o = this.orbe, R = MM_R, ox = o.x * R + 32, oy = o.y * R + 14, r = [];
     if (!this.semilla || t - this.tRayo > 85) { this.semilla = (Math.random() * 1e6) | 0; this.tRayo = t; }
     let k = 0;
-    for (const p of this.ents.values()) { if (!p.trabajando || p.tipo === 'apolo' || p.tipo === 'modelo' || p.sale || p.cat === 'web' || p.cat === 'memoria') continue; r.push([ox, oy, p.x, p.y - 33, this.semilla + k++ * 13, 1]); }
+    for (const p of this.ents.values()) { if (!p.trabajando || p.tipo === 'apolo' || p.tipo === 'modelo' || p.sale || p.cat === 'web' || p.cat === 'memoria' || p.cat === 'mcp') continue; r.push([ox, oy, p.x, p.y - 33, this.semilla + k++ * 13, 1]); }
     const a = this.ents.get('apolo'); if (a?.trabajando) r.push([a.x, a.y - 90, ox - 8, oy - 4, this.semilla + 99, .6]);
     return r;
   },
@@ -338,6 +348,8 @@ const MC_MUNDO = {
       for (const o of this.m.objetos) {
         if (o.tipo === 'antorcha' && Math.random() < dt / 260) P.push({ x: o.x * R + 16 + (Math.random() - .5) * 4, y: o.y * R + 2, vx: (Math.random() - .5) * 8, vy: -18 - Math.random() * 14, vida: 0, max: 900 + Math.random() * 700, tam: 1, col: '255,170,70', tipo: 'brasa' });
         else if (o.tipo === 'orbe' && Math.random() < dt / (120 - e.orbe * 80)) { const a = Math.random() * 6.28; P.push({ x: o.x * R + 32 + Math.cos(a) * 14, y: o.y * R + 14 + Math.sin(a) * 14, vx: Math.cos(a) * 10, vy: -8 - Math.random() * 10, vida: 0, max: 1200, tam: 1, col: '150,240,255', tipo: 'chispa' }); }
+        else if (o.tipo === 'caldero' && Math.random() < dt / 500) P.push({ x: o.x * R + 10 + Math.random() * 12, y: o.y * R + 10, vx: (Math.random() - .5) * 4, vy: -12, vida: 0, max: 1600, tam: 2, col: '170,255,190', tipo: 'mota' });
+        else if (o.tipo === 'portal' && e.mcp > .3 && Math.random() < dt / 40 && this.portal) { const a = Math.random() * 6.28, v = 20 + Math.random() * 40; P.push({ x: this.portal.x, y: this.portal.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 10, vida: 0, max: 450, tam: 1, col: Math.random() < .5 ? '255,220,255' : '170,250,255', tipo: 'chispa' }); }
         else if (o.tipo === 'impresora' && Math.random() < dt / 700) P.push({ x: o.x * R + 20 + Math.random() * 56, y: o.y * R + 50, vx: (Math.random() - .5) * 30, vy: -10, vida: 0, max: 400, tam: 1, col: '255,200,90', tipo: 'brasa' });
       }
       if (Math.random() < dt / 300) { const s = this.m.salas[Math.random() * this.m.salas.length | 0]; P.push({ x: (s.x + Math.random() * s.w) * R, y: (s.y + Math.random() * s.h) * R, vx: (Math.random() - .5) * 4, vy: -2 - Math.random() * 3, vida: 0, max: 5000, tam: 1, col: '230,220,200', tipo: 'mota' }); }
@@ -378,7 +390,7 @@ const MC_MUNDO = {
     let mejor = null, md = 20;
     for (const p of this.ents.values()) { const d = Math.hypot(p.x - x, p.y - 30 - y); if (d < md + 8) { md = d; mejor = { p }; } }
     if (mejor) return mejor;
-    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && ['orbe', 'rack', 'impresora', 'estanteria'].includes(o.tipo) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
+    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && ['orbe', 'rack', 'impresora', 'estanteria', 'portal'].includes(o.tipo) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
     return null;
   },
   clic(e) { const p = this.punto(e), h = this.enPunto(p.x, p.y); if (!h) return this.cerrarHolo(); this.abrirHolo(h); },
@@ -407,6 +419,12 @@ const MC_MUNDO = {
     else if (h.p?.tipo === 'tarea') { const t = h.p.tarea; col = '#f5c542'; cab = [h.p.nombre, tr('Tarea programada')]; cuerpo = `<div class="mm-txt">${esc(String(t.accion?.texto || '').slice(0, 260))}</div>${fila('Próxima', t.proxima ? new Date(t.proxima).toLocaleString(I18N.locale()) : '—')}${fila('Último resultado', esc(String(t.ultimoResultado || '—').slice(0, 80)))}`; }
     else if (h.o?.tipo === 'rack') { cab = [tr('Núcleo'), tr('Sala de servidores')]; cuerpo = fila('CPU', `${Math.round(this.est.cpu * 100)}%`) + fila('RAM', `${(this.est.ram * this.est.ramTot / 1e9).toFixed(1)} / ${(this.est.ramTot / 1e9).toFixed(0)} GB`) + fila('Plugins activos', (this.plugins || []).length); }
     else if (h.o?.tipo === 'impresora') { col = '#ff8a3d'; cab = [tr('Taller'), tr('Turno de noche y tareas')]; const tu = this.turno; cuerpo = fila('Turno de noche', tu?.activo ? `${Math.round(this.est.progreso * 100)}%` : tr('parado')) + fila('En cola', tu?.cola?.length || 0) + fila('Tareas activas', (this.tareas || []).length) + `<div class="mm-acc"><a class="btn mini" href="#/turno">${tr('Turno de noche')} ${ic('der')}</a></div>`; }
+    else if (h.o?.tipo === 'portal') {
+      col = '#c85aff'; cab = [tr('Laboratorio MCP'), tr('Donde se conjuran las herramientas MCP')];
+      const usando = vivos.filter(a => a.herramienta && mmEsMcp(a.herramienta.nombre));
+      cuerpo = fila('Ahora', usando.length ? esc(mmEtiquetaMcp(usando[0].herramienta.nombre)) : tr('en reposo')) + (usando.length ? fila('Quién', esc(String(usando[0].nombre || usando[0].id))) : '') +
+        `<div class="mm-txt">${(this.mcpServ || []).map(s => `${s.conectado ? '●' : '○'} <b>${esc(s.nombre)}</b> · ${s.herramientas.length} ${tr('herramientas')}`).join('<br>') || tr('Sin servidores MCP remotos. Claude Code y otros agentes también usan MCP: sus llamadas mcp__… se conjuran aquí.')}</div>`;
+    }
     else if (h.o?.tipo === 'estanteria') { col = '#ff5c7a'; cab = [tr('Memoria'), tr('Biblioteca')]; cuerpo = `<div class="mm-txt">${tr('Brilla en rojo cuando APOLO lee o guarda recuerdos.')}</div><div class="mm-acc"><a class="btn mini" href="#/memoria/grafo">${tr('Ver el grafo')} ${ic('der')}</a></div>`; }
     if (!cab) return;
     this.sel = h; det.hidden = false; det.classList.remove('on', 'sale'); det.style.setProperty('--holo', col);
