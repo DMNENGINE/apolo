@@ -24,15 +24,15 @@ const BASE = {
   ],
   objetos: [
     { tipo: 'rack', x: 2, y: 3 }, { tipo: 'rack', x: 5, y: 3 }, { tipo: 'rack', x: 8, y: 3 }, { tipo: 'rack', x: 2, y: 6 }, { tipo: 'rack', x: 5, y: 6 }, { tipo: 'rack', x: 8, y: 6 },
-    { tipo: 'cables', x: 10, y: 1 },
+    { tipo: 'cables', x: 10, y: 6 },
     { tipo: 'impresora', x: 5, y: 13 }, { tipo: 'cuadro', x: 9, y: 10 }, { tipo: 'estanteria', x: 1, y: 12 }, { tipo: 'pc', x: 1, y: 17 }, { tipo: 'mesa', x: 9, y: 18 },
     { tipo: 'caja', x: 11, y: 12 }, { tipo: 'barril', x: 11, y: 15 },
     { tipo: 'orbe', x: 19, y: 10 }, { tipo: 'estanteria', x: 24, y: 6 }, { tipo: 'cofre', x: 15, y: 15 },
     { tipo: 'pc', x: 33, y: 6 }, { tipo: 'telescopio', x: 30, y: 4 }, { tipo: 'telescopio', x: 32, y: 10 }, { tipo: 'mesa', x: 33, y: 13 },
-    { tipo: 'barril', x: 35, y: 1 }, { tipo: 'cofre', x: 28, y: 13 }, { tipo: 'planta', x: 35, y: 9 }, { tipo: 'cables', x: 31, y: 1 },
+    { tipo: 'barril', x: 35, y: 1 }, { tipo: 'cofre', x: 28, y: 13 }, { tipo: 'planta', x: 35, y: 9 }, { tipo: 'cables', x: 33, y: 3 },
     { tipo: 'antorcha', x: 14, y: 2 }, { tipo: 'antorcha', x: 25, y: 2 }, { tipo: 'antorcha', x: 29, y: 0 }, { tipo: 'antorcha', x: 34, y: 0 },
     { tipo: 'antorcha', x: 16, y: 5 }, { tipo: 'antorcha', x: 23, y: 5 }, { tipo: 'antorcha', x: 2, y: 10 }, { tipo: 'antorcha', x: 8, y: 10 },
-    { tipo: 'antorcha', x: 13, y: 16 }, { tipo: 'antorcha', x: 27, y: 16 }, { tipo: 'antorcha', x: 36, y: 7 }, { tipo: 'antorcha', x: 26, y: 9 }, { tipo: 'antorcha', x: 25, y: 19 }, { tipo: 'antorcha', x: 33, y: 19 }, { tipo: 'portal', x: 27, y: 21 }, { tipo: 'brazo', x: 25, y: 21 }, { tipo: 'brazo', x: 31, y: 21 }, { tipo: 'alambique', x: 21, y: 21 }, { tipo: 'caldero', x: 23, y: 23 }, { tipo: 'tanque', x: 34, y: 21 }, { tipo: 'estanteria', x: 32, y: 23 },
+    { tipo: 'antorcha', x: 13, y: 16 }, { tipo: 'antorcha', x: 27, y: 16 }, { tipo: 'antorcha', x: 36, y: 7 }, { tipo: 'antorcha', x: 26, y: 9 }, { tipo: 'antorcha', x: 25, y: 19 }, { tipo: 'antorcha', x: 33, y: 19 }, { tipo: 'portal', x: 27, y: 21 }, { tipo: 'brazo', x: 25, y: 21 }, { tipo: 'brazo', x: 31, y: 21 }, { tipo: 'alambique', x: 21, y: 21 }, { tipo: 'caldero', x: 23, y: 23 }, { tipo: 'tanque', x: 34, y: 21 }, { tipo: 'estanteria', x: 32, y: 20 },
   ],
 };
 

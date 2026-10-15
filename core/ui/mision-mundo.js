@@ -70,6 +70,7 @@ const MC_MUNDO = {
     this.porRol = Object.fromEntries(m.salas.map(s => [s.rol, s]));
     this.orbe = m.objetos.find(o => o.tipo === 'orbe') || (() => { const s = this.porRol.principal; return { x: s.x + (s.w >> 1) - 1, y: s.y + (s.h >> 1) - 1 }; })();
     this.fondo = mmFondo(this);
+    document.fonts?.load('700 16px Silkscreen').then(() => { if (this.m === m) this.fondo = mmFondo(this); }).catch(() => {});   // los carteles del suelo usan la fuente pixel
     const po = m.objetos.find(o => o.tipo === 'portal'); this.portal = po ? { x: po.x * R + 48, y: po.y * R + 16 } : null; this.est.portal = this.portal;
     // luz: mapa a media resolución (se suaviza al escalar) y viñeta fija
     this.luz = mmLienzo(W >> 1, H >> 1); this.lc = this.luz.getContext('2d');
@@ -86,10 +87,6 @@ const MC_MUNDO = {
         <span class="mm-titulo">MISSION CONTROL</span><span class="mm-dato mm-status" data-d="status">STATUS: —</span>
         <span class="mm-pest"><button data-p="ticker" class="${this.pestana === 'ticker' ? 'on' : ''}">TICKER</button><button data-p="log" class="${this.pestana === 'log' ? 'on' : ''}">LOG</button></span></div>
       <div class="mm-mapa" style="aspect-ratio:${m.ancho}/${m.alto}"><canvas width="${this.W}" height="${this.H}"></canvas>
-        ${m.salas.filter(x => x.nombre).map(x => `<div class="mm-placa" style="left:${px(x.x + x.w / 2)};top:${py(x.rol === 'mcp' ? x.y + x.h - .85 : x.y + .15)}">${esc(x.nombre).toUpperCase()}</div>`).join('')}
-        ${s.servidores ? `<div class="mm-panel" style="left:${px(s.servidores.x + s.servidores.w - 2.3)};top:${py(s.servidores.y + 2.6)}"><div>CPU <i data-b="cpu"><b></b></i></div><div>RAM <i data-b="ram"><b></b></i></div></div>` : ''}
-        ${s.taller ? `<div class="mm-panel" style="left:${px(s.taller.x + s.taller.w - 3.6)};top:${py(s.taller.y + 2.2)}"><div class="mm-c" data-d="taller">TAREAS:<br>—</div></div>` : ''}
-        ${this.portal ? `<div class="mm-conjuro" style="left:${px(this.portal.x / MM_R)};top:${py(this.portal.y / MM_R - .75)}" hidden></div>` : ''}
         <div class="mm-nombres"></div>
         <div class="mm-ticker"><div class="mm-lineas"></div></div>
         <div class="mm-holo mv-holo" hidden></div>
@@ -276,15 +273,22 @@ const MC_MUNDO = {
     if (conjura) { this.ultConjuro = { txt: mmEtiquetaMcp(conjura.herramienta.nombre), t: Date.now() }; }
     const activoMcp = this.ultConjuro && Date.now() - this.ultConjuro.t < 2500;
     e.mcp += ((activoMcp ? 1 : 0) - e.mcp) * Math.min(1, dt / (activoMcp ? 350 : 900));
-    const cj = this.portal && $('.mm-conjuro', this.caja);
-    if (cj) { const ver = e.mcp > .25 && this.ultConjuro; cj.hidden = !ver; if (ver && cj.dataset.t !== this.ultConjuro.txt) { cj.dataset.t = this.ultConjuro.txt; cj.textContent = '✦ ' + this.ultConjuro.txt.toUpperCase(); } }
+
     const enUso = new Set(vivos.map(a => mmProveedor(a.modelo)));
     for (const x of this.ents.values()) { x.trabajando = x.agente ? x.agente.estado === 'trabajando' : x.tipo === 'apolo' ? vivos.length > 0 : x.tipo === 'modelo' ? enUso.has(x.modelo.id) || (x.modelo.puente && false) : false; this.mover(x, dt, t); }
     c.globalCompositeOperation = 'source-over'; c.drawImage(this.fondo, 0, 0);
+    const borde = this.tema.borde, carteles = [], s = this.porRol;
+    if (s.servidores) carteles.push(mmCartel(c, (s.servidores.x + s.servidores.w / 2) * R, (s.servidores.y + s.servidores.h - 1) * R + 6, 'NÚCLEO', { borde, max: s.servidores.w * R, barras: [['CPU', e.cpu], ['RAM', e.ram]] }));
+    if (s.taller) { const prox = (this.tareas || []).map(x => x.proxima).filter(Boolean).sort()[0], tu = this.turno;
+      carteles.push(mmCartel(c, (s.taller.x + s.taller.w / 2) * R, (s.taller.y + s.taller.h - 1) * R + 6, tu?.activo ? `TURNO DE NOCHE ${Math.round(e.progreso * 100)}%` : `TAREAS ${(this.tareas || []).length}${prox ? ' · PRÓXIMA ' + new Date(prox).toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' }) : ''}`, { borde, max: s.taller.w * R })); }
+    if (s.mcp) { const vivo = e.mcp > .25 && this.ultConjuro;
+      carteles.push(mmCartel(c, (s.mcp.x + s.mcp.w / 2) * R, (s.mcp.y + s.mcp.h - 1) * R + 6, vivo ? '✦ ' + this.ultConjuro.txt.toUpperCase() : (s.mcp.nombre || 'LABORATORIO MCP').toUpperCase(), { borde: vivo ? '#c85aff' : borde, max: s.mcp.w * R, brillo: vivo ? .6 + Math.sin(t / 160) * .4 : 0 })); }
     // objetos de pared primero; luego lo que está en el suelo y los personajes, ordenados por su base
     const luces = [], cosas = [];
     for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (!d) continue; const X = o.x * R, Y = o.y * R - d.alto; cosas.push({ o, d, X, Y, base: d.bloq ? (o.y + d.h) * R - 2 : -1 }); if (d.luz) luces.push(...d.luz(o, X, Y, t, e)); }
     for (const p of this.ents.values()) cosas.push({ p, base: p.y });
+    for (const k of carteles) luces.push({ x: k.x + k.w / 2, y: k.y + k.h / 2, r: Math.max(60, k.w * .7), col: [200, 230, 225], a: .22 });
+    for (const sa of this.m.salas) if (sa.nombre && sa.rol !== 'mcp') luces.push({ x: (sa.x + sa.w / 2) * R, y: sa.y * R + 18, r: 80, col: [200, 230, 225], a: .18 });
     cosas.sort((a, b) => a.base - b.base);
     for (const k of cosas) {
       if (k.o) { c.drawImage(mmSpriteObjeto(k.o), k.X, k.Y); k.d.vivo?.(c, k.X, k.Y, t, e, k.o); continue; }

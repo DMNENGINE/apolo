@@ -108,6 +108,7 @@ function mmFondo(w) {
   }
   c.putImageData(img, 0, 0);
   mmDecorar(c, w);
+  for (const s of m.salas) if (s.nombre && s.rol !== 'mcp') mmCartel(c, (s.x + s.w / 2) * R, s.y * R + 6, s.nombre.toUpperCase(), { borde: T.borde, max: s.w * R - 8 });
   return cv;
 }
 function mmMuro(tipo, pared, gx, gy, px, py) {
@@ -659,3 +660,27 @@ mmObj('caldero', 1, 1, 1, 8, c => {
   const A = 8; c.fillStyle = '#3fd27a'; c.beginPath(); c.ellipse(X + 16, Y + 10 + A, 11, 3, 0, 0, 7); c.fill();
   for (let i = 0; i < 4; i++) { const u = (t / 500 + i * .27) % 1; c.fillStyle = `rgba(190,255,200,${1 - u})`; c.beginPath(); c.arc(X + 9 + i * 5, Y + 10 + A - u * 2, 1 + u * 1.5, 0, 7); c.fill(); }
 }, (o, X, Y) => [{ x: X + 16, y: Y + 14, r: 50, col: [70, 255, 130], a: .4 }]);
+
+// ---------- carteles en el suelo (los personajes pasan por encima) ----------
+// placa de piedra con bisel, filo del color del tema y letras grabadas; devuelve su ancho. barras: [[etiqueta, 0..1], …]
+function mmCartel(c, cx, y, texto, { borde = '#2fd1b0', max = 400, brillo = 0, barras = null } = {}) {
+  let tam = 16; c.font = `700 ${tam}px Silkscreen, monospace`;
+  if (c.measureText(texto).width + (barras ? barras.length * 64 : 0) > max * .62) { tam = 8; c.font = `700 ${tam}px Silkscreen, monospace`; }
+  const tw = Math.ceil(c.measureText(texto).width), bw = barras ? barras.length * 64 : 0, W = Math.round(tw + bw + 20), H = tam === 16 ? 24 : 16, X = Math.round(cx - W / 2), Y = Math.round(y);
+  const p = mmP(c);
+  c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(X + 2, Y + 3, W, H);
+  mmBisel(c, X, Y, W, H, '#262b33'); p(X + 2, Y + 2, W - 4, H - 4, '#1a1e24');
+  c.strokeStyle = borde; c.globalAlpha = .75 + brillo * .25; c.lineWidth = 1; c.strokeRect(X + 2.5, Y + 2.5, W - 5, H - 5); c.globalAlpha = 1;
+  for (const [x, yy] of [[X + 3, Y + 3], [X + W - 5, Y + 3], [X + 3, Y + H - 5], [X + W - 5, Y + H - 5]]) p(x, yy, 2, 2, '#59626e');
+  c.textBaseline = 'middle'; c.textAlign = 'left';
+  const tx = X + 10, ty = Y + H / 2 + (tam === 16 ? 1 : 0);
+  c.fillStyle = '#0b0d10'; c.fillText(texto, tx + 1, ty + 1);
+  c.fillStyle = brillo ? `rgb(${230 + brillo * 25 | 0},${235},${255})` : '#d6e6e2'; c.fillText(texto, tx, ty);
+  if (barras) barras.forEach(([et, v], i) => {
+    const bx = X + 16 + tw + i * 64; c.font = '400 8px Silkscreen, monospace'; c.fillStyle = '#9fb8b2'; c.fillText(et, bx, ty);
+    p(bx + 24, Y + H / 2 - 3, 34, 6, '#06110f'); const n = Math.round(Math.max(0, Math.min(1, v)) * 8);
+    for (let k = 0; k < n; k++) p(bx + 25 + k * 4, Y + H / 2 - 2, 3, 4, v > .85 ? '#ff5470' : v > .6 ? '#ffcf4d' : '#3dff8a');
+    c.font = `700 ${tam}px Silkscreen, monospace`;
+  });
+  return { x: X, y: Y, w: W, h: H };
+}
