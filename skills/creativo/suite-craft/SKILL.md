@@ -4,7 +4,7 @@ description: Usa las apps creativas de la suite ArtCraft instaladas en el PC (Fi
 license: MIT
 metadata:
   apolo:
-    version: 1.0.0
+    version: 1.1.0
     autor: DMN / APOLO
     disparadores: [vídeo, video, clip, clips, subtítulos, subtitulos, subtitula, subtitular, tiktok, short, shorts, reel, reels, edita el video, edita este video, miniatura, thumbnail, foto, fotos, retoca, recorta, logo, svg, vector, plano, planos, cad, dxf, dwg, autocad, pieza, presentación, diapositivas, hoja de cálculo, excel, pdf, audio, podcast, mezcla, filmcraft, photocraft, cadcraft, lightcraft, vectorcraft, effectcraft, figcraft, designcraft, deckcraft, wordcraft, gridcraft, pdfcraft, soundcraft, artcraft]
 ---
@@ -28,6 +28,11 @@ Cada app instalada es **una herramienta tuya** con su nombre: `filmcraft`, `phot
 | hoja de cálculo, fórmulas, gráficos | `gridcraft` |
 | leer/editar/unir/dividir PDF | `pdfcraft` |
 | audio, mezcla, podcast | `soundcraft` |
+
+## Guías profesionales (LÉELAS)
+Cada app tiene su guía en `references/<app>.md` (p. ej. `references/photocraft.md`): reglas verificadas de la app, una receta probada de principio a fin, los comandos clave y los **estándares profesionales** del oficio (tamaños, LUFS, sangrados, rejillas, tipografía) + checklist de entrega. **Antes de la primera tarea con una app en una conversación, léela con `leer_recurso_skill {"nombre":"suite-craft","ruta":"references/<app>.md"}`** y trabaja con ese nivel: no entregues nada sin pasar su checklist.
+
+Trampas ya comprobadas (resumen): PhotoCraft solo abre/guarda dentro de la carpeta del usuario (copia desde D:\ al Escritorio) · VectorCraft: cada forma hereda la pintura anterior, pasa `fill` y `stroke` siempre · DeckCraft nace con una diapositiva vacía · WordCraft necesita `paragraphs:true` para varios párrafos · DesignCraft: páginas 0-based y el color del texto es una muestra (`swatch.create`) · CadCraft: un comando a medias se come lo siguiente (mira `running`) · SoundCraft: sesión sin pistas ni master, créalos · LightCraft no sobrescribe al exportar (añade `-2`) · FigCraft: marcos nuevos con alto fijo, usa `sizingV:"hug"`.
 
 ## Cómo usar cualquier app
 1. `{}` (sin argumentos) → lista sus herramientas y sus **instrucciones** (léelas la primera vez). Con `{"buscar": "caption"}` filtras.

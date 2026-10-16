@@ -9,6 +9,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawn } = require('child_process');
 
 const VERSION_MCP = '2025-06-18';
@@ -16,7 +17,8 @@ const VERSION_MCP = '2025-06-18';
 const CRAFT = {
   filmcraft: { nombre: 'FilmCraft', carpeta: 'FilmCraft', descripcion: 'editor de vídeo (estilo Premiere): cortar, montar, títulos y subtítulos en pantalla, efectos, audio, exportar MP4' },
   effectcraft: { nombre: 'EffectCraft', carpeta: 'EffectCraft', descripcion: 'motion graphics y efectos (estilo After Effects): composiciones, capas, keyframes, render' },
-  photocraft: { nombre: 'PhotoCraft', carpeta: 'PhotoCraft', descripcion: 'editor de fotos (estilo Photoshop): capas, retoque, recortes, texto, exportar PNG/JPG' },
+  // PhotoCraft sin raíces de automatización rechaza TODA ruta ("filesystem authority is absent"): se le da la carpeta del usuario
+  photocraft: { nombre: 'PhotoCraft', carpeta: 'PhotoCraft', args: ['--automation-read-root', os.homedir(), '--automation-write-root', os.homedir()], descripcion: 'editor de fotos (estilo Photoshop): capas, retoque, recortes, texto, exportar PNG/JPG' },
   lightcraft: { nombre: 'LightCraft', carpeta: 'LightCraft', descripcion: 'revelado de fotos (estilo Lightroom): exposición, color, lotes de fotos, exportar' },
   vectorcraft: { nombre: 'VectorCraft', carpeta: 'VectorCraft', args: ['--headless'], descripcion: 'dibujo vectorial (estilo Illustrator): logos, iconos, SVG' },
   cadcraft: { nombre: 'CadCraft', carpeta: 'CADCraft', descripcion: 'CAD 2D/3D (estilo AutoCAD): planos, piezas, cotas, DXF/DWG/PDF' },
@@ -60,6 +62,15 @@ function crearMcpLocales({ cfg, bus, registrar, quitar, lanzar = spawn, detectar
     lista = [];
     try { for (const s of detectar()) lista.push({ ...s, activo: true, herramientas: [] }); } catch (e) { log('[mcp-local] detectar:', e.message); }
     guardar();
+  } else {                                             // los args de la suite pueden cambiar entre versiones: manda la detección
+    let cambio = false;
+    try {
+      for (const d of detectar()) {
+        const s = obtener(d.id);
+        if (s && s.origen === 'craft' && JSON.stringify(s.args) !== JSON.stringify(d.args)) { s.args = d.args; cambio = true; }
+      }
+    } catch (e) { log('[mcp-local] detectar:', e.message); }
+    if (cambio) guardar();
   }
 
   const vivos = new Map();                             // id → { p, pendientes: Map, buf, siguiente, iniciado, temp, instrucciones }
@@ -228,7 +239,7 @@ function crearMcpLocales({ cfg, bus, registrar, quitar, lanzar = spawn, detectar
     for (const d of detectar()) {
       const s = obtener(d.id);
       if (!s) { lista.push({ ...d, activo: true, herramientas: [] }); nuevos++; registrarDe(lista[lista.length - 1]); }
-      else if (s.origen === 'craft' && s.comando !== d.comando) { s.comando = d.comando; registrarDe(s); }
+      else if (s.origen === 'craft' && (s.comando !== d.comando || JSON.stringify(s.args) !== JSON.stringify(d.args))) { s.comando = d.comando; s.args = d.args; registrarDe(s); }
     }
     guardar(); return nuevos;
   }
