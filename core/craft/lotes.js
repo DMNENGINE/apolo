@@ -194,12 +194,15 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   async function interpretar(c, pedido) {
     if (!generarJSON) throw Object.assign(new Error('no hay modelo para entender el pedido; usa los controles'), { status: 400 });
     const dur = Math.round(c.fin - c.inicio);
+    const v = vista(c);                                  // los tiempos que dice el usuario son los del vídeo que está viendo
     const r = await generarJSON({ modelo: modelo?.(), system: 'Traduces lo que pide un streamer sobre un clip vertical ya editado a ajustes concretos del editor. Solo cambias lo que pide; lo demás "igual".',
-      prompt: `Clip de ${dur} s (los tiempos son desde el inicio del clip, en segundos; "1:05" = 65). Estilo actual: ${c.estilo}. `
+      prompt: `El vídeo editado dura ${Math.round(v.duracion)} s${v.dA ? ` (los primeros ${v.dA} s son el avance)` : ''}. Da TODOS los tiempos tal como los dice el usuario, en segundos del vídeo editado ("1:05" = 65); `
+        + `no los recalcules. Estilo actual: ${c.estilo}. `
         + `Cambios de escena actuales: ${(c.escenas || []).map(e => `${e.tipo} ${Math.round(e.desde)}–${Math.round(e.hasta)} s`).join(', ') || 'ninguno'}. `
         + `Ajustes ya aplicados: ${JSON.stringify(c.ajustes || {})}.\n\nLo que pide: "${pedido}"\n\n`
         + 'temblor = la vibración/sacudida de pantalla: "quitar" (ninguna), "tramos" (solo en esos tramos, p. ej. "que solo vibre de 40 a 55"), "intensidad" (la automática más suave/fuerte); intensidad 0–100 = % de la máxima (la actual es 100; "suave" ≈ 25, "media" ≈ 50). '
         + 'avance = repetir un TROZO DEL VÍDEO al principio como adelanto y luego el clip entero ("que empiece con el accidente de 0:45 a 0:47", "recap", "gancho del segundo X", "adelanto"): da desde/hasta en segundos; quitarAvance = true si pide quitarlo. '
+        + 'recorte = dónde EMPIEZA y/o dónde TERMINA el clip ("que termine en 1:37", "que empiece en 0:10", "corta el final desde 2:00"): desde y/o hasta (lo que no diga, sin poner); quitarRecorte = true si pide el clip entero otra vez. '
         + 'efectos = los golpes automáticos (zoom, destellos, glitch…). escenas = los cambios de escena (acercamientos a la cara). '
         + 'gancho = SOLO el TEXTO del título que sale al principio ("-" para quitarlo, "" = igual); nunca pongas tiempos en el gancho. respuesta = una frase corta que confirma lo que vas a cambiar.',
       schema: { type: 'object', properties: {
@@ -208,13 +211,14 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         efectos: ENUM_IGUAL('auto', 'no'), escenas: ENUM_IGUAL('auto', 'no'), emojis: ENUM_IGUAL('si', 'no'),
         look: ENUM_IGUAL('ninguno', ...Object.keys(require('./efectos').LOOKS)), gancho: { type: 'string' }, respuesta: { type: 'string' },
         avance: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } } }, quitarAvance: { type: 'boolean' },
+        recorte: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } } }, quitarRecorte: { type: 'boolean' },
       }, required: ['temblor', 'respuesta'] } });
     const d = r?.datos || r || {};
     const aj = {};
     if (d.estilo && d.estilo !== 'igual') aj.estilo = d.estilo;
     const tb = d.temblor || {};
     if (tb.modo === 'quitar') aj.temblor = false;
-    else if (tb.modo === 'tramos' && tb.tramos?.length) aj.temblor = { tramos: tb.tramos.map(x => [+x.desde, +x.hasta]), ...(tb.intensidad != null ? { intensidad: +tb.intensidad } : {}) };
+    else if (tb.modo === 'tramos' && tb.tramos?.length) aj.temblor = { tramos: tb.tramos.map(x => [v.aOrig(+x.desde), v.aOrig(+x.hasta)]), ...(tb.intensidad != null ? { intensidad: +tb.intensidad } : {}) };
     else if (tb.modo === 'intensidad' && tb.intensidad != null) aj.temblor = { intensidad: +tb.intensidad };
     if (d.efectos && d.efectos !== 'igual') aj.efectos = d.efectos;
     if (d.escenas && d.escenas !== 'igual') aj.escenas = d.escenas;
@@ -223,8 +227,26 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (d.gancho === '-') aj.gancho = false;
     else if (d.gancho && d.gancho !== 'igual' && !/\d:\d\d/.test(d.gancho)) aj.gancho = d.gancho;   // un "0:45 - 0:47" no es un título
     if (d.quitarAvance) aj.avance = null;
-    else if (d.avance && +d.avance.hasta > +d.avance.desde && +d.avance.desde >= 0 && +d.avance.hasta <= dur + 1) aj.avance = [+d.avance.desde, +d.avance.hasta];
+    else if (d.avance && +d.avance.hasta > +d.avance.desde && +d.avance.desde >= 0) {
+      const av = [v.aOrig(+d.avance.desde), v.aOrig(+d.avance.hasta)];
+      if (av[1] > av[0] && av[1] <= dur + 1) aj.avance = av;
+    }
+    if (d.quitarRecorte) aj.recorte = null;
+    else if (d.recorte && (d.recorte.desde != null || d.recorte.hasta != null)) {
+      const actual = c.ajustes?.recorte || [0, dur];
+      // un "empieza en" que cae dentro del avance = el inicio de siempre
+      const rc = [d.recorte.desde != null && +d.recorte.desde > v.dA ? v.aOrig(+d.recorte.desde) : actual[0],
+        d.recorte.hasta != null ? v.aOrig(+d.recorte.hasta) : actual[1]].map(x => Math.min(dur, Math.max(0, +x.toFixed(2))));
+      if (rc[1] - rc[0] >= 3) aj.recorte = rc;
+    }
     return { ajustes: aj, respuesta: String(d.respuesta || '') };
+  }
+
+  // tiempos del vídeo editado (con avance delante y recortado) ↔ tiempos del clip original
+  function vista(c) {
+    const av = c.ajustes?.avance, rc = c.ajustes?.recorte, dur = c.fin - c.inicio;
+    const dA = av ? av[1] - av[0] : 0, rd = rc ? rc[0] : 0, rh = rc ? rc[1] : dur;
+    return { dA, duracion: dA + rh - rd, aOrig: t => +(t < dA ? av[0] + t : t - dA + rd).toFixed(2), aVista: o => +(o - rd + dA).toFixed(2) };
   }
 
   async function modificar(id, { pedido, ajustes } = {}) {

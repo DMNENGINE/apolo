@@ -38,7 +38,9 @@ function montar() {
     for (const ext of ['.mp4', '.srt', '.png', '.fcproj']) fs.writeFileSync(b + ext, 'x');
     return { texto: 'ok', imagenes: [], datos: { mp4: b + '.mp4', srt: b + '.srt', previa: b + '.png', proyecto: b + '.fcproj', gancho: 'LA LLORONA', dudas: [{ texto: 'MIGUEL', s: 3 }], escenas: [{ tipo: 'corte', desde: 4, hasta: 6 }], emojis: 2 } };
   } };
-  const generarJSON = async ({ prompt }) => (/Lo que pide/.test(prompt)
+  const generarJSON = async ({ prompt }) => (/Lo que pide: "que termine en 1:37/.test(prompt)
+    ? { datos: { temblor: { modo: 'tramos', tramos: [{ desde: 12, hasta: 20 }] }, recorte: { hasta: 97 }, respuesta: 'Termina en 1:37.' } }
+    : /Lo que pide/.test(prompt)
     ? { datos: { estilo: 'igual', temblor: { modo: 'tramos', tramos: [{ desde: 40, hasta: 55 }], intensidad: 30 }, efectos: 'igual', escenas: 'igual', emojis: 'no', look: 'igual', gancho: '-', respuesta: 'Vibración solo de 0:40 a 0:55 al 30 %, sin emojis ni título.' } }
     : { datos: { estilo: /llorona/i.test(prompt) ? 'terror' : 'pop' } });
   fs.mkdirSync(path.join(dir, 'craft'), { recursive: true });
@@ -122,4 +124,20 @@ test('lotes: con varios streams nuevos solo entra el último válido (los cortos
   const e = await esperar(l);
   assert.deepStrictEqual(e.clips.map(c => c.stream), ['BBB']);
   assert.strictEqual((await l.revisar()).nuevos, 0, 'el viejo (AAA) queda visto');
+});
+
+test('lotes: recorte y tiempos pedidos sobre el vídeo que se ve (con avance delante) se pasan al original', async () => {
+  const { l, subtitulos } = montar();
+  await l.revisar(); await esperar(l);
+  const c = l.estado().clips[0];                       // clip de 180 s
+  await l.modificar(c.id, { ajustes: { avance: [45, 47] } }); await esperar(l);
+  // "termina en 1:37" del vídeo con 2 s de avance = 95 s del original; la vibración de 0:12–0:20 = 10–18 s del original
+  const r = await l.modificar(c.id, { pedido: 'que termine en 1:37 y que vibre de 0:12 a 0:20' }); await esperar(l);
+  assert.deepStrictEqual(r.ajustes.recorte, [0, 95]);
+  assert.deepStrictEqual(r.ajustes.temblor.tramos, [[10, 18]]);
+  const ult = subtitulos.at(-1);
+  assert.deepStrictEqual(ult.avance, [45, 47]); assert.deepStrictEqual(ult.recorte, [0, 95]);
+  await l.modificar(c.id, { ajustes: { recorte: null } }); await esperar(l);
+  assert.strictEqual(subtitulos.at(-1).recorte, undefined, 'clip entero otra vez');
+  assert.deepStrictEqual(subtitulos.at(-1).avance, [45, 47], 'el avance se queda');
 });

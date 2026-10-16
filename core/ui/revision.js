@@ -23,7 +23,9 @@ Object.assign(I18N.dic.en, {
   'Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.':
     'Retouch and save (Ctrl+S) in FilmCraft, then “Export the retouched version”. Note: “Request change” and “Redo” rebuild the clip and manual retouches are lost.',
   'Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · quita el título · sin emojis': 'E.g.: start with the 0:45–0:47 bit and then the whole clip · remove the shake except 0:40–0:55 · remove the title · no emojis',
-  'quedan': 'left', 'lleva': 'running for', 'empezando': 'starting', 'transcribiendo': 'transcribing', 'eligiendo estilo': 'choosing style',
+  'Dónde empieza y dónde termina': 'Where it starts and ends', 'Empieza en': 'Starts at', 'Termina en': 'Ends at', 'Clip entero': 'Whole clip',
+  'Tiempos del vídeo tal como lo ves aquí': 'Times of the video as you see it here', 'Pon dónde empieza y dónde termina (p. ej. 0:00 y 1:37)': 'Set where it starts and ends (e.g. 0:00 and 1:37)',
+  'recorte': 'trim', 'del original': 'of the original', 'recortando': 'trimming', 'quedan': 'left', 'lleva': 'running for', 'empezando': 'starting', 'transcribiendo': 'transcribing', 'eligiendo estilo': 'choosing style',
   'montando el avance': 'building the teaser', 'montando en FilmCraft': 'assembling in FilmCraft', 'cambios de escena': 'scene changes', 'vibración': 'shake',
   'subtítulos': 'subtitles', 'título, marca y emojis': 'title, brand and emojis', 'exportando': 'exporting', 'abriendo el proyecto': 'opening the project',
   'avance': 'teaser', 'al principio': 'at the start', 'Cambios': 'Changes', 'vibración': 'shake', 'quitada': 'removed', 'solo': 'only', 'al': 'at',
@@ -39,16 +41,31 @@ function RV_ajustes(aj) {                                // resumen de los cambi
   if (tb === false) out.push(`${tr('vibración')} ${tr('quitada')}`);
   else if (tb) out.push(`${tr('vibración')}${tb.tramos ? ` ${tr('solo')} ${tb.tramos.map(([d, h]) => `${RV_mmss(d)}–${RV_mmss(h)}`).join(', ')}` : ''}${tb.intensidad != null ? ` ${tr('al')} ${tb.intensidad} %` : ''}`);
   if (Array.isArray(aj.avance)) out.push(`${tr('avance')} ${RV_mmss(aj.avance[0])}–${RV_mmss(aj.avance[1])} ${tr('al principio')}`);
-  for (const [k, v] of Object.entries(aj)) if (k !== 'temblor' && k !== 'avance') out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : v}`);
+  if (Array.isArray(aj.recorte)) out.push(`${tr('recorte')} ${RV_mmss(aj.recorte[0])}–${RV_mmss(aj.recorte[1])} ${tr('del original')}`);
+  for (const [k, v] of Object.entries(aj)) if (!['temblor', 'avance', 'recorte'].includes(k)) out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : v}`);
   return out.join(' · ');
 }
+// tiempos del vídeo editado que ves (avance delante, recortado) ↔ tiempos del clip original (lo que se guarda); igual que vista() en lotes.js
+function RV_vista(c) {
+  const av = c.ajustes?.avance, rc = c.ajustes?.recorte, dur = c.fin - c.inicio;
+  const dA = av ? av[1] - av[0] : 0, rd = rc ? rc[0] : 0, rh = rc ? rc[1] : dur;
+  return { dA, rd, rh, dur, duracion: dA + rh - rd, aOrig: t => +(t < dA ? av[0] + t : t - dA + rd).toFixed(2), aVista: o => +(o - rd + dA).toFixed(2) };
+}
 function RV_cambios(c) {
-  const tb = c.ajustes?.temblor, tramo = tb?.tramos?.[0];
+  const v = RV_vista(c);
+  const tb = c.ajustes?.temblor, t0 = tb?.tramos?.[0], tramo = t0 && [v.aVista(t0[0]), v.aVista(t0[1])];
   const modo = tb === false ? 'quitar' : tramo ? 'tramo' : tb ? 'intensidad' : 'tramo';
   const int = tb && tb.intensidad != null ? tb.intensidad : 100;
   return `<details class="rv-cambios"><summary>${tr('Cambios y edición a mano')}</summary>
     <textarea class="rv-pedido" placeholder="${esc(tr('Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · quita el título · sin emojis'))}"></textarea>
     <div class="rv-fila"><button class="btn pri" data-a="pedir">${tr('Pedir cambio')}</button></div>
+    <div class="rv-sub">${tr('Dónde empieza y dónde termina')}</div>
+    <div class="rv-fila">${tr('Empieza en')} <input type="text" class="rv-rdesde" value="${RV_mmss(v.dA)}">
+      <button class="btn fantasma" data-a="marcar" data-campo="rdesde" title="${esc(tr('usar el momento del vídeo'))}">⏱</button>
+      ${tr('Termina en')} <input type="text" class="rv-rhasta" value="${RV_mmss(v.duracion)}">
+      <button class="btn fantasma" data-a="marcar" data-campo="rhasta" title="${esc(tr('usar el momento del vídeo'))}">⏱</button></div>
+    <div class="rv-fila"><button class="btn" data-a="recortar">${tr('Aplicar')}</button>${c.ajustes?.recorte ? `<button class="btn fantasma" data-a="sinrecorte">${tr('Clip entero')}</button>` : ''}
+      <small class="tenue">${tr('Tiempos del vídeo tal como lo ves aquí')}</small></div>
     <div class="rv-sub">${tr('Vibración de pantalla')}</div>
     <div class="rv-fila"><select class="rv-estilo rv-vmodo">
         <option value="tramo"${modo === 'tramo' ? ' selected' : ''}>${tr('Solo en un tramo')}</option>
@@ -184,7 +201,7 @@ VISTAS.revision = {
     }
     if (a.dataset.a === 'marcar') {                      // ⏱ = el momento en que está el vídeo
       const vid = $('video', tarjeta); if (!vid) return aviso('Dale a ▶ primero', true);
-      $(a.dataset.campo === 'desde' ? '.rv-desde' : '.rv-hasta', tarjeta).value = RV_mmss(vid.currentTime);
+      $('.rv-' + a.dataset.campo, tarjeta).value = RV_mmss(vid.currentTime);
       return;
     }
     // qué se manda: acción → [ruta, cuerpo]
@@ -202,9 +219,22 @@ VISTAS.revision = {
       else {
         const d = RV_seg($('.rv-desde', tarjeta).value), h = RV_seg($('.rv-hasta', tarjeta).value);
         if (!(h > d)) return aviso('Pon desde y hasta (p. ej. 0:40 y 0:55)', true);
-        temblor = { tramos: [[d, h]], intensidad };
+        const v = RV_vista(this.L.clips.find(x => x.id === id));
+        temblor = { tramos: [[v.aOrig(d), v.aOrig(h)]], intensidad };
       }
       ruta = 'modificar'; cuerpo = { ajustes: { temblor } };
+    }
+    if (ruta === 'recortar' || ruta === 'sinrecorte') {
+      let recorte = null;
+      if (ruta === 'recortar') {
+        const v = RV_vista(this.L.clips.find(x => x.id === id));
+        const d = RV_seg($('.rv-rdesde', tarjeta).value), h = RV_seg($('.rv-rhasta', tarjeta).value);
+        if (!(h > d)) return aviso('Pon dónde empieza y dónde termina (p. ej. 0:00 y 1:37)', true);
+        recorte = [d <= v.dA ? v.rd : v.aOrig(d), Math.min(v.dur, v.aOrig(h))];   // dentro del avance = el inicio de siempre
+        if (recorte[1] - recorte[0] < 3) return aviso('Pon dónde empieza y dónde termina (p. ej. 0:00 y 1:37)', true);
+        if (recorte[0] <= 0.05 && recorte[1] >= v.dur - 0.05) recorte = null;
+      }
+      ruta = 'modificar'; cuerpo = { ajustes: { recorte } };
     }
     if (ruta === 'abrir') aviso('Abriendo FilmCraft…');
     a.disabled = true;

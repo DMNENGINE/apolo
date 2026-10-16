@@ -133,10 +133,13 @@ function transcribir(video, { python = 'python', modelo = 'large-v3', idioma = '
   });
 }
 
-// vídeo con avance: [desde, hasta] del original + el original entero (vídeo y audio), H.264 casi sin pérdida
-function montarAvance(entrada, salida, d, h, ffmpeg = 'ffmpeg') {
-  const filtro = `[0:v]split[va][vb];[0:a]asplit[aa][ab];[va]trim=start=${d}:end=${h},setpts=PTS-STARTPTS[v0];[aa]atrim=start=${d}:end=${h},asetpts=PTS-STARTPTS[a0];`
-    + '[vb]setpts=PTS-STARTPTS[v1];[ab]asetpts=PTS-STARTPTS[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]';
+// vídeo montado: [avance del original] + el original (entero o solo el recorte), vídeo y audio, H.264 casi sin pérdida
+function montarFuente(entrada, salida, { avance, recorte }, ffmpeg = 'ffmpeg') {
+  const tramo = r => (r ? `trim=start=${r[0]}:end=${r[1]},` : ''), atramo = r => (r ? `atrim=start=${r[0]}:end=${r[1]},` : '');
+  const filtro = avance
+    ? `[0:v]split[va][vb];[0:a]asplit[aa][ab];[va]${tramo(avance)}setpts=PTS-STARTPTS[v0];[aa]${atramo(avance)}asetpts=PTS-STARTPTS[a0];`
+      + `[vb]${tramo(recorte)}setpts=PTS-STARTPTS[v1];[ab]${atramo(recorte)}asetpts=PTS-STARTPTS[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]`
+    : `[0:v]${tramo(recorte)}setpts=PTS-STARTPTS[v];[0:a]${atramo(recorte)}asetpts=PTS-STARTPTS[a]`;
   fs.mkdirSync(path.dirname(salida), { recursive: true });
   const tmp = salida + '.tmp.mp4';
   return new Promise((ok, mal) => {
@@ -144,7 +147,7 @@ function montarAvance(entrada, salida, d, h, ffmpeg = 'ffmpeg') {
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '256k', tmp], { windowsHide: true });
     let err = ''; p.stderr.on('data', x => { err += x; });
     p.on('error', e => mal(new Error(`ffmpeg no está disponible: ${e.message}`)));
-    p.on('close', c => { if (c !== 0) return mal(new Error(`ffmpeg (avance) salió con ${c}: ${err.trim().slice(-300)}`)); fs.renameSync(tmp, salida); ok(salida); });
+    p.on('close', c => { if (c !== 0) return mal(new Error(`ffmpeg (avance/recorte) salió con ${c}: ${err.trim().slice(-300)}`)); fs.renameSync(tmp, salida); ok(salida); });
   });
 }
 
@@ -237,22 +240,27 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       palabras = tr.palabras;
       trozos = trocear(palabras, opTrozos);
     }
-    // avance [desde, hasta]: ese trozo del clip se repite al principio como adelanto (el accidente, el susto…) y luego va el clip
-    // entero. Se monta un vídeo nuevo con ffmpeg y las palabras se recolocan (no vuelve a pasar Whisper)
-    const avance = Array.isArray(a.avance) && a.avance.length === 2 && +a.avance[1] > +a.avance[0] ? a.avance.map(Number) : null;
-    let dAvance = 0;
-    if (avance && !a.soloTranscribir) {
-      if (Array.isArray(a.subtitulos) && a.subtitulos.length) throw new Error('el avance no se combina con subtítulos corregidos a mano');
-      const [d, h] = avance;
-      dAvance = h - d;
-      const conAvance = path.join(dirSalida, `${base}.avance-${d}-${h}.mp4`);
-      if (!fs.existsSync(conAvance)) { avisar('montando el avance', 8); await montarAvance(video, conAvance, d, h, cfg?.craft?.ffmpeg); }
-      video = conAvance;
+    // avance [desde, hasta]: ese trozo del clip se repite al principio como adelanto (el accidente, el susto…) y luego va el clip.
+    // recorte [desde, hasta]: el clip empieza y acaba ahí. Todos los tiempos, del clip original. Se monta un vídeo nuevo con
+    // ffmpeg y las palabras se recolocan (no vuelve a pasar Whisper)
+    const par = v => (Array.isArray(v) && v.length === 2 && +v[1] > +v[0] && +v[0] >= 0 ? v.map(Number) : null);
+    const avance = par(a.avance), recorte = par(a.recorte);
+    let dAvance = 0, corrimiento = 0;                    // tiempo final = tiempo original + corrimiento (fuera del avance)
+    if ((avance || recorte) && !a.soloTranscribir) {
+      if (Array.isArray(a.subtitulos) && a.subtitulos.length) throw new Error('el avance y el recorte no se combinan con subtítulos corregidos a mano');
+      const [rd, rh] = recorte || [0, Infinity];
+      dAvance = avance ? avance[1] - avance[0] : 0;
+      corrimiento = dAvance - rd;
+      const etiqueta = [avance && `a${avance.join('-')}`, recorte && `r${recorte.join('-')}`].filter(Boolean).join('_');
+      const montado = path.join(dirSalida, `${base}.${etiqueta}.mp4`);
+      if (!fs.existsSync(montado)) { avisar(avance ? 'montando el avance' : 'recortando', 8); await montarFuente(video, montado, { avance, recorte }, cfg?.craft?.ffmpeg); }
+      video = montado;
       palabras = [
-        ...palabras.filter(p => p.s >= d - 0.05 && p.e <= h + 0.05).map(p => ({ ...p, s: Math.max(0, p.s - d), e: Math.min(dAvance, p.e - d) })),
-        ...palabras.map(p => ({ ...p, s: p.s + dAvance, e: p.e + dAvance })),
+        ...(avance ? palabras.filter(p => p.s >= avance[0] - 0.05 && p.e <= avance[1] + 0.05).map(p => ({ ...p, s: Math.max(0, p.s - avance[0]), e: Math.min(dAvance, p.e - avance[0]) })) : []),
+        ...palabras.filter(p => p.s >= rd - 0.05 && p.e <= rh + 0.05).map(p => ({ ...p, s: Math.max(dAvance, p.s + corrimiento), e: p.e + corrimiento })),
       ];
       trozos = trocear(palabras, opTrozos);
+      if (!trozos.length) throw new Error('en ese tramo no se dice nada que subtitular');
     }
     // rango [desde, hasta] en segundos: solo ese tramo (muestras rápidas de un estilo)
     const rango = Array.isArray(a.rango) && a.rango.length === 2 ? a.rango.map(Number) : null;
@@ -330,7 +338,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     }
     if (v1 != null && tramosVib.length) {             // los tramos se dan en tiempos del clip original: con avance, van corridos
       avisar('vibración', 22);
-      for (const [d, h] of tramosVib.sort((x, y) => x[0] - y[0])) await gx.golpe('temblor', d + dAvance, h - d);
+      for (const [d, h] of tramosVib.sort((x, y) => x[0] - y[0])) await gx.golpe('temblor', Math.max(dAvance, d + corrimiento), h - d);
     }
     if (v1 != null && dAvance) await gx.golpe('destello', dAvance, 0.2);   // fogonazo al volver del avance al principio del clip
     const fuente = a.fuente || E.fuente;
@@ -515,6 +523,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
         description: 'cambios de escena manuales durante [desde, hasta]: ' + Object.entries(efectos.TIPOS_ESCENA).map(([k, v]) => `${k} (${v})`).join('; ') + '. Sin x,y la cara se detecta sola.' },
       zonaEnfoque: { type: 'array', items: { type: 'number' }, description: 'zona por defecto de los enfoques' },
       avance: { type: 'array', items: { type: 'number' }, description: '[desde, hasta] en segundos: ese trozo del clip se repite al principio como adelanto (recap/gancho de vídeo) y luego va el clip entero' },
+      recorte: { type: 'array', items: { type: 'number' }, description: '[desde, hasta] en segundos del clip: dónde empieza y dónde termina (lo de fuera se quita)' },
       temblor: { description: 'vibración de pantalla: false = ninguna; { intensidad: 0–100 (% de la máxima; por defecto 100), tramos: [[desde, hasta], …] en segundos } = solo en esos tramos (sin tramos: la automática a esa intensidad)' },
       look: { type: 'string', enum: Object.keys(efectos.LOOKS), description: 'look de color del vídeo: ' + Object.keys(efectos.LOOKS).join(', ') },
       emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },
