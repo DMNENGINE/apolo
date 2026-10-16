@@ -1,0 +1,92 @@
+// Base de estilos de subtítulos animados para subtitular_video (propios: no copian plantillas de CapCut/Submagic ni usan nombres de marcas).
+// Cada estilo = fuente + relleno/contorno/caja/sombra (parámetros de graphic_text de FilmCraft) + modo + animación de entrada.
+//   modo: bloque   — el trozo entero aparece de golpe
+//         karaoke  — el trozo entero visible y la palabra que se dice cambia de color
+//         palabra  — una palabra cada vez, grande
+//         acumula  — las palabras del trozo van apareciendo y se quedan
+//   entrada (la animan keyframes de motion/opacity, centrados en el texto): ninguna | pop | rebote | subir | fundido
+// Medidas pensadas para 1080 px de ancho (se escalan con el vídeo).
+'use strict';
+
+const ESTILOS = {
+  clasico: {
+    nombre: 'Clásico', descripcion: 'Impact blanco con contorno negro y palabras clave en amarillo. Sin animación. El del clip 08.',
+    fuente: 'Impact', tam: 112, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
+    resaltado: '#ffd400', modo: 'bloque', entrada: 'ninguna',
+  },
+  pop: {
+    nombre: 'Pop', descripcion: 'Como el clásico, pero cada trozo entra con un golpe de escala (80 → 108 → 100 %). Energía de TikTok.',
+    fuente: 'Impact', tam: 116, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
+    resaltado: '#ffd400', modo: 'bloque', entrada: 'pop',
+  },
+  karaoke: {
+    nombre: 'Karaoke', descripcion: 'El trozo entero en pantalla y la palabra que dices se enciende en verde. Fácil de seguir.',
+    fuente: 'Arial', estiloFuente: 'Black', tam: 96, relleno: '#ffffff', contorno: { ancho: 9, color: '#000000' }, sombra: true,
+    activo: '#3dff6e', resaltado: null, modo: 'karaoke', entrada: 'pop', maxPalabras: 4, maxLetras: 26,
+  },
+  palabra: {
+    nombre: 'Palabra a palabra', descripcion: 'Una sola palabra gigante cada vez, con rebote. Máxima energía; para frases cortas y gritos.',
+    fuente: 'Impact', tam: 170, relleno: '#ffffff', contorno: { ancho: 12, color: '#000000' }, sombra: true,
+    resaltado: '#ffd400', modo: 'palabra', entrada: 'rebote',
+  },
+  caja: {
+    nombre: 'Caja', descripcion: 'Texto oscuro sobre una caja blanca redondeada que sube suave. Limpio, estilo Reels.',
+    fuente: 'Segoe UI', estiloFuente: 'Black', tam: 76, relleno: '#111111', contorno: null, sombra: false, mayus: false,
+    caja: { color: '#ffffff', opacidad: 100, radio: 18, tam: 22 },
+    resaltado: '#e8174b', modo: 'bloque', entrada: 'subir', maxPalabras: 5, maxLetras: 30,
+  },
+  neon: {
+    nombre: 'Neón', descripcion: 'Blanco con borde y brillo magenta, y la palabra activa en amarillo. Contrasta con fondos claros y la cabina teal.',
+    fuente: 'Segoe UI', estiloFuente: 'Black', tam: 100, relleno: '#ffffff', contorno: { ancho: 6, color: '#ff1fb4' },
+    brillo: { color: '#ff1fb4', difuminado: 26, tam: 12, opacidad: 100 },
+    activo: '#ffe600', resaltado: null, modo: 'karaoke', entrada: 'fundido', maxPalabras: 3,
+  },
+  fuego: {
+    nombre: 'Fuego', descripcion: 'Impact amarillo con doble contorno (negro y naranja). Para momentos épicos y gaming.',
+    fuente: 'Impact', tam: 118, relleno: '#ffd400', contorno: { ancho: 10, color: '#000000' }, contorno2: { ancho: 8, color: '#ff5a00' }, sombra: true,
+    resaltado: '#ffffff', modo: 'bloque', entrada: 'rebote',
+  },
+  acumula: {
+    nombre: 'Acumulativo', descripcion: 'Las palabras del trozo aparecen una a una y se quedan; la última en amarillo. Ritmo de conversación.',
+    fuente: 'Arial', estiloFuente: 'Black', tam: 96, relleno: '#ffffff', contorno: { ancho: 9, color: '#000000' }, sombra: true,
+    activo: '#ffd400', resaltado: null, modo: 'acumula', entrada: 'ninguna', maxPalabras: 4, maxLetras: 26,
+  },
+  minimal: {
+    nombre: 'Minimal', descripcion: 'Blanco con sombra suave, sin contorno ni mayúsculas, fundido. Para vídeos tranquilos o de explicar.',
+    fuente: 'Segoe UI', estiloFuente: 'Semibold', tam: 70, relleno: '#ffffff', contorno: null, mayus: false,
+    brillo: { color: '#000000', difuminado: 20, tam: 9, opacidad: 100 },
+    resaltado: null, modo: 'bloque', entrada: 'fundido', maxPalabras: 6, maxLetras: 36,
+  },
+};
+
+// keyframes de entrada: [segundos desde el inicio del clip, escala %, opacidad %, desplazamiento y en px (a 1080)]
+const ENTRADAS = {
+  ninguna: [],
+  pop: [[0, 80, 100, 0], [0.07, 108, 100, 0], [0.13, 100, 100, 0]],
+  rebote: [[0, 40, 0, 0], [0.08, 118, 100, 0], [0.15, 94, 100, 0], [0.21, 100, 100, 0]],
+  subir: [[0, 100, 0, 40], [0.16, 100, 100, 0]],
+  fundido: [[0, 100, 0, 0], [0.15, 100, 100, 0]],
+};
+
+// propiedades de graphics.set para un estilo (k = escala por ancho del vídeo)
+function props(e, k) {
+  const p = { align: 'center', fill_color: e.relleno, shadow: !!e.sombra || !!e.brillo };
+  p.stroke = !!e.contorno;
+  if (e.contorno) Object.assign(p, { stroke_width: Math.round(e.contorno.ancho * k), stroke_color: e.contorno.color });
+  // el 2.º contorno se dibuja detrás y su ancho cuenta desde la letra: tiene que sumar el del 1.º para asomar
+  if (e.contorno2) Object.assign(p, { stroke2: true, stroke2_width: Math.round(((e.contorno?.ancho || 0) + e.contorno2.ancho) * k), stroke2_color: e.contorno2.color });
+  if (e.brillo) Object.assign(p, { shadow_color: e.brillo.color, shadow_blur: Math.round(e.brillo.difuminado * k), shadow_size: Math.round(e.brillo.tam * k), shadow_distance: 0, shadow_opacity: e.brillo.opacidad });
+  if (e.caja) Object.assign(p, { background: true, background_color: e.caja.color, background_opacity: e.caja.opacidad, background_radius: Math.round(e.caja.radio * k), background_size: Math.round(e.caja.tam * k) });
+  if (e.estiloFuente) p.font_style = e.estiloFuente;
+  return p;
+}
+
+function obtener(nombre) {
+  if (nombre && typeof nombre === 'object') return { ...ESTILOS.clasico, ...nombre };       // estilo a medida
+  const e = ESTILOS[String(nombre || 'clasico').toLowerCase()];
+  if (!e) throw new Error(`no existe el estilo "${nombre}". Hay: ${Object.keys(ESTILOS).join(', ')}`);
+  return e;
+}
+const lista = () => Object.entries(ESTILOS).map(([id, e]) => ({ id, nombre: e.nombre, descripcion: e.descripcion }));
+
+module.exports = { ESTILOS, ENTRADAS, props, obtener, lista };

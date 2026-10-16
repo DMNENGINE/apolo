@@ -6,7 +6,7 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { crearMcpLocales, detectarCraft } = require('../mcp-local');
-const { trocear, resaltables, rangosResaltados, tituloDeArchivo, dosLineas, srtCaso } = require('../craft/subtitular');
+const { montarPalabras, trocear, resaltables, rangosResaltados, tituloDeArchivo, dosLineas, srtCaso } = require('../craft/subtitular');
 
 const SERVIDOR = `
 const rl = require('readline').createInterface({ input: process.stdin });
@@ -117,4 +117,9 @@ test('subtitular: trocear, resaltar, título y 2 líneas', () => {
   // un trozo no acaba en "para"/"de": la palabra pasa al siguiente
   const t2 = trocear([w('Bendiciones', 70, 70.4), w('para', 70.4, 70.6), w('todos', 70.6, 70.9), w('los', 70.9, 71), w('del', 71, 71.1), w('chat', 71.1, 71.4)], { maxPalabras: 2 });
   assert.deepStrictEqual(t2.map(x => x.texto), ['BENDICIONES', 'PARA TODOS', 'LOS', 'DEL CHAT']);
+  // karaoke: rango de cada palabra sin signos; la última pierde la coma/punto
+  const m = montarPalabras([w('¿Gracias,', 0, 1), w('Miguel?', 1, 2), w('hermano.', 2, 3)]);
+  assert.strictEqual(m.texto, '¿GRACIAS, MIGUEL? HERMANO');
+  assert.deepStrictEqual(m.rangos.map(([a, b]) => m.texto.slice(a, b)), ['GRACIAS', 'MIGUEL', 'HERMANO']);
+  assert.strictEqual(montarPalabras([w('Hola', 0, 1)], false).texto, 'Hola');
 });
