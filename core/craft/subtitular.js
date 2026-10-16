@@ -136,7 +136,8 @@ function transcribir(video, { python = 'python', modelo = 'large-v3', idioma = '
 // ── edición en FilmCraft ──
 function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
   async function fc(id, params = {}) {
-    const r = await mcpLocales.llamar('filmcraft', 'command_run', { id, params });
+    // exportar un clip de 3 min con muchas animaciones pasa de 10 min en CPU: si se corta, FilmCraft sigue exportando y atasca lo siguiente
+    const r = await mcpLocales.llamar('filmcraft', 'command_run', { id, params }, id === 'file.exportMedia' ? { timeoutSeg: 3600 } : {});
     const txt = (r?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
     if (r?.isError) throw new Error(`FilmCraft ${id}: ${txt.slice(0, 400)}`);
     try { return JSON.parse(txt); } catch { return txt; }
@@ -347,6 +348,12 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       if (fot(c.s) > fot(p.s)) p.e = fot(c.s) / fps;   // se recorta el anterior
       else { c.s = fot(p.e) / fps; if (fot(c.e) <= fot(c.s)) c.e = (fot(c.s) + 1) / fps; }   // o se retrasa este
     }
+    // palabras con duración cero (Whisper): el trozo se alarga hasta 0,4 s sin pisar el siguiente
+    trozos.forEach((c, i) => {
+      if (fot(c.e) - fot(c.s) >= 3) return;
+      const tope = trozos[i + 1] ? fot(trozos[i + 1].s) : fot(c.s + 0.4);
+      c.e = Math.max(fot(c.s) + 1, Math.min(fot(c.s + 0.4), tope)) / fps;
+    });
     const nombres = new Map();                         // nombres propios = mayúscula a mitad de frase
     palabras.forEach((p, i) => {
       const w = String(p.w).replace(/[^\p{L}\d]/gu, '');

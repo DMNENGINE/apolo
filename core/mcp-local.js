@@ -163,10 +163,11 @@ function crearMcpLocales({ cfg, bus, registrar, quitar, lanzar = spawn, detectar
     return imagenes.length ? { texto, imagenes } : texto;
   }
 
-  async function llamar(id, nombre, args = {}) {
+  // timeoutSeg: para llamadas largas conocidas (exportar un vídeo puede pasar de los 10 min por defecto)
+  async function llamar(id, nombre, args = {}, { timeoutSeg } = {}) {
     const s = obtener(id); if (!s) throw new Error(`no existe el servidor ${id}`);
     await iniciar(s);
-    return rpc(s, 'tools/call', { name: nombre, arguments: args || {} });
+    return rpc(s, 'tools/call', { name: nombre, arguments: args || {} }, { timeoutSeg });
   }
 
   function listar(s, filtro) {
