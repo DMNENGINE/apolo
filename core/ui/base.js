@@ -375,7 +375,7 @@ function conectarEventos() {
   flujoGlobal?.abort(); flujoGlobal = new AbortController();
   const marcar = ok => { const p = $('#puntoConexion'); if (p) p.className = 'punto ' + (ok ? 'ok' : 'mal'); };
   marcar(true);
-  flujo('GET', '/eventos', undefined, e => {
+  flujo('GET', '/eventos?panel=1', undefined, e => {   // panel=1: mientras esté abierto la isla se puede ocultar
     if (e.tipo === 'permiso') { E.pendientes.set(e.id, e); pintarPermisos(); robotsLog(`? ${tr('permiso')}: ${NOMBRE_HERR[e.herramienta] || e.herramienta}`); }
     else if (e.tipo === 'permiso-resuelto') { E.pendientes.delete(e.id); pintarPermisos(); }
     else if (e.tipo === 'avatar' && typeof AV_cargarGlobal === 'function') { AV_cargarGlobal().catch(() => { }); }   // AV_aplicarGlobal re-monta el compañero

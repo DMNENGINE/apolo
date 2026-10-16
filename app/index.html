@@ -83,7 +83,11 @@
   /* el panel se despliega/pliega suave en vez de aparecer/desaparecer de golpe */
   #panel{padding:0 14px;position:relative;max-height:0;opacity:0;overflow:hidden;transform:translateY(-8px);
     transition:max-height .6s cubic-bezier(.2,.8,.2,1), opacity .45s ease, transform .5s ease, padding .5s}
-  #island.open #panel{max-height:var(--pmax,720px);opacity:1;transform:none;padding-bottom:14px}
+  #island.open #panel{max-height:var(--pmax,720px);opacity:1;transform:none;padding-bottom:14px;
+    overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+  /* un permiso pendiente va antes que la respuesta/actualización y las tarjetas: sus botones nunca quedan fuera */
+  #izq{display:flex;flex-direction:column} #answer,#cards{order:2}
+  #izq:has(#perms .perm) #answer{max-height:96px}
   #island.open #mini{display:none}
   #island.open #bar{display:none}                 /* abierta: el panel ya muestra estado y robot grande */
   #island.open #panel{padding-top:12px}

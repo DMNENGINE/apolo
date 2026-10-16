@@ -113,7 +113,7 @@ function iniciar(opciones = {}) {
   const local = ip => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
   const ipDe = req => String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
   // eventos para clientes remotos: si no hay ninguno conectado se guardan (máx. 100, 15 min) y se entregan al conectar
-  n.remotos = 0; n.motores = {}; const cola = [];
+  n.remotos = 0; n.paneles = 0; n.motores = {}; const cola = [];
   n.bus.on('remoto', e => { if (!n.remotos) { cola.push({ t: Date.now(), e }); if (cola.length > 100) cola.shift(); } });
   // app móvil: tokens de dispositivo con alcance limitado; cfg.red.moviles abre la LAN privada SOLO a /m/ y a esos tokens
   const MV = require('./movil');
@@ -319,6 +319,8 @@ function iniciar(opciones = {}) {
           n.motores[cliente] = (n.motores[cliente] || 0) + 1; n.bus.on('motor', mot);
           n.canales.registrar(cliente, { nombre: cliente[0].toUpperCase() + cliente.slice(1), tipo: 'motor', estado: 'activo', detalle: 'Puente conectado: escribe "' + cliente + ': …" en la isla, Discord o voz' });
         }
+        const esPanel = !disp && !cliente && u.searchParams.get('panel') === '1';   // pestaña del panel de control abierta
+        if (esPanel) { n.paneles++; n.bus.emit('panel-conexion', { abiertos: n.paneles }); }
         const rem = e => enviar({ tipo: 'remoto', ...e });
         if (esRemoto) {
           n.remotos++; n.bus.emit('remoto-conexion', { conectados: n.remotos, cliente: String(req.headers['x-cliente']) });
@@ -331,6 +333,7 @@ function iniciar(opciones = {}) {
         const hk = () => enviar({ tipo: 'permisos-externos' }); n.bus.on('nodo-permiso', hk); n.bus.on('nodo-refrescar', hk);   // permisos de los hooks de Claude Code (main.js)
         const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
         req.on('close', () => { clearInterval(ping); n.bus.off('permiso', a); n.bus.off('permiso-resuelto', b); n.bus.off('evento', c); n.bus.off('tarea', d); n.bus.off('agente', ag); n.bus.off('control', ctl); n.bus.off('memoria-uso', mu); n.bus.off('servicios', sv); n.bus.off('registro', g); n.bus.off('nodo-permiso', hk); n.bus.off('nodo-refrescar', hk);
+          if (esPanel) { n.paneles--; n.bus.emit('panel-conexion', { abiertos: n.paneles }); }
           if (esRemoto) { n.bus.off('remoto', rem); n.remotos--; n.bus.emit('remoto-conexion', { conectados: n.remotos }); }
           if (esMotor) {
             n.bus.off('motor', mot); n.motores[cliente]--;

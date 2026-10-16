@@ -475,6 +475,22 @@ async function discordComoPlugin() {
   console.log('[discord] usando el plugin del SDK (plugins/discord)');
 }
 
+// isla oculta mientras el panel está abierto (userData/isla-prefs.json {ocultarConPanel})
+let panelesAbiertos = 0, islaOcultaPorPanel = false;
+const PREFS_ISLA = () => path.join(app.getPath('userData'), 'isla-prefs.json');
+function prefsIsla() { try { return JSON.parse(fs.readFileSync(PREFS_ISLA(), 'utf8')); } catch { return {}; } }
+const ocultarConPanel = () => prefsIsla().ocultarConPanel !== false;
+function ponerOcultarConPanel(v) {
+  try { fs.writeFileSync(PREFS_ISLA(), JSON.stringify({ ...prefsIsla(), ocultarConPanel: !!v }, null, 2)); } catch { }
+  aplicarOcultarConPanel();
+}
+function aplicarOcultarConPanel() {
+  if (!win || win.isDestroyed()) return;
+  const ocultar = ocultarConPanel() && panelesAbiertos > 0;
+  if (ocultar && !islaOcultaPorPanel) { islaOcultaPorPanel = true; win.hide(); }
+  else if (!ocultar && islaOcultaPorPanel) { islaOcultaPorPanel = false; win.showInactive(); win.setAlwaysOnTop(true, 'screen-saver'); }
+}
+
 // panel web del núcleo: el token va en el #hash (no viaja al servidor) y el panel lo guarda y lo borra de la URL
 function abrirPanel(ruta = '') {
   if (!nucleo) return;
@@ -571,6 +587,8 @@ async function startNucleo() {
     movil.sendAviso(`🛑 **${tr('PÁNICO')}** (${e.origen}): ${tr('todo parado hasta reanudar.')}`, 'red');
   });
   nucleo.bus.on('panico-fin', avisarPanico);
+  // con el panel de control abierto la isla se esconde y vuelve al cerrarlo (opción de la bandeja, encendida por defecto)
+  nucleo.bus.on('panel-conexion', ({ abiertos }) => { panelesAbiertos = abiertos; aplicarOcultarConPanel(); });
   ipcMain.on('panico', (_e, on) => (on ? nucleo.panico.activar('isla') : nucleo.panico.reanudar('isla')));
   ipcMain.handle('panico-estado', () => nucleo.panico.estado());
   ipcMain.on('salir-gamer', () => { if (nucleo.gamer) nucleo.gamer.desactivar({ motivo: 'desde la isla' }).catch(() => { }); });
@@ -685,6 +703,7 @@ function buildTray() {
     { type: 'separator' },
     { label: `🤖 ${tr('Núcleo')}: ${tr('isla')} → ${(puente && puente.destino('isla')) || 'Claude Code'} · Discord → ${(puente && puente.destino('discord')) || 'Claude Code'}`, enabled: false },
     { label: `🖥️ ${tr('Abrir panel de control')}`, click: () => abrirPanel() },
+    { label: tr('Ocultar la isla mientras el panel está abierto'), type: 'checkbox', checked: ocultarConPanel(), click: i => ponerOcultarConPanel(i.checked) },
     nucleo?.panico?.activo() ? { label: `▶ ${tr('Reanudar (salir del pánico)')}`, click: () => nucleo.panico.reanudar('bandeja') } : { label: `🛑 ${tr('Pánico: parar todo')}  Ctrl+Alt+Esc`, click: () => nucleo?.panico?.activar('bandeja') },
     { label: `✨ ${tr('Asistente de bienvenida')}`, click: () => abrirPanel('/bienvenida') },
     { label: `💬 ${tr('Conectar ChatGPT (tu plan, sin API key)')}`, click: () => abrirPanel('/ajustes/modelos') },
