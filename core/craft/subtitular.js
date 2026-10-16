@@ -12,6 +12,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const estilos = require('./estilos');
 const emojis = require('./emojis');
+const efectos = require('./efectos');
 
 const TPS = 254016000000;                              // ticks de FilmCraft por segundo
 const AMARILLO = '#ffd400';
@@ -207,6 +208,15 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const t = s => Math.round(fot(s) / fps * TPS);
     const durF = (ini, secs) => Math.max(1, fot(ini + secs) - fot(ini)) / fps;
 
+    // golpes de vídeo (zoom, temblor, destello, rgb, glitch, barrido) en los momentos fuertes + look de color
+    let resumenFx = null;
+    const modoFx = a.efectos ?? E.efectos ?? 'no';
+    if (modoFx !== 'no' && modoFx !== false || a.look || E.look) {
+      const v1 = sec?.video?.[0]?.items?.[0]?.clip;
+      const permitidos = Array.isArray(modoFx) ? modoFx.filter(g => efectos.GOLPES.includes(g)) : modoFx === 'no' || modoFx === false ? [] : efectos.GOLPES;
+      const lista = permitidos.length ? efectos.momentos(trozos, { permitidos, fijos: Array.isArray(modoFx) ? permitidos : null, intro: !rango || rango[0] < 1 }) : [];
+      if (v1 != null) resumenFx = await efectos.aplicar({ fc, clip: v1, t, lista, look: a.look === false ? null : a.look || E.look });
+    }
     const fuente = a.fuente || E.fuente;
     // un texto con el estilo: lo crea, lo ajusta al ancho y devuelve { clip, centro } (centro = mitad visual, para animar alrededor)
     async function texto(txt, x, y, size, ini, secs, track, extra = {}) {
@@ -227,11 +237,13 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       if (!kf.length) return;
       await fc('effects.setParam', { clip, effect: 'motion', param: 'anchor', value: centro });
       await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: centro });
-      for (const [dt, esc, op, dy] of kf) {
+      const mueve = kf.some(x => (x[3] || 0) !== 0 || (x[4] || 0) !== 0), gira = kf.some(x => (x[5] || 0) !== 0);
+      for (const [dt, esc, op, dy = 0, dx = 0, rot = 0] of kf) {
         const tk = t(ini) + Math.round(dt * TPS);
         if (kf.some(x => x[1] !== 100)) await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: esc, time: tk, keyframe: true });
         if (kf.some(x => x[2] !== 100)) await fc('effects.setParam', { clip, effect: 'opacity', param: 'opacity', value: op, time: tk, keyframe: true });
-        if (kf.some(x => x[3] !== 0)) await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: [centro[0], centro[1] + Math.round(dy * k)], time: tk, keyframe: true });
+        if (mueve) await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: [centro[0] + Math.round(dx * k), centro[1] + Math.round(dy * k)], time: tk, keyframe: true });
+        if (gira) await fc('effects.setParam', { clip, effect: 'motion', param: 'rotation', value: rot, time: tk, keyframe: true });
       }
     }
     let contColor = 0;
@@ -341,7 +353,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       a.exportar === false ? `Proyecto listo (sin exportar): ${proyecto}` : `Vídeo: ${mp4}`,
       a.exportar === false ? '' : `Subtítulos aparte: ${path.join(dirSalida, nombre + '.srt')}`,
       `Proyecto de FilmCraft: ${proyecto}`,
-      `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
+      `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${resumenFx?.golpes ? ` · ${resumenFx.golpes} golpes de efecto` : ''}${resumenFx?.look ? ` · look ${resumenFx.look}` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
       `Revisa estas líneas (Whisper dudó): ${trozos.filter(x => x.confianza != null && x.confianza < 0.6).map(x => `"${x.texto}" (${Math.floor(x.s / 60)}:${String(Math.floor(x.s % 60)).padStart(2, '0')})`).slice(0, 10).join(', ') || 'ninguna'}`,
     ].filter(Boolean).join('\n');
     return imagenes.length ? { texto: textoFinal, imagenes } : textoFinal;
@@ -354,6 +366,8 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     parametros: { type: 'object', properties: {
       video: { type: 'string', description: 'ruta del vídeo' },
       estilo: { type: 'string', enum: Object.keys(estilos.ESTILOS), description: 'estilo de subtítulos: ' + estilos.lista().map(e => `${e.id} (${e.descripcion.split('.')[0]})`).join('; ') },
+      efectos: { description: 'golpes de vídeo en los momentos fuertes: "auto", "no" o una lista de ' + efectos.GOLPES.join(', ') + ' (por defecto según el estilo)' },
+      look: { type: 'string', enum: Object.keys(efectos.LOOKS), description: 'look de color del vídeo: ' + Object.keys(efectos.LOOKS).join(', ') },
       emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },
       entrada: { type: 'string', enum: Object.keys(estilos.ENTRADAS), description: 'cambia la animación de entrada del estilo' },
       marca: { type: 'string', description: 'texto fijo arriba, p. ej. el nombre del canal' },

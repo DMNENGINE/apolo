@@ -161,3 +161,15 @@ test('subtitular: trocear, resaltar, título y 2 líneas', () => {
   assert.deepStrictEqual(m.rangos.map(([a, b]) => m.texto.slice(a, b)), ['GRACIAS', 'MIGUEL', 'HERMANO']);
   assert.strictEqual(montarPalabras([w('Hola', 0, 1)], false).texto, 'Hola');
 });
+
+test('efectos: momentos fuertes, huecos, golpes fijos del estilo y animaciones nuevas', () => {
+  const fx = require('../craft/efectos');
+  const { ENTRADAS, ESTILOS } = require('../craft/estilos');
+  const tr = [['HOLA A TODOS', 0.5], ['¡VUELA LA BANDITA!', 4], ['¡VUELA!', 5.2], ['LA LLORONA', 12], ['GRACIAS', 20]].map(([texto, s]) => ({ texto, s, e: s + 0.6 }));
+  assert.deepStrictEqual(fx.momentos(tr).map(m => `${m.s}:${m.golpes}`), ['0:destello', '4:barrido,zoom', '12:glitch,rgb'], 'intro, rayo, fantasma; el 2.º ¡VUELA! cae en el hueco');
+  assert.deepStrictEqual(fx.momentos(tr, { fijos: ['temblor'], permitidos: ['temblor'] }).map(m => `${m.s}:${m.golpes}`), ['4:temblor', '12:temblor']);
+  assert.deepStrictEqual(fx.momentos(tr, { intro: false, permitidos: ['zoom'] }).map(m => m.s), [4]);
+  for (const n of ['caida', 'deslizar', 'giro', 'zoom', 'glitch', 'sacudida']) assert.ok(ENTRADAS[n]?.length >= 2, n);
+  for (const e of Object.values(ESTILOS)) assert.ok(!e.entrada || ENTRADAS[e.entrada], `entrada de ${e.nombre}`);
+  assert.ok(Object.values(ESTILOS).filter(e => e.paquete === 'efectos').length >= 6);
+});

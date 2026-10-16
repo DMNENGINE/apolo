@@ -17,7 +17,7 @@ const ESTILOS = {
   pop: {
     nombre: 'Pop', descripcion: 'Como el clásico, pero cada trozo entra con un golpe de escala (80 → 108 → 100 %). Energía de TikTok.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
-    resaltado: '#ffd400', modo: 'bloque', entrada: 'pop',
+    resaltado: '#ffd400', modo: 'bloque', entrada: 'pop', efectos: 'auto',
   },
   karaoke: {
     nombre: 'Karaoke', descripcion: 'El trozo entero en pantalla y la palabra que dices se enciende en verde. Fácil de seguir.',
@@ -27,7 +27,7 @@ const ESTILOS = {
   palabra: {
     nombre: 'Palabra a palabra', descripcion: 'Una sola palabra gigante cada vez, con rebote. Máxima energía; para frases cortas y gritos.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 150, relleno: '#ffffff', contorno: { ancho: 12, color: '#000000' }, sombra: true,
-    resaltado: '#ffd400', modo: 'palabra', entrada: 'rebote',
+    resaltado: '#ffd400', modo: 'palabra', entrada: 'rebote', efectos: 'auto',
   },
   caja: {
     nombre: 'Caja', descripcion: 'Texto oscuro sobre una caja blanca redondeada que sube suave. Limpio, estilo Reels.',
@@ -44,7 +44,7 @@ const ESTILOS = {
   fuego: {
     nombre: 'Fuego', descripcion: 'Trueno amarillo con doble contorno (negro y naranja). Para momentos épicos y gaming.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#ffd400', contorno: { ancho: 10, color: '#000000' }, contorno2: { ancho: 8, color: '#ff5a00' }, sombra: true,
-    resaltado: '#ffffff', modo: 'bloque', entrada: 'rebote',
+    resaltado: '#ffffff', modo: 'bloque', entrada: 'rebote', efectos: 'auto',
   },
   acumula: {
     nombre: 'Acumulativo', descripcion: 'Las palabras del trozo aparecen una a una y se quedan; la última en amarillo. Ritmo de conversación.',
@@ -62,62 +62,102 @@ const ESTILOS = {
   atardecer: {
     paquete: 'color', nombre: 'Atardecer', descripcion: 'Degradado amarillo → rosa con contorno morado y palabras clave en blanco. Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: { de: '#ffd84a', a: '#ff3d8b', angulo: 90 }, contorno: { ancho: 9, color: '#2b0a3d' }, sombra: true,
-    resaltado: '#ffffff', modo: 'bloque', entrada: 'pop', emojis: true,
+    resaltado: '#ffffff', modo: 'bloque', entrada: 'pop', emojis: true, efectos: 'auto',
   },
   hielo: {
     paquete: 'color', nombre: 'Hielo', descripcion: 'Blanco con contorno azul marino y halo celeste; clave en azul eléctrico. Sube suave. Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 102, relleno: '#ffffff', contorno: { ancho: 9, color: '#0b2a6b' }, contorno2: { ancho: 9, color: '#9be8ff' }, sombra: false,
-    resaltado: '#2f7bff', modo: 'bloque', entrada: 'subir', emojis: true,
+    resaltado: '#2f7bff', modo: 'bloque', entrada: 'subir', emojis: true, efectos: 'auto',
   },
   retro: {
     paquete: 'color', nombre: 'Retro', descripcion: 'Crema con contorno marrón y sombra dura roja desplazada, como un cartel de los 70. Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#fff1c9', contorno: { ancho: 8, color: '#3b1f0e' }, sombraDura: { color: '#e63946', distancia: 14, angulo: 135 },
-    resaltado: '#e63946', modo: 'bloque', entrada: 'pop', emojis: true,
+    resaltado: '#e63946', modo: 'bloque', entrada: 'pop', emojis: true, efectos: 'auto', look: 'retro',
   },
   chicle: {
     paquete: 'color', nombre: 'Chicle', descripcion: 'Texto blanco en caja rosa chicle redondeada, clave en amarillo, con rebote. Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 82, relleno: '#ffffff', contorno: null, sombra: false,
     caja: { color: '#ff4fa3', opacidad: 100, radio: 26, tam: 22 },
-    resaltado: '#ffe600', modo: 'bloque', entrada: 'rebote', maxPalabras: 4, maxLetras: 28, emojis: true,
+    resaltado: '#ffe600', modo: 'bloque', entrada: 'rebote', maxPalabras: 4, maxLetras: 28, emojis: true, efectos: 'auto',
   },
   lima: {
     paquete: 'color', nombre: 'Lima', descripcion: 'Texto negro en caja verde lima; la palabra que dices en morado (karaoke). Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 82, relleno: '#111111', contorno: null, sombra: false,
     caja: { color: '#b6ff3b', opacidad: 100, radio: 14, tam: 20 },
-    activo: '#7a00ff', resaltado: null, modo: 'karaoke', entrada: 'pop', maxPalabras: 4, maxLetras: 28, emojis: true,
+    activo: '#7a00ff', resaltado: null, modo: 'karaoke', entrada: 'pop', maxPalabras: 4, maxLetras: 28, emojis: true, efectos: 'auto',
   },
   oro: {
     paquete: 'color', nombre: 'Oro', descripcion: 'Degradado dorado con contorno chocolate y brillo cálido. Para logros, récords y momentos épicos. Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 106, relleno: { de: '#fff6b0', a: '#d08a00', angulo: 90 }, contorno: { ancho: 9, color: '#3a2200' },
     brillo: { color: '#ffb300', difuminado: 22, tam: 6, opacidad: 80 },
-    resaltado: '#ffffff', modo: 'bloque', entrada: 'rebote', emojis: true,
+    resaltado: '#ffffff', modo: 'bloque', entrada: 'rebote', emojis: true, efectos: 'auto',
   },
   terror: {
     paquete: 'color', nombre: 'Terror', descripcion: 'Blanco hueso con aura roja; la palabra que dices en rojo sangre. Para los clips de la Llorona y fantasmas. Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 100, relleno: '#efe9e1', contorno: { ancho: 7, color: '#000000' },
     brillo: { color: '#d00000', difuminado: 30, tam: 12, opacidad: 100 },
-    activo: '#ff2020', resaltado: null, modo: 'karaoke', entrada: 'fundido', maxPalabras: 3, emojis: true,
+    activo: '#ff2020', resaltado: null, modo: 'karaoke', entrada: 'fundido', maxPalabras: 3, emojis: true, efectos: 'auto', look: 'terror',
   },
   arcoiris: {
     paquete: 'color', nombre: 'Arcoíris', descripcion: 'Cada palabra de un color vivo distinto, contorno negro grueso. Divertido y llamativo. Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
-    colores: ['#ffe600', '#3dff6e', '#38d6ff', '#ff4fd8', '#ff8a1f'], resaltado: null, modo: 'bloque', entrada: 'pop', emojis: true,
+    colores: ['#ffe600', '#3dff6e', '#38d6ff', '#ff4fd8', '#ff8a1f'], resaltado: null, modo: 'bloque', entrada: 'pop', emojis: true, efectos: 'auto',
   },
   noche: {
     paquete: 'color', nombre: 'Noche', descripcion: 'Píldora oscura semitransparente con texto blanco; la palabra que dices en verde menta. Elegante y legible. Emojis.',
     fuente: 'Trueno', estiloFuente: 'Black', tam: 80, relleno: '#ffffff', contorno: null, sombra: false,
     caja: { color: '#0d0f14', opacidad: 78, radio: 40, tam: 24 },
-    activo: '#00ffa3', resaltado: null, modo: 'karaoke', entrada: 'subir', maxPalabras: 4, maxLetras: 28, emojis: true,
+    activo: '#00ffa3', resaltado: null, modo: 'karaoke', entrada: 'subir', maxPalabras: 4, maxLetras: 28, emojis: true, efectos: 'auto',
+  },
+
+  // ── PAQUETE 3 · EFECTOS (animaciones fuertes en el texto + golpes de vídeo) ──
+  impacto: {
+    paquete: 'efectos', nombre: 'Impacto', descripcion: 'El texto llega desde lejos (zoom) y el vídeo da un golpe de zoom con destello en cada momento fuerte. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 110, relleno: '#ffffff', contorno: { ancho: 11, color: '#000000' }, sombra: true,
+    resaltado: '#ff2d2d', modo: 'bloque', entrada: 'zoom', emojis: true, efectos: ['zoom', 'destello'],
+  },
+  glitch: {
+    paquete: 'efectos', nombre: 'Glitch', descripcion: 'Texto verde terminal que entra con fallo digital; el vídeo se rompe en RGB y bloques en los momentos fuertes.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 100, relleno: '#39ff7a', contorno: { ancho: 6, color: '#001a09' },
+    brillo: { color: '#39ff7a', difuminado: 20, tam: 6, opacidad: 85 },
+    activo: '#ffffff', resaltado: null, modo: 'karaoke', entrada: 'glitch', maxPalabras: 3, emojis: true, efectos: ['rgb', 'glitch'],
+  },
+  terremoto: {
+    paquete: 'efectos', nombre: 'Terremoto', descripcion: 'Cada frase entra sacudiéndose y la cámara tiembla en los momentos fuertes. Para sustos, choques y gritos.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 108, relleno: '#ffe600', contorno: { ancho: 10, color: '#000000' }, contorno2: { ancho: 7, color: '#ffffff' },
+    resaltado: '#ff3b3b', modo: 'bloque', entrada: 'sacudida', emojis: true, efectos: ['temblor', 'zoom'],
+  },
+  cascada: {
+    paquete: 'efectos', nombre: 'Cascada', descripcion: 'Las frases caen desde arriba y rebotan; barrido de movimiento en el vídeo cuando algo va rápido.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#ffffff', contorno: { ancho: 9, color: '#0b1d4a' }, sombra: true,
+    resaltado: '#38d6ff', modo: 'bloque', entrada: 'caida', emojis: true, efectos: ['barrido', 'zoom'],
+  },
+  tornado: {
+    paquete: 'efectos', nombre: 'Tornado', descripcion: 'Cada frase entra girando; la palabra que dices en naranja. Divertido para momentos locos.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 100, relleno: '#ffffff', contorno: { ancho: 9, color: '#000000' }, sombra: true,
+    activo: '#ff8a1f', resaltado: null, modo: 'karaoke', entrada: 'giro', maxPalabras: 3, emojis: true, efectos: ['zoom', 'temblor'],
+  },
+  flecha: {
+    paquete: 'efectos', nombre: 'Flecha', descripcion: 'Las frases entran deslizando desde la izquierda en una caja cian, como rótulos de noticias.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 80, relleno: '#001014', contorno: null, sombra: false,
+    caja: { color: '#21e6ff', opacidad: 100, radio: 6, tam: 20 },
+    resaltado: '#ffffff', modo: 'bloque', entrada: 'deslizar', maxPalabras: 4, maxLetras: 28, emojis: true, efectos: ['barrido'],
   },
 };
 
-// keyframes de entrada: [segundos desde el inicio del clip, escala %, opacidad %, desplazamiento y en px (a 1080)]
+// keyframes de entrada: [segundos desde el inicio del clip, escala %, opacidad %, desplazamiento y px, desplazamiento x px, giro °] (px a 1080)
 const ENTRADAS = {
   ninguna: [],
   pop: [[0, 80, 100, 0], [0.07, 108, 100, 0], [0.13, 100, 100, 0]],
   rebote: [[0, 40, 0, 0], [0.08, 118, 100, 0], [0.15, 94, 100, 0], [0.21, 100, 100, 0]],
   subir: [[0, 100, 0, 40], [0.16, 100, 100, 0]],
   fundido: [[0, 100, 0, 0], [0.15, 100, 100, 0]],
+  caida: [[0, 100, 0, -150], [0.12, 100, 100, 14], [0.19, 100, 100, -6], [0.25, 100, 100, 0]],
+  deslizar: [[0, 100, 0, 0, -380], [0.14, 100, 100, 0, 18], [0.2, 100, 100, 0, 0]],
+  giro: [[0, 55, 0, 0, 0, -28], [0.12, 108, 100, 0, 0, 5], [0.2, 100, 100, 0, 0, 0]],
+  zoom: [[0, 175, 0, 0], [0.13, 95, 100, 0], [0.2, 100, 100, 0]],
+  glitch: [[0, 100, 0, 0, 0], [0.03, 100, 100, 0, -26], [0.06, 104, 35, 0, 20], [0.09, 100, 100, 0, -12], [0.12, 100, 60, 0, 8], [0.15, 100, 100, 0, 0]],
+  sacudida: [[0, 100, 100, 0, 0, 0], [0.05, 110, 100, 0, 0, -8], [0.1, 110, 100, 0, 0, 7], [0.15, 105, 100, 0, 0, -4], [0.2, 101, 100, 0, 0, 2], [0.25, 100, 100, 0, 0, 0]],
 };
 
 // propiedades de graphics.set para un estilo (k = escala por ancho del vídeo)
