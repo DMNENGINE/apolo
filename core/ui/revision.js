@@ -22,8 +22,8 @@ Object.assign(I18N.dic.en, {
   'Escribe qué quieres cambiar': 'Write what you want to change', 'Entendiendo el pedido…': 'Understanding the request…', 'usar el momento del vídeo': 'use the video position',
   'Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.':
     'Retouch and save (Ctrl+S) in FilmCraft, then “Export the retouched version”. Note: “Request change” and “Redo” rebuild the clip and manual retouches are lost.',
-  'Ej.: quita la vibración menos de 0:40 a 0:55 y más suave · quita el título · sin emojis · sin acercamientos': 'E.g.: remove the shake except 0:40–0:55 and softer · remove the title · no emojis · no zooms',
-  'Cambios': 'Changes', 'vibración': 'shake', 'quitada': 'removed', 'solo': 'only', 'al': 'at',
+  'Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · quita el título · sin emojis': 'E.g.: start with the 0:45–0:47 bit and then the whole clip · remove the shake except 0:40–0:55 · remove the title · no emojis',
+  'avance': 'teaser', 'al principio': 'at the start', 'Cambios': 'Changes', 'vibración': 'shake', 'quitada': 'removed', 'solo': 'only', 'al': 'at',
 });
 
 const RV_ESTADO = { editando: ['aviso', 'editando…'], 'en cola': ['', 'en cola'], revisar: ['ok', 'revisar'], aprobado: ['ok', 'aprobado'], descartado: ['', 'descartado'], error: ['mal', 'error'] };
@@ -35,7 +35,8 @@ function RV_ajustes(aj) {                                // resumen de los cambi
   const tb = aj.temblor, out = [];
   if (tb === false) out.push(`${tr('vibración')} ${tr('quitada')}`);
   else if (tb) out.push(`${tr('vibración')}${tb.tramos ? ` ${tr('solo')} ${tb.tramos.map(([d, h]) => `${RV_mmss(d)}–${RV_mmss(h)}`).join(', ')}` : ''}${tb.intensidad != null ? ` ${tr('al')} ${tb.intensidad} %` : ''}`);
-  for (const [k, v] of Object.entries(aj)) if (k !== 'temblor') out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : v}`);
+  if (Array.isArray(aj.avance)) out.push(`${tr('avance')} ${RV_mmss(aj.avance[0])}–${RV_mmss(aj.avance[1])} ${tr('al principio')}`);
+  for (const [k, v] of Object.entries(aj)) if (k !== 'temblor' && k !== 'avance') out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : v}`);
   return out.join(' · ');
 }
 function RV_cambios(c) {
@@ -43,7 +44,7 @@ function RV_cambios(c) {
   const modo = tb === false ? 'quitar' : tramo ? 'tramo' : tb ? 'intensidad' : 'tramo';
   const int = tb && tb.intensidad != null ? tb.intensidad : 100;
   return `<details class="rv-cambios"><summary>${tr('Cambios y edición a mano')}</summary>
-    <textarea class="rv-pedido" placeholder="${esc(tr('Ej.: quita la vibración menos de 0:40 a 0:55 y más suave · quita el título · sin emojis · sin acercamientos'))}"></textarea>
+    <textarea class="rv-pedido" placeholder="${esc(tr('Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · quita el título · sin emojis'))}"></textarea>
     <div class="rv-fila"><button class="btn pri" data-a="pedir">${tr('Pedir cambio')}</button></div>
     <div class="rv-sub">${tr('Vibración de pantalla')}</div>
     <div class="rv-fila"><select class="rv-estilo rv-vmodo">

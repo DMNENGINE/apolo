@@ -133,6 +133,21 @@ function transcribir(video, { python = 'python', modelo = 'large-v3', idioma = '
   });
 }
 
+// vídeo con avance: [desde, hasta] del original + el original entero (vídeo y audio), H.264 casi sin pérdida
+function montarAvance(entrada, salida, d, h, ffmpeg = 'ffmpeg') {
+  const filtro = `[0:v]split[va][vb];[0:a]asplit[aa][ab];[va]trim=start=${d}:end=${h},setpts=PTS-STARTPTS[v0];[aa]atrim=start=${d}:end=${h},asetpts=PTS-STARTPTS[a0];`
+    + '[vb]setpts=PTS-STARTPTS[v1];[ab]asetpts=PTS-STARTPTS[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]';
+  fs.mkdirSync(path.dirname(salida), { recursive: true });
+  const tmp = salida + '.tmp.mp4';
+  return new Promise((ok, mal) => {
+    const p = spawn(ffmpeg, ['-v', 'error', '-y', '-i', entrada, '-filter_complex', filtro, '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-crf', '14', '-preset', 'veryfast',
+      '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '256k', tmp], { windowsHide: true });
+    let err = ''; p.stderr.on('data', x => { err += x; });
+    p.on('error', e => mal(new Error(`ffmpeg no está disponible: ${e.message}`)));
+    p.on('close', c => { if (c !== 0) return mal(new Error(`ffmpeg (avance) salió con ${c}: ${err.trim().slice(-300)}`)); fs.renameSync(tmp, salida); ok(salida); });
+  });
+}
+
 // ── edición en FilmCraft ──
 function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
   async function fc(id, params = {}) {
@@ -163,7 +178,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
 
   async function subtitular(a, ctx = {}) {
     if (a.perfil && PERFILES[a.perfil]) a = { ...PERFILES[a.perfil], ...a, zonas: { ...PERFILES[a.perfil].zonas, ...(a.zonas || {}) } };
-    const video = path.resolve(ctx.cwd || os.homedir(), String(a.video || ''));
+    let video = path.resolve(ctx.cwd || os.homedir(), String(a.video || ''));
     if (!fs.existsSync(video)) throw new Error(`no existe el vídeo: ${video}`);
     if (!mcpLocales.obtener('filmcraft')?.activo) throw new Error('FilmCraft no está instalado o está desactivado (Configuración → Apps MCP locales → Detectar)');
     const avisar = t => ctx.progreso?.(t);
@@ -200,6 +215,23 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
         fs.mkdirSync(dirSalida, { recursive: true }); fs.writeFileSync(cache, JSON.stringify({ ...tr, huella }));
       }
       palabras = tr.palabras;
+      trozos = trocear(palabras, opTrozos);
+    }
+    // avance [desde, hasta]: ese trozo del clip se repite al principio como adelanto (el accidente, el susto…) y luego va el clip
+    // entero. Se monta un vídeo nuevo con ffmpeg y las palabras se recolocan (no vuelve a pasar Whisper)
+    const avance = Array.isArray(a.avance) && a.avance.length === 2 && +a.avance[1] > +a.avance[0] ? a.avance.map(Number) : null;
+    let dAvance = 0;
+    if (avance && !a.soloTranscribir) {
+      if (Array.isArray(a.subtitulos) && a.subtitulos.length) throw new Error('el avance no se combina con subtítulos corregidos a mano');
+      const [d, h] = avance;
+      dAvance = h - d;
+      const conAvance = path.join(dirSalida, `${base}.avance-${d}-${h}.mp4`);
+      if (!fs.existsSync(conAvance)) { avisar(`montando el avance (${d}–${h} s al principio)…`); await montarAvance(video, conAvance, d, h, cfg?.craft?.ffmpeg); }
+      video = conAvance;
+      palabras = [
+        ...palabras.filter(p => p.s >= d - 0.05 && p.e <= h + 0.05).map(p => ({ ...p, s: Math.max(0, p.s - d), e: Math.min(dAvance, p.e - d) })),
+        ...palabras.map(p => ({ ...p, s: p.s + dAvance, e: p.e + dAvance })),
+      ];
       trozos = trocear(palabras, opTrozos);
     }
     // rango [desde, hasta] en segundos: solo ese tramo (muestras rápidas de un estilo)
@@ -276,10 +308,11 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       avisar(`cambios de escena: ${escenas.length}`);
       nEnfoques = await efectos.enfocar({ fc, clip: v1, t, W, H, fps, enfoques: escenas, golpes: gx });
     }
-    if (v1 != null && tramosVib.length) {
+    if (v1 != null && tramosVib.length) {             // los tramos se dan en tiempos del clip original: con avance, van corridos
       avisar(`vibración en ${tramosVib.length} tramo(s)`);
-      for (const [d, h] of tramosVib.sort((x, y) => x[0] - y[0])) await gx.golpe('temblor', d, h - d);
+      for (const [d, h] of tramosVib.sort((x, y) => x[0] - y[0])) await gx.golpe('temblor', d + dAvance, h - d);
     }
+    if (v1 != null && dAvance) await gx.golpe('destello', dAvance, 0.2);   // fogonazo al volver del avance al principio del clip
     const fuente = a.fuente || E.fuente;
     // un texto con el estilo: lo crea, lo ajusta al ancho y devuelve { clip, centro } (centro = mitad visual, para animar alrededor)
     async function texto(txt, x, y, size, ini, secs, track, extra = {}) {
@@ -452,6 +485,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       enfoques: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' }, tipo: { type: 'string', enum: Object.keys(efectos.TIPOS_ESCENA) }, zona: { description: 'nombre del perfil (cara, cabina, pedales) o [x0,y0,x1,y1]' }, hacia: { description: 'zona de llegada (recorrido)' }, x: { type: 'number' }, y: { type: 'number' } } },
         description: 'cambios de escena manuales durante [desde, hasta]: ' + Object.entries(efectos.TIPOS_ESCENA).map(([k, v]) => `${k} (${v})`).join('; ') + '. Sin x,y la cara se detecta sola.' },
       zonaEnfoque: { type: 'array', items: { type: 'number' }, description: 'zona por defecto de los enfoques' },
+      avance: { type: 'array', items: { type: 'number' }, description: '[desde, hasta] en segundos: ese trozo del clip se repite al principio como adelanto (recap/gancho de vídeo) y luego va el clip entero' },
       temblor: { description: 'vibración de pantalla: false = ninguna; { intensidad: 0–100 (% de la máxima; por defecto 100), tramos: [[desde, hasta], …] en segundos } = solo en esos tramos (sin tramos: la automática a esa intensidad)' },
       look: { type: 'string', enum: Object.keys(efectos.LOOKS), description: 'look de color del vídeo: ' + Object.keys(efectos.LOOKS).join(', ') },
       emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },

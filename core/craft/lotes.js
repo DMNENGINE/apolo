@@ -194,12 +194,15 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         + `Cambios de escena actuales: ${(c.escenas || []).map(e => `${e.tipo} ${Math.round(e.desde)}–${Math.round(e.hasta)} s`).join(', ') || 'ninguno'}. `
         + `Ajustes ya aplicados: ${JSON.stringify(c.ajustes || {})}.\n\nLo que pide: "${pedido}"\n\n`
         + 'temblor = la vibración/sacudida de pantalla: "quitar" (ninguna), "tramos" (solo en esos tramos, p. ej. "que solo vibre de 40 a 55"), "intensidad" (la automática más suave/fuerte); intensidad 0–100 = % de la máxima (la actual es 100; "suave" ≈ 25, "media" ≈ 50). '
-        + 'efectos = los golpes automáticos (zoom, destellos, glitch…). escenas = los cambios de escena (acercamientos a la cara). gancho = el título del principio ("-" para quitarlo, "" = igual). respuesta = una frase corta que confirma lo que vas a cambiar.',
+        + 'avance = repetir un TROZO DEL VÍDEO al principio como adelanto y luego el clip entero ("que empiece con el accidente de 0:45 a 0:47", "recap", "gancho del segundo X", "adelanto"): da desde/hasta en segundos; quitarAvance = true si pide quitarlo. '
+        + 'efectos = los golpes automáticos (zoom, destellos, glitch…). escenas = los cambios de escena (acercamientos a la cara). '
+        + 'gancho = SOLO el TEXTO del título que sale al principio ("-" para quitarlo, "" = igual); nunca pongas tiempos en el gancho. respuesta = una frase corta que confirma lo que vas a cambiar.',
       schema: { type: 'object', properties: {
         estilo: { type: 'string', enum: ['igual', ...Object.keys(estilos.ESTILOS)] },
         temblor: { type: 'object', properties: { modo: ENUM_IGUAL('quitar', 'tramos', 'intensidad'), intensidad: { type: 'number' }, tramos: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } }, required: ['desde', 'hasta'] } } }, required: ['modo'] },
         efectos: ENUM_IGUAL('auto', 'no'), escenas: ENUM_IGUAL('auto', 'no'), emojis: ENUM_IGUAL('si', 'no'),
         look: ENUM_IGUAL('ninguno', ...Object.keys(require('./efectos').LOOKS)), gancho: { type: 'string' }, respuesta: { type: 'string' },
+        avance: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } } }, quitarAvance: { type: 'boolean' },
       }, required: ['temblor', 'respuesta'] } });
     const d = r?.datos || r || {};
     const aj = {};
@@ -212,7 +215,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (d.escenas && d.escenas !== 'igual') aj.escenas = d.escenas;
     if (d.emojis && d.emojis !== 'igual') aj.emojis = d.emojis === 'si';
     if (d.look && d.look !== 'igual') aj.look = d.look === 'ninguno' ? false : d.look;
-    if (d.gancho === '-') aj.gancho = false; else if (d.gancho && d.gancho !== 'igual') aj.gancho = d.gancho;
+    if (d.gancho === '-') aj.gancho = false;
+    else if (d.gancho && d.gancho !== 'igual' && !/\d:\d\d/.test(d.gancho)) aj.gancho = d.gancho;   // un "0:45 - 0:47" no es un título
+    if (d.quitarAvance) aj.avance = null;
+    else if (d.avance && +d.avance.hasta > +d.avance.desde && +d.avance.desde >= 0 && +d.avance.hasta <= dur + 1) aj.avance = [+d.avance.desde, +d.avance.hasta];
     return { ajustes: aj, respuesta: String(d.respuesta || '') };
   }
 
@@ -226,6 +232,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     c.ajustes = { ...(c.ajustes || {}), ...aj };
     // "más suave" después de "solo de 40 a 55": se quedan los tramos con la nueva intensidad
     if (aj.temblor && typeof aj.temblor === 'object' && !aj.temblor.tramos && antes?.tramos) c.ajustes.temblor = { ...antes, ...aj.temblor };
+    for (const [k, v] of Object.entries(c.ajustes)) if (v === null) delete c.ajustes[k];   // null = quitar ese ajuste (vuelve a lo automático)
     if (pedido) (c.pedidos = c.pedidos || []).push({ texto: String(pedido).slice(0, 300), respuesta, cuando: Date.now() });
     c.estiloForzado = c.ajustes.estilo || c.estilo;
     c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
