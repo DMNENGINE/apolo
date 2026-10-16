@@ -1369,4 +1369,9 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .rv-sub { font-size: 12px; color: var(--txt-2); margin-top: 10px; font-weight: 600; }
 .rv-ajustes { font-size: 12px; color: var(--txt-2); }
 .rv-respuesta { font-size: 12.5px; color: var(--ok); }
+.rv-prog { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 80%; }
+.rv-prog b { font-size: 26px; color: var(--txt); }
+.rv-barra { width: 100%; height: 8px; border-radius: 4px; background: var(--capa-2); overflow: hidden; }
+.rv-barra i { display: block; height: 100%; background: var(--aviso); transition: width .6s; }
+.rv-prog small { color: var(--txt-2); }
 @media (max-width: 600px) { .rv-clip { grid-template-columns: 1fr; } .rv-medio { max-height: 70vh; } }

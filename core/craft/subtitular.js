@@ -164,6 +164,26 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     try { return JSON.parse(txt); } catch { return txt; }
   }
 
+  // exporta sin bloquear y pregunta a FilmCraft cómo va (jobs.list: done/total/etaSeconds) → progreso(0..1, quedanSeg)
+  async function exportar(params, progreso = () => { }, { maxSeg = 3600 } = {}) {
+    const r = await fc('file.exportMedia', { ...params, wait: false });
+    const job = r?.job;
+    if (job == null) throw new Error(`FilmCraft no empezó a exportar: ${JSON.stringify(r).slice(0, 200)}`);
+    const t0 = Date.now();
+    for (;;) {
+      await new Promise(ok => setTimeout(ok, 2000));
+      const lista = await fc('jobs.list');
+      const j = (Array.isArray(lista) ? lista : lista?.items || []).find(x => x.id === job);
+      if (!j) throw new Error('FilmCraft perdió la exportación');
+      if (j.finished) {
+        if (j.result?.error) throw new Error(`exportar: ${j.result.error}`);
+        progreso(1, 0); return j.result;
+      }
+      progreso(j.total ? j.done / j.total : j.progress || 0, j.etaSeconds);
+      if (Date.now() - t0 > maxSeg * 1000) { try { await fc('jobs.cancel', { job }); } catch { } throw new Error(`exportar: más de ${maxSeg / 60} min, cancelada`); }
+    }
+  }
+
   async function ideas(palabras, titulo) {               // gancho + palabras clave con el modelo del cerebro (si falla, título del archivo)
     if (!generarJSON || !palabras.length) return { gancho: titulo || null, resaltar: [] };
     try {
@@ -181,7 +201,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     let video = path.resolve(ctx.cwd || os.homedir(), String(a.video || ''));
     if (!fs.existsSync(video)) throw new Error(`no existe el vídeo: ${video}`);
     if (!mcpLocales.obtener('filmcraft')?.activo) throw new Error('FilmCraft no está instalado o está desactivado (Configuración → Apps MCP locales → Detectar)');
-    const avisar = t => ctx.progreso?.(t);
+    const avisar = (t, pct, eta) => ctx.progreso?.(t, pct, eta);   // pct 0–100 de la edición entera (si se sabe)
     const base = path.basename(video, path.extname(video)).replace(/\s*\([^)]*\)\s*$/, '');
     const dirSalida = a.carpeta ? path.resolve(ctx.cwd || os.homedir(), a.carpeta) : path.join(path.dirname(video), 'editados');
     const nombre = a.nombre || `${base} (subtitulado)`;
@@ -226,7 +246,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       const [d, h] = avance;
       dAvance = h - d;
       const conAvance = path.join(dirSalida, `${base}.avance-${d}-${h}.mp4`);
-      if (!fs.existsSync(conAvance)) { avisar(`montando el avance (${d}–${h} s al principio)…`); await montarAvance(video, conAvance, d, h, cfg?.craft?.ffmpeg); }
+      if (!fs.existsSync(conAvance)) { avisar('montando el avance', 8); await montarAvance(video, conAvance, d, h, cfg?.craft?.ffmpeg); }
       video = conAvance;
       palabras = [
         ...palabras.filter(p => p.s >= d - 0.05 && p.e <= h + 0.05).map(p => ({ ...p, s: Math.max(0, p.s - d), e: Math.min(dAvance, p.e - d) })),
@@ -247,7 +267,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const claves = resaltables(palabras, [...id.resaltar, ...(a.resaltar || [])].flatMap(x => String(x).split(/\s+/)));
 
     // 3. proyecto
-    avisar('montando en FilmCraft…');
+    avisar('montando en FilmCraft', 12);
     await fc('file.newProject', { name: nombre });
     const imp = await herramienta('media_import', { paths: [video] });
     const item = imp?.items?.[0]; if (item == null) throw new Error(`FilmCraft no pudo importar el vídeo: ${JSON.stringify(imp?.errors || imp).slice(0, 300)}`);
@@ -305,11 +325,11 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       resumenFx = await efectos.aplicar({ fc, clip: v1, t, lista, look: a.look === false ? null : a.look || E.look, golpes: gx });
     }
     if (v1 != null && escenas.length) {
-      avisar(`cambios de escena: ${escenas.length}`);
+      avisar('cambios de escena', 18);
       nEnfoques = await efectos.enfocar({ fc, clip: v1, t, W, H, fps, enfoques: escenas, golpes: gx });
     }
     if (v1 != null && tramosVib.length) {             // los tramos se dan en tiempos del clip original: con avance, van corridos
-      avisar(`vibración en ${tramosVib.length} tramo(s)`);
+      avisar('vibración', 22);
       for (const [d, h] of tramosVib.sort((x, y) => x[0] - y[0])) await gx.golpe('temblor', d + dAvance, h - d);
     }
     if (v1 != null && dAvance) await gx.golpe('destello', dAvance, 0.2);   // fogonazo al volver del avance al principio del clip
@@ -318,13 +338,13 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     async function texto(txt, x, y, size, ini, secs, track, extra = {}) {
       const r = await fc('graphics.newText', { text: txt, position: [x, y], size, font: fuente, seconds: durF(ini, secs), time: t(ini), track, newClip: true });
       await fc('graphics.set', { clip: r.clip, layer: 0, props: { ...estilos.props(E, k), position: [x, y], ...extra } });
-      let lb = (await fc('graphics.list', { clip: r.clip }))?.layers?.[0]?.localBounds;
+      let lb = (await fc('graphics.list', { clip: r.clip }))?.layers?.[0]?.localBounds, usado = size;
       if (lb && lb[2] - lb[0] > maxW) {
-        const s2 = +(size * maxW / (lb[2] - lb[0])).toFixed(1);
-        await fc('graphics.set', { clip: r.clip, layer: 0, props: { size: s2 } });
-        lb = lb.map(v => v * s2 / size);
+        usado = +(size * maxW / (lb[2] - lb[0])).toFixed(1);
+        await fc('graphics.set', { clip: r.clip, layer: 0, props: { size: usado } });
+        lb = lb.map(v => v * usado / size);
       }
-      return { clip: r.clip, centro: [x, Math.round(y + (lb ? (lb[1] + lb[3]) / 2 : -size * 0.4))] };
+      return { clip: r.clip, centro: [x, Math.round(y + (lb ? (lb[1] + lb[3]) / 2 : -size * 0.4))], tam: usado };
     }
     const colorear = async (clip, ini, fin, color) => fc('graphics.setCharStyle', { clip, layer: 0, start: ini, end: fin, style: { color } });
     // entrada animada: escala/opacidad/subida con keyframes de motion y opacity, con el ancla en el centro del texto
@@ -373,7 +393,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     }
 
     // 4. subtítulos quemados (V2) + pista de subtítulos para el .srt (oculta)
-    avisar(`subtítulos: ${trozos.length}`);
+    avisar('subtítulos', 25);
     // Whisper a veces empieza un trozo antes de que acabe el anterior: en la pista no caben dos a la vez ("V2 is not free here")
     // y hay palabras con duración cero. Una pasada en fotogramas: cada trozo empieza donde acaba el anterior como pronto,
     // dura al menos 1 fotograma, y si es cortísimo se alarga hasta 0,4 s sin pisar el siguiente
@@ -393,7 +413,8 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     });
     await fc('captions.newTrack', { format: 'Subtitle', name: 'Subtítulos', language: a.idioma || 'es' });
     let fallosSrt = 0;
-    for (const tr of trozos) {
+    for (const [i, tr] of trozos.entries()) {
+      if (i % 4 === 0) avisar('subtítulos', 25 + 30 * i / trozos.length);
       await trozo(tr);
       try {                                            // pista para el .srt: un fotograma menos para que dos seguidas no se toquen
         await fc('captions.add', { track: 'C1', text: srtCaso(tr.texto, nombres), seconds: fot(tr.s) / fps, durationSeconds: Math.max(1, fot(tr.e) - fot(tr.s) - 1) / fps });
@@ -423,6 +444,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       }
     }
 
+    avisar('título, marca y emojis', 56);
     // 5. gancho, marca, llamada a seguir
     const primero = trozos[0].s;
     if (gancho && (!rango || rango[0] < 1)) {
@@ -434,8 +456,14 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       const tamG = Math.round(Math.max(tam, 100 * k) * 1.05), salto = Math.round(tamG * 1.15);
       const g = await texto(l1, W / 2, y1, tamG, 0, dur, hueco ? 1 : 3);
       if (l2) {
-        await fc('graphics.newText', { text: l2, position: [W / 2, y1 + salto], size: tamG, font: fuente, clip: g.clip });
-        await fc('graphics.set', { clip: g.clip, layer: 1, props: { ...estilos.props(E, k), fill_color: E.resaltado || E.activo || AMARILLO, position: [W / 2, y1 + salto] } });
+        // la 2.ª línea también tiene que caber: las dos al mismo tamaño, el que quepa la más ancha
+        await fc('graphics.newText', { text: l2, position: [W / 2, y1 + salto], size: g.tam, font: fuente, clip: g.clip });
+        await fc('graphics.set', { clip: g.clip, layer: 1, props: { ...estilos.props(E, k), size: g.tam, fill_color: E.resaltado || E.activo || AMARILLO, position: [W / 2, y1 + salto] } });
+        const lb2 = (await fc('graphics.list', { clip: g.clip }))?.layers?.[1]?.localBounds;
+        if (lb2 && lb2[2] - lb2[0] > maxW) {
+          const s3 = +(g.tam * maxW / (lb2[2] - lb2[0])).toFixed(1);
+          for (const layer of [0, 1]) await fc('graphics.set', { clip: g.clip, layer, props: { size: s3 } });
+        }
         g.centro[1] += Math.round(salto / 2);
       }
       await animar(g, 0);
@@ -452,9 +480,10 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     await fc('file.saveAs', { path: proyecto });
     const mp4 = path.join(dirSalida, `${nombre}.mp4`);
     if (a.exportar !== false) {
-      avisar('exportando (unos minutos)…');
-      await fc('file.exportMedia', { path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: a.lufs ?? -14,
-        captionSidecar: 'srt', hardwareEncoding: 'auto', wait: true, ...(rango ? { range: 'custom', startSeconds: rango[0], endSeconds: rango[1] } : {}) });
+      avisar('exportando (unos minutos)…', 60);
+      await exportar({ path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: a.lufs ?? -14,
+        captionSidecar: 'srt', hardwareEncoding: 'auto', ...(rango ? { range: 'custom', startSeconds: rango[0], endSeconds: rango[1] } : {}) },
+      (p, eta) => avisar('exportando', 60 + p * 40, eta));
     }
     const imagenes = fs.existsSync(previa) ? [{ mime: 'image/png', ruta: previa }] : [];
     const textoFinal = [
@@ -506,11 +535,13 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     ejecutar: (a, ctx) => subtitular(a, ctx),
   };
   // vuelve a exportar un .fcproj (p. ej. retocado a mano en FilmCraft) con los mismos ajustes; vista previa en `segPrevia`
-  async function reexportar({ proyecto, mp4, previa, segPrevia = 1, lufs = -14 }) {
+  async function reexportar({ proyecto, mp4, previa, segPrevia = 1, lufs = -14 }, ctx = {}) {
     if (!fs.existsSync(proyecto)) throw new Error(`no existe el proyecto: ${proyecto}`);
+    ctx.progreso?.('abriendo el proyecto…', 2);
     await fc('file.open', { path: proyecto });
     if (previa) try { const r = await mcpLocales.llamar('filmcraft', 'render_frame', { seconds: segPrevia, max_side: 960 }); const img = r?.content?.find(c => c.type === 'image'); if (img) fs.writeFileSync(previa, Buffer.from(img.data, 'base64')); } catch { }
-    await fc('file.exportMedia', { path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: lufs, captionSidecar: 'srt', hardwareEncoding: 'auto', wait: true });
+    await exportar({ path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: lufs, captionSidecar: 'srt', hardwareEncoding: 'auto' },
+      (p, eta) => ctx.progreso?.('exportando', 5 + p * 95, eta));
     try { await fc('file.closeProject', { force: true }); } catch { }
     return { mp4, previa };
   }

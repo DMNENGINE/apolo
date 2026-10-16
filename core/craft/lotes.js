@@ -101,9 +101,11 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (!f) { c.estado = 'error'; c.error = 'la fuente ya no existe'; return; }
     const base = path.join(carpetaFuente(f), `${c.fecha}_${c.stream}`);
     const original = path.join(base, 'originales', c.archivo);
-    c.estado = 'editando'; c.error = null; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    c.estado = 'editando'; c.error = null; c.progreso = { fase: 'empezando', pct: 0, desde: Date.now() }; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    // progreso en vivo (solo en memoria; la página lo pide cada pocos segundos): fase, % de la edición entera y lo que le queda a la exportación
+    const ctx = { progreso: (fase, pct, eta) => { c.progreso = { ...c.progreso, fase: String(fase).replace(/…$/, ''), ...(pct != null ? { pct: Math.round(Math.min(100, Math.max(c.progreso?.pct || 0, pct))) } : {}), eta: eta ?? null }; } };
     if (c.reexportar) {                                 // retocado a mano en FilmCraft: solo volver a exportar su proyecto
-      await subtitulador.reexportar({ proyecto: c.proyecto, mp4: c.mp4, previa: c.previa, segPrevia: Math.min(20, (c.fin - c.inicio) / 3) });
+      await subtitulador.reexportar({ proyecto: c.proyecto, mp4: c.mp4, previa: c.previa, segPrevia: Math.min(20, (c.fin - c.inicio) / 3) }, ctx);
       Object.assign(c, { estado: 'revisar', editado: Date.now(), reexportar: false, retocado: true });
       guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
       return;
@@ -113,13 +115,15 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     const comun = { video: original, perfil: f.perfil, carpeta: path.join(base, 'editados'), nombre: `${String(c.rank).padStart(2, '0')}`,
       tituloClip: String(c.titulo || '').replace(/\s*\((portrait|vertical)\)\s*/i, '').trim() || undefined };
     if (!c.estiloForzado) {                             // transcribe primero (queda en caché) para elegir el estilo por lo que se dice
-      const t = await subtitulador.subtitular({ ...comun, soloTranscribir: true }, {});
+      ctx.progreso('transcribiendo', 2);
+      const t = await subtitulador.subtitular({ ...comun, soloTranscribir: true }, ctx);
+      ctx.progreso('eligiendo estilo', 6);
       const texto = JSON.parse(typeof t === 'string' ? t : t.texto).subtitulos.map(x => x.texto).join(' ');
       const usados = Object.values(est.clips).filter(x => x.stream === c.stream && x.estilo && x.id !== id).map(x => x.estilo);
       c.estilo = await elegirEstilo(f, c, texto, usados);
     } else c.estilo = c.estiloForzado;
     const { estilo: _e, ...ajustes } = c.ajustes || {};  // cambios pedidos desde Revisión (vibración, efectos, escenas, gancho…)
-    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...ajustes }, {});
+    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...ajustes }, ctx);
     const d = r.datos || {};
     if (c.estado === 'descartado') {                    // lo descartaron mientras se editaba: fuera lo recién hecho
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) try { if (d[k]) fs.rmSync(d[k], { force: true }); } catch { }
@@ -139,6 +143,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       const id = cola.shift(); enCurso = id;
       try { await editarUno(id); }
       catch (e) { const c = est.clips[id]; if (c) { c.estado = 'error'; c.error = e.message.slice(0, 400); guardarEst(); } log('[lotes]', id, e.message); }
+      if (est.clips[id]?.progreso) { delete est.clips[id].progreso; guardarEst(); }
       enCurso = null;
       const c = est.clips[id];
       // ¿se acabó ese stream? → aviso con el resumen

@@ -23,6 +23,9 @@ Object.assign(I18N.dic.en, {
   'Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.':
     'Retouch and save (Ctrl+S) in FilmCraft, then “Export the retouched version”. Note: “Request change” and “Redo” rebuild the clip and manual retouches are lost.',
   'Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · quita el título · sin emojis': 'E.g.: start with the 0:45–0:47 bit and then the whole clip · remove the shake except 0:40–0:55 · remove the title · no emojis',
+  'quedan': 'left', 'lleva': 'running for', 'empezando': 'starting', 'transcribiendo': 'transcribing', 'eligiendo estilo': 'choosing style',
+  'montando el avance': 'building the teaser', 'montando en FilmCraft': 'assembling in FilmCraft', 'cambios de escena': 'scene changes', 'vibración': 'shake',
+  'subtítulos': 'subtitles', 'título, marca y emojis': 'title, brand and emojis', 'exportando': 'exporting', 'abriendo el proyecto': 'opening the project',
   'avance': 'teaser', 'al principio': 'at the start', 'Cambios': 'Changes', 'vibración': 'shake', 'quitada': 'removed', 'solo': 'only', 'al': 'at',
 });
 
@@ -63,6 +66,12 @@ function RV_cambios(c) {
     <small class="tenue">${tr('Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.')}</small>
   </details>`;
 }
+function RV_progreso(p) {
+  if (!p) return esc(tr('editando…'));
+  const pct = p.pct || 0, tiempo = p.desde ? Math.round((Date.now() - p.desde) / 1000) : null;
+  return `<div class="rv-prog"><b>${pct} %</b><div class="rv-barra"><i style="width:${pct}%"></i></div><span>${esc(tr(p.fase || 'editando'))}</span>
+    <small>${p.eta ? `${tr('quedan')} ~${RV_mmss(p.eta)}` : tiempo != null ? `${tr('lleva')} ${RV_mmss(tiempo)}` : ''}</small></div>`;
+}
 async function RV_blob(ruta) {
   const r = await fetch('/v1' + ruta, { headers: { 'x-robot-token': TOKEN } });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -89,7 +98,7 @@ VISTAS.revision = {
     };
     v.oninput = e => { if (e.target.matches('.rv-int')) e.target.parentElement.querySelector('.rv-intv').textContent = e.target.value + ' %'; };
     await this.cargar();
-    this.reloj = setInterval(() => this.cargar(true), 6000);
+    this.reloj = setInterval(() => this.cargar(true), 3000);
   },
   salir() { clearInterval(this.reloj); },
   async cargar(silencio) {
@@ -97,12 +106,21 @@ VISTAS.revision = {
     const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado])) + this.filtro;
     this.L = L;
     this.pintarEstado(L);
+    this.pintarProgreso(L);
     for (const [k] of RV_FILTROS) { const n = k === 'todos' ? L.clips.length : L.clips.filter(c => c.estado === k).length; const el = $(`[data-n="${k}"]`, this.v); if (el) el.textContent = n || ''; }
     if (silencio && firma === this.firma) return;        // nada cambió: no se repinta (no corta el vídeo que estás viendo)
     if (silencio && this.ocupado()) return;              // viendo un vídeo o escribiendo un cambio: se repinta luego
     this.firma = firma;
     $('#rvLista', this.v).innerHTML = this.lista(L);
+    this.pintarProgreso(L);
     this.cargarPrevias();
+  },
+  // barra de la tarjeta que se está editando: se actualiza sola (sin repintar la lista, no corta lo que estás viendo)
+  pintarProgreso(L) {
+    for (const c of L.clips.filter(x => x.estado === 'editando')) {
+      const el = $(`.rv-clip[data-id="${CSS.escape(c.id)}"] .rv-hueco`, this.v); if (!el) continue;
+      el.innerHTML = RV_progreso(c.progreso);
+    }
   },
   ocupado() {
     const lista = $('#rvLista', this.v); if (!lista) return false;
@@ -112,7 +130,7 @@ VISTAS.revision = {
     const el = $('#rvEstado', this.v); if (!el) return;
     const ed = L.enCurso && L.clips.find(c => c.id === L.enCurso);
     el.innerHTML = !L.config.fuentes.length ? `<div class="caja pad tenue">${tr('Aún no hay fuentes configuradas.')}</div>`
-      : ed || L.cola.length ? `<div class="caja pad rv-trabajando"><span class="punto aviso"></span>${ed ? `<b>${tr('Editando ahora')}:</b> ${esc(ed.titulo || ed.stream)} · #${ed.rank}` : ''}${L.cola.length ? ` · ${tr('{n} en cola', { n: L.cola.length })}` : ''}</div>` : '';
+      : ed || L.cola.length ? `<div class="caja pad rv-trabajando"><span class="punto aviso"></span>${ed ? `<b>${tr('Editando ahora')}:</b> ${esc(ed.titulo || ed.stream)} · #${ed.rank}${ed.progreso ? ` · ${esc(tr(ed.progreso.fase))} <b>${ed.progreso.pct || 0} %</b>${ed.progreso.eta ? ` · ${tr('quedan')} ~${RV_mmss(ed.progreso.eta)}` : ''}` : ''}` : ''}${L.cola.length ? ` · ${tr('{n} en cola', { n: L.cola.length })}` : ''}</div>` : '';
   },
   lista(L) {
     const clips = L.clips.filter(c => this.filtro === 'todos' || c.estado === this.filtro || (this.filtro === 'revisar' && ['editando', 'en cola', 'error'].includes(c.estado)));
