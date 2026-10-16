@@ -1336,3 +1336,27 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mmg-giro { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: mmg-giro .8s linear infinite; vertical-align: -2px; }
 @keyframes mmg-giro { to { transform: rotate(360deg); } }
 .mm-previa { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: rgba(6, 14, 18, .94); border: 2px solid var(--mm-borde); box-shadow: 0 0 0 2px #000, 0 0 20px rgba(0,0,0,.6); color: #e8fff9; font-size: 13px; z-index: 7; flex-wrap: wrap; justify-content: center; }
+
+/* ---------- Revisión de clips (ui/revision.js) ---------- */
+.rv-filtros { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 14px; }
+.rv-n { opacity: .7; font-size: 12px; }
+.rv-trabajando { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.rv-grupo { font-size: 14px; color: var(--txt-2); margin: 18px 0 8px; font-weight: 600; }
+.rv-rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 12px; }
+.rv-clip { display: grid; grid-template-columns: 200px 1fr; gap: 14px; padding: 12px; align-items: start; }
+.rv-medio { position: relative; aspect-ratio: 9 / 16; background: #000; border-radius: 10px; overflow: hidden; }
+.rv-medio img, .rv-medio video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.rv-play { position: absolute; inset: 0; margin: auto; width: 54px; height: 54px; border-radius: 50%; border: 0; font-size: 20px; cursor: pointer;
+  background: color-mix(in srgb, var(--acento) 85%, transparent); color: var(--sobre-acento); }
+.rv-hueco { height: 100%; display: grid; place-items: center; color: var(--txt-2); font-size: 13px; text-align: center; padding: 10px; }
+.rv-info { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.rv-cab { gap: 8px; flex-wrap: wrap; align-items: center; }
+.rv-gancho { font-weight: 700; letter-spacing: .02em; }
+.rv-dudas { font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.rv-dudas span { color: var(--aviso); } .rv-dudas i { color: var(--txt-2); font-style: normal; }
+.rv-chat { font-size: 12.5px; color: var(--txt-2); } .rv-chat div { padding: 2px 0; border-bottom: 1px solid var(--borde); }
+.rv-error { color: var(--mal); font-size: 12.5px; }
+.rv-acc { gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.rv-estilo { background: var(--capa-2); color: var(--txt); border: 1px solid var(--borde-2); border-radius: 8px; padding: 5px 8px; }
+.rv-vacio { display: flex; align-items: center; gap: 10px; color: var(--txt-2); }
+@media (max-width: 600px) { .rv-clip { grid-template-columns: 1fr; } .rv-medio { max-height: 70vh; } }

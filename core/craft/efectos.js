@@ -203,8 +203,12 @@ async function enfocar({ fc, clip, t, W, H, enfoques, fps = 60, golpes: gx = cre
 function elegirEscenas(palabras, { duracion, cuantas, hueco = 15 } = {}) {
   const frases = [];
   let f = [];
-  for (const p of palabras) { f.push(p); if (/[.!?…]$/.test(p.w)) { frases.push(f); f = []; } }
-  if (f.length) frases.push(f);
+  // frases: por la puntuación, y también por las pausas al hablar (Whisper a veces no pone ni un punto) o si se alargan
+  palabras.forEach((p, i) => {
+    f.push(p);
+    const sig = palabras[i + 1], largo = p.e - f[0].s;
+    if (/[.!?…]$/.test(p.w) || !sig || sig.s - p.e > 0.55 || largo >= 4.5 || (largo >= 2.5 && /,$/.test(p.w))) { frases.push(f); f = []; }
+  });
   const dur = duracion || (palabras.at(-1)?.e || 0);
   const n = cuantas ?? (dur > 90 ? 3 : 2);
   const triste = /\b(acab|trist|extra[ñn]|perd|dif[ií]cil|muri|adi[oó]s|nunca)/i;

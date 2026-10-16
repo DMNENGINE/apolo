@@ -149,7 +149,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
   }
 
   async function ideas(palabras, titulo) {               // gancho + palabras clave con el modelo del cerebro (si falla, título del archivo)
-    if (!generarJSON || !palabras.length) return { gancho: titulo, resaltar: [] };
+    if (!generarJSON || !palabras.length) return { gancho: titulo || null, resaltar: [] };
     try {
       const texto = palabras.map(p => p.w).join(' ').slice(0, 6000);
       const r = await generarJSON({ modelo: modelo?.(), system: 'Editas clips verticales para TikTok/Shorts en español.', prompt:
@@ -157,7 +157,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
         schema: { type: 'object', properties: { gancho: { type: 'string' }, resaltar: { type: 'array', items: { type: 'string' } } }, required: ['gancho', 'resaltar'] } });
       const d = r?.datos || r;
       return { gancho: String(d.gancho || titulo).toLocaleUpperCase('es').slice(0, 60), resaltar: (d.resaltar || []).map(String).slice(0, 16) };
-    } catch { return { gancho: titulo, resaltar: [] }; }
+    } catch { return { gancho: titulo || null, resaltar: [] }; }
   }
 
   async function subtitular(a, ctx = {}) {
@@ -169,7 +169,9 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const base = path.basename(video, path.extname(video)).replace(/\s*\([^)]*\)\s*$/, '');
     const dirSalida = a.carpeta ? path.resolve(ctx.cwd || os.homedir(), a.carpeta) : path.join(path.dirname(video), 'editados');
     const nombre = a.nombre || `${base} (subtitulado)`;
-    const titulo = tituloDeArchivo(video);
+    // título para el gancho: el que pase quien llama (p. ej. el del stream) o el del archivo si dice algo (no "02_33430_145s")
+    const delArchivo = tituloDeArchivo(video);
+    const titulo = a.tituloClip ? String(a.tituloClip).toLocaleUpperCase('es') : (delArchivo.replace(/[^\p{L}]/gu, '').length >= 4 ? delArchivo : '');
     const E = estilos.obtener(a.estilo);
     try { require('./fuentes/instalar').asegurarFuentes(); } catch (e) { avisar(`no se pudo instalar la fuente Trueno: ${e.message}`); }
     const opTrozos = { maxPalabras: E.modo === 'palabra' ? 1 : E.maxPalabras || 3, maxLetras: E.maxLetras || 22 };
@@ -207,7 +209,8 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
 
     // 2. gancho + resaltados
     const id = await ideas(palabras, titulo);
-    const gancho = a.gancho === false ? null : String(a.gancho || id.gancho || titulo).toLocaleUpperCase('es');
+    const g = a.gancho === false ? null : a.gancho || id.gancho || titulo || null;
+    const gancho = g ? String(g).toLocaleUpperCase('es') : null;
     const claves = resaltables(palabras, [...id.resaltar, ...(a.resaltar || [])].flatMap(x => String(x).split(/\s+/)));
 
     // 3. proyecto
@@ -404,7 +407,12 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${resumenFx?.golpes ? ` · ${resumenFx.golpes} golpes de efecto` : ''}${resumenFx?.look ? ` · look ${resumenFx.look}` : ''}${nEnfoques ? ` · ${nEnfoques} cambio(s) de escena (${escenas.map(e => `${e.tipo || 'acercar'} ${Math.floor(e.desde / 60)}:${String(Math.floor(e.desde % 60)).padStart(2, '0')}`).join(', ')})` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
       `Revisa estas líneas (Whisper dudó): ${trozos.filter(x => x.confianza != null && x.confianza < 0.6).map(x => `"${x.texto}" (${Math.floor(x.s / 60)}:${String(Math.floor(x.s % 60)).padStart(2, '0')})`).slice(0, 10).join(', ') || 'ninguna'}`,
     ].filter(Boolean).join('\n');
-    return imagenes.length ? { texto: textoFinal, imagenes } : textoFinal;
+    // `datos` = lo mismo estructurado, para quien llama desde código (editor por lotes); el agente usa texto + imágenes
+    const datos = { mp4: a.exportar === false ? null : mp4, srt: a.exportar === false ? null : path.join(dirSalida, nombre + '.srt'), proyecto,
+      previa: fs.existsSync(previa) ? previa : null, estilo: a.estilo || 'clasico', gancho, subtitulos: trozos.length, emojis: nEmojis,
+      escenas: escenas.map(e => ({ tipo: e.tipo || 'acercar', desde: e.desde, hasta: e.hasta })),
+      dudas: trozos.filter(x => x.confianza != null && x.confianza < 0.6).map(x => ({ texto: x.texto, s: x.s })).slice(0, 10) };
+    return { texto: textoFinal, imagenes, datos };
   }
 
   const HERRAMIENTA = {
@@ -426,6 +434,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       marca: { type: 'string', description: 'texto fijo arriba, p. ej. el nombre del canal' },
       cta: { type: 'string', description: 'llamada a seguir en los últimos segundos, p. ej. "Sígueme para más"' },
       gancho: { description: 'título de los primeros segundos (texto) o false para no ponerlo; por defecto lo propone el modelo' },
+      tituloClip: { type: 'string', description: 'de qué va el clip o el título del stream (ayuda a proponer el gancho)' },
       resaltar: { type: 'array', items: { type: 'string' }, description: 'palabras extra en amarillo' },
       y: { type: 'number', description: 'altura de los subtítulos, fracción del alto (0.72 vertical por defecto; 0.78 para LAGCTRUCKS: zona de pedales)' },
       idioma: { type: 'string' }, contexto: { type: 'string', description: 'palabras/nombres que ayudan a Whisper' },
