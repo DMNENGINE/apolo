@@ -57,6 +57,58 @@ const ESTILOS = {
     brillo: { color: '#000000', difuminado: 20, tam: 9, opacidad: 100 },
     resaltado: null, modo: 'bloque', entrada: 'fundido', maxPalabras: 6, maxLetras: 36,
   },
+
+  // ── PAQUETE 2 · COLOR (con emojis propios) ──
+  atardecer: {
+    paquete: 'color', nombre: 'Atardecer', descripcion: 'Degradado amarillo → rosa con contorno morado y palabras clave en blanco. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: { de: '#ffd84a', a: '#ff3d8b', angulo: 90 }, contorno: { ancho: 9, color: '#2b0a3d' }, sombra: true,
+    resaltado: '#ffffff', modo: 'bloque', entrada: 'pop', emojis: true,
+  },
+  hielo: {
+    paquete: 'color', nombre: 'Hielo', descripcion: 'Blanco con contorno azul marino y halo celeste; clave en azul eléctrico. Sube suave. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 102, relleno: '#ffffff', contorno: { ancho: 9, color: '#0b2a6b' }, contorno2: { ancho: 9, color: '#9be8ff' }, sombra: false,
+    resaltado: '#2f7bff', modo: 'bloque', entrada: 'subir', emojis: true,
+  },
+  retro: {
+    paquete: 'color', nombre: 'Retro', descripcion: 'Crema con contorno marrón y sombra dura roja desplazada, como un cartel de los 70. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#fff1c9', contorno: { ancho: 8, color: '#3b1f0e' }, sombraDura: { color: '#e63946', distancia: 14, angulo: 135 },
+    resaltado: '#e63946', modo: 'bloque', entrada: 'pop', emojis: true,
+  },
+  chicle: {
+    paquete: 'color', nombre: 'Chicle', descripcion: 'Texto blanco en caja rosa chicle redondeada, clave en amarillo, con rebote. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 82, relleno: '#ffffff', contorno: null, sombra: false,
+    caja: { color: '#ff4fa3', opacidad: 100, radio: 26, tam: 22 },
+    resaltado: '#ffe600', modo: 'bloque', entrada: 'rebote', maxPalabras: 4, maxLetras: 28, emojis: true,
+  },
+  lima: {
+    paquete: 'color', nombre: 'Lima', descripcion: 'Texto negro en caja verde lima; la palabra que dices en morado (karaoke). Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 82, relleno: '#111111', contorno: null, sombra: false,
+    caja: { color: '#b6ff3b', opacidad: 100, radio: 14, tam: 20 },
+    activo: '#7a00ff', resaltado: null, modo: 'karaoke', entrada: 'pop', maxPalabras: 4, maxLetras: 28, emojis: true,
+  },
+  oro: {
+    paquete: 'color', nombre: 'Oro', descripcion: 'Degradado dorado con contorno chocolate y brillo cálido. Para logros, récords y momentos épicos. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 106, relleno: { de: '#fff6b0', a: '#d08a00', angulo: 90 }, contorno: { ancho: 9, color: '#3a2200' },
+    brillo: { color: '#ffb300', difuminado: 22, tam: 6, opacidad: 80 },
+    resaltado: '#ffffff', modo: 'bloque', entrada: 'rebote', emojis: true,
+  },
+  terror: {
+    paquete: 'color', nombre: 'Terror', descripcion: 'Blanco hueso con aura roja; la palabra que dices en rojo sangre. Para los clips de la Llorona y fantasmas. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 100, relleno: '#efe9e1', contorno: { ancho: 7, color: '#000000' },
+    brillo: { color: '#d00000', difuminado: 30, tam: 12, opacidad: 100 },
+    activo: '#ff2020', resaltado: null, modo: 'karaoke', entrada: 'fundido', maxPalabras: 3, emojis: true,
+  },
+  arcoiris: {
+    paquete: 'color', nombre: 'Arcoíris', descripcion: 'Cada palabra de un color vivo distinto, contorno negro grueso. Divertido y llamativo. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
+    colores: ['#ffe600', '#3dff6e', '#38d6ff', '#ff4fd8', '#ff8a1f'], resaltado: null, modo: 'bloque', entrada: 'pop', emojis: true,
+  },
+  noche: {
+    paquete: 'color', nombre: 'Noche', descripcion: 'Píldora oscura semitransparente con texto blanco; la palabra que dices en verde menta. Elegante y legible. Emojis.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 80, relleno: '#ffffff', contorno: null, sombra: false,
+    caja: { color: '#0d0f14', opacidad: 78, radio: 40, tam: 24 },
+    activo: '#00ffa3', resaltado: null, modo: 'karaoke', entrada: 'subir', maxPalabras: 4, maxLetras: 28, emojis: true,
+  },
 };
 
 // keyframes de entrada: [segundos desde el inicio del clip, escala %, opacidad %, desplazamiento y en px (a 1080)]
@@ -70,7 +122,10 @@ const ENTRADAS = {
 
 // propiedades de graphics.set para un estilo (k = escala por ancho del vídeo)
 function props(e, k) {
-  const p = { align: 'center', fill_color: e.relleno, shadow: !!e.sombra || !!e.brillo };
+  const p = { align: 'center', shadow: !!e.sombra || !!e.brillo || !!e.sombraDura };
+  if (e.relleno && typeof e.relleno === 'object') Object.assign(p, { fill_kind: 1, fill_color: e.relleno.de, gradient_start: e.relleno.de, gradient_end: e.relleno.a, gradient_angle: e.relleno.angulo ?? 90 });
+  else Object.assign(p, { fill_kind: 0, fill_color: e.relleno });
+  if (e.sombraDura) Object.assign(p, { shadow_color: e.sombraDura.color, shadow_distance: Math.round(e.sombraDura.distancia * k), shadow_angle: e.sombraDura.angulo ?? 135, shadow_blur: 0, shadow_size: 0, shadow_opacity: 100 });
   p.stroke = !!e.contorno;
   if (e.contorno) Object.assign(p, { stroke_width: Math.round(e.contorno.ancho * k), stroke_color: e.contorno.color });
   // el 2.º contorno se dibuja detrás y su ancho cuenta desde la letra: tiene que sumar el del 1.º para asomar
@@ -87,6 +142,6 @@ function obtener(nombre) {
   if (!e) throw new Error(`no existe el estilo "${nombre}". Hay: ${Object.keys(ESTILOS).join(', ')}`);
   return e;
 }
-const lista = () => Object.entries(ESTILOS).map(([id, e]) => ({ id, nombre: e.nombre, descripcion: e.descripcion }));
+const lista = () => Object.entries(ESTILOS).map(([id, e]) => ({ id, paquete: e.paquete || 'base', nombre: e.nombre, descripcion: e.descripcion }));
 
 module.exports = { ESTILOS, ENTRADAS, props, obtener, lista };

@@ -121,6 +121,23 @@ test('fuentes propias: Trueno existe, todos los estilos la usan y se instala una
   assert.ok(fs.existsSync(path.join(casa, 'Microsoft', 'Windows', 'Fonts', 'Trueno-Black.ttf')));
 });
 
+test('emojis propios: palabras → emoji, sin falsos positivos y sin saturar', () => {
+  const em = require('../craft/emojis');
+  assert.strictEqual(em.disponibles().length, Object.keys(em.PALABRAS).length, 'cada emoji tiene su PNG');
+  assert.strictEqual(em.emojiDe('¡VUELA LA BANDITA!'), 'rayo');
+  assert.strictEqual(em.emojiDe('LA LLORONA'), 'fantasma');
+  assert.strictEqual(em.emojiDe('MANEJAR EN MÉXICO'), 'mexico');
+  assert.strictEqual(em.emojiDe('ES PA GENTE PRO'), 'corona');
+  assert.strictEqual(em.emojiDe('UN PROBLEMA'), null, '"pro" solo como palabra entera');
+  assert.strictEqual(em.emojiDe('ESO ES CORRECTO'), null);
+  const tr = [['GRACIAS', 1], ['GRACIAS', 2], ['¡VUELA!', 3], ['¡VUELA!', 20], ['GRACIAS', 30]].map(([texto, s]) => ({ texto, s, e: s + 0.5 }));
+  assert.deepStrictEqual(em.elegir(tr).map(x => `${x.emoji}@${x.s}`), ['corazon@1', 'rayo@20', 'corazon@30'], 'hueco de 2,5 s y sin repetir en 12 s');
+  const { ESTILOS, props } = require('../craft/estilos');
+  assert.ok(Object.values(ESTILOS).filter(e => e.paquete === 'color').length >= 9);
+  assert.strictEqual(props(ESTILOS.atardecer, 1).fill_kind, 1, 'degradado');
+  assert.strictEqual(props(ESTILOS.retro, 1).shadow_blur, 0, 'sombra dura');
+});
+
 test('subtitular: trocear, resaltar, título y 2 líneas', () => {
   const w = (texto, s, e, p = 0.9) => ({ w: texto, s, e, p });
   const palabras = [w('Hola,', 13.9, 14.3), w('bro,', 14.3, 14.4), w('¿cómo', 14.5, 14.7), w('estás?', 14.7, 14.9),

@@ -11,6 +11,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const estilos = require('./estilos');
+const emojis = require('./emojis');
 
 const TPS = 254016000000;                              // ticks de FilmCraft por segundo
 const AMARILLO = '#ffd400';
@@ -193,7 +194,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const imp = await herramienta('media_import', { paths: [video] });
     const item = imp?.items?.[0]; if (item == null) throw new Error(`FilmCraft no pudo importar el vídeo: ${JSON.stringify(imp?.errors || imp).slice(0, 300)}`);
     await fc('file.newSequenceFromClip', { items: [item] });
-    await fc('sequence.addTracks', { video: 3 });
+    await fc('sequence.addTracks', { video: 4 });                 // V2 subtítulos · V3 marca · V4 gancho/CTA · V5 emojis
     const sec = await herramienta('sequence_inspect');
     const W = sec?.settings?.width || 1080, H = sec?.settings?.height || 1920, DUR = (sec?.duration || 0) / TPS || trozos.at(-1).e + 1;
     const vertical = H > W, k = Math.min(W, H) / 1080;
@@ -233,25 +234,33 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
         if (kf.some(x => x[3] !== 0)) await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: [centro[0], centro[1] + Math.round(dy * k)], time: tk, keyframe: true });
       }
     }
+    let contColor = 0;
     // un trozo según el modo del estilo
     async function trozo(tr) {
       const ws = tr.palabras?.length ? tr.palabras : [{ w: tr.texto, s: tr.s, e: tr.e }];
       const { texto: txt, rangos } = montarPalabras(ws, mayus);
       const claveR = E.resaltado ? rangosResaltados(txt, claves) : [];
       if (E.modo === 'karaoke' || E.modo === 'acumula') {
+        // en fotogramas enteros con un cursor que no retrocede: dos palabras a menos de un fotograma no se pisan en la pista
+        const finTrozo = fot(tr.e);
+        let cursor = fot(tr.s), primero = true;
         for (let i = 0; i < ws.length; i++) {
-          const ini = i === 0 ? tr.s : Math.max(tr.s, ws[i].s), fin = i + 1 < ws.length ? Math.max(ini + 1 / fps, ws[i + 1].s) : tr.e;
-          if (fot(fin) <= fot(ini)) continue;          // palabra de menos de un fotograma: la absorbe la siguiente
+          const fIni = Math.max(cursor, fot(ws[i].s));
+          const fFin = Math.min(finTrozo, i + 1 < ws.length ? Math.max(fIni + 1, fot(ws[i + 1].s)) : finTrozo);
+          if (fFin <= fIni) continue;                  // palabra sin hueco: la absorbe la siguiente
+          cursor = fFin;
+          const ini = fIni / fps, fin = fFin / fps;
           const visible = E.modo === 'acumula' ? txt.slice(0, rangos[i][1]) : txt;
           const c = await texto(visible, W / 2, capY, tam, ini, fin - ini, 1);
           for (const [x0, x1] of claveR) if (x1 <= visible.length) await colorear(c.clip, x0, x1, E.resaltado);
           await colorear(c.clip, rangos[i][0], rangos[i][1], E.activo);
-          if (i === 0) await animar(c, ini);
+          if (primero) { await animar(c, ini); primero = false; }
         }
         return;
       }
       const c = await texto(txt, W / 2, capY, tam, tr.s, tr.e - tr.s, 1);
       for (const [x0, x1] of claveR) await colorear(c.clip, x0, x1, E.resaltado);
+      if (E.colores) for (const [x0, x1] of rangos) await colorear(c.clip, x0, x1, E.colores[contColor++ % E.colores.length]);
       await animar(c, tr.s);
     }
 
@@ -271,6 +280,28 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       } catch (e) { fallosSrt++; }
     }
     await fc('captions.hideAll');
+
+    // emojis propios encima del subtítulo cuando se dice una palabra que encaja (core/craft/emojis)
+    let nEmojis = 0;
+    if (a.emojis ?? E.emojis) {
+      const tamE = Math.round((a.tamEmoji || 190) * k), yE = capY - Math.round(tam * 0.4) - Math.round(tamE * 0.75);
+      const ganchoArriba = gancho && trozos[0].s <= 1.5 && (!rango || rango[0] < 1);   // el gancho ocupa ese sitio los primeros 3,5 s
+      const libres = emojis.elegir(trozos).filter(em => !(ganchoArriba && em.s < 3.6) && !(a.cta && em.e > DUR - 4.6));
+      for (const em of libres) {
+        const r = await fc('graphics.newFromFile', { path: emojis.ruta(em.emoji), time: t(em.s), track: 4 });
+        const clip = r?.clip; if (clip == null) continue;
+        const sobra = fot(em.s + 5) - fot(em.s) - Math.max(1, fot(em.e) - fot(em.s));      // entra con 5 s: se recorta a su frase
+        if (sobra > 0) await fc('timeline.trim', { clip, edge: 'out', mode: 'regular', deltaFrames: -sobra });
+        const base = 100 * tamE / 512, centro = [W / 2, yE];
+        await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: centro });
+        for (const [dt, esc, op] of estilos.ENTRADAS.rebote) {
+          const tk = t(em.s) + Math.round(dt * TPS);
+          await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: +(base * esc / 100).toFixed(2), time: tk, keyframe: true });
+          await fc('effects.setParam', { clip, effect: 'opacity', param: 'opacity', value: op, time: tk, keyframe: true });
+        }
+        nEmojis++;
+      }
+    }
 
     // 5. gancho, marca, llamada a seguir
     const primero = trozos[0].s;
@@ -310,7 +341,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       a.exportar === false ? `Proyecto listo (sin exportar): ${proyecto}` : `Vídeo: ${mp4}`,
       a.exportar === false ? '' : `Subtítulos aparte: ${path.join(dirSalida, nombre + '.srt')}`,
       `Proyecto de FilmCraft: ${proyecto}`,
-      `${trozos.length} subtítulos${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
+      `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
       `Revisa estas líneas (Whisper dudó): ${trozos.filter(x => x.confianza != null && x.confianza < 0.6).map(x => `"${x.texto}" (${Math.floor(x.s / 60)}:${String(Math.floor(x.s % 60)).padStart(2, '0')})`).slice(0, 10).join(', ') || 'ninguna'}`,
     ].filter(Boolean).join('\n');
     return imagenes.length ? { texto: textoFinal, imagenes } : textoFinal;
@@ -319,10 +350,11 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
   const HERRAMIENTA = {
     nombre: 'subtitular_video', riesgo: 'escritura',
     descripcion: 'Edita un clip en FilmCraft para TikTok/Shorts/Reels: subtítulos dinámicos en pantalla sincronizados palabra a palabra (mayúsculas, contorno, palabras clave en amarillo), gancho al principio, marca y llamada a seguir opcionales, audio normalizado, exporta MP4 + .srt + proyecto .fcproj (por defecto en <carpeta del vídeo>/editados). '
-      + 'Tarda ~1 min + la exportación. Hay estilos animados (estilo: pop, karaoke, palabra, caja, neon, fuego, acumula, minimal; clasico por defecto). Usa soloTranscribir para revisar el texto y luego pasa "subtitulos" corregidos.',
+      + 'Tarda ~1 min + la exportación. Hay estilos animados — paquete base: clasico (defecto), pop, karaoke, palabra, caja, neon, fuego, acumula, minimal; paquete 2 de color con emojis: atardecer, hielo, retro, chicle, lima, oro, terror, arcoiris, noche. Usa soloTranscribir para revisar el texto y luego pasa "subtitulos" corregidos.',
     parametros: { type: 'object', properties: {
       video: { type: 'string', description: 'ruta del vídeo' },
       estilo: { type: 'string', enum: Object.keys(estilos.ESTILOS), description: 'estilo de subtítulos: ' + estilos.lista().map(e => `${e.id} (${e.descripcion.split('.')[0]})`).join('; ') },
+      emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },
       entrada: { type: 'string', enum: Object.keys(estilos.ENTRADAS), description: 'cambia la animación de entrada del estilo' },
       marca: { type: 'string', description: 'texto fijo arriba, p. ej. el nombre del canal' },
       cta: { type: 'string', description: 'llamada a seguir en los últimos segundos, p. ej. "Sígueme para más"' },
