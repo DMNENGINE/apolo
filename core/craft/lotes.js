@@ -102,6 +102,12 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     const base = path.join(carpetaFuente(f), `${c.fecha}_${c.stream}`);
     const original = path.join(base, 'originales', c.archivo);
     c.estado = 'editando'; c.error = null; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    if (c.reexportar) {                                 // retocado a mano en FilmCraft: solo volver a exportar su proyecto
+      await subtitulador.reexportar({ proyecto: c.proyecto, mp4: c.mp4, previa: c.previa, segPrevia: Math.min(20, (c.fin - c.inicio) / 3) });
+      Object.assign(c, { estado: 'revisar', editado: Date.now(), reexportar: false, retocado: true });
+      guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+      return;
+    }
     fs.mkdirSync(path.dirname(original), { recursive: true });
     if (!fs.existsSync(original)) await scp(f, `${f.ruta}/${c.carpeta}/${c.archivo}`, original);
     const comun = { video: original, perfil: f.perfil, carpeta: path.join(base, 'editados'), nombre: `${String(c.rank).padStart(2, '0')}`,
@@ -112,7 +118,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       const usados = Object.values(est.clips).filter(x => x.stream === c.stream && x.estilo && x.id !== id).map(x => x.estilo);
       c.estilo = await elegirEstilo(f, c, texto, usados);
     } else c.estilo = c.estiloForzado;
-    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto' }, {});
+    const { estilo: _e, ...ajustes } = c.ajustes || {};  // cambios pedidos desde Revisión (vibración, efectos, escenas, gancho…)
+    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...ajustes }, {});
     const d = r.datos || {};
     if (c.estado === 'descartado') {                    // lo descartaron mientras se editaba: fuera lo recién hecho
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) try { if (d[k]) fs.rmSync(d[k], { force: true }); } catch { }
@@ -121,7 +128,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     }
     if (c.mp4 && c.mp4 !== d.mp4) for (const viejo of [c.mp4, c.srt, c.previa, c.proyecto]) try { if (viejo) fs.rmSync(viejo, { force: true }); } catch { }   // al rehacer, fuera la versión anterior
     Object.assign(c, { estado: 'revisar', mp4: d.mp4, srt: d.srt, previa: d.previa, proyecto: d.proyecto, gancho: d.gancho, dudas: d.dudas || [], escenas: d.escenas || [],
-      emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null });
+      emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null, retocado: false });
     guardarEst();
     bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
@@ -176,6 +183,67 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     return publico(c);
   }
 
+  // ── 4. cambios pedidos desde Revisión: en palabras ("quita la vibración salvo de 0:40 a 0:55, más suave") o ya concretos ──
+  // se guardan en c.ajustes (se acumulan) y el clip se rehace con el mismo estilo; la transcripción sale de la caché
+  const ENUM_IGUAL = (...v) => ({ type: 'string', enum: ['igual', ...v] });
+  async function interpretar(c, pedido) {
+    if (!generarJSON) throw Object.assign(new Error('no hay modelo para entender el pedido; usa los controles'), { status: 400 });
+    const dur = Math.round(c.fin - c.inicio);
+    const r = await generarJSON({ modelo: modelo?.(), system: 'Traduces lo que pide un streamer sobre un clip vertical ya editado a ajustes concretos del editor. Solo cambias lo que pide; lo demás "igual".',
+      prompt: `Clip de ${dur} s (los tiempos son desde el inicio del clip, en segundos; "1:05" = 65). Estilo actual: ${c.estilo}. `
+        + `Cambios de escena actuales: ${(c.escenas || []).map(e => `${e.tipo} ${Math.round(e.desde)}–${Math.round(e.hasta)} s`).join(', ') || 'ninguno'}. `
+        + `Ajustes ya aplicados: ${JSON.stringify(c.ajustes || {})}.\n\nLo que pide: "${pedido}"\n\n`
+        + 'temblor = la vibración/sacudida de pantalla: "quitar" (ninguna), "tramos" (solo en esos tramos, p. ej. "que solo vibre de 40 a 55"), "intensidad" (la automática más suave/fuerte); intensidad 0–100 = % de la máxima (la actual es 100; "suave" ≈ 25, "media" ≈ 50). '
+        + 'efectos = los golpes automáticos (zoom, destellos, glitch…). escenas = los cambios de escena (acercamientos a la cara). gancho = el título del principio ("-" para quitarlo, "" = igual). respuesta = una frase corta que confirma lo que vas a cambiar.',
+      schema: { type: 'object', properties: {
+        estilo: { type: 'string', enum: ['igual', ...Object.keys(estilos.ESTILOS)] },
+        temblor: { type: 'object', properties: { modo: ENUM_IGUAL('quitar', 'tramos', 'intensidad'), intensidad: { type: 'number' }, tramos: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } }, required: ['desde', 'hasta'] } } }, required: ['modo'] },
+        efectos: ENUM_IGUAL('auto', 'no'), escenas: ENUM_IGUAL('auto', 'no'), emojis: ENUM_IGUAL('si', 'no'),
+        look: ENUM_IGUAL('ninguno', ...Object.keys(require('./efectos').LOOKS)), gancho: { type: 'string' }, respuesta: { type: 'string' },
+      }, required: ['temblor', 'respuesta'] } });
+    const d = r?.datos || r || {};
+    const aj = {};
+    if (d.estilo && d.estilo !== 'igual') aj.estilo = d.estilo;
+    const tb = d.temblor || {};
+    if (tb.modo === 'quitar') aj.temblor = false;
+    else if (tb.modo === 'tramos' && tb.tramos?.length) aj.temblor = { tramos: tb.tramos.map(x => [+x.desde, +x.hasta]), ...(tb.intensidad != null ? { intensidad: +tb.intensidad } : {}) };
+    else if (tb.modo === 'intensidad' && tb.intensidad != null) aj.temblor = { intensidad: +tb.intensidad };
+    if (d.efectos && d.efectos !== 'igual') aj.efectos = d.efectos;
+    if (d.escenas && d.escenas !== 'igual') aj.escenas = d.escenas;
+    if (d.emojis && d.emojis !== 'igual') aj.emojis = d.emojis === 'si';
+    if (d.look && d.look !== 'igual') aj.look = d.look === 'ninguno' ? false : d.look;
+    if (d.gancho === '-') aj.gancho = false; else if (d.gancho && d.gancho !== 'igual') aj.gancho = d.gancho;
+    return { ajustes: aj, respuesta: String(d.respuesta || '') };
+  }
+
+  async function modificar(id, { pedido, ajustes } = {}) {
+    const c = est.clips[id]; if (!c) throw Object.assign(new Error('no existe ese clip'), { status: 404 });
+    if (!['revisar', 'error'].includes(c.estado)) throw Object.assign(new Error('el clip se está editando; espera a que termine'), { status: 409 });
+    let aj = ajustes && typeof ajustes === 'object' ? ajustes : {}, respuesta = '';
+    if (pedido && String(pedido).trim()) ({ ajustes: aj, respuesta } = await interpretar(c, String(pedido).trim().slice(0, 1000)));
+    if (!Object.keys(aj).length) throw Object.assign(new Error('no entendí qué cambiar; dilo de otra forma'), { status: 400 });
+    const antes = c.ajustes?.temblor;
+    c.ajustes = { ...(c.ajustes || {}), ...aj };
+    // "más suave" después de "solo de 40 a 55": se quedan los tramos con la nueva intensidad
+    if (aj.temblor && typeof aj.temblor === 'object' && !aj.temblor.tramos && antes?.tramos) c.ajustes.temblor = { ...antes, ...aj.temblor };
+    if (pedido) (c.pedidos = c.pedidos || []).push({ texto: String(pedido).slice(0, 300), respuesta, cuando: Date.now() });
+    c.estiloForzado = c.ajustes.estilo || c.estilo;
+    c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
+    return { clip: publico(c), ajustes: c.ajustes, respuesta };
+  }
+
+  // abre el proyecto en FilmCraft con ventana; "exportar" (después de guardar allí) lo vuelve a exportar tal cual
+  async function abrir(id) {
+    const c = est.clips[id]; if (!c?.proyecto) throw Object.assign(new Error('el clip no tiene proyecto'), { status: 409 });
+    return subtitulador.abrirEnApp(c.proyecto);
+  }
+  function reexportar(id) {
+    const c = est.clips[id]; if (!c?.proyecto) throw Object.assign(new Error('el clip no tiene proyecto'), { status: 409 });
+    if (!['revisar', 'error'].includes(c.estado)) throw Object.assign(new Error('el clip se está editando; espera a que termine'), { status: 409 });
+    c.reexportar = true; c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
+    return publico(c);
+  }
+
   // limpieza: pendientes viejos (y sus originales) fuera; el registro de decididos se queda 30 días
   function limpiar() {
     const ahora = Date.now(), dia = 864e5;
@@ -216,10 +284,13 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (M === 'GET' && p[3] === 'video') { if (!c.mp4 || !fs.existsSync(c.mp4)) throw Object.assign(new Error('sin vídeo'), { status: 404 }); return { __archivo: c.mp4 }; }
     if (M === 'GET' && p[3] === 'previa') { if (!c.previa || !fs.existsSync(c.previa)) throw Object.assign(new Error('sin vista previa'), { status: 404 }); return { __archivo: c.previa }; }
     if (M === 'POST' && ['aprobar', 'descartar', 'rehacer'].includes(p[3])) return decidir(c.id, p[3], b);
+    if (M === 'POST' && p[3] === 'modificar') return modificar(c.id, b);
+    if (M === 'POST' && p[3] === 'abrir') return abrir(c.id);
+    if (M === 'POST' && p[3] === 'exportar') return reexportar(c.id);
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
 
-  return { revisar, procesar, decidir, limpiar, estado, programar, http, elegirEstilo, ESTILOS_DEFECTO };
+  return { revisar, procesar, decidir, modificar, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, ESTILOS_DEFECTO };
 }
 
 module.exports = { crearLotes, ESTILOS_DEFECTO };

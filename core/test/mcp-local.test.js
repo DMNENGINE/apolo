@@ -207,3 +207,12 @@ test('escenas: 8 tipos con plan coherente, el punto queda centrado y la elecció
   assert.deepStrictEqual(e.map(x => x.tipo), ['temblor', 'drama', 'acercar']);
   assert.ok(e.every(x => x.desde > 3.5 && x.hasta < 120), 'ni en el gancho ni en el final');
 });
+
+test('efectos: la intensidad escala el temblor y los tramos largos entran suave', async () => {
+  const fx = require('../craft/efectos');
+  const set = [];
+  const fc = async (id, p) => { if (id === 'effects.setParam' && p.param === 'amount' && p.keyframe) set.push([p.time, p.value]); };
+  const gx = fx.crearGolpes({ fc, clip: 1, t: s => s, fuerzas: { temblor: 0.25 } });
+  await gx.golpe('temblor', 40, 15);
+  assert.deepStrictEqual(set, [[0, 0], [40, 0], [40.35, 8], [55, 8], [55.35, 0]]);
+});

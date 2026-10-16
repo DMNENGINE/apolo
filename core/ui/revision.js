@@ -13,11 +13,55 @@ Object.assign(I18N.dic.en, {
   'Escenas': 'Scenes', 'No hay clips aquí.': 'No clips here.', 'Aún no hay fuentes configuradas.': 'No sources configured yet.', 'Buscando…': 'Looking…',
   '{n} clips nuevos': '{n} new clips', 'No hay streams nuevos': 'No new streams', 'Aprobado: está en la carpeta de aprobados': 'Approved: it is in the approved folder',
   'Se rehace con otro estilo': 'Being redone with another style', 'Descartado': 'Discarded',
+  'Cambios y edición a mano': 'Changes and manual editing', 'Pedir cambio': 'Request change', 'Vibración de pantalla': 'Screen shake',
+  'Quitarla': 'Remove it', 'Solo en un tramo': 'Only in a segment', 'En todo el clip (automática)': 'Whole clip (automatic)', 'de': 'from', 'a': 'to',
+  'Intensidad': 'Intensity', '100 % = como está ahora': '100 % = as it is now', 'Aplicar': 'Apply', 'Línea de tiempo': 'Timeline',
+  'Abrir en FilmCraft': 'Open in FilmCraft', 'Exportar lo retocado': 'Export the retouched version', 'retocado a mano': 'retouched by hand',
+  'Se rehace con tus cambios': 'Being redone with your changes', 'Abriendo FilmCraft…': 'Opening FilmCraft…', 'Abierto en FilmCraft': 'Opened in FilmCraft',
+  'Exportando lo retocado': 'Exporting the retouched version', 'Dale a ▶ primero': 'Press ▶ first', 'Pon desde y hasta (p. ej. 0:40 y 0:55)': 'Set from and to (e.g. 0:40 and 0:55)',
+  'Escribe qué quieres cambiar': 'Write what you want to change', 'Entendiendo el pedido…': 'Understanding the request…', 'usar el momento del vídeo': 'use the video position',
+  'Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.':
+    'Retouch and save (Ctrl+S) in FilmCraft, then “Export the retouched version”. Note: “Request change” and “Redo” rebuild the clip and manual retouches are lost.',
+  'Ej.: quita la vibración menos de 0:40 a 0:55 y más suave · quita el título · sin emojis · sin acercamientos': 'E.g.: remove the shake except 0:40–0:55 and softer · remove the title · no emojis · no zooms',
+  'Cambios': 'Changes', 'vibración': 'shake', 'quitada': 'removed', 'solo': 'only', 'al': 'at',
 });
 
 const RV_ESTADO = { editando: ['aviso', 'editando…'], 'en cola': ['', 'en cola'], revisar: ['ok', 'revisar'], aprobado: ['ok', 'aprobado'], descartado: ['', 'descartado'], error: ['mal', 'error'] };
 const RV_mmss = s => (s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}` : `${Math.floor(s / 60)}`) + `:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const RV_FILTROS = [['revisar', 'Por revisar'], ['aprobado', 'Aprobados'], ['descartado', 'Descartados'], ['todos', 'Todos']];
+const RV_seg = v => { v = String(v || '').trim().replace(',', '.'); if (!v) return NaN; const p = v.split(':').map(Number); return p.reduce((a, x) => a * 60 + x, 0); };
+function RV_ajustes(aj) {                                // resumen de los cambios pedidos, en corto
+  if (!aj || !Object.keys(aj).length) return '';
+  const tb = aj.temblor, out = [];
+  if (tb === false) out.push(`${tr('vibración')} ${tr('quitada')}`);
+  else if (tb) out.push(`${tr('vibración')}${tb.tramos ? ` ${tr('solo')} ${tb.tramos.map(([d, h]) => `${RV_mmss(d)}–${RV_mmss(h)}`).join(', ')}` : ''}${tb.intensidad != null ? ` ${tr('al')} ${tb.intensidad} %` : ''}`);
+  for (const [k, v] of Object.entries(aj)) if (k !== 'temblor') out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : v}`);
+  return out.join(' · ');
+}
+function RV_cambios(c) {
+  const tb = c.ajustes?.temblor, tramo = tb?.tramos?.[0];
+  const modo = tb === false ? 'quitar' : tramo ? 'tramo' : tb ? 'intensidad' : 'tramo';
+  const int = tb && tb.intensidad != null ? tb.intensidad : 100;
+  return `<details class="rv-cambios"><summary>${tr('Cambios y edición a mano')}</summary>
+    <textarea class="rv-pedido" placeholder="${esc(tr('Ej.: quita la vibración menos de 0:40 a 0:55 y más suave · quita el título · sin emojis · sin acercamientos'))}"></textarea>
+    <div class="rv-fila"><button class="btn pri" data-a="pedir">${tr('Pedir cambio')}</button></div>
+    <div class="rv-sub">${tr('Vibración de pantalla')}</div>
+    <div class="rv-fila"><select class="rv-estilo rv-vmodo">
+        <option value="tramo"${modo === 'tramo' ? ' selected' : ''}>${tr('Solo en un tramo')}</option>
+        <option value="quitar"${modo === 'quitar' ? ' selected' : ''}>${tr('Quitarla')}</option>
+        <option value="intensidad"${modo === 'intensidad' ? ' selected' : ''}>${tr('En todo el clip (automática)')}</option></select>
+      <span class="rv-tramo" ${modo === 'tramo' ? '' : 'hidden'}>${tr('de')} <input type="text" class="rv-desde" placeholder="0:40" value="${tramo ? RV_mmss(tramo[0]) : ''}">
+        <button class="btn fantasma" data-a="marcar" data-campo="desde" title="${esc(tr('usar el momento del vídeo'))}">⏱</button>
+        ${tr('a')} <input type="text" class="rv-hasta" placeholder="0:55" value="${tramo ? RV_mmss(tramo[1]) : ''}">
+        <button class="btn fantasma" data-a="marcar" data-campo="hasta" title="${esc(tr('usar el momento del vídeo'))}">⏱</button></span></div>
+    <div class="rv-fila rv-intfila" ${modo === 'quitar' ? 'hidden' : ''}>${tr('Intensidad')} <input type="range" class="rv-int" min="5" max="100" step="5" value="${int}"> <b class="rv-intv">${int} %</b>
+      <small class="tenue">${tr('100 % = como está ahora')}</small></div>
+    <div class="rv-fila"><button class="btn" data-a="vibracion">${tr('Aplicar')}</button></div>
+    <div class="rv-sub">${tr('Línea de tiempo')}</div>
+    <div class="rv-fila"><button class="btn" data-a="abrir">${tr('Abrir en FilmCraft')}</button><button class="btn" data-a="exportar">${tr('Exportar lo retocado')}</button></div>
+    <small class="tenue">${tr('Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.')}</small>
+  </details>`;
+}
 async function RV_blob(ruta) {
   const r = await fetch('/v1' + ruta, { headers: { 'x-robot-token': TOKEN } });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -34,7 +78,15 @@ VISTAS.revision = {
       <div class="rv-filtros">${RV_FILTROS.map(([k, t]) => `<button class="btn ${k === this.filtro ? 'pri' : 'fantasma'}" data-f="${k}">${tr(t)} <span class="rv-n" data-n="${k}"></span></button>`).join('')}</div>
       <div id="rvLista"></div></div>`;
     v.onclick = e => this.clic(e);
-    v.onchange = e => { if (e.target.matches('.rv-estilo')) e.target.closest('.rv-acc').querySelector('[data-a="rehacer"]').disabled = false; };
+    v.onchange = e => {
+      if (e.target.matches('.rv-acc .rv-estilo')) e.target.closest('.rv-acc').querySelector('[data-a="rehacer"]').disabled = false;
+      if (e.target.matches('.rv-vmodo')) {
+        const box = e.target.closest('.rv-cambios');
+        $('.rv-tramo', box).hidden = e.target.value !== 'tramo';
+        $('.rv-intfila', box).hidden = e.target.value === 'quitar';
+      }
+    };
+    v.oninput = e => { if (e.target.matches('.rv-int')) e.target.parentElement.querySelector('.rv-intv').textContent = e.target.value + ' %'; };
     await this.cargar();
     this.reloj = setInterval(() => this.cargar(true), 6000);
   },
@@ -46,9 +98,14 @@ VISTAS.revision = {
     this.pintarEstado(L);
     for (const [k] of RV_FILTROS) { const n = k === 'todos' ? L.clips.length : L.clips.filter(c => c.estado === k).length; const el = $(`[data-n="${k}"]`, this.v); if (el) el.textContent = n || ''; }
     if (silencio && firma === this.firma) return;        // nada cambió: no se repinta (no corta el vídeo que estás viendo)
+    if (silencio && this.ocupado()) return;              // viendo un vídeo o escribiendo un cambio: se repinta luego
     this.firma = firma;
     $('#rvLista', this.v).innerHTML = this.lista(L);
     this.cargarPrevias();
+  },
+  ocupado() {
+    const lista = $('#rvLista', this.v); if (!lista) return false;
+    return $$('video', lista).some(x => !x.paused) || $$('.rv-cambios[open]', lista).length > 0 || lista.contains(document.activeElement);
   },
   pintarEstado(L) {
     const el = $('#rvEstado', this.v); if (!el) return;
@@ -74,10 +131,13 @@ VISTAS.revision = {
           ${c.dudas?.length ? `<div class="rv-dudas"><small>${tr('Whisper dudó en')}:</small> ${c.dudas.slice(0, 5).map(d => `<span>“${esc(d.texto)}” <i>${RV_mmss(d.s)}</i></span>`).join(' ')}</div>` : ''}
           ${c.chat?.length ? `<details class="rv-chat"><summary>${tr('Chat en ese momento')} (${c.chat.length})</summary>${c.chat.map(m => `<div>${esc(m)}</div>`).join('')}</details>` : ''}
           ${c.error ? `<div class="rv-error">${esc(c.error)}</div>` : ''}
+          ${c.ajustes && Object.keys(c.ajustes).length ? `<div class="rv-ajustes">${tr('Cambios')}: ${esc(RV_ajustes(c.ajustes))}</div>` : ''}
+          ${c.pedidos?.at(-1)?.respuesta ? `<div class="rv-respuesta">${esc(c.pedidos.at(-1).respuesta)}</div>` : ''}
+          ${c.retocado ? `<span class="chip">${tr('retocado a mano')}</span>` : ''}
           ${c.estado === 'revisar' || c.estado === 'error' ? `<div class="rv-acc flex">
             ${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
             <select class="rv-estilo"><option value="">${tr('Otro estilo')}…</option>${opciones}</select><button class="btn" data-a="rehacer">${tr('Rehacer')}</button>
-            <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button></div>` : ''}
+            <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button></div>${RV_cambios(c)}` : ''}
         </div></div>`;
     }).join('')}</div>`).join('');
   },
@@ -103,11 +163,37 @@ VISTAS.revision = {
       catch (er) { medio.innerHTML = `<div class="rv-hueco">${esc(er.message)}</div>`; }
       return;
     }
+    if (a.dataset.a === 'marcar') {                      // ⏱ = el momento en que está el vídeo
+      const vid = $('video', tarjeta); if (!vid) return aviso('Dale a ▶ primero', true);
+      $(a.dataset.campo === 'desde' ? '.rv-desde' : '.rv-hasta', tarjeta).value = RV_mmss(vid.currentTime);
+      return;
+    }
+    // qué se manda: acción → [ruta, cuerpo]
+    let ruta = a.dataset.a, cuerpo = {};
+    if (ruta === 'rehacer') cuerpo = { estilo: $('.rv-acc .rv-estilo', tarjeta).value || undefined };
+    if (ruta === 'pedir') {
+      const pedido = $('.rv-pedido', tarjeta).value.trim(); if (!pedido) return aviso('Escribe qué quieres cambiar', true);
+      ruta = 'modificar'; cuerpo = { pedido }; aviso('Entendiendo el pedido…');
+    }
+    if (ruta === 'vibracion') {
+      const modo = $('.rv-vmodo', tarjeta).value, intensidad = +$('.rv-int', tarjeta).value;
+      let temblor;
+      if (modo === 'quitar') temblor = false;
+      else if (modo === 'intensidad') temblor = { intensidad };
+      else {
+        const d = RV_seg($('.rv-desde', tarjeta).value), h = RV_seg($('.rv-hasta', tarjeta).value);
+        if (!(h > d)) return aviso('Pon desde y hasta (p. ej. 0:40 y 0:55)', true);
+        temblor = { tramos: [[d, h]], intensidad };
+      }
+      ruta = 'modificar'; cuerpo = { ajustes: { temblor } };
+    }
+    if (ruta === 'abrir') aviso('Abriendo FilmCraft…');
     a.disabled = true;
     try {
-      const cuerpo = a.dataset.a === 'rehacer' ? { estilo: $('.rv-estilo', tarjeta).value || undefined } : {};
-      await api('POST', `/revision/${encodeURIComponent(id)}/${a.dataset.a}`, cuerpo);
-      aviso({ aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado' }[a.dataset.a]);
+      const r = await api('POST', `/revision/${encodeURIComponent(id)}/${ruta}`, cuerpo);
+      aviso(ruta === 'modificar' ? (r?.respuesta || 'Se rehace con tus cambios')
+        : { aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado', abrir: 'Abierto en FilmCraft', exportar: 'Exportando lo retocado' }[ruta]);
+      if (ruta === 'abrir') { a.disabled = false; return; }
       this.firma = null; await this.cargar();
     } catch (er) { aviso(er.message, true); a.disabled = false; }
   },

@@ -16,7 +16,11 @@ const GOLPES = ['zoom', 'temblor', 'destello', 'rgb', 'glitch', 'barrido'];
 
 // keyframes de cada golpe: efecto de FilmCraft, parámetro, valores fijos y la curva [segundos desde el momento, valor] (0 = apagado)
 const CURVAS = {
-  temblor: { efecto: 'camera_shake', param: 'amount', fijos: { zoom: 7, rotation: 2.5, frequency: 14, complexity: 3, motion_blur: 0 }, curva: dur => [[0, 0], [0.04, 32], [Math.max(0.1, dur), 32], [Math.max(0.1, dur) + 0.08, 0]] },
+  // temblor: 32 = intensidad máxima (100 %). Los tramos largos (vibración de motor…) entran y salen suave
+  temblor: { efecto: 'camera_shake', param: 'amount', fijos: { zoom: 7, rotation: 2.5, frequency: 14, complexity: 3, motion_blur: 0 }, curva: dur => {
+    const d = Math.max(0.1, dur), suave = d > 1.5 ? 0.35 : 0.04;
+    return [[0, 0], [suave, 32], [d, 32], [d + (d > 1.5 ? 0.35 : 0.08), 0]];
+  } },
   destello: { efecto: 'brightness_contrast', param: 'brightness', curva: () => [[0, 0], [0.04, 85], [0.22, 0]] },
   rgb: { efecto: 'rgb_split', param: 'amount', fijos: { angle: 0 }, curva: () => [[0, 0], [0.03, 28], [0.14, 12], [0.3, 0]] },
   glitch: { efecto: 'vr_digital_glitch', param: 'amplitude', fijos: { rate: 24, distortion: 35 }, curva: () => [[0, 0], [0.03, 75], [0.18, 40], [0.28, 0]] },
@@ -53,7 +57,8 @@ function momentos(trozos, { permitidos = GOLPES, fijos = null, hueco = 3.5, intr
 }
 
 // efectos de FilmCraft sobre el clip de vídeo, compartidos entre golpes, looks y escenas (cada efecto se aplica una sola vez)
-function crearGolpes({ fc, clip, t }) {
+// fuerzas = { temblor: 0..1 } escala la curva de ese golpe (1 = la de siempre)
+function crearGolpes({ fc, clip, t, fuerzas = {} }) {
   const aplicados = new Set();
   let base = null;                                     // valores del look (lumetri), para que el "drama" vuelva a ellos
   const asegurar = async nombre => {
@@ -64,9 +69,9 @@ function crearGolpes({ fc, clip, t }) {
     await fc('effects.setParam', { clip, effect: c.efecto, param: c.param, value: 0, time: 0, keyframe: true });   // apagado de base
     aplicados.add(nombre); return c;
   };
-  async function golpe(nombre, s, dur = 0.3) {
+  async function golpe(nombre, s, dur = 0.3, fuerza = fuerzas[nombre] ?? 1) {
     const c = await asegurar(nombre);
-    for (const [dt, v] of c.curva(dur)) await fc('effects.setParam', { clip, effect: c.efecto, param: c.param, value: v, time: t(s + dt), keyframe: true });
+    for (const [dt, v] of c.curva(dur)) await fc('effects.setParam', { clip, effect: c.efecto, param: c.param, value: +(v * fuerza).toFixed(2), time: t(s + dt), keyframe: true });
   }
   async function lumetri(valores = {}) {
     if (!base) { await fc('effects.apply', { clips: [clip], effect: 'lumetri' }); base = { saturation: 100, vignette_amount: 0 }; }

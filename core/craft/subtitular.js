@@ -243,6 +243,12 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       escenas.push(...auto.map(e => ({ ...e, zona: 'cara', ...(e.tipo === 'recorrido' ? { hacia: 'cabina' } : {}) })));
     }
     escenas = escenas.filter(en => en.hasta > en.desde && Object.prototype.hasOwnProperty.call(efectos.TIPOS_ESCENA, en.tipo || 'acercar'));
+    // vibración de pantalla: temblor = false (ninguna) | { intensidad: 0–100 % de la máxima, tramos: [[desde, hasta], …] (solo ahí) }
+    const vib = a.temblor === false || a.temblor === 'no' ? { quitar: true } : a.temblor && typeof a.temblor === 'object' ? a.temblor : null;
+    const tramosVib = (vib?.tramos || []).map(x => (Array.isArray(x) ? x : [x.desde, x.hasta]).map(Number)).filter(([d, h]) => h > d);
+    const sinVibAuto = !!vib && (vib.quitar || tramosVib.length > 0);           // la automática fuera: o ninguna, o solo los tramos pedidos
+    if (sinVibAuto) for (const en of escenas) if (en.tipo === 'temblor') en.tipo = 'acercar';
+    const fuerzas = vib?.intensidad != null ? { temblor: Math.min(100, Math.max(0, +vib.intensidad)) / 100 } : {};
     for (const en of escenas) {                          // la cara de cada escena, detectada si no viene dada
       const nombreZona = typeof en.zona === 'string' ? en.zona : null;
       en.zona = zonaDe(en.zona);
@@ -255,10 +261,11 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
 
     // golpes de vídeo (zoom, temblor, destello, rgb, glitch, barrido) en los momentos fuertes + look de color
     let resumenFx = null, nEnfoques = 0;
-    const gx = v1 != null ? efectos.crearGolpes({ fc, clip: v1, t }) : null;
+    const gx = v1 != null ? efectos.crearGolpes({ fc, clip: v1, t, fuerzas }) : null;
     const modoFx = a.efectos ?? E.efectos ?? 'no';
     if (v1 != null && (modoFx !== 'no' && modoFx !== false || a.look || E.look)) {
-      const permitidos = Array.isArray(modoFx) ? modoFx.filter(g => efectos.GOLPES.includes(g)) : modoFx === 'no' || modoFx === false ? [] : efectos.GOLPES;
+      const permitidos = (Array.isArray(modoFx) ? modoFx.filter(g => efectos.GOLPES.includes(g)) : modoFx === 'no' || modoFx === false ? [] : efectos.GOLPES)
+        .filter(g => !(sinVibAuto && g === 'temblor'));
       let lista = permitidos.length ? efectos.momentos(trozos, { permitidos, fijos: Array.isArray(modoFx) ? permitidos : null, intro: !rango || rango[0] < 1 }) : [];
       // durante una escena el zoom lo lleva la escena: fuera los golpes de zoom que caigan dentro
       lista = lista.map(m => ({ ...m, golpes: m.golpes.filter(g => g !== 'zoom' || !escenas.some(en => m.s > en.desde - 1 && m.s < en.hasta + 1)) })).filter(m => m.golpes.length);
@@ -267,6 +274,10 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     if (v1 != null && escenas.length) {
       avisar(`cambios de escena: ${escenas.length}`);
       nEnfoques = await efectos.enfocar({ fc, clip: v1, t, W, H, fps, enfoques: escenas, golpes: gx });
+    }
+    if (v1 != null && tramosVib.length) {
+      avisar(`vibración en ${tramosVib.length} tramo(s)`);
+      for (const [d, h] of tramosVib.sort((x, y) => x[0] - y[0])) await gx.golpe('temblor', d, h - d);
     }
     const fuente = a.fuente || E.fuente;
     // un texto con el estilo: lo crea, lo ajusta al ancho y devuelve { clip, centro } (centro = mitad visual, para animar alrededor)
@@ -329,6 +340,13 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
 
     // 4. subtítulos quemados (V2) + pista de subtítulos para el .srt (oculta)
     avisar(`subtítulos: ${trozos.length}`);
+    // Whisper a veces empieza un trozo antes de que acabe el anterior: en la pista no caben dos a la vez ("V2 is not free here")
+    for (let i = 1; i < trozos.length; i++) {
+      const p = trozos[i - 1], c = trozos[i];
+      if (fot(c.s) >= fot(p.e)) continue;
+      if (fot(c.s) > fot(p.s)) p.e = fot(c.s) / fps;   // se recorta el anterior
+      else { c.s = fot(p.e) / fps; if (fot(c.e) <= fot(c.s)) c.e = (fot(c.s) + 1) / fps; }   // o se retrasa este
+    }
     const nombres = new Map();                         // nombres propios = mayúscula a mitad de frase
     palabras.forEach((p, i) => {
       const w = String(p.w).replace(/[^\p{L}\d]/gu, '');
@@ -428,6 +446,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       enfoques: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' }, tipo: { type: 'string', enum: Object.keys(efectos.TIPOS_ESCENA) }, zona: { description: 'nombre del perfil (cara, cabina, pedales) o [x0,y0,x1,y1]' }, hacia: { description: 'zona de llegada (recorrido)' }, x: { type: 'number' }, y: { type: 'number' } } },
         description: 'cambios de escena manuales durante [desde, hasta]: ' + Object.entries(efectos.TIPOS_ESCENA).map(([k, v]) => `${k} (${v})`).join('; ') + '. Sin x,y la cara se detecta sola.' },
       zonaEnfoque: { type: 'array', items: { type: 'number' }, description: 'zona por defecto de los enfoques' },
+      temblor: { description: 'vibración de pantalla: false = ninguna; { intensidad: 0–100 (% de la máxima; por defecto 100), tramos: [[desde, hasta], …] en segundos } = solo en esos tramos (sin tramos: la automática a esa intensidad)' },
       look: { type: 'string', enum: Object.keys(efectos.LOOKS), description: 'look de color del vídeo: ' + Object.keys(efectos.LOOKS).join(', ') },
       emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },
       entrada: { type: 'string', enum: Object.keys(estilos.ENTRADAS), description: 'cambia la animación de entrada del estilo' },
@@ -446,7 +465,36 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     disponible: () => !!mcpLocales.obtener('filmcraft')?.activo,
     ejecutar: (a, ctx) => subtitular(a, ctx),
   };
-  return { subtitular, HERRAMIENTA };
+  // vuelve a exportar un .fcproj (p. ej. retocado a mano en FilmCraft) con los mismos ajustes; vista previa en `segPrevia`
+  async function reexportar({ proyecto, mp4, previa, segPrevia = 1, lufs = -14 }) {
+    if (!fs.existsSync(proyecto)) throw new Error(`no existe el proyecto: ${proyecto}`);
+    await fc('file.open', { path: proyecto });
+    if (previa) try { const r = await mcpLocales.llamar('filmcraft', 'render_frame', { seconds: segPrevia, max_side: 960 }); const img = r?.content?.find(c => c.type === 'image'); if (img) fs.writeFileSync(previa, Buffer.from(img.data, 'base64')); } catch { }
+    await fc('file.exportMedia', { path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: lufs, captionSidecar: 'srt', hardwareEncoding: 'auto', wait: true });
+    try { await fc('file.closeProject', { force: true }); } catch { }
+    return { mp4, previa };
+  }
+
+  // abre el proyecto en la app de FilmCraft (con ventana, línea de tiempo) para retocarlo a mano
+  async function abrirEnApp(proyecto, { puerto = 7980 } = {}) {
+    if (!fs.existsSync(proyecto)) throw new Error(`no existe el proyecto: ${proyecto}`);
+    const cli = mcpLocales.obtener('filmcraft')?.comando;
+    if (!cli) throw new Error('FilmCraft no está instalado (Configuración → Apps MCP locales → Detectar)');
+    const app = path.join(path.dirname(cli), 'filmcraft.exe');
+    const { spawn, execFile } = require('child_process');
+    const puente = (args, timeout = 15_000) => new Promise((ok, mal) => execFile(cli, ['--bridge', `127.0.0.1:${puerto}`, ...args], { windowsHide: true, timeout, encoding: 'utf8' }, (e, out, err) => (e ? mal(new Error((err || e.message).trim().slice(0, 300))) : ok(out))));
+    const vivo = () => puente(['inspect', 'project'], 5000).then(() => true, () => false);
+    if (!await vivo()) {
+      spawn(app, ['--control', String(puerto)], { detached: true, stdio: 'ignore' }).unref();
+      let ok = false;
+      for (let i = 0; i < 40 && !ok; i++) { await new Promise(r => setTimeout(r, 1000)); ok = await vivo(); }
+      if (!ok) throw new Error('FilmCraft no arrancó (¿se cerró la ventana?)');
+    }
+    await puente(['exec', 'file.open', JSON.stringify({ path: proyecto })], 60_000);
+    return { abierto: proyecto };
+  }
+
+  return { subtitular, reexportar, abrirEnApp, HERRAMIENTA };
 }
 
 module.exports = { crearSubtitulador, montarPalabras, trocear, resaltables, rangosResaltados, tituloDeArchivo, dosLineas, srtCaso, limpiar };
