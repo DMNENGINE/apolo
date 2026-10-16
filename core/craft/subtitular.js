@@ -342,17 +342,16 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     // 4. subtítulos quemados (V2) + pista de subtítulos para el .srt (oculta)
     avisar(`subtítulos: ${trozos.length}`);
     // Whisper a veces empieza un trozo antes de que acabe el anterior: en la pista no caben dos a la vez ("V2 is not free here")
-    for (let i = 1; i < trozos.length; i++) {
-      const p = trozos[i - 1], c = trozos[i];
-      if (fot(c.s) >= fot(p.e)) continue;
-      if (fot(c.s) > fot(p.s)) p.e = fot(c.s) / fps;   // se recorta el anterior
-      else { c.s = fot(p.e) / fps; if (fot(c.e) <= fot(c.s)) c.e = (fot(c.s) + 1) / fps; }   // o se retrasa este
-    }
-    // palabras con duración cero (Whisper): el trozo se alarga hasta 0,4 s sin pisar el siguiente
+    // y hay palabras con duración cero. Una pasada en fotogramas: cada trozo empieza donde acaba el anterior como pronto,
+    // dura al menos 1 fotograma, y si es cortísimo se alarga hasta 0,4 s sin pisar el siguiente
+    for (let i = 0; i + 1 < trozos.length; i++)       // si el siguiente empieza dentro de este, este se recorta
+      if (fot(trozos[i + 1].s) > fot(trozos[i].s) && fot(trozos[i + 1].s) < fot(trozos[i].e)) trozos[i].e = trozos[i + 1].s;
+    let cursorF = -Infinity;
     trozos.forEach((c, i) => {
-      if (fot(c.e) - fot(c.s) >= 3) return;
-      const tope = trozos[i + 1] ? fot(trozos[i + 1].s) : fot(c.s + 0.4);
-      c.e = Math.max(fot(c.s) + 1, Math.min(fot(c.s + 0.4), tope)) / fps;
+      const fs = Math.max(fot(c.s), cursorF);
+      let fe = Math.max(fot(c.e), fs + 1);
+      if (fe - fs < 3) fe = Math.max(fs + 1, Math.min(fs + Math.round(0.4 * fps), trozos[i + 1] ? fot(trozos[i + 1].s) : Infinity));
+      c.s = fs / fps; c.e = fe / fps; cursorF = fe;
     });
     const nombres = new Map();                         // nombres propios = mayúscula a mitad de frase
     palabras.forEach((p, i) => {
