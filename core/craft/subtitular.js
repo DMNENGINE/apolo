@@ -99,7 +99,7 @@ const srtCaso = (t, nombres) => {
 // perfiles: los ajustes de un canal de una vez (posición de subtítulos, marca, llamada a seguir, zonas de su vídeo, contexto)
 const PERFILES = {
   lagctrucks: {
-    y: 0.78, marca: 'LAGCTRUCKS', cta: 'Sígueme para más',
+    y: 0.78, marca: 'LAGCTRUCKS', letrero: { nombre1: 'LAGC', nombre2: 'TRUCKS' }, cta: 'Sígueme para más',
     contexto: 'Stream de LAGCTRUCKS en American Truck Simulator. Saludos al chat, compa, hermano, papi, camión, México.',
     zonas: { cara: [0, 97, 1080, 705], cabina: [0, 705, 1080, 1313], pedales: [0, 1313, 1080, 1920] },
   },
@@ -476,7 +476,26 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       }
       await animar(g, 0);
     }
-    if (a.marca) await texto(String(a.marca), W / 2, Math.round(H * (a.yMarca ?? 0.0375)), Math.round(56 * k), 0, DUR, 2,
+    // marca arriba: el letrero animado de EffectCraft (bucle de 6 s repetido en V3) o, sin él, el texto amarillo
+    let conLetrero = false;
+    if (a.letrero && a.letrero !== false && vertical) {
+      try {
+        const marcaMod = require('./marca');
+        const mov = await marcaMod.asegurarLetrero({ ...a.letrero, carpeta: path.join(cfg?.dir || path.join(os.homedir(), '.apolo'), 'craft', 'marca'), mcpLocales, python: cfg?.craft?.python });
+        const item = (await herramienta('media_import', { paths: [mov] }))?.items?.[0];
+        if (item == null) throw new Error('FilmCraft no importó el letrero');
+        for (let ini = 0; ini < DUR - 0.05; ini += marcaMod.BUCLE) {
+          const pl = await fc('timeline.place', { item, track: 'V3', seconds: ini, duration: t(Math.min(marcaMod.BUCLE, DUR - ini)), video: true, audio: false });
+          const clip = pl?.clips?.[0];                 // FilmCraft lo centra en el cuadro: arriba del todo (mide 1080×150)
+          if (clip != null) {
+            await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: [W / 2, Math.round(75 * k)] });
+            if (k !== 1) await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: +(100 * k).toFixed(2) });
+          }
+        }
+        conLetrero = true;
+      } catch (e) { avisar(`letrero animado no disponible (${e.message}); va el texto`); }
+    }
+    if (a.marca && !conLetrero) await texto(String(a.marca), W / 2, Math.round(H * (a.yMarca ?? 0.0375)), Math.round(56 * k), 0, DUR, 2,
       { fill_color: AMARILLO, stroke: false, stroke2: false, background: false, shadow: false, tracking: 120 });
     if (a.cta && (!rango || rango[1] >= DUR - 4.5)) await animar(await texto(mayus ? String(a.cta).toLocaleUpperCase('es') : String(a.cta), W / 2, capY - Math.round(225 * k), Math.round(76 * k), Math.max(0, DUR - 4.5), 4.5, 3), Math.max(0, DUR - 4.5));
 
@@ -529,6 +548,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },
       entrada: { type: 'string', enum: Object.keys(estilos.ENTRADAS), description: 'cambia la animación de entrada del estilo' },
       marca: { type: 'string', description: 'texto fijo arriba, p. ej. el nombre del canal' },
+      letrero: { description: 'letrero animado arriba (EffectCraft): { nombre1, nombre2 } (blanco + cian, con iconos de redes) o false para el texto simple' },
       cta: { type: 'string', description: 'llamada a seguir en los últimos segundos, p. ej. "Sígueme para más"' },
       gancho: { description: 'título de los primeros segundos (texto) o false para no ponerlo; por defecto lo propone el modelo' },
       tituloClip: { type: 'string', description: 'de qué va el clip o el título del stream (ayuda a proponer el gancho)' },
