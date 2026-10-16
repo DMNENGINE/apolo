@@ -28,6 +28,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const cola = [];                                     // ids de clips por editar (en orden)
   let enCurso = null, revisando = false;
   for (const c of Object.values(est.clips)) if (c.estado === 'editando' || c.estado === 'en cola') { c.estado = 'en cola'; cola.push(c.id); }   // tras reiniciar
+  // exportaciones 4K pendientes (van en la misma cola como "4k:<id>")
+  for (const c of Object.values(est.clips)) if (c.estado === 'aprobado' && ['en cola', 'exportando'].includes(c.k4?.estado)) { c.k4 = { estado: 'en cola' }; cola.push('4k:' + c.id); }
 
   const sh = (cmd, args, { timeout = 600_000 } = {}) => new Promise((ok, mal) =>
     ejecutar(cmd, args, { windowsHide: true, timeout, maxBuffer: 64 << 20, encoding: 'utf8' }, (e, out, err) => (e ? mal(new Error(`${cmd}: ${(err || e.message).toString().trim().slice(0, 300)}`)) : ok(out))));
@@ -141,6 +143,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (enCurso) return;
     while (cola.length) {
       const id = cola.shift(); enCurso = id;
+      if (id.startsWith('4k:')) { await hacer4k(id.slice(3)); enCurso = null; continue; }
       try { await editarUno(id); }
       catch (e) { const c = est.clips[id]; if (c) { c.estado = 'error'; c.error = e.message.slice(0, 400); guardarEst(); } log('[lotes]', id, e.message); }
       if (est.clips[id]?.progreso) { delete est.clips[id].progreso; guardarEst(); }
@@ -158,6 +161,36 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         }
       }
     }
+  }
+
+  // ── 4K para subir: al aprobar se exporta otra vez el proyecto a 2160×3840 (textos y letrero nítidos; el vídeo de la fuente
+  // es 1080p y se reescala). Las fuentes (original y vídeo montado con avance/recorte) se borran cuando acaba ──
+  const ANCHO4K = 2160, ALTO4K = 3840;
+  function encolar4k(c) {
+    if (!c.proyecto || !fs.existsSync(c.proyecto)) throw Object.assign(new Error('el clip no tiene proyecto para exportar en 4K'), { status: 409 });
+    if (['en cola', 'exportando'].includes(c.k4?.estado)) return;
+    c.k4 = { estado: 'en cola' }; cola.push('4k:' + c.id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
+  }
+  function borrarFuentes(c) {
+    const f = conf.fuentes.find(x => x.id === c.fuente);
+    const base = f ? path.join(carpetaFuente(f), `${c.fecha}_${c.stream}`) : null;
+    if (!base) return;
+    try { fs.rmSync(path.join(base, 'originales', c.archivo), { force: true }); } catch { }
+    const raiz = path.basename(c.archivo, path.extname(c.archivo)), ed = path.join(base, 'editados');
+    try { for (const n of fs.readdirSync(ed)) if (n.startsWith(raiz + '.') && /\.(a|r)[\d.\-_ar]+\.mp4$/.test(n)) fs.rmSync(path.join(ed, n), { force: true }); } catch { }
+  }
+  async function hacer4k(id) {
+    const c = est.clips[id]; if (!c || c.estado !== 'aprobado') return;
+    const destino = c.mp4.replace(/\.mp4$/i, ' 4K.mp4');
+    c.k4 = { estado: 'exportando', pct: 0, desde: Date.now() }; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    try {
+      await subtitulador.reexportar({ proyecto: c.proyecto, mp4: destino, ancho: ANCHO4K, alto: ALTO4K, srt: false },
+        { progreso: (fase, pct, eta) => { c.k4 = { ...c.k4, pct: Math.round(pct ?? c.k4.pct ?? 0), eta: eta ?? null }; } });
+      c.k4 = { estado: 'listo', mp4: destino, hecho: Date.now() };
+      borrarFuentes(c);
+      bus?.emit('aviso-externo', { origen: 'Clips', urgente: false, texto: `🎬 4K listo para subir: ${path.basename(destino)}` });
+    } catch (e) { c.k4 = { estado: 'error', error: e.message.slice(0, 300) }; log('[lotes] 4K', id, e.message); }
+    guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
 
   // ── 3. decisiones del usuario ──
@@ -178,7 +211,9 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       const nombre = `${c.fecha} ${c.stream} ${String(c.rank).padStart(2, '0')} - ${c.estilo}`;
       for (const [k, ext] of [['mp4', '.mp4'], ['srt', '.srt']]) if (c[k] && fs.existsSync(c[k])) { const d = path.join(destino, nombre + ext); fs.renameSync(c[k], d); c[k] = d; }
       c.estado = 'aprobado'; c.decidido = Date.now();
-      if (original) fs.rmSync(original, { force: true });
+      // la versión 4K para subir (salvo exportar4k: false); las fuentes se borran cuando termine
+      if (conf.exportar4k !== false && c.proyecto && fs.existsSync(c.proyecto)) { guardarEst(); encolar4k(c); }
+      else borrarFuentes(c);
     } else if (accion === 'descartar') {
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) if (c[k]) fs.rmSync(c[k], { force: true });
       if (original) fs.rmSync(original, { force: true });
@@ -321,6 +356,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (M === 'POST' && p[3] === 'modificar') return modificar(c.id, b);
     if (M === 'POST' && p[3] === 'abrir') return abrir(c.id);
     if (M === 'POST' && p[3] === 'exportar') return reexportar(c.id);
+    if (M === 'POST' && p[3] === '4k') {
+      if (c.estado !== 'aprobado') throw Object.assign(new Error('primero apruébalo'), { status: 409 });
+      encolar4k(c); return publico(c);
+    }
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
 

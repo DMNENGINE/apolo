@@ -63,14 +63,21 @@ test('lotes: trae lo nuevo, ignora streams cortos y clips cortos, elige estilo p
   assert.strictEqual((await l.revisar()).nuevos, 0, 'lo visto no se repite');
 });
 
-test('lotes: aprobar mueve a aprobados y borra el original; rehacer con otro estilo; descartar borra', async () => {
-  const { l, salida } = montar();
+test('lotes: aprobar mueve a aprobados, exporta el 4K y luego borra el original; rehacer con otro estilo; descartar borra', async () => {
+  const { l, salida, subtitulador } = montar();
   await l.revisar(); let e = await esperar(l);
   const [a, b] = e.clips;
+  const original = path.join(salida, 'LAGCTRUCKS', '2026-10-14_AAA', 'originales', '01.mp4');
   const ap = l.decidir(a.id, 'aprobar');
   assert.strictEqual(ap.estado, 'aprobado');
   assert.ok(ap.mp4.includes(path.join('LAGCTRUCKS', 'aprobados', '2026-10-14')) && fs.existsSync(ap.mp4));
-  assert.ok(!fs.existsSync(path.join(salida, 'LAGCTRUCKS', '2026-10-14_AAA', 'originales', '01.mp4')), 'original borrado');
+  e = await esperar(l);
+  const k4 = subtitulador.reexportados.at(-1);
+  assert.deepStrictEqual([k4.ancho, k4.alto, k4.srt], [2160, 3840, false]);
+  assert.ok(k4.mp4.endsWith(' 4K.mp4') && k4.mp4.includes('aprobados'));
+  const ya = e.clips.find(c => c.id === a.id);
+  assert.strictEqual(ya.k4.estado, 'listo');
+  assert.ok(!fs.existsSync(original), 'original borrado cuando acaba el 4K');
   l.decidir(b.id, 'rehacer', { estilo: 'oro' }); e = await esperar(l);
   const rb = e.clips.find(c => c.id === b.id);
   assert.strictEqual(rb.estilo, 'oro'); assert.strictEqual(rb.estado, 'revisar'); assert.ok(rb.mp4.includes('oro'));

@@ -564,13 +564,15 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     ejecutar: (a, ctx) => subtitular(a, ctx),
   };
   // vuelve a exportar un .fcproj (p. ej. retocado a mano en FilmCraft) con los mismos ajustes; vista previa en `segPrevia`
-  async function reexportar({ proyecto, mp4, previa, segPrevia = 1, lufs = -14 }, ctx = {}) {
+  // ancho/alto: otra resolución (p. ej. 2160×3840 = 4K vertical); los textos y el letrero se dibujan a esa resolución
+  async function reexportar({ proyecto, mp4, previa, segPrevia = 1, lufs = -14, ancho, alto, srt = true }, ctx = {}) {
     if (!fs.existsSync(proyecto)) throw new Error(`no existe el proyecto: ${proyecto}`);
     ctx.progreso?.('abriendo el proyecto…', 2);
     await fc('file.open', { path: proyecto });
     if (previa) try { const r = await mcpLocales.llamar('filmcraft', 'render_frame', { seconds: segPrevia, max_side: 960 }); const img = r?.content?.find(c => c.type === 'image'); if (img) fs.writeFileSync(previa, Buffer.from(img.data, 'base64')); } catch { }
-    await exportar({ path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: lufs, captionSidecar: 'srt', hardwareEncoding: 'auto' },
-      (p, eta) => ctx.progreso?.('exportando', 5 + p * 95, eta));
+    await exportar({ path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: lufs, hardwareEncoding: 'auto',
+      ...(srt ? { captionSidecar: 'srt' } : {}), ...(ancho && alto ? { width: ancho, height: alto } : {}) },
+    (p, eta) => ctx.progreso?.('exportando', 5 + p * 95, eta));
     try { await fc('file.closeProject', { force: true }); } catch { }
     return { mp4, previa };
   }

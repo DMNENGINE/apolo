@@ -1374,4 +1374,7 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .rv-barra { width: 100%; height: 8px; border-radius: 4px; background: var(--capa-2); overflow: hidden; }
 .rv-barra i { display: block; height: 100%; background: var(--aviso); transition: width .6s; }
 .rv-prog small { color: var(--txt-2); }
+.rv-k4 { gap: 8px; flex-wrap: wrap; align-items: center; }
+.rv-k4 .rv-barra { width: 140px; }
+.rv-ruta { word-break: break-all; font-size: 11.5px; }
 @media (max-width: 600px) { .rv-clip { grid-template-columns: 1fr; } .rv-medio { max-height: 70vh; } }

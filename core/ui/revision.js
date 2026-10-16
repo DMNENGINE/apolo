@@ -25,6 +25,7 @@ Object.assign(I18N.dic.en, {
   'Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · quita el título · sin emojis': 'E.g.: start with the 0:45–0:47 bit and then the whole clip · remove the shake except 0:40–0:55 · remove the title · no emojis',
   'Dónde empieza y dónde termina': 'Where it starts and ends', 'Empieza en': 'Starts at', 'Termina en': 'Ends at', 'Clip entero': 'Whole clip',
   'Tiempos del vídeo tal como lo ves aquí': 'Times of the video as you see it here', 'Pon dónde empieza y dónde termina (p. ej. 0:00 y 1:37)': 'Set where it starts and ends (e.g. 0:00 and 1:37)',
+  'Exportar en 4K': 'Export in 4K', '4K en cola': '4K queued', 'Reintentar 4K': 'Retry 4K', 'Exportando en 4K': 'Exporting in 4K',
   'recorte': 'trim', 'del original': 'of the original', 'recortando': 'trimming', 'quedan': 'left', 'lleva': 'running for', 'empezando': 'starting', 'transcribiendo': 'transcribing', 'eligiendo estilo': 'choosing style',
   'montando el avance': 'building the teaser', 'montando en FilmCraft': 'assembling in FilmCraft', 'cambios de escena': 'scene changes', 'vibración': 'shake',
   'subtítulos': 'subtitles', 'título, marca y emojis': 'title, brand and emojis', 'exportando': 'exporting', 'abriendo el proyecto': 'opening the project',
@@ -83,6 +84,15 @@ function RV_cambios(c) {
     <small class="tenue">${tr('Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.')}</small>
   </details>`;
 }
+// la versión 4K de un clip aprobado: en cola / exportando con % / lista (con su archivo) / error con reintento
+function RV_k4(c) {
+  const k = c.k4;
+  if (!k) return `<button class="btn" data-a="4k">${tr('Exportar en 4K')}</button>`;
+  if (k.estado === 'en cola') return `<span class="chip">${tr('4K en cola')}</span>`;
+  if (k.estado === 'exportando') return `<span class="chip aviso">4K ${k.pct || 0} %</span><div class="rv-barra"><i style="width:${k.pct || 0}%"></i></div>${k.eta ? `<small class="tenue">${tr('quedan')} ~${RV_mmss(k.eta)}</small>` : ''}`;
+  if (k.estado === 'listo') return `<span class="chip ok">4K ✓</span><small class="tenue rv-ruta">${esc(k.mp4)}</small>`;
+  return `<span class="chip mal">4K: ${esc(tr('error'))}</span><small class="rv-error">${esc(k.error || '')}</small><button class="btn" data-a="4k">${tr('Reintentar 4K')}</button>`;
+}
 function RV_progreso(p) {
   if (!p) return esc(tr('editando…'));
   const pct = p.pct || 0, tiempo = p.desde ? Math.round((Date.now() - p.desde) / 1000) : null;
@@ -120,7 +130,7 @@ VISTAS.revision = {
   salir() { clearInterval(this.reloj); },
   async cargar(silencio) {
     let L; try { L = await api('GET', '/revision'); } catch (e) { if (!silencio) aviso(e.message, true); return; }
-    const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado])) + this.filtro;
+    const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado, c.k4?.estado])) + this.filtro;
     this.L = L;
     this.pintarEstado(L);
     this.pintarProgreso(L);
@@ -138,6 +148,9 @@ VISTAS.revision = {
       const el = $(`.rv-clip[data-id="${CSS.escape(c.id)}"] .rv-hueco`, this.v); if (!el) continue;
       el.innerHTML = RV_progreso(c.progreso);
     }
+    for (const c of L.clips.filter(x => x.k4?.estado === 'exportando')) {
+      const el = $(`[data-k4="${CSS.escape(c.id)}"]`, this.v); if (el) el.innerHTML = RV_k4(c);
+    }
   },
   ocupado() {
     const lista = $('#rvLista', this.v); if (!lista) return false;
@@ -145,7 +158,8 @@ VISTAS.revision = {
   },
   pintarEstado(L) {
     const el = $('#rvEstado', this.v); if (!el) return;
-    const ed = L.enCurso && L.clips.find(c => c.id === L.enCurso);
+    const es4k = /^4k:/.test(L.enCurso || ''), ed = L.enCurso && L.clips.find(c => c.id === L.enCurso.replace(/^4k:/, ''));
+    if (es4k && ed) { el.innerHTML = `<div class="caja pad rv-trabajando"><span class="punto aviso"></span><b>${tr('Exportando en 4K')}:</b> ${esc(ed.titulo || ed.stream)} · #${ed.rank} · <b>${ed.k4?.pct || 0} %</b>${ed.k4?.eta ? ` · ${tr('quedan')} ~${RV_mmss(ed.k4.eta)}` : ''}${L.cola.length ? ` · ${tr('{n} en cola', { n: L.cola.length })}` : ''}</div>`; return; }
     el.innerHTML = !L.config.fuentes.length ? `<div class="caja pad tenue">${tr('Aún no hay fuentes configuradas.')}</div>`
       : ed || L.cola.length ? `<div class="caja pad rv-trabajando"><span class="punto aviso"></span>${ed ? `<b>${tr('Editando ahora')}:</b> ${esc(ed.titulo || ed.stream)} · #${ed.rank}${ed.progreso ? ` · ${esc(tr(ed.progreso.fase))} <b>${ed.progreso.pct || 0} %</b>${ed.progreso.eta ? ` · ${tr('quedan')} ~${RV_mmss(ed.progreso.eta)}` : ''}` : ''}` : ''}${L.cola.length ? ` · ${tr('{n} en cola', { n: L.cola.length })}` : ''}</div>` : '';
   },
@@ -170,6 +184,7 @@ VISTAS.revision = {
           ${c.ajustes && Object.keys(c.ajustes).length ? `<div class="rv-ajustes">${tr('Cambios')}: ${esc(RV_ajustes(c.ajustes))}</div>` : ''}
           ${c.pedidos?.at(-1)?.respuesta ? `<div class="rv-respuesta">${esc(c.pedidos.at(-1).respuesta)}</div>` : ''}
           ${c.retocado ? `<span class="chip">${tr('retocado a mano')}</span>` : ''}
+          ${c.estado === 'aprobado' ? `<div class="rv-k4 flex" data-k4="${esc(c.id)}">${RV_k4(c)}</div>` : ''}
           ${c.estado === 'revisar' || c.estado === 'error' ? `<div class="rv-acc flex">
             ${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
             <select class="rv-estilo"><option value="">${tr('Otro estilo')}…</option>${opciones}</select><button class="btn" data-a="rehacer">${tr('Rehacer')}</button>
@@ -241,7 +256,7 @@ VISTAS.revision = {
     try {
       const r = await api('POST', `/revision/${encodeURIComponent(id)}/${ruta}`, cuerpo);
       aviso(ruta === 'modificar' ? (r?.respuesta || 'Se rehace con tus cambios')
-        : { aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado', abrir: 'Abierto en FilmCraft', exportar: 'Exportando lo retocado' }[ruta]);
+        : { aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado', abrir: 'Abierto en FilmCraft', exportar: 'Exportando lo retocado', '4k': '4K en cola' }[ruta]);
       if (ruta === 'abrir') { a.disabled = false; return; }
       this.firma = null; await this.cargar();
     } catch (er) { aviso(er.message, true); a.disabled = false; }
