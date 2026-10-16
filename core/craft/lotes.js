@@ -46,14 +46,19 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         let lista;
         try { lista = (await ssh(f, `ls -1 ${f.ruta}`)).split('\n').map(s => s.trim()).filter(s => /^\d{4}-\d\d-\d\d_/.test(s)); }
         catch (e) { log('[lotes]', f.id, e.message); continue; }
-        for (const carpeta of lista) {
+        // soloUltimo (por defecto): del más nuevo al más viejo; en cuanto uno entra en cola, los anteriores se dan por vistos
+        const soloUltimo = f.soloUltimo !== false;
+        const pendientes = lista.filter(c => !est.vistos[`${f.id}/${c}`]).sort();
+        if (soloUltimo) pendientes.reverse();
+        let encolado = false;
+        for (const carpeta of pendientes) {
           const clave = `${f.id}/${carpeta}`;
-          if (est.vistos[clave]) continue;
+          if (encolado) { est.vistos[clave] = new Date().toISOString(); log('[lotes] stream viejo, se salta', clave); guardarEst(); continue; }
           let m;
           try { m = JSON.parse(await ssh(f, `cat ${f.ruta}/${q(carpeta)}/manifiesto.json`)); }
-          catch { continue; }                          // todavía cortando: se mira en la siguiente vuelta
+          catch { if (soloUltimo) break; continue; }   // todavía cortando: se mira en la siguiente vuelta (y no se cuela uno viejo)
           const listos = (m.clips || []).filter(c => c.archivo && c.estado !== 'cortando');
-          if (!listos.length && (m.clips || []).length) continue;
+          if (!listos.length && (m.clips || []).length) { if (soloUltimo) break; continue; }
           est.vistos[clave] = new Date().toISOString();
           if ((m.duracion || 0) < (f.minStreamSeg ?? 600)) { log('[lotes] stream corto, se ignora', clave); guardarEst(); continue; }
           for (const c of listos) {
@@ -65,6 +70,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
               estado: 'en cola', creado: Date.now() };
             cola.push(id); nuevos++;
           }
+          if (soloUltimo && listos.length) encolado = true;
           guardarEst();
           bus?.emit('lotes', { tipo: 'nuevos', fuente: f.id, stream: m.video, clips: listos.length });
         }
@@ -108,6 +114,11 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     } else c.estilo = c.estiloForzado;
     const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto' }, {});
     const d = r.datos || {};
+    if (c.estado === 'descartado') {                    // lo descartaron mientras se editaba: fuera lo recién hecho
+      for (const k of ['mp4', 'srt', 'previa', 'proyecto']) try { if (d[k]) fs.rmSync(d[k], { force: true }); } catch { }
+      try { fs.rmSync(original, { force: true }); } catch { }
+      return;
+    }
     if (c.mp4 && c.mp4 !== d.mp4) for (const viejo of [c.mp4, c.srt, c.previa, c.proyecto]) try { if (viejo) fs.rmSync(viejo, { force: true }); } catch { }   // al rehacer, fuera la versión anterior
     Object.assign(c, { estado: 'revisar', mp4: d.mp4, srt: d.srt, previa: d.previa, proyecto: d.proyecto, gancho: d.gancho, dudas: d.dudas || [], escenas: d.escenas || [],
       emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null });
