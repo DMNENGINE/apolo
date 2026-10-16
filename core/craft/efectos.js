@@ -52,9 +52,10 @@ function momentos(trozos, { permitidos = GOLPES, fijos = null, hueco = 3.5, intr
   return out;
 }
 
-// aplica golpes y look al clip de vídeo. fc(id, params) = command_run; t(seg) = ticks cuadrados a fotograma
-async function aplicar({ fc, clip, t, lista, look }) {
+// efectos de FilmCraft sobre el clip de vídeo, compartidos entre golpes, looks y escenas (cada efecto se aplica una sola vez)
+function crearGolpes({ fc, clip, t }) {
   const aplicados = new Set();
+  let base = null;                                     // valores del look (lumetri), para que el "drama" vuelva a ellos
   const asegurar = async nombre => {
     const c = CURVAS[nombre];
     if (aplicados.has(nombre)) return c;
@@ -63,6 +64,20 @@ async function aplicar({ fc, clip, t, lista, look }) {
     await fc('effects.setParam', { clip, effect: c.efecto, param: c.param, value: 0, time: 0, keyframe: true });   // apagado de base
     aplicados.add(nombre); return c;
   };
+  async function golpe(nombre, s, dur = 0.3) {
+    const c = await asegurar(nombre);
+    for (const [dt, v] of c.curva(dur)) await fc('effects.setParam', { clip, effect: c.efecto, param: c.param, value: v, time: t(s + dt), keyframe: true });
+  }
+  async function lumetri(valores = {}) {
+    if (!base) { await fc('effects.apply', { clips: [clip], effect: 'lumetri' }); base = { saturation: 100, vignette_amount: 0 }; }
+    for (const [k, v] of Object.entries(valores)) { await fc('effects.setParam', { clip, effect: 'lumetri', param: k, value: v }); if (k in base) base[k] = v; }
+    return base;
+  }
+  return { asegurar, golpe, lumetri };
+}
+
+// aplica golpes y look al clip de vídeo. fc(id, params) = command_run; t(seg) = ticks cuadrados a fotograma
+async function aplicar({ fc, clip, t, lista, look, golpes: gx = crearGolpes({ fc, clip, t }) }) {
   let zooms = 0;
   for (const m of lista) {
     for (const g of m.golpes) {
@@ -72,49 +87,150 @@ async function aplicar({ fc, clip, t, lista, look }) {
           await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: v, time: t(m.s + dt), keyframe: true });
         continue;
       }
-      const c = await asegurar(g);
-      for (const [dt, v] of c.curva(m.e - m.s)) await fc('effects.setParam', { clip, effect: c.efecto, param: c.param, value: v, time: t(m.s + dt), keyframe: true });
+      await gx.golpe(g, m.s, m.e - m.s);
     }
   }
-  if (look && LOOKS[look]) {
-    await fc('effects.apply', { clips: [clip], effect: 'lumetri' });
-    for (const [k, v] of Object.entries(LOOKS[look])) await fc('effects.setParam', { clip, effect: 'lumetri', param: k, value: v });
-  }
+  if (look && LOOKS[look]) await gx.lumetri({ basic_on: true, ...LOOKS[look] });
   return { golpes: lista.reduce((n, m) => n + m.golpes.length, 0), look: look && LOOKS[look] ? look : null };
 }
 
-// cambio de escena: el vídeo se mete en una zona (p. ej. la cámara del streamer) hasta llenar la pantalla, se queda durante
-// la frase y vuelve. Ancla fija + posición/escala animadas (a escala 100 con posición = ancla la imagen queda exactamente igual).
-// zona [x0,y0,x1,y1] en px del vídeo; x/y = punto a centrar (si no, el centro de la zona).
-function encuadre({ zona, x, y, W, H }) {
+// ── CAMBIOS DE ESCENA ──
+// El vídeo se mete en una zona (la cámara del streamer…) hasta llenar la pantalla durante una frase y vuelve.
+// Ancla de motion en el centro del cuadro c: para dejar el punto P en el centro a escala S y giro θ, posición = c − R(θ)·S·(P − c).
+const TIPOS_ESCENA = {
+  acercar: 'zoom suave a la zona, se queda la frase y vuelve',
+  escalones: 'zoom en 3 golpes secos (dun, dun, DUN) con fogonazo; para lo cómico',
+  corte: 'salto instantáneo al plano cerrado con fogonazo, y salto de vuelta',
+  lento: 'entra y se sigue acercando despacio durante la frase; para lo serio',
+  giro: 'plano cerrado inclinado (holandés); para lo loco',
+  recorrido: 'entra en una zona y viaja a otra (cara → cabina) durante la frase',
+  drama: 'acercamiento lento que se vuelve blanco y negro con viñeta; para lo triste',
+  temblor: 'plano cerrado con la cámara temblando; para gritos y sustos',
+};
+
+function encuadre({ zona, x, y, W, H, extra = 1 }) {
   const [x0, y0, x1, y1] = zona;
-  const S = Math.max(W / (x1 - x0), H / (y1 - y0));                 // "cubrir": la zona llena el cuadro sin dejar bordes
+  const S = Math.max(W / (x1 - x0), H / (y1 - y0)) * extra;        // "cubrir": la zona llena el cuadro sin dejar bordes
   const mx = W / (2 * S), my = H / (2 * S);
-  const lim = (v, a, b) => Math.min(Math.max(v, a), b);
+  const lim = (v, a, b) => (a > b ? (a + b) / 2 : Math.min(Math.max(v, a), b));
   return { escala: +(S * 100).toFixed(2), punto: [Math.round(lim(x ?? (x0 + x1) / 2, x0 + mx, x1 - mx)), Math.round(lim(y ?? (y0 + y1) / 2, y0 + my, y1 - my))] };
 }
 
-async function enfocar({ fc, clip, t, W, H, enfoques, trans = 0.35 }) {
-  if (!enfoques?.length) return 0;
-  // ancla en el centro del cuadro (la de siempre): el punto P queda en el centro de la pantalla con posición = centro + S·(centro − P)
-  const centro = [W / 2, H / 2];
-  await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: centro, time: 0, keyframe: true });
-  await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: 100, time: 0, keyframe: true });
-  let n = 0;
-  for (const en of [...enfoques].sort((a, b) => a.desde - b.desde)) {
-    const { escala, punto } = encuadre({ zona: en.zona, x: en.x, y: en.y, W, H });
-    const S = escala / 100, dentro = [Math.round(centro[0] + S * (centro[0] - punto[0])), Math.round(centro[1] + S * (centro[1] - punto[1]))];
-    const ini = Math.max(0, en.desde - trans * 0.4), lleno = ini + trans, sale = Math.max(lleno, en.hasta), fuera = sale + trans;
-    for (const [seg, pos, esc] of [[ini, centro, 100], [lleno, dentro, escala], [sale, dentro, escala], [fuera, centro, 100]]) {
-      await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: pos, time: t(seg), keyframe: true });
-      await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: esc, time: t(seg), keyframe: true });
-    }
-    for (const [seg, curva] of [[ini, 'easeOut'], [lleno, 'easeIn'], [sale, 'easeOut'], [fuera, 'easeIn']])   // entra y sale con suavidad
-      for (const param of ['position', 'scale'])
-        try { await fc('effects.setInterpolation', { clip, effect: 'motion', param, mediaTime: t(seg), interpolation: curva }); } catch { }
-    n++;
-  }
-  return n;
+// posición para centrar `punto` a escala `esc` (%) y giro `rot` (°)
+function posicion(punto, esc, rot, W, H) {
+  const c = [W / 2, H / 2], S = esc / 100, a = rot * Math.PI / 180;
+  const vx = (punto[0] - c[0]) * S, vy = (punto[1] - c[1]) * S;
+  return [Math.round(c[0] - (vx * Math.cos(a) - vy * Math.sin(a))), Math.round(c[1] - (vx * Math.sin(a) + vy * Math.cos(a)))];
 }
 
-module.exports = { momentos, aplicar, encuadre, enfocar, GOLPES, LOOKS, POR_EMOJI };
+// plan de una escena (puro): keyframes de motion [seg, pos, esc, rot, curva] + golpes + tramo de drama
+function planEscena({ tipo = 'acercar', desde, hasta, zona, x, y, hacia, xHacia, yHacia, W, H, trans = 0.35, fps = 60 }) {
+  const c = [W / 2, H / 2], ROT = -10;
+  const giro = tipo === 'giro';
+  const extra = giro ? Math.cos(Math.abs(ROT) * Math.PI / 180) + Math.sin(Math.abs(ROT) * Math.PI / 180) * Math.max(W / H, H / W) : 1;
+  const { escala, punto } = encuadre({ zona, x, y, W, H, extra });
+  const rot = giro ? ROT : 0;
+  const dentro = posicion(punto, escala, rot, W, H);
+  const ini = Math.max(0, desde - trans * 0.4), lleno = ini + trans, sale = Math.max(lleno + 0.1, hasta), fuera = sale + trans;
+  const kf = [], golpes = [];
+  let drama = null;
+  const suave = () => kf.push([ini, c, 100, 0, 'easeOut'], [lleno, dentro, escala, rot, 'easeIn']);
+  const vuelta = (pos = dentro, esc = escala) => kf.push([sale, pos, esc, rot, 'easeOut'], [fuera, c, 100, 0, 'easeIn']);
+  if (tipo === 'corte') {
+    const f = 1 / fps;
+    kf.push([Math.max(0, desde - f), c, 100, 0, 'hold'], [desde, dentro, escala, 0, 'hold'], [hasta, c, 100, 0, 'hold']);
+    golpes.push(['destello', desde, 0.2], ['destello', hasta, 0.2]);
+  } else if (tipo === 'escalones') {
+    kf.push([Math.max(0, desde - 1 / fps), c, 100, 0, 'hold']);
+    for (const [dt, u] of [[0, 0.35], [0.28, 0.68], [0.56, 1]]) {
+      const esc = 100 + (escala - 100) * u;
+      kf.push([desde + dt, posicion(punto, esc, 0, W, H), +esc.toFixed(2), 0, 'hold']);
+    }
+    golpes.push(['destello', desde + 0.56, 0.2]);
+    const fin = Math.max(desde + 0.7, hasta);
+    kf.push([fin, dentro, escala, 0, 'easeOut'], [fin + trans, c, 100, 0, 'easeIn']);
+  } else if (tipo === 'lento' || tipo === 'drama') {
+    suave();
+    kf[kf.length - 1][4] = 'linear';
+    const esc2 = +(escala * 1.12).toFixed(2);
+    vuelta(posicion(punto, esc2, 0, W, H), esc2);
+    if (tipo === 'drama') drama = { s: lleno, e: sale, fuera };
+  } else if (tipo === 'recorrido' && hacia) {
+    const b = encuadre({ zona: hacia, x: xHacia, y: yHacia, W, H });
+    suave();
+    kf.push([lleno + Math.max(0.2, (sale - lleno) * 0.35), dentro, escala, 0, 'easeOut']);
+    kf.push([sale, posicion(b.punto, b.escala, 0, W, H), b.escala, 0, 'easeOut'], [fuera, c, 100, 0, 'easeIn']);
+  } else {                                             // acercar, giro, temblor
+    suave(); vuelta();
+    if (tipo === 'temblor') golpes.push(['temblor', lleno, Math.max(0.2, sale - lleno)]);
+  }
+  return { kf, golpes, drama, escala, punto };
+}
+
+async function enfocar({ fc, clip, t, W, H, enfoques, fps = 60, golpes: gx = crearGolpes({ fc, clip, t }) }) {
+  if (!enfoques?.length) return 0;
+  const c = [W / 2, H / 2];
+  const planes = [...enfoques].sort((a, b) => a.desde - b.desde).map(en => planEscena({ ...en, W, H, fps }));
+  const girado = planes.some(p => p.kf.some(k => k[3]));
+  await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: c, time: 0, keyframe: true });
+  await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: 100, time: 0, keyframe: true });
+  if (girado) await fc('effects.setParam', { clip, effect: 'motion', param: 'rotation', value: 0, time: 0, keyframe: true });
+  const params = girado ? ['position', 'scale', 'rotation'] : ['position', 'scale'];
+  for (const plan of planes) {
+    for (const [seg, pos, esc, rot] of plan.kf) {
+      const tk = t(seg);
+      await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: pos, time: tk, keyframe: true });
+      await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: esc, time: tk, keyframe: true });
+      if (girado) await fc('effects.setParam', { clip, effect: 'motion', param: 'rotation', value: rot, time: tk, keyframe: true });
+    }
+    for (const [seg, , , , curva] of plan.kf)
+      for (const param of params)
+        try { await fc('effects.setInterpolation', { clip, effect: 'motion', param, mediaTime: t(seg), interpolation: curva }); } catch { }
+    for (const [nombre, s, dur] of plan.golpes) await gx.golpe(nombre, s, dur);
+    if (plan.drama) {                                  // se va a blanco y negro con viñeta y vuelve al color del look
+      const base = await gx.lumetri({ basic_on: true, vignette_on: true });
+      for (const [seg, sat, vig] of [[plan.drama.s - 0.3, base.saturation, base.vignette_amount], [plan.drama.s + 0.4, 0, -3], [plan.drama.e, 0, -3], [plan.drama.fuera, base.saturation, base.vignette_amount]]) {
+        await fc('effects.setParam', { clip, effect: 'lumetri', param: 'saturation', value: sat, time: t(seg), keyframe: true });
+        await fc('effects.setParam', { clip, effect: 'lumetri', param: 'vignette_amount', value: vig, time: t(seg), keyframe: true });
+      }
+    }
+  }
+  return planes.length;
+}
+
+// frases candidatas para escenas automáticas: [{desde, hasta, texto, tipo}] (puro)
+// puntúa gritos y palabras fuertes, separa las escenas `hueco` s, evita el gancho (3,5 s) y la llamada final (5 s), y varía el tipo
+function elegirEscenas(palabras, { duracion, cuantas, hueco = 15 } = {}) {
+  const frases = [];
+  let f = [];
+  for (const p of palabras) { f.push(p); if (/[.!?…]$/.test(p.w)) { frases.push(f); f = []; } }
+  if (f.length) frases.push(f);
+  const dur = duracion || (palabras.at(-1)?.e || 0);
+  const n = cuantas ?? (dur > 90 ? 3 : 2);
+  const triste = /\b(acab|trist|extra[ñn]|perd|dif[ií]cil|muri|adi[oó]s|nunca)/i;
+  const candidatas = frases.map(ws => {
+    const texto = ws.map(w => w.w).join(' '), desde = ws[0].s, hasta = ws.at(-1).e;
+    const em = emojis.emojiDe(texto);
+    let p = 0, tipo = 'acercar';
+    if (/[¡!]/.test(texto)) { p += 2; tipo = 'temblor'; }
+    if (em) p += 1;
+    if (em === 'risa' || em === 'calavera') { p += 1; tipo = 'escalones'; }
+    if (em === 'fantasma' || em === 'sorpresa') { p += 1; tipo = 'corte'; }
+    if (triste.test(texto)) { p += 1.5; tipo = 'drama'; }
+    if (/\?/.test(texto)) p += 0.5;
+    return { desde, hasta, texto, tipo, p };
+  }).filter(x => x.hasta - x.desde >= 1.2 && x.hasta - x.desde <= 5 && x.desde > 3.5 && x.hasta < dur - 5);
+  const elegidas = [];
+  for (const c of candidatas.sort((a, b) => b.p - a.p)) {
+    if (elegidas.length >= n) break;
+    if (elegidas.some(e => Math.abs(e.desde - c.desde) < hueco)) continue;
+    elegidas.push(c);
+  }
+  // variedad: si un tipo se repite, el repetido pasa a otro
+  const otros = ['acercar', 'lento', 'giro', 'escalones'];
+  const vistos = new Set();
+  for (const e of elegidas.sort((a, b) => a.desde - b.desde)) { if (vistos.has(e.tipo)) e.tipo = otros.find(o => !vistos.has(o)) || e.tipo; vistos.add(e.tipo); }
+  return elegidas.map(({ p, ...e }) => e);
+}
+
+module.exports = { momentos, aplicar, crearGolpes, encuadre, posicion, planEscena, enfocar, elegirEscenas, TIPOS_ESCENA, GOLPES, LOOKS, POR_EMOJI };

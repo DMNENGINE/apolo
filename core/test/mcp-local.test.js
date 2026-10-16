@@ -183,3 +183,27 @@ test('cambio de escena: el encuadre cubre la pantalla con la zona y no se sale d
   assert.ok(e.punto[0] - 540 / S >= 0 && e.punto[0] + 540 / S <= 1080 && e.punto[1] - 960 / S >= 97 - 0.5 && e.punto[1] + 960 / S <= 705 + 0.5);
   assert.deepStrictEqual(encuadre({ zona: [0, 97, 1080, 705], x: 20, W: 1080, H: 1920 }).punto[0], 171, 'pegado al borde: se corre hacia dentro');
 });
+
+test('escenas: 8 tipos con plan coherente, el punto queda centrado y la elección automática varía', () => {
+  const fx = require('../craft/efectos');
+  const base = { desde: 10, hasta: 12, zona: [0, 97, 1080, 705], x: 350, y: 330, hacia: [0, 705, 1080, 1313], W: 1080, H: 1920 };
+  for (const tipo of Object.keys(fx.TIPOS_ESCENA)) {
+    const p = fx.planEscena({ ...base, tipo });
+    assert.ok(p.kf.length >= 3, tipo);
+    assert.deepStrictEqual(p.kf.at(-1).slice(1, 4), [[540, 960], 100, 0], `${tipo} vuelve al plano normal`);
+    assert.ok(p.kf.every((k, i) => i === 0 || k[0] >= p.kf[i - 1][0]), `${tipo}: keyframes en orden`);
+  }
+  // posición: el punto P acaba en el centro de la pantalla (también girado)
+  for (const rot of [0, -7]) {
+    const P = [350, 401], S = 3.5, pos = fx.posicion(P, S * 100, rot, 1080, 1920), a = rot * Math.PI / 180;
+    const vx = (P[0] - 540) * S, vy = (P[1] - 960) * S;
+    assert.ok(Math.abs(pos[0] + vx * Math.cos(a) - vy * Math.sin(a) - 540) <= 1 && Math.abs(pos[1] + vx * Math.sin(a) + vy * Math.cos(a) - 960) <= 1, `giro ${rot}`);
+  }
+  assert.deepStrictEqual(fx.planEscena({ ...base, tipo: 'corte' }).golpes.map(g => g[0]), ['destello', 'destello']);
+  assert.ok(fx.planEscena({ ...base, tipo: 'drama' }).drama);
+  const w = (texto, s) => texto.split(' ').map((x, i, arr) => ({ w: x, s: s + i * 0.3, e: s + i * 0.3 + 0.28 }));
+  const palabras = [...w('Hola chat, ¿cómo están?', 1), ...w('¡Vuelve el lobo, mi hermano!', 20), ...w('Se está acabando el tema de los camiones.', 50), ...w('Nada más que decir aquí hoy.', 80), ...w('Adiós a todos.', 118)];
+  const e = fx.elegirEscenas(palabras, { duracion: 125, cuantas: 3 });
+  assert.deepStrictEqual(e.map(x => x.tipo), ['temblor', 'drama', 'acercar']);
+  assert.ok(e.every(x => x.desde > 3.5 && x.hasta < 120), 'ni en el gancho ni en el final');
+});

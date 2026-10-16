@@ -96,6 +96,26 @@ const srtCaso = (t, nombres) => {
   const i = s.search(/[\p{L}\d]/u); return i < 0 ? s : s.slice(0, i) + s[i].toLocaleUpperCase('es') + s.slice(i + 1);
 };
 
+// perfiles: los ajustes de un canal de una vez (posición de subtítulos, marca, llamada a seguir, zonas de su vídeo, contexto)
+const PERFILES = {
+  lagctrucks: {
+    y: 0.78, marca: 'LAGCTRUCKS', cta: 'Sígueme para más',
+    contexto: 'Stream de LAGCTRUCKS en American Truck Simulator. Saludos al chat, compa, hermano, papi, camión, México.',
+    zonas: { cara: [0, 97, 1080, 705], cabina: [0, 705, 1080, 1313], pedales: [0, 1313, 1080, 1920] },
+  },
+};
+
+// dónde está la cara en una zona durante un tramo (core/craft/cara.py, detector YuNet) → {x, y} | null
+function detectarCara(video, desde, hasta, zona, python = 'python') {
+  return new Promise(ok => {
+    const p = spawn(python, ['-I', path.join(__dirname, 'cara.py'), video, String(desde), String(hasta), ...zona.map(String)], { windowsHide: true });
+    let out = '';
+    p.stdout.on('data', d => { out += d; });
+    p.on('error', () => ok(null));
+    p.on('close', () => { try { ok(JSON.parse(out.trim().split(/\r?\n/).pop())); } catch { ok(null); } });
+  });
+}
+
 // ── transcripción ──
 function transcribir(video, { python = 'python', modelo = 'large-v3', idioma = 'es', contexto = '', gpu = false, signal } = {}) {
   const salida = path.join(os.tmpdir(), `apolo-palabras-${Date.now()}.json`);
@@ -141,6 +161,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
   }
 
   async function subtitular(a, ctx = {}) {
+    if (a.perfil && PERFILES[a.perfil]) a = { ...PERFILES[a.perfil], ...a, zonas: { ...PERFILES[a.perfil].zonas, ...(a.zonas || {}) } };
     const video = path.resolve(ctx.cwd || os.homedir(), String(a.video || ''));
     if (!fs.existsSync(video)) throw new Error(`no existe el vídeo: ${video}`);
     if (!mcpLocales.obtener('filmcraft')?.activo) throw new Error('FilmCraft no está instalado o está desactivado (Configuración → Apps MCP locales → Detectar)');
@@ -208,21 +229,41 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const t = s => Math.round(fot(s) / fps * TPS);
     const durF = (ini, secs) => Math.max(1, fot(ini + secs) - fot(ini)) / fps;
 
-    // golpes de vídeo (zoom, temblor, destello, rgb, glitch, barrido) en los momentos fuertes + look de color
-    let resumenFx = null;
-    const modoFx = a.efectos ?? E.efectos ?? 'no';
-    if (modoFx !== 'no' && modoFx !== false || a.look || E.look) {
-      const v1 = sec?.video?.[0]?.items?.[0]?.clip;
-      const permitidos = Array.isArray(modoFx) ? modoFx.filter(g => efectos.GOLPES.includes(g)) : modoFx === 'no' || modoFx === false ? [] : efectos.GOLPES;
-      const lista = permitidos.length ? efectos.momentos(trozos, { permitidos, fijos: Array.isArray(modoFx) ? permitidos : null, intro: !rango || rango[0] < 1 }) : [];
-      if (v1 != null) resumenFx = await efectos.aplicar({ fc, clip: v1, t, lista, look: a.look === false ? null : a.look || E.look });
+    // cambios de escena: manuales (enfoques) o automáticos (escenas: "auto" | n). Zonas con nombre del perfil (cara, cabina…)
+    const v1 = sec?.video?.[0]?.items?.[0]?.clip;
+    const zonas = a.zonas || {};
+    const zonaDe = z => (Array.isArray(z) ? z : zonas[z] || a.zonaEnfoque || zonas.cara || [0, 0, W, H]);
+    let escenas = (Array.isArray(a.enfoques) ? a.enfoques : []).map(en => ({ ...en, desde: +en.desde, hasta: +en.hasta }));
+    if (a.escenas && a.escenas !== 'no') {
+      const enRango = rango ? palabras.filter(p => p.s >= rango[0] && p.e <= rango[1]) : palabras;
+      const auto = efectos.elegirEscenas(enRango, { duracion: rango ? rango[1] : DUR, cuantas: typeof a.escenas === 'number' ? a.escenas : undefined });
+      escenas.push(...auto.map(e => ({ ...e, zona: 'cara', ...(e.tipo === 'recorrido' ? { hacia: 'cabina' } : {}) })));
     }
-    // cambios de escena: zoom a una zona (la cámara del streamer…) durante una frase y vuelta
-    let nEnfoques = 0;
-    if (Array.isArray(a.enfoques) && a.enfoques.length) {
-      const v1 = sec?.video?.[0]?.items?.[0]?.clip;
-      const ens = a.enfoques.map(en => ({ ...en, desde: +en.desde, hasta: +en.hasta, zona: en.zona || a.zonaEnfoque || [0, 0, W, H] })).filter(en => en.hasta > en.desde);
-      if (v1 != null) nEnfoques = await efectos.enfocar({ fc, clip: v1, t, W, H, enfoques: ens });
+    escenas = escenas.filter(en => en.hasta > en.desde && Object.prototype.hasOwnProperty.call(efectos.TIPOS_ESCENA, en.tipo || 'acercar'));
+    for (const en of escenas) {                          // la cara de cada escena, detectada si no viene dada
+      const nombreZona = typeof en.zona === 'string' ? en.zona : null;
+      en.zona = zonaDe(en.zona);
+      if (en.hacia) en.hacia = zonaDe(en.hacia);
+      if (en.x == null && (nombreZona === 'cara' || !nombreZona)) {
+        const c = await detectarCara(video, en.desde, en.hasta, en.zona, cfg?.craft?.python).catch(() => null);
+        if (c) Object.assign(en, { x: c.x, y: c.y });
+      }
+    }
+
+    // golpes de vídeo (zoom, temblor, destello, rgb, glitch, barrido) en los momentos fuertes + look de color
+    let resumenFx = null, nEnfoques = 0;
+    const gx = v1 != null ? efectos.crearGolpes({ fc, clip: v1, t }) : null;
+    const modoFx = a.efectos ?? E.efectos ?? 'no';
+    if (v1 != null && (modoFx !== 'no' && modoFx !== false || a.look || E.look)) {
+      const permitidos = Array.isArray(modoFx) ? modoFx.filter(g => efectos.GOLPES.includes(g)) : modoFx === 'no' || modoFx === false ? [] : efectos.GOLPES;
+      let lista = permitidos.length ? efectos.momentos(trozos, { permitidos, fijos: Array.isArray(modoFx) ? permitidos : null, intro: !rango || rango[0] < 1 }) : [];
+      // durante una escena el zoom lo lleva la escena: fuera los golpes de zoom que caigan dentro
+      lista = lista.map(m => ({ ...m, golpes: m.golpes.filter(g => g !== 'zoom' || !escenas.some(en => m.s > en.desde - 1 && m.s < en.hasta + 1)) })).filter(m => m.golpes.length);
+      resumenFx = await efectos.aplicar({ fc, clip: v1, t, lista, look: a.look === false ? null : a.look || E.look, golpes: gx });
+    }
+    if (v1 != null && escenas.length) {
+      avisar(`cambios de escena: ${escenas.length}`);
+      nEnfoques = await efectos.enfocar({ fc, clip: v1, t, W, H, fps, enfoques: escenas, golpes: gx });
     }
     const fuente = a.fuente || E.fuente;
     // un texto con el estilo: lo crea, lo ajusta al ancho y devuelve { clip, centro } (centro = mitad visual, para animar alrededor)
@@ -360,7 +401,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       a.exportar === false ? `Proyecto listo (sin exportar): ${proyecto}` : `Vídeo: ${mp4}`,
       a.exportar === false ? '' : `Subtítulos aparte: ${path.join(dirSalida, nombre + '.srt')}`,
       `Proyecto de FilmCraft: ${proyecto}`,
-      `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${resumenFx?.golpes ? ` · ${resumenFx.golpes} golpes de efecto` : ''}${resumenFx?.look ? ` · look ${resumenFx.look}` : ''}${nEnfoques ? ` · ${nEnfoques} cambio(s) de escena` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
+      `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${resumenFx?.golpes ? ` · ${resumenFx.golpes} golpes de efecto` : ''}${resumenFx?.look ? ` · look ${resumenFx.look}` : ''}${nEnfoques ? ` · ${nEnfoques} cambio(s) de escena (${escenas.map(e => `${e.tipo || 'acercar'} ${Math.floor(e.desde / 60)}:${String(Math.floor(e.desde % 60)).padStart(2, '0')}`).join(', ')})` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
       `Revisa estas líneas (Whisper dudó): ${trozos.filter(x => x.confianza != null && x.confianza < 0.6).map(x => `"${x.texto}" (${Math.floor(x.s / 60)}:${String(Math.floor(x.s % 60)).padStart(2, '0')})`).slice(0, 10).join(', ') || 'ninguna'}`,
     ].filter(Boolean).join('\n');
     return imagenes.length ? { texto: textoFinal, imagenes } : textoFinal;
@@ -374,8 +415,10 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       video: { type: 'string', description: 'ruta del vídeo' },
       estilo: { type: 'string', enum: Object.keys(estilos.ESTILOS), description: 'estilo de subtítulos: ' + estilos.lista().map(e => `${e.id} (${e.descripcion.split('.')[0]})`).join('; ') },
       efectos: { description: 'golpes de vídeo en los momentos fuertes: "auto", "no" o una lista de ' + efectos.GOLPES.join(', ') + ' (por defecto según el estilo)' },
-      enfoques: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' }, zona: { type: 'array', items: { type: 'number' } }, x: { type: 'number' }, y: { type: 'number' } } },
-        description: 'cambios de escena: durante [desde, hasta] (s) el vídeo hace zoom a la zona [x0,y0,x1,y1] (px) hasta llenar la pantalla, centrando el punto x,y, y vuelve. LAGCTRUCKS: cámara del streamer = [0,97,1080,705]' },
+      perfil: { type: 'string', enum: Object.keys(PERFILES), description: 'ajustes de un canal: lagctrucks = subtítulos en los pedales, marca, "Sígueme", zonas cara/cabina/pedales' },
+      escenas: { description: 'cambios de escena automáticos: "auto" (2–3 en las frases más fuertes, con la cara detectada) o un número' },
+      enfoques: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' }, tipo: { type: 'string', enum: Object.keys(efectos.TIPOS_ESCENA) }, zona: { description: 'nombre del perfil (cara, cabina, pedales) o [x0,y0,x1,y1]' }, hacia: { description: 'zona de llegada (recorrido)' }, x: { type: 'number' }, y: { type: 'number' } } },
+        description: 'cambios de escena manuales durante [desde, hasta]: ' + Object.entries(efectos.TIPOS_ESCENA).map(([k, v]) => `${k} (${v})`).join('; ') + '. Sin x,y la cara se detecta sola.' },
       zonaEnfoque: { type: 'array', items: { type: 'number' }, description: 'zona por defecto de los enfoques' },
       look: { type: 'string', enum: Object.keys(efectos.LOOKS), description: 'look de color del vídeo: ' + Object.keys(efectos.LOOKS).join(', ') },
       emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },
