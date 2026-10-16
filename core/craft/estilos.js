@@ -1,4 +1,4 @@
-// Base de estilos de subtítulos animados para subtitular_video (propios: no copian plantillas de CapCut/Submagic ni usan nombres de marcas).
+// Base de estilos de subtítulos animados para subtitular_video. 100 % propios: diseño nuestro y fuente nuestra (Trueno, core/craft/fuentes).
 // Cada estilo = fuente + relleno/contorno/caja/sombra (parámetros de graphic_text de FilmCraft) + modo + animación de entrada.
 //   modo: bloque   — el trozo entero aparece de golpe
 //         karaoke  — el trozo entero visible y la palabra que se dice cambia de color
@@ -10,50 +10,50 @@
 
 const ESTILOS = {
   clasico: {
-    nombre: 'Clásico', descripcion: 'Impact blanco con contorno negro y palabras clave en amarillo. Sin animación. El del clip 08.',
-    fuente: 'Impact', tam: 112, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
+    nombre: 'Clásico', descripcion: 'Trueno blanco con contorno negro y palabras clave en amarillo. Sin animación. El del clip 08.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 100, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
     resaltado: '#ffd400', modo: 'bloque', entrada: 'ninguna',
   },
   pop: {
     nombre: 'Pop', descripcion: 'Como el clásico, pero cada trozo entra con un golpe de escala (80 → 108 → 100 %). Energía de TikTok.',
-    fuente: 'Impact', tam: 116, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#ffffff', contorno: { ancho: 10, color: '#000000' }, sombra: true,
     resaltado: '#ffd400', modo: 'bloque', entrada: 'pop',
   },
   karaoke: {
     nombre: 'Karaoke', descripcion: 'El trozo entero en pantalla y la palabra que dices se enciende en verde. Fácil de seguir.',
-    fuente: 'Arial', estiloFuente: 'Black', tam: 96, relleno: '#ffffff', contorno: { ancho: 9, color: '#000000' }, sombra: true,
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 96, relleno: '#ffffff', contorno: { ancho: 9, color: '#000000' }, sombra: true,
     activo: '#3dff6e', resaltado: null, modo: 'karaoke', entrada: 'pop', maxPalabras: 4, maxLetras: 26,
   },
   palabra: {
     nombre: 'Palabra a palabra', descripcion: 'Una sola palabra gigante cada vez, con rebote. Máxima energía; para frases cortas y gritos.',
-    fuente: 'Impact', tam: 170, relleno: '#ffffff', contorno: { ancho: 12, color: '#000000' }, sombra: true,
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 150, relleno: '#ffffff', contorno: { ancho: 12, color: '#000000' }, sombra: true,
     resaltado: '#ffd400', modo: 'palabra', entrada: 'rebote',
   },
   caja: {
     nombre: 'Caja', descripcion: 'Texto oscuro sobre una caja blanca redondeada que sube suave. Limpio, estilo Reels.',
-    fuente: 'Segoe UI', estiloFuente: 'Black', tam: 76, relleno: '#111111', contorno: null, sombra: false, mayus: false,
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 76, relleno: '#111111', contorno: null, sombra: false, mayus: false,
     caja: { color: '#ffffff', opacidad: 100, radio: 18, tam: 22 },
     resaltado: '#e8174b', modo: 'bloque', entrada: 'subir', maxPalabras: 5, maxLetras: 30,
   },
   neon: {
     nombre: 'Neón', descripcion: 'Blanco con borde y brillo magenta, y la palabra activa en amarillo. Contrasta con fondos claros y la cabina teal.',
-    fuente: 'Segoe UI', estiloFuente: 'Black', tam: 100, relleno: '#ffffff', contorno: { ancho: 6, color: '#ff1fb4' },
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 100, relleno: '#ffffff', contorno: { ancho: 6, color: '#ff1fb4' },
     brillo: { color: '#ff1fb4', difuminado: 26, tam: 12, opacidad: 100 },
     activo: '#ffe600', resaltado: null, modo: 'karaoke', entrada: 'fundido', maxPalabras: 3,
   },
   fuego: {
-    nombre: 'Fuego', descripcion: 'Impact amarillo con doble contorno (negro y naranja). Para momentos épicos y gaming.',
-    fuente: 'Impact', tam: 118, relleno: '#ffd400', contorno: { ancho: 10, color: '#000000' }, contorno2: { ancho: 8, color: '#ff5a00' }, sombra: true,
+    nombre: 'Fuego', descripcion: 'Trueno amarillo con doble contorno (negro y naranja). Para momentos épicos y gaming.',
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 104, relleno: '#ffd400', contorno: { ancho: 10, color: '#000000' }, contorno2: { ancho: 8, color: '#ff5a00' }, sombra: true,
     resaltado: '#ffffff', modo: 'bloque', entrada: 'rebote',
   },
   acumula: {
     nombre: 'Acumulativo', descripcion: 'Las palabras del trozo aparecen una a una y se quedan; la última en amarillo. Ritmo de conversación.',
-    fuente: 'Arial', estiloFuente: 'Black', tam: 96, relleno: '#ffffff', contorno: { ancho: 9, color: '#000000' }, sombra: true,
+    fuente: 'Trueno', estiloFuente: 'Black', tam: 96, relleno: '#ffffff', contorno: { ancho: 9, color: '#000000' }, sombra: true,
     activo: '#ffd400', resaltado: null, modo: 'acumula', entrada: 'ninguna', maxPalabras: 4, maxLetras: 26,
   },
   minimal: {
     nombre: 'Minimal', descripcion: 'Blanco con sombra suave, sin contorno ni mayúsculas, fundido. Para vídeos tranquilos o de explicar.',
-    fuente: 'Segoe UI', estiloFuente: 'Semibold', tam: 70, relleno: '#ffffff', contorno: null, mayus: false,
+    fuente: 'Trueno', estiloFuente: 'Regular', tam: 70, relleno: '#ffffff', contorno: null, mayus: false,
     brillo: { color: '#000000', difuminado: 20, tam: 9, opacidad: 100 },
     resaltado: null, modo: 'bloque', entrada: 'fundido', maxPalabras: 6, maxLetras: 36,
   },

@@ -100,6 +100,27 @@ test('mcp-local: detectarCraft encuentra <carpeta>/<id>-cli(.exe) y los args sin
   assert.deepStrictEqual(d.find(x => x.id === 'filmcraft').args, ['mcp']);
 });
 
+test('fuentes propias: Trueno existe, todos los estilos la usan y se instala una sola vez', () => {
+  const { asegurarFuentes } = require('../craft/fuentes/instalar');
+  const { ESTILOS } = require('../craft/estilos');
+  assert.ok(Object.values(ESTILOS).every(e => e.fuente === 'Trueno'), 'ningún estilo depende de fuentes de terceros');
+  for (const f of ['Trueno-Black.ttf', 'Trueno-Regular.ttf']) assert.ok(fs.statSync(path.join(__dirname, '..', 'craft', 'fuentes', f)).size > 5000);
+  const casa = fs.mkdtempSync(path.join(os.tmpdir(), 'fuentes-'));
+  const antes = process.env.LOCALAPPDATA; process.env.LOCALAPPDATA = casa;
+  const llamadas = [];
+  try {
+    const plat = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      assert.strictEqual(asegurarFuentes({ ejecutar: (...a) => llamadas.push(a) }).length, 2);
+      assert.strictEqual(asegurarFuentes({ ejecutar: (...a) => llamadas.push(a) }).length, 0, 'la segunda vez no copia nada');
+    } finally { Object.defineProperty(process, 'platform', plat); }
+  } finally { process.env.LOCALAPPDATA = antes; }
+  assert.strictEqual(llamadas.length, 2);
+  assert.ok(llamadas[0][1].includes('Trueno (TrueType)'));
+  assert.ok(fs.existsSync(path.join(casa, 'Microsoft', 'Windows', 'Fonts', 'Trueno-Black.ttf')));
+});
+
 test('subtitular: trocear, resaltar, título y 2 líneas', () => {
   const w = (texto, s, e, p = 0.9) => ({ w: texto, s, e, p });
   const palabras = [w('Hola,', 13.9, 14.3), w('bro,', 14.3, 14.4), w('¿cómo', 14.5, 14.7), w('estás?', 14.7, 14.9),

@@ -148,6 +148,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const nombre = a.nombre || `${base} (subtitulado)`;
     const titulo = tituloDeArchivo(video);
     const E = estilos.obtener(a.estilo);
+    try { require('./fuentes/instalar').asegurarFuentes(); } catch (e) { avisar(`no se pudo instalar la fuente Trueno: ${e.message}`); }
     const opTrozos = { maxPalabras: E.modo === 'palabra' ? 1 : E.maxPalabras || 3, maxLetras: E.maxLetras || 22 };
 
     // 1. palabras / subtítulos
