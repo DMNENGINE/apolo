@@ -44,13 +44,14 @@ Usa **`subtitular_video`** — hace todo en un paso: transcribe palabra a palabr
 - **Efectos de vídeo** (`efectos`): golpes en los momentos fuertes (las palabras de los emojis y los ¡gritos!), uno cada 3,5 s como mucho: `zoom`, `temblor`, `destello`, `rgb`, `glitch`, `barrido`. `"auto"` = cada momento trae el suyo (rayo → barrido+zoom, fantasma → glitch+rgb, risa → temblor, fuego → destello+zoom…); una lista = esos golpes en todos los momentos; `"no"` = ninguno. Vienen en `pop`, `palabra`, `fuego` y en los paquetes 2 y 3.
 - **Animación del texto** (`entrada`): pop, rebote, subir, fundido, caida, deslizar, giro, zoom, glitch, sacudida, ninguna.
 - **Look de color** (`look`): vivo, calido, frio, cine, terror, retro, bn (terror y retro lo traen sus estilos; `look: false` lo quita). Úsalo con cabeza: cambia el color de todo el vídeo.
+- **Cambio de escena** (`enfoques`): `[{desde, hasta, zona:[x0,y0,x1,y1], x, y}]` → el vídeo hace zoom suave a esa zona hasta llenar la pantalla, se queda durante la frase y vuelve (los subtítulos no se mueven). Pon `desde`/`hasta` al principio y final de una FRASE completa (con `soloTranscribir` ves los tiempos) y `x`,`y` donde está la cara. Úsalo 1–3 veces por clip, en las frases más fuertes.
 - Si el audio es ruidoso (juego de fondo, música) o hay nombres raros: primero `soloTranscribir: true`, corrige los textos (y quita lo que no se entiende — mejor sin subtítulo que inventado), y llama otra vez con `subtitulos`.
 - Pasa en `contexto` nombres y jerga que ayuden a Whisper.
 - Para varios clips: uno detrás de otro (FilmCraft es un proceso), avisando al acabar cada uno.
 - Al terminar, enseña la vista previa y lista las líneas dudosas que devuelve la herramienta.
 
 ### Perfil LAGCTRUCKS (streams verticales del usuario)
-Vídeo 1080×1920 con 3 cámaras apiladas: barra negra 0–97 px, cara 97–705, cabina 705–1313, pedales 1313–1920 (con la barra de suscriptores arriba). Usa `y: 0.78` (subtítulos en la zona de los pedales: no tapan la cara y quedan por encima de los botones de TikTok), `marca: "LAGCTRUCKS"`, `cta: "Sígueme para más"`. El acento es caribeño/mexicano y hay saludos a gente del chat: cuidado con los nombres.
+Vídeo 1080×1920 con 3 cámaras apiladas: barra negra 0–97 px, cara 97–705, cabina 705–1313, pedales 1313–1920 (con la barra de suscriptores arriba). Cámara del streamer para `enfoques`: `zona: [0, 97, 1080, 705]`; la cara suele estar en `x` ≈ 300–420, `y` ≈ 320. Usa `y: 0.78` (subtítulos en la zona de los pedales: no tapan la cara y quedan por encima de los botones de TikTok), `marca: "LAGCTRUCKS"`, `cta: "Sígueme para más"`. El acento es caribeño/mexicano y hay saludos a gente del chat: cuidado con los nombres.
 
 ## FilmCraft a mano (cuando no basta subtitular_video)
 - Tiempo en *ticks*: 254016000000 por segundo (los comandos aceptan también `seconds`).

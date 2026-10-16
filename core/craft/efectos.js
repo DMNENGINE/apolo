@@ -83,4 +83,38 @@ async function aplicar({ fc, clip, t, lista, look }) {
   return { golpes: lista.reduce((n, m) => n + m.golpes.length, 0), look: look && LOOKS[look] ? look : null };
 }
 
-module.exports = { momentos, aplicar, GOLPES, LOOKS, POR_EMOJI };
+// cambio de escena: el vídeo se mete en una zona (p. ej. la cámara del streamer) hasta llenar la pantalla, se queda durante
+// la frase y vuelve. Ancla fija + posición/escala animadas (a escala 100 con posición = ancla la imagen queda exactamente igual).
+// zona [x0,y0,x1,y1] en px del vídeo; x/y = punto a centrar (si no, el centro de la zona).
+function encuadre({ zona, x, y, W, H }) {
+  const [x0, y0, x1, y1] = zona;
+  const S = Math.max(W / (x1 - x0), H / (y1 - y0));                 // "cubrir": la zona llena el cuadro sin dejar bordes
+  const mx = W / (2 * S), my = H / (2 * S);
+  const lim = (v, a, b) => Math.min(Math.max(v, a), b);
+  return { escala: +(S * 100).toFixed(2), punto: [Math.round(lim(x ?? (x0 + x1) / 2, x0 + mx, x1 - mx)), Math.round(lim(y ?? (y0 + y1) / 2, y0 + my, y1 - my))] };
+}
+
+async function enfocar({ fc, clip, t, W, H, enfoques, trans = 0.35 }) {
+  if (!enfoques?.length) return 0;
+  // ancla en el centro del cuadro (la de siempre): el punto P queda en el centro de la pantalla con posición = centro + S·(centro − P)
+  const centro = [W / 2, H / 2];
+  await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: centro, time: 0, keyframe: true });
+  await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: 100, time: 0, keyframe: true });
+  let n = 0;
+  for (const en of [...enfoques].sort((a, b) => a.desde - b.desde)) {
+    const { escala, punto } = encuadre({ zona: en.zona, x: en.x, y: en.y, W, H });
+    const S = escala / 100, dentro = [Math.round(centro[0] + S * (centro[0] - punto[0])), Math.round(centro[1] + S * (centro[1] - punto[1]))];
+    const ini = Math.max(0, en.desde - trans * 0.4), lleno = ini + trans, sale = Math.max(lleno, en.hasta), fuera = sale + trans;
+    for (const [seg, pos, esc] of [[ini, centro, 100], [lleno, dentro, escala], [sale, dentro, escala], [fuera, centro, 100]]) {
+      await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: pos, time: t(seg), keyframe: true });
+      await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: esc, time: t(seg), keyframe: true });
+    }
+    for (const [seg, curva] of [[ini, 'easeOut'], [lleno, 'easeIn'], [sale, 'easeOut'], [fuera, 'easeIn']])   // entra y sale con suavidad
+      for (const param of ['position', 'scale'])
+        try { await fc('effects.setInterpolation', { clip, effect: 'motion', param, mediaTime: t(seg), interpolation: curva }); } catch { }
+    n++;
+  }
+  return n;
+}
+
+module.exports = { momentos, aplicar, encuadre, enfocar, GOLPES, LOOKS, POR_EMOJI };

@@ -173,3 +173,13 @@ test('efectos: momentos fuertes, huecos, golpes fijos del estilo y animaciones n
   for (const e of Object.values(ESTILOS)) assert.ok(!e.entrada || ENTRADAS[e.entrada], `entrada de ${e.nombre}`);
   assert.ok(Object.values(ESTILOS).filter(e => e.paquete === 'efectos').length >= 6);
 });
+
+test('cambio de escena: el encuadre cubre la pantalla con la zona y no se sale de ella', () => {
+  const { encuadre } = require('../craft/efectos');
+  const e = encuadre({ zona: [0, 97, 1080, 705], x: 313, y: 322, W: 1080, H: 1920 });
+  assert.ok(Math.abs(e.escala - 315.79) < 0.01, 'la cámara del streamer (608 px) llena los 1920 px');
+  assert.deepStrictEqual(e.punto, [313, 401], 'x se respeta; y se ajusta para no enseñar nada fuera de la zona');
+  const S = e.escala / 100;
+  assert.ok(e.punto[0] - 540 / S >= 0 && e.punto[0] + 540 / S <= 1080 && e.punto[1] - 960 / S >= 97 - 0.5 && e.punto[1] + 960 / S <= 705 + 0.5);
+  assert.deepStrictEqual(encuadre({ zona: [0, 97, 1080, 705], x: 20, W: 1080, H: 1920 }).punto[0], 171, 'pegado al borde: se corre hacia dentro');
+});

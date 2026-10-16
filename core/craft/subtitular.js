@@ -217,6 +217,13 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       const lista = permitidos.length ? efectos.momentos(trozos, { permitidos, fijos: Array.isArray(modoFx) ? permitidos : null, intro: !rango || rango[0] < 1 }) : [];
       if (v1 != null) resumenFx = await efectos.aplicar({ fc, clip: v1, t, lista, look: a.look === false ? null : a.look || E.look });
     }
+    // cambios de escena: zoom a una zona (la cámara del streamer…) durante una frase y vuelta
+    let nEnfoques = 0;
+    if (Array.isArray(a.enfoques) && a.enfoques.length) {
+      const v1 = sec?.video?.[0]?.items?.[0]?.clip;
+      const ens = a.enfoques.map(en => ({ ...en, desde: +en.desde, hasta: +en.hasta, zona: en.zona || a.zonaEnfoque || [0, 0, W, H] })).filter(en => en.hasta > en.desde);
+      if (v1 != null) nEnfoques = await efectos.enfocar({ fc, clip: v1, t, W, H, enfoques: ens });
+    }
     const fuente = a.fuente || E.fuente;
     // un texto con el estilo: lo crea, lo ajusta al ancho y devuelve { clip, centro } (centro = mitad visual, para animar alrededor)
     async function texto(txt, x, y, size, ini, secs, track, extra = {}) {
@@ -353,7 +360,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       a.exportar === false ? `Proyecto listo (sin exportar): ${proyecto}` : `Vídeo: ${mp4}`,
       a.exportar === false ? '' : `Subtítulos aparte: ${path.join(dirSalida, nombre + '.srt')}`,
       `Proyecto de FilmCraft: ${proyecto}`,
-      `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${resumenFx?.golpes ? ` · ${resumenFx.golpes} golpes de efecto` : ''}${resumenFx?.look ? ` · look ${resumenFx.look}` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
+      `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${resumenFx?.golpes ? ` · ${resumenFx.golpes} golpes de efecto` : ''}${resumenFx?.look ? ` · look ${resumenFx.look}` : ''}${nEnfoques ? ` · ${nEnfoques} cambio(s) de escena` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
       `Revisa estas líneas (Whisper dudó): ${trozos.filter(x => x.confianza != null && x.confianza < 0.6).map(x => `"${x.texto}" (${Math.floor(x.s / 60)}:${String(Math.floor(x.s % 60)).padStart(2, '0')})`).slice(0, 10).join(', ') || 'ninguna'}`,
     ].filter(Boolean).join('\n');
     return imagenes.length ? { texto: textoFinal, imagenes } : textoFinal;
@@ -367,6 +374,9 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       video: { type: 'string', description: 'ruta del vídeo' },
       estilo: { type: 'string', enum: Object.keys(estilos.ESTILOS), description: 'estilo de subtítulos: ' + estilos.lista().map(e => `${e.id} (${e.descripcion.split('.')[0]})`).join('; ') },
       efectos: { description: 'golpes de vídeo en los momentos fuertes: "auto", "no" o una lista de ' + efectos.GOLPES.join(', ') + ' (por defecto según el estilo)' },
+      enfoques: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' }, zona: { type: 'array', items: { type: 'number' } }, x: { type: 'number' }, y: { type: 'number' } } },
+        description: 'cambios de escena: durante [desde, hasta] (s) el vídeo hace zoom a la zona [x0,y0,x1,y1] (px) hasta llenar la pantalla, centrando el punto x,y, y vuelve. LAGCTRUCKS: cámara del streamer = [0,97,1080,705]' },
+      zonaEnfoque: { type: 'array', items: { type: 'number' }, description: 'zona por defecto de los enfoques' },
       look: { type: 'string', enum: Object.keys(efectos.LOOKS), description: 'look de color del vídeo: ' + Object.keys(efectos.LOOKS).join(', ') },
       emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },
       entrada: { type: 'string', enum: Object.keys(estilos.ENTRADAS), description: 'cambia la animación de entrada del estilo' },
