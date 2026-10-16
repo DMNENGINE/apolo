@@ -144,6 +144,12 @@ function crearNucleo(opciones = {}) {
   // servidores MCP remotos con OAuth (Mobbin…) → herramientas <id>_<herramienta>; API /v1/mcp-remotos
   const mcpRemotos = require('./mcp-remoto').crearMcpRemotos({ cfg, registrar: require('./herramientas').registrar, quitar: require('./herramientas').quitar, log: (...a) => console.log(...a) });
   nucleo.mcpRemotos = mcpRemotos; nucleo.extensiones['mcp-remotos'] = { http: (...a) => mcpRemotos.http(...a) };
+  // servidores MCP locales por stdio (suite ArtCraft: FilmCraft, CadCraft…) → una herramienta por app; API /v1/mcp-locales
+  const mcpLocales = require('./mcp-local').crearMcpLocales({ cfg, bus, registrar: require('./herramientas').registrar, quitar: require('./herramientas').quitar,
+    detectar: opciones.detectarMcpLocales, log: (...a) => console.log(...a) });
+  nucleo.mcpLocales = mcpLocales; nucleo.extensiones['mcp-locales'] = { http: (...a) => mcpLocales.http(...a) };
+  const subtitulador = require('./craft/subtitular').crearSubtitulador({ mcpLocales, generarJSON: generarJSONvivo, modelo: modeloCerebro, cfg });
+  require('./herramientas').registrar([subtitulador.HERRAMIENTA]);              // subtitular_video: clip → TikTok con subtítulos (FilmCraft)
   // biblioteca de diseño: patrones aprendidos de apps reales en Mobbin; API /v1/diseno
   const diseno = require('./diseno').crearDiseno({ cfg, mcpRemotos, generarJSON: generarJSONvivo, memoria, tareas, bus });
   require('./herramientas').registrar(diseno.HERRAMIENTAS);

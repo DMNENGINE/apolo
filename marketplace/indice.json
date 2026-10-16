@@ -287,6 +287,19 @@
       "version": "2.0.0",
       "licencia": "MIT",
       "web": "https://github.com/DMNENGINE/apolo/tree/main/skills/entretenimiento"
+    },
+    {
+      "nombre": "suite-craft",
+      "descripcion": "Usa las apps de la suite ArtCraft instaladas (FilmCraft, PhotoCraft, CadCraft, VectorCraft…) como herramientas: editar y subtitular clips para TikTok, retocar fotos, logos, planos CAD, presentaciones, hojas de cálculo, PDF y audio.",
+      "fuente": "DMNENGINE/apolo/skills/creativo/suite-craft",
+      "autor": "DMN / APOLO",
+      "etiquetas": [
+        "creativo",
+        "vídeo",
+        "oficial"
+      ],
+      "version": "1.0.0",
+      "licencia": "MIT"
     }
   ]
 }

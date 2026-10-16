@@ -37,6 +37,7 @@ function crearPanico({ nucleo, ahora = Date.now }) {
     try { n.turno?.parar?.(); } catch { }
     try { n.navegador?.detener?.(); } catch { }
     try { r.sandbox = require('./sandbox').matarTodo(); } catch { }          // Etapa H: jaulas (Job Object) y VMs de Windows Sandbox
+    try { r.mcp = n.mcpLocales?.matarTodo?.() || 0; } catch { }               // apps MCP locales (FilmCraft…) a medio exportar
     if (!ya) {
       n.auditoria?.registrar({ tipo: 'panico', decision: 'activar', quien: quien || origen, resumen: `turnos ${r.turnos}, permisos ${r.permisos}, control ${r.control}, sandbox ${r.sandbox || 0}` });
       n.registro?.add('aviso', 'PÁNICO', `activado desde ${origen}`);
