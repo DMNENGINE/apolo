@@ -15,16 +15,19 @@ const diaLocal = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(
 const inicioDia = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const TURNO_MAX = 30 * 60_000;            // un turno del agente cuenta como mucho 30 min (si se quedó colgado no infla las horas)
 
-// categorías de herramientas (lo único que sale en lo compartible)
+// categorías de herramientas (lo único que sale en lo compartible); con las de Claude Code, que entran por el espejo
+// (core/espejo-cc.js): Bash, Read, Edit, WebSearch, mcp__claude-in-chrome__…, mcp__filmcraft__…
 const CATEGORIAS = [
-  ['Terminal', /^shell$/], ['Archivos', /^(leer_archivo|listar|escribir_archivo|editar_archivo)$/], ['Web', /^(web|navegador_.*)$/],
-  ['Memoria', /^(recordar|buscar_memoria|olvidar|buscar_historial|explorar_grafo)$/], ['Subagentes', /^delegar$/],
-  ['Control del PC', /^(ver_pantalla|tomar_control|soltar_control|clic|escribir|tecla|scroll|arrastrar)$/], ['Skills', /skill/],
-  ['Automatizaciones', /^(programar_tarea|ver_tareas|borrar_tarea|turno_.*)$/], ['Consejo', /^consultar_consejo$/], ['Correo', /^correo_/],
+  ['Terminal', /^(shell|Bash|PowerShell|BashOutput|KillShell|Monitor)$/], ['Archivos', /^(leer_archivo|listar|escribir_archivo|editar_archivo|Read|Write|Edit|MultiEdit|Glob|Grep|NotebookEdit)$/],
+  ['Web', /^(web|navegador_.*|WebFetch|WebSearch|mcp__claude-in-chrome__.*)$/],
+  ['Memoria', /^(recordar|buscar_memoria|olvidar|buscar_historial|explorar_grafo)$/], ['Subagentes', /^(delegar|Task|Agent|SendMessage)$/],
+  ['Control del PC', /^(ver_pantalla|tomar_control|soltar_control|clic|escribir|tecla|scroll|arrastrar|mcp__computer-use__.*)$/], ['Skills', /skill/i],
+  ['Creativo', /^(subtitular_video|hacer_miniatura|masterizar_audio|rotulo_animado|titulo_animado|kit_marca|revisar_calidad|(mcp__)?(film|photo|effect|sound|light|vector|cad|fig|design|deck|word|grid|pdf)craft.*|mcp__blender__.*)$/],
+  ['Automatizaciones', /^(programar_tarea|ver_tareas|borrar_tarea|turno_.*|CronCreate|ScheduleWakeup)$/], ['Consejo', /^consultar_consejo$/], ['Correo', /^correo_/],
 ];
 const categoria = n => (CATEGORIAS.find(([, re]) => re.test(n)) || ['Otras'])[0];
 // minutos que te habría llevado hacerlo a mano (estimación conservadora, explicada en la tarjeta)
-const MINUTOS = { Terminal: 2, Archivos: 3, Web: 3, Memoria: 0.5, Subagentes: 10, 'Control del PC': 1, Skills: 5, Automatizaciones: 1, Consejo: 0, Correo: 4, Otras: 1 };
+const MINUTOS = { Terminal: 2, Archivos: 3, Web: 3, Memoria: 0.5, Subagentes: 10, 'Control del PC': 1, Skills: 5, Creativo: 10, Automatizaciones: 1, Consejo: 0, Correo: 4, Otras: 1 };
 const MIN_ENCARGO = 45, MIN_TAREA = 5, MIN_CONSEJO = 15;
 
 function crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos, avatar }) {

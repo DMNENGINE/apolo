@@ -148,9 +148,24 @@ function crearNucleo(opciones = {}) {
   const mcpLocales = require('./mcp-local').crearMcpLocales({ cfg, bus, registrar: require('./herramientas').registrar, quitar: require('./herramientas').quitar,
     detectar: opciones.detectarMcpLocales, log: (...a) => console.log(...a) });
   nucleo.mcpLocales = mcpLocales; nucleo.extensiones['mcp-locales'] = { http: (...a) => mcpLocales.http(...a) };
-  // página de Uso: también el uso de Claude Code (transcripts de ~/.claude/projects, lectura incremental); opciones.usoClaude = null lo quita
-  // (se lee al abrir la página de Uso o un dashboard de uso, no al arrancar)
-  nucleo.usoClaude = opciones.usoClaude !== undefined ? opciones.usoClaude : require('./uso-claude').crearUsoClaude({ cfg, log: (...a) => console.log(...a) });
+  // encargos a Claude Code: APOLO le pasa el trabajo pesado (programar, proyectos) a la CLI del usuario, en segundo plano
+  const encargos = require('./encargos-claude').crearEncargosClaude({ cfg, sesiones, bus, log: (...a) => console.log(...a) });
+  require('./herramientas').registrar([encargos.HERRAMIENTA]);
+  nucleo.encargos = encargos;
+  // espejo de Claude Code: cada sesión de Claude Code es también una conversación de APOLO (Wrapped, Uso, historial, memoria).
+  // En vivo con los hooks; el repaso completo lo arranca la app (espejoCC.iniciar() en main.js), no los tests
+  const espejoCC = require('./espejo-cc').crearEspejoCC({ cfg, sesiones, log: (...a) => console.log(...a) });
+  let aprenderPronto = null;
+  bus.on('motor-hook', ev => {
+    if ((ev?._motor || 'claude') !== 'claude') return;
+    if (['UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'].includes(ev.hook_event_name)) espejoCC.tocar(ev.transcript_path);
+    // la memoria aprende de la sesión en cuanto se queda parada (aprender-cc salta las que tienen actividad de hace < 10 min), no a las 3 de la noche
+    if (['Stop', 'SessionEnd'].includes(ev.hook_event_name) && cfg.aprenderClaude?.activo !== false && cfg.aprenderClaude?.alMomento !== false) {
+      clearTimeout(aprenderPronto);
+      aprenderPronto = setTimeout(() => aprenderCC.aprender().catch(() => { }), 12 * 60_000); aprenderPronto.unref?.();
+    }
+  });
+  nucleo.espejoCC = { ...espejoCC, iniciar() { espejoCC.actualizar({ forzar: true }).catch(() => { }); setInterval(() => espejoCC.actualizar().catch(() => { }), 10 * 60_000).unref(); } };
   // recetas fijas de la suite (kit de marca, control de calidad, portadas, audio de estudio, rótulo/título animados)
   const craft = require('./craft/herramientas').crearHerramientasCraft({ mcpLocales, cfg });
   require('./herramientas').registrar(craft.HERRAMIENTAS);

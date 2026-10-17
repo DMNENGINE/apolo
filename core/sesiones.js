@@ -36,6 +36,20 @@ function crearSesiones({ cfg }) {
     s.mensajes.push(m); s.actualizada = Date.now();
     fs.appendFileSync(F(s.id, 'jsonl'), JSON.stringify(m) + '\n');
   }
+  // conversación que viene de fuera (espejo de Claude Code): id y fechas propios; meta se mezcla con la que hubiera y
+  // los mensajes nuevos se añaden sin tocar "actualizada" (la pone quien llama, con la hora real del último mensaje)
+  function espejar(meta, nuevos = []) {
+    if (!valido(meta.id)) throw new Error(`id no válido: ${meta.id}`);
+    let previa = vivas.get(meta.id);
+    if (!previa) try { previa = JSON.parse(fs.readFileSync(F(meta.id, 'json'), 'utf8')); } catch { previa = null; }
+    const { mensajes: _m, ...antes } = previa || { creada: meta.creada || Date.now(), uso: { entrada: 0, salida: 0 } };
+    const s = { ...antes, ...meta };
+    guardarMeta(s);
+    if (nuevos.length || !previa) fs.appendFileSync(F(s.id, 'jsonl'), nuevos.map(m => JSON.stringify(m) + '\n').join(''));
+    const viva = vivas.get(s.id);
+    if (viva) Object.assign(viva, s, { mensajes: [...viva.mensajes, ...nuevos] });
+    return s;
+  }
   function lista() {
     return fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => {
       try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch { return null; }
@@ -47,7 +61,7 @@ function crearSesiones({ cfg }) {
     for (const e of ['json', 'jsonl']) try { fs.unlinkSync(F(id, e)); } catch { }
     return true;
   }
-  return { crear, obtener, agregar, guardarMeta, lista, borrar };
+  return { crear, obtener, agregar, guardarMeta, espejar, lista, borrar };
 }
 
 module.exports = { crearSesiones };

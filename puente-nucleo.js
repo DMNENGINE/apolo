@@ -28,11 +28,16 @@ const comoHook = (nombre, args = {}) => (HERR[nombre] ? HERR[nombre](args) : [no
 const CC = '@claude-code';
 const RUTAS_DEF = { programar: CC, navegador: null, pc: null, general: null };   // null = RAPIDO si está en este PC, si no cfg.modeloPorDefecto
 const RAPIDO = 'ollama/gemma4:31b-cloud';             // rápido (~1 s) y bueno con herramientas: el preferido para la isla cuando existe
-const PISTAS = [                                  // atajos sin llamar al modelo (lo obvio, al instante)
+const PISTAS = [                                  // atajos sin llamar al modelo (lo obvio, al instante); el orden importa: gana el primero
+  // programar va antes que el navegador: "crea una página web" o "login con google" son trabajo de código, no de usar una web
+  ['programar', /\b(c[oó]digo|bug|commit|git\b|refactor|compila|deploy|despliega|pull request|\bpr\b|tests?\b|funci[oó]n|variable|endpoint|archivo\s+\S+\.(?:js|ts|py|cs|json|html|css))|\b(crea|cr[eé]ame|haz|hazme|construye|programa|monta|desarrolla|implementa|a[nñ]ade|agrega)\b.{0,40}\b(p[aá]gina web|sitio web|web|app|aplicaci[oó]n|bot|script|programa|api|login|base de datos|backend|frontend|plugin|mod|extensi[oó]n)\b/i],
   ['navegador', /\b(gemini|google flow|flow|youtube|navegador|chrome|edge|p[aá]gina web|sitio web|https?:\/\/|www\.|\.com\b|\.org\b|desc[aá]rga(?:la|lo|r)?|s[uú]be(?:la|lo)?\s+a)\b/i],
-  ['programar', /\b(c[oó]digo|bug|commit|git\b|refactor|compila|deploy|despliega|pull request|\bpr\b|tests?\b|funci[oó]n|variable|endpoint|archivo\s+\S+\.(?:js|ts|py|cs|json|html|css))/i],
   ['pc', /\b(mi pantalla|la pantalla|rat[oó]n|teclado|abre (?:el )?(?:programa|explorador|bloc de notas|carpeta)|toma el control)\b/i],
+  // lo ligero va directo al núcleo sin preguntar a ningún modelo: saludos, charla corta y datos rápidos (precio, clima, hora…)
+  ['general', /^(hola|buenas|buenos d[ií]as|hey|qu[eé] tal|c[oó]mo est[aá]s|gracias|jaja|ok\b|vale\b|perfecto|genial)|\b(precio|cotizaci[oó]n|cu[aá]nto (vale|cuesta|est[aá]|es)|clima|qu[eé] tiempo|temperatura|qu[eé] hora|qu[eé] d[ií]a|qui[eé]n (es|fue|era)|qu[eé] (es|significa) |cu[aá]l es|traduce|convierte|recu[eé]rdame|cu[eé]ntame (algo|un chiste))\b/i],
 ];
+const REMOTOS = ['discord', 'telegram', 'whatsapp', 'movil'];   // sin terminal delante: lo de programar va como encargo en segundo plano
+const SEGUIR = /^(y |tambi[eé]n|ahora |a[nñ]ade|agrega|cambia|quita|arregla|otra cosa|sigue|contin[uú]a|y si|pero )/i;
 const ESQUEMA_RUTA = { type: 'object', properties: { ruta: { type: 'string', enum: ['programar', 'navegador', 'pc', 'general'] }, motivo: { type: 'string' } }, required: ['ruta'] };
 const SISTEMA_RUTA = 'Eres el enrutador de un asistente. Clasifica el mensaje del usuario en UNA ruta:\n' +
   '- programar: escribir/cambiar/revisar código o archivos de un proyecto de software, git, compilar, depurar, desplegar.\n' +
@@ -107,6 +112,22 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     return { ok: true, msg: `📨 Encargado a **${motor}**. Te aviso cuando termine.` };
   }
 
+  // encargo a Claude Code en segundo plano (core/encargos-claude.js): para cuando escribes desde fuera (Discord, Telegram…) y no hay
+  // una terminal delante. La respuesta vuelve a ese mismo chat; "y añade también…" en los 30 min siguientes sigue la misma sesión
+  function aClaudeEnSegundoPlano(texto, origin, c) {
+    if (!nucleo.encargos) return null;
+    const previo = st.encargo?.[c];
+    const continuar = previo && Date.now() - previo.t < 30 * 60_000 && (SEGUIR.test(texto) || texto.length < 80) ? previo.sesionCC : undefined;
+    try {
+      const e = nucleo.encargos.encargar({ tarea: texto, continuar, alTerminar: x => {
+        st.encargo = { ...(st.encargo || {}), [c]: { sesionCC: x.sesionCC, t: Date.now() } }; guardar();
+        reply(origin, `${x.estado === 'listo' ? '✅ Claude Code terminó' : '❌ Claude Code no pudo terminar'} (${Math.max(1, Math.round((x.fin - x.inicio) / 60000))} min):\n\n${x.resultado}`, 'Claude Code');
+      } });
+      nucleo.registro?.add?.('info', 'enrutador', `programar → encargo a Claude Code${continuar ? ' (sigue)' : ''}: ${texto.slice(0, 80)}`);
+      return { ok: true, msg: `🛠️ ${continuar ? 'Sigo con lo de antes en' : 'Se lo encargo a'} **Claude Code** (${e.modelo}). Te escribo aquí cuando termine.` };
+    } catch (er) { return { ok: false, msg: `❌ ${er.message}` }; }
+  }
+
   // devuelve null si el texto NO es para el núcleo (sigue el camino de Claude Code)
   const porDefecto = () => (nucleo.proveedores.disponible?.(RAPIDO) ? RAPIDO : nucleo.cfg.modeloPorDefecto);
   const rutas = () => Object.fromEntries(Object.entries({ ...RUTAS_DEF, ...(nucleo.cfg.enrutador?.rutas || {}) }).map(([k, v]) => [k, v || porDefecto()]));
@@ -129,7 +150,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
   async function handle(text, origin) {
     const t = String(text || '').trim(), c = canal(origin);
     let m;
-    if ((m = t.match(/^(?:claude(?:\s*code)?|cc)\s*:\s*([\s\S]+)$/i))) return { claude: m[1].trim() };
+    if ((m = t.match(/^(?:claude(?:\s*code)?|cc)\s*:\s*([\s\S]+)$/i))) return (REMOTOS.includes(origin) && aClaudeEnSegundoPlano(m[1].trim(), origin, c)) || { claude: m[1].trim() };
     if (/^usa(?:r)?\s+auto(?:m[aá]tico)?$/i.test(t)) { st.destino[c] = '@auto'; guardar(); return { ok: true, msg: '🧭 Modo automático: elijo el destino según lo que me pidas (código → Claude Code; web, PC y lo demás → núcleo).' }; }
     if ((m = t.match(/^(antigravity|ag)\s*:\s*([\s\S]+)$/i))) return aMotor('antigravity', m[2].trim(), origin);
     // "gemma + gpt: <pregunta>" → esos modelos responden A LA VEZ y se ven todas las respuestas (consejo en modo comparar)
@@ -181,6 +202,7 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
         nucleo.registro?.add?.('info', 'enrutador', `${r.ruta} (${r.por}) → ${modelo}: ${t.slice(0, 80)}`);
       } else modelo = d;
     }
+    if (modelo === CC && REMOTOS.includes(origin)) { const r = aClaudeEnSegundoPlano(msg, origin, c); if (r) return r; }
     if (!modelo || modelo === CC) return null;
 
     await nucleo.proveedores.listo?.();

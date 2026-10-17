@@ -868,6 +868,7 @@ app.whenReady().then(() => {
   setTimeout(() => revisarModelos(), 25_000);                 // da tiempo a que el núcleo compruebe qué hay instalado
   nucleo = crearNucleo();                                    // antes que el cerebro: el cerebro usa sus modelos
   nucleo.versionApp = app.getVersion();                      // Acerca de: APOLO v0.2.x (la del núcleo va aparte)
+  try { nucleo.espejoCC?.iniciar(); } catch (e) { console.log('[espejo-cc]', e.message); }   // las sesiones de Claude Code también son de APOLO
   try {                                                       // correo (varias cuentas), GitHub, Hugging Face, ElevenLabs
     const cifra = safeStorage.isEncryptionAvailable();
     conectores = crearConectores({

@@ -276,6 +276,15 @@ function ses(ev) {
   return s;
 }
 
+// primera frase útil de la respuesta final de Claude, sin markdown, para decirla en voz alta (≤ 160 letras; vacío si no hay)
+function resumenVoz(texto) {
+  const limpio = String(texto || '').replace(/```[\s\S]*?```/g, ' ').split('\n').map(l => l.trim())
+    .filter(l => l && !/^(#|\||[-*]\s*$|>)/.test(l))                 // sin títulos, tablas ni citas
+    .map(l => l.replace(/^[-*\d.)\s]+/, '').replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')).join(' ');
+  const frase = (limpio.match(/^.*?[.!?](\s|$)/) || [limpio])[0].trim();
+  return frase.length > 160 ? frase.slice(0, 157).replace(/\s+\S*$/, '') + '…' : frase;
+}
+
 function toolText(name, inp = {}) {
   const short = (v, n = 60) => { v = String(v ?? ''); return v.length > n ? v.slice(0, n) + '…' : v; };
   switch (name) {
@@ -360,8 +369,11 @@ function onEvent(ev) {
       speakPerm(perms[perms.length - 1], ev.tool_input || {}); reaccion('duda', 2.4); break;
     case 'Notification':
       robot.pushLog(`! ${String(ev.message || '').slice(0, 40)}`); break;
-    case 'Stop':
-      s.state = 'listo'; s.act = tr('listo ✓'); s.doneAt = Date.now(); robot.pushLog(`✓ ${s.name}: ${tr('terminado')}`); say(tr('Listo, terminé en {x}', { x: s.name })); reaccion('celebrar', 2.4); break;
+    case 'Stop': {
+      s.state = 'listo'; s.act = tr('listo ✓'); s.doneAt = Date.now(); robot.pushLog(`✓ ${s.name}: ${tr('terminado')}`);
+      const hecho = resumenVoz(ev.last_assistant_message);      // lo que se hizo, con la voz de APOLO (no solo "terminé")
+      say(hecho ? tr('Listo en {x}: {y}', { x: s.name, y: hecho }) : tr('Listo, terminé en {x}', { x: s.name })); reaccion('celebrar', 2.4); break;
+    }
     case 'StopFailure':
       s.state = 'error'; s.act = tr('terminó con error'); s.doneAt = Date.now(); robot.pushLog(`✗ ${s.name}: error`); say(tr('Algo falló en {x}', { x: s.name })); reaccion('triste', 3); break;
     case 'SessionEnd':

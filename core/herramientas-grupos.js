@@ -8,7 +8,7 @@
 // núcleo: lo que cualquier charla o encargo puede necesitar
 const NUCLEO = new Set(['shell', 'leer_archivo', 'listar', 'escribir_archivo', 'editar_archivo', 'web', 'programar_tarea', 'ver_tareas', 'borrar_tarea',
   'cambiar_nombre', 'recordar', 'buscar_memoria', 'olvidar', 'buscar_historial', 'usar_skill', 'leer_recurso_skill', 'anotar_skill', 'ejecutar_script_skill',
-  'delegar', 'nacer', 'cargar_herramientas']);
+  'delegar', 'nacer', 'cargar_herramientas', 'encargar_a_claude']);
 
 const CRAFT = ['filmcraft', 'effectcraft', 'photocraft', 'lightcraft', 'vectorcraft', 'cadcraft', 'figcraft', 'designcraft', 'deckcraft', 'wordcraft', 'gridcraft', 'pdfcraft', 'soundcraft'];
 const GRUPOS = {

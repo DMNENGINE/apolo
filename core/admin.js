@@ -78,40 +78,27 @@ function guardarConfig(cfg, cambios) {
   return configPublica(cfg);
 }
 
-// uso por modelo y por día: las sesiones del núcleo (APOLO) + Claude Code (usoClaude = core/uso-claude.js, opcional)
-function uso(sesiones, dias = 30, usoClaude = null) {
-  const r = usoNucleo(sesiones, dias);
-  const fuentes = { apolo: totales(r.porModelo, r.sesiones) };
-  if (usoClaude) {
-    usoClaude.actualizar().catch(() => { });          // en segundo plano; la siguiente visita ya lo trae
-    const c = usoClaude.resumen(dias);
-    for (const [k, m] of Object.entries(c.porModelo)) r.porModelo[k] = m;
-    for (const [d, x] of Object.entries(c.porDia)) { const p = r.porDia[d] || (r.porDia[d] = { entrada: 0, salida: 0 }); p.entrada += x.entrada; p.salida += x.salida; }
-    r.sesiones += c.sesiones;
-    fuentes.claudeCode = { ...totales(c.porModelo, c.sesiones), leyendo: c.leyendo, activo: c.activo };
-  }
-  return { ...r, fuentes };
-}
-function totales(porModelo, sesiones) {
-  const ms = Object.values(porModelo);
-  return { entrada: ms.reduce((n, m) => n + m.entrada, 0), salida: ms.reduce((n, m) => n + m.salida, 0), cacheLeida: ms.reduce((n, m) => n + (m.cacheLeida || 0), 0), sesiones };
-}
-
-function usoNucleo(sesiones, dias) {
+// uso por modelo y por día a partir de las sesiones guardadas (las de Claude Code entran por el espejo, core/espejo-cc.js)
+// fuentes = el total por origen: claudeCode (canal 'claude-code') y apolo (lo demás)
+function uso(sesiones, dias = 30) {
   const desde = Date.now() - dias * 86400_000;
-  const porModelo = {}, porDia = {};
+  const porModelo = {}, porDia = {}, fuentes = {};
   let sesionesN = 0;
   for (const s of sesiones.lista()) {
     if ((s.actualizada || 0) < desde) continue;
     sesionesN++;
-    const e = s.uso?.entrada || 0, o = s.uso?.salida || 0;
-    const m = porModelo[s.modelo] || (porModelo[s.modelo] = { entrada: 0, salida: 0, sesiones: 0 });
-    m.entrada += e; m.salida += o; m.sesiones++;
+    const e = s.uso?.entrada || 0, o = s.uso?.salida || 0, c = s.uso?.cacheLeida || 0;
+    const m = porModelo[s.modelo] || (porModelo[s.modelo] = { entrada: 0, salida: 0, sesiones: 0, cacheLeida: 0 });
+    m.entrada += e; m.salida += o; m.cacheLeida += c; m.sesiones++;
     const dia = new Date(s.actualizada).toISOString().slice(0, 10);
     const d = porDia[dia] || (porDia[dia] = { entrada: 0, salida: 0 });
     d.entrada += e; d.salida += o;
+    const k = s.canal === 'claude-code' ? 'claudeCode' : 'apolo';
+    const f = fuentes[k] || (fuentes[k] = { entrada: 0, salida: 0, cacheLeida: 0, sesiones: 0 });
+    f.entrada += e; f.salida += o; f.cacheLeida += c; if (!s.padre) f.sesiones++;
   }
-  return { dias, sesiones: sesionesN, porModelo, porDia };
+  for (const m of Object.values(porModelo)) if (!m.cacheLeida) delete m.cacheLeida;
+  return { dias, sesiones: sesionesN, porModelo, porDia, fuentes };
 }
 
 module.exports = { configPublica, guardarConfig, uso };
