@@ -492,10 +492,27 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       const hueco = primero > 1.5;
       const [l1, l2] = dosLineas(gancho);
       const dur = hueco ? Math.min(5.5, primero - 0.1) : 3.5;
+      // título animado propio (EffectCraft, marca/titulo.jsx): placas blanca/cian que entran con golpe y destello.
+      // Se renderiza al doble (nítido en el 4K) y va al 50 %. Sin EffectCraft, el título de texto de siempre
+      let animado = false;
+      if (a.tituloAnimado !== false && vertical) {
+        try {
+          avisar('título animado (EffectCraft)', 56);
+          const peli = await require('./marca').asegurarTitulo({ linea1: l1, linea2: l2 || '', duracion: dur, escala: 2, carpeta: path.join(datosDir, 'titulos'), mcpLocales, ffmpeg: cfg?.craft?.ffmpeg });
+          const it = (await herramienta('media_import', { paths: [peli] }))?.items?.[0];
+          if (it == null) throw new Error('FilmCraft no importó el título');
+          const pl = await fc('timeline.place', { item: it, track: 'V4', seconds: 0, duration: t(dur), video: true, audio: false });
+          const clip = pl?.clips?.[0]; if (clip == null) throw new Error('no se pudo colocar el título');
+          const cy = hueco ? capY - Math.round((l2 ? 40 : 0) * k) : capY - Math.round((l2 ? 300 : 220) * k);
+          await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: [W / 2, cy] });
+          await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: +(50 * k).toFixed(2) });
+          animado = true;
+        } catch (e) { avisar(`título animado no disponible (${e.message}); va el de texto`); }
+      }
       const y1 = hueco ? (l2 ? capY - Math.round(45 * k) : capY) : capY - Math.round((l2 ? 330 : 200) * k);
       const tamG = Math.round(Math.max(tam, 100 * k) * 1.05), salto = Math.round(tamG * 1.15);
-      const g = await texto(l1, W / 2, y1, tamG, 0, dur, hueco ? 1 : 3);
-      if (l2) {
+      const g = animado ? null : await texto(l1, W / 2, y1, tamG, 0, dur, hueco ? 1 : 3);
+      if (g && l2) {
         // la 2.ª línea también tiene que caber: las dos al mismo tamaño, el que quepa la más ancha
         await fc('graphics.newText', { text: l2, position: [W / 2, y1 + salto], size: g.tam, font: fuente, clip: g.clip });
         await fc('graphics.set', { clip: g.clip, layer: 1, props: { ...estilos.props(E, k), size: g.tam, fill_color: E.resaltado || E.activo || AMARILLO, position: [W / 2, y1 + salto] } });
@@ -506,7 +523,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
         }
         g.centro[1] += Math.round(salto / 2);
       }
-      await animar(g, 0);
+      if (g) await animar(g, 0);
     }
     // marca arriba: el letrero animado de EffectCraft (bucle de 6 s repetido en V3) o, sin él, el texto amarillo
     let conLetrero = false;
@@ -608,6 +625,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       avance: { type: 'array', items: { type: 'number' }, description: '[desde, hasta] en segundos: ese trozo del clip se repite al principio como adelanto (recap/gancho de vídeo) y luego va el clip entero' },
       recorte: { type: 'array', items: { type: 'number' }, description: '[desde, hasta] en segundos del clip: dónde empieza y dónde termina (lo de fuera se quita)' },
       temblor: { description: 'vibración de pantalla: false = ninguna; { intensidad: 0–100 (% de la máxima; por defecto 100), tramos: [[desde, hasta], …] en segundos } = solo en esos tramos (sin tramos: la automática a esa intensidad)' },
+      tituloAnimado: { type: 'boolean', description: 'el título del principio como pieza animada de EffectCraft (por defecto sí si está instalado); false = título de texto' },
       director: { type: 'boolean', description: 'el director analiza el vídeo (cámaras, caras, volumen) y decide diseños, escenas, sonidos y emojis (por defecto con el perfil lagctrucks)' },
       disenos: { description: 'diseños por tramos: false = ninguno, o [{ tipo: ' + Object.keys(director.DISENOS).join('|') + ', desde, hasta, esquina: derecha|izquierda }]. ' + Object.entries(director.DISENOS).map(([k, v]) => `${k} = ${v}`).join('; ') },
       sonidos: { type: 'boolean', description: 'efectos de sonido propios (whoosh, impacto, claxon…) donde los ponga el director; false = sin sonidos' },
