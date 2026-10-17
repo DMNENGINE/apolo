@@ -126,7 +126,10 @@
     // ===== panel · uso =====
     'Tokens del núcleo en todas las conversaciones y automatizaciones. El uso de Claude Code va aparte, en la isla.': 'Core tokens across all conversations and automations. Claude Code usage is separate, in the island.',
     '7 días': '7 days', '30 días': '30 days', '90 días': '90 days', '{n} días': '{n} days', 'Tokens por día': 'Tokens per day', 'Actividad · 26 semanas': 'Activity · 26 weeks', 'Menos': 'Less', 'Más': 'More',
-    'Por modelo': 'By model', 'Proporción': 'Share', 'Sin uso en este periodo.': 'No usage in this period.',
+    'Por modelo': 'By model', 'Por origen': 'By source', 'Origen': 'Source', 'leyendo…': 'reading…', '{p} % de caché': '{p} % from cache', 'caché': 'cache',
+    'tus sesiones de Claude Code en la terminal': 'your Claude Code sessions in the terminal', 'chat, isla, automatizaciones y clips (sus propios modelos)': 'chat, island, automations and clips (its own models)',
+    'La caché son tokens que el modelo reutiliza de la llamada anterior: cuentan, pero cuestan mucho menos que los nuevos.': 'Cache tokens are reused from the previous call: they count, but cost much less than new ones.',
+    'Tokens de Claude Code y de APOLO (conversaciones, isla y automatizaciones). Los límites del plan de Claude se ven en la isla.': 'Tokens from Claude Code and APOLO (conversations, island and automations). Claude plan limits are shown on the island.', 'Proporción': 'Share', 'Sin uso en este periodo.': 'No usage in this period.',
     // ===== panel · mission control =====
     'Trabajando': 'Working', 'Listo': 'Done', 'Error': 'Error', 'Cancelado': 'Cancelled', 'En espera': 'Waiting', 'Quién está haciendo qué ahora mismo: conversaciones, tareas y los subagentes que lanzan. En vivo.': "Who's doing what right now: conversations, tasks and the subagents they launch. Live.",
     'Agentes': 'Agents', 'Detenido': 'Stopped', 'agentes principales': 'main agents', 'Subagentes': 'Subagents', 'activos ahora': 'active now', 'Esperando permiso': 'Waiting for permission', 'te necesitan': 'need you', 'nadie': 'nobody',

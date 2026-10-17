@@ -1,7 +1,9 @@
 // Bucle del agente: modelo → herramientas → modelo … hasta que responde sin pedir herramientas.
 const os = require('os');
 const fs = require('fs');
-const { HERRAMIENTAS, porNombre } = require('./herramientas');
+const { HERRAMIENTAS, porNombre, registrar } = require('./herramientas');
+const grupos = require('./herramientas-grupos');
+registrar([grupos.crearCargar()]);                     // cargar_herramientas: el modelo pide un grupo que no le llegó
 const { vista } = require('./compactar');
 const { esCorreccion } = require('./skills/taller');
 const { redactar } = require('./seguridad');
@@ -113,8 +115,11 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       if (!nacimiento) apagadas.add('nacer');
       let hayActivas = false; try { hayActivas = !!skills?.almacen.lista().some(x => x.activa); } catch { }
       if (!hayActivas) ['usar_skill', 'leer_recurso_skill', 'anotar_skill', 'ejecutar_script_skill'].forEach(x => apagadas.add(x));   // sin skills activas: menos herramientas
-      const herramientas = HERRAMIENTAS.filter(h => !apagadas.has(h.nombre) && (!h.disponible || h.disponible()));
-      const disponibles = new Set(herramientas.map(h => h.nombre));
+      const todas = HERRAMIENTAS.filter(h => !apagadas.has(h.nombre) && (!h.disponible || h.disponible()));
+      // al modelo van el núcleo + los grupos de la conversación (core/herramientas-grupos.js); si pide una que no se le mandó
+      // pero existe, se ejecuta igual y su grupo queda cargado
+      const disponibles = new Set(todas.map(h => h.nombre));
+      const paraEnviar = () => (cfg.herramientasPorGrupos === false ? todas : grupos.filtrar(todas, grupos.gruposActivos(s, texto)));
       let final = '', empujones = 0, empujon = false;
       for (let paso = 0; paso < cfg.maxPasos; paso++) {
         const base = sistema(s, recuerdos, pers, '', cfg, sk, interior, nombre, nacimiento);
@@ -126,6 +131,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         const sys = sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento);
         let historial = conImagenes(v.mensajes, s.sinVision);
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
+        const herramientas = paraEnviar();               // por paso: cargar_herramientas o una herramienta nueva amplían la lista
         let r;
         try { r = await api.chat({ model, system: sys, mensajes: historial, herramientas, signal: ctl.signal }); }
         catch (e) {                                      // ¿el modelo no acepta imágenes? se marca la sesión y se reintenta solo con texto
@@ -153,6 +159,8 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         const correr = async c => {
           const h = disponibles.has(c.name) ? porNombre[c.name] : null;
           if (!h) return `error: herramienta "${c.name}" no existe`;
+          const g = grupos.grupoDe(c.name);              // usada = su grupo se queda cargado en esta conversación
+          if (g && g !== 'nucleo' && !(s.gruposCargados || []).includes(g)) s.gruposCargados = [...(s.gruposCargados || []), g];
           if ((s.canal === 'eval' || s.soloLectura) && (typeof h.riesgo === 'function' ? h.riesgo(c.args || {}, s) : h.riesgo) !== 'lectura') return `DENEGADO: ${s.soloLectura ? 'en un encargo por iniciativa propia' : 'en una evaluación'} solo se permiten herramientas de lectura`;
           ev('herramienta', { id: c.id, nombre: c.name, args: c.args || {}, resumen: h.resumen(c.args || {}) });
           const p = await permisos.pedir({ h, args: c.args || {}, sesion: s, ctx: { skills } });

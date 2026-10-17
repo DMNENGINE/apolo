@@ -148,6 +148,9 @@ function crearNucleo(opciones = {}) {
   const mcpLocales = require('./mcp-local').crearMcpLocales({ cfg, bus, registrar: require('./herramientas').registrar, quitar: require('./herramientas').quitar,
     detectar: opciones.detectarMcpLocales, log: (...a) => console.log(...a) });
   nucleo.mcpLocales = mcpLocales; nucleo.extensiones['mcp-locales'] = { http: (...a) => mcpLocales.http(...a) };
+  // página de Uso: también el uso de Claude Code (transcripts de ~/.claude/projects, lectura incremental); opciones.usoClaude = null lo quita
+  // (se lee al abrir la página de Uso o un dashboard de uso, no al arrancar)
+  nucleo.usoClaude = opciones.usoClaude !== undefined ? opciones.usoClaude : require('./uso-claude').crearUsoClaude({ cfg, log: (...a) => console.log(...a) });
   // recetas fijas de la suite (kit de marca, control de calidad, portadas, audio de estudio, rótulo/título animados)
   const craft = require('./craft/herramientas').crearHerramientasCraft({ mcpLocales, cfg });
   require('./herramientas').registrar(craft.HERRAMIENTAS);

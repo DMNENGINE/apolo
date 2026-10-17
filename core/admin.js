@@ -78,8 +78,26 @@ function guardarConfig(cfg, cambios) {
   return configPublica(cfg);
 }
 
-// uso por modelo y por día a partir de las sesiones guardadas
-function uso(sesiones, dias = 30) {
+// uso por modelo y por día: las sesiones del núcleo (APOLO) + Claude Code (usoClaude = core/uso-claude.js, opcional)
+function uso(sesiones, dias = 30, usoClaude = null) {
+  const r = usoNucleo(sesiones, dias);
+  const fuentes = { apolo: totales(r.porModelo, r.sesiones) };
+  if (usoClaude) {
+    usoClaude.actualizar().catch(() => { });          // en segundo plano; la siguiente visita ya lo trae
+    const c = usoClaude.resumen(dias);
+    for (const [k, m] of Object.entries(c.porModelo)) r.porModelo[k] = m;
+    for (const [d, x] of Object.entries(c.porDia)) { const p = r.porDia[d] || (r.porDia[d] = { entrada: 0, salida: 0 }); p.entrada += x.entrada; p.salida += x.salida; }
+    r.sesiones += c.sesiones;
+    fuentes.claudeCode = { ...totales(c.porModelo, c.sesiones), leyendo: c.leyendo, activo: c.activo };
+  }
+  return { ...r, fuentes };
+}
+function totales(porModelo, sesiones) {
+  const ms = Object.values(porModelo);
+  return { entrada: ms.reduce((n, m) => n + m.entrada, 0), salida: ms.reduce((n, m) => n + m.salida, 0), cacheLeida: ms.reduce((n, m) => n + (m.cacheLeida || 0), 0), sesiones };
+}
+
+function usoNucleo(sesiones, dias) {
   const desde = Date.now() - dias * 86400_000;
   const porModelo = {}, porDia = {};
   let sesionesN = 0;

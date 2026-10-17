@@ -281,7 +281,7 @@ function iniciar(opciones = {}) {
         if (p[2] && M === 'PUT') { try { n.personalidad.guardar(p[2], (await leer(req)).contenido ?? ''); return json(res, 200, {}); } catch (e) { return json(res, 400, { error: e.message }); } }
         if (p[2] && p[3] === 'restablecer' && M === 'POST') { n.personalidad.restablecer(p[2]); return json(res, 200, {}); }
       }
-      if (p[1] === 'uso' && M === 'GET') return json(res, 200, admin.uso(n.sesiones, +u.searchParams.get('dias') || 30));
+      if (p[1] === 'uso' && M === 'GET') return json(res, 200, admin.uso(n.sesiones, +u.searchParams.get('dias') || 30, n.usoClaude));
       if (p[1] === 'reglas') {
         if (M === 'GET') return json(res, 200, n.permisos.reglas());
         if (M === 'DELETE' && p[2] !== undefined) { const r = n.permisos.reglas()[+p[2]]; const ok = n.permisos.borrarRegla(+p[2]); if (ok) n.bus.emit('config-seguridad', { resumen: `regla borrada: ${r?.herramienta} ${r?.prefijo}` }); return json(res, ok ? 200 : 404, {}); }

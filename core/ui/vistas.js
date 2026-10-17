@@ -414,11 +414,21 @@ VISTAS.uso = {
     vals.sort((a, b) => a - b);
     const q = p => vals[Math.floor(p * (vals.length - 1))] || 0;
     const nivel = n => (!n ? 0 : n <= q(.25) ? 1 : n <= q(.5) ? 2 : n <= q(.8) ? 3 : 4);
-    v.innerHTML = `<div class="pagina">${cabecera('Uso', 'Tokens del núcleo en todas las conversaciones y automatizaciones. El uso de Claude Code va aparte, en la isla.', seg('dias', [['7', '7 días'], ['30', '30 días'], ['90', '90 días']], String(this.dias)))}
+    // de dónde sale el uso: Claude Code (tus sesiones en la terminal) y APOLO (el núcleo: chat, isla, automatizaciones, clips…)
+    const F = u.fuentes || {}, origenes = [['Claude Code', F.claudeCode, 'tus sesiones de Claude Code en la terminal'], ['APOLO', F.apolo, 'chat, isla, automatizaciones y clips (sus propios modelos)']].filter(([, x]) => x);
+    const pct = (a, b) => (b ? Math.round(a / b * 100) : 0);
+    if (F.claudeCode?.leyendo) setTimeout(() => { if (location.hash.startsWith('#/uso')) this.pintar(v); }, 4000);   // primera lectura de los transcripts
+    v.innerHTML = `<div class="pagina">${cabecera('Uso', 'Tokens de Claude Code y de APOLO (conversaciones, isla y automatizaciones). Los límites del plan de Claude se ven en la isla.', seg('dias', [['7', '7 días'], ['30', '30 días'], ['90', '90 días']], String(this.dias)))}
       <div class="rejilla k"><div class="kpi"><small>${ic('rayo')}Tokens</small><b>${fmtK(total)}</b><span>${tr('{n} días', { n: this.dias })}</span></div>
         <div class="kpi"><small>${ic('enviar')}${tr('Entrada')}</small><b>${fmtK(ent)}</b><span>${total ? Math.round(ent / total * 100) : 0}%</span></div>
         <div class="kpi"><small>${ic('abajo')}${tr('Salida')}</small><b>${fmtK(sal)}</b><span>${total ? Math.round(sal / total * 100) : 0}%</span></div>
         <div class="kpi"><small>${ic('chat')}${tr('Conversaciones')}</small><b>${u.sesiones}</b><span>${tr('{n} modelos', { n: modelos.length })}</span></div></div>
+      ${origenes.length > 1 ? `<div class="seccion">${tr('Por origen')}</div>
+      <div class="caja tabla-env"><table class="tabla"><tr><th>${tr('Origen')}</th><th>${tr('Conversaciones')}</th><th>${tr('Entrada')}</th><th>${tr('Salida')}</th><th style="width:28%">${tr('Proporción')}</th></tr>
+        ${origenes.map(([n, x, d]) => { const t = x.entrada + x.salida; return `<tr><td><b>${esc(n)}</b>${x.leyendo ? ` <span class="chip aviso">${tr('leyendo…')}</span>` : ''}<br><small class="tenue">${esc(tr(d))}</small></td><td>${x.sesiones}</td>
+          <td>${fmtK(x.entrada)}${x.cacheLeida ? `<br><small class="tenue">${tr('{p} % de caché', { p: pct(x.cacheLeida, x.entrada) })}</small>` : ''}</td><td>${fmtK(x.salida)}</td>
+          <td><div class="flex"><div class="medidor crece" style="margin:0"><i style="width:${pct(t, total)}%"></i></div><b style="min-width:52px;text-align:right">${pct(t, total)} %</b></div></td></tr>`; }).join('')}</table></div>
+      <small class="tenue">${tr('La caché son tokens que el modelo reutiliza de la llamada anterior: cuentan, pero cuestan mucho menos que los nuevos.')}</small>` : ''}
       <div class="seccion">${tr('Tokens por día')}</div>
       <div class="caja pad"><div class="barras">${serie.map(([d, n]) => `<div style="height:${n / max * 100}%" title="${d}: ${n.toLocaleString(I18N.locale())} tokens"></div>`).join('')}</div><div class="eje"><span>${serie[0][0]}</span><span>${tr('hoy')}</span></div></div>
       <div class="seccion">${tr('Actividad · 26 semanas')}</div>
@@ -426,7 +436,7 @@ VISTAS.uso = {
         <div class="flex tenue" style="justify-content:flex-end;font-size:11px;margin-top:8px">${tr('Menos')} <span class="mapa-calor" style="grid-template-rows:12px">${[0, 1, 2, 3, 4].map(n => `<i data-n="${n}"></i>`).join('')}</span> ${tr('Más')}</div></div>
       <div class="seccion">${tr('Por modelo')}</div>
       <div class="caja tabla-env">${modelos.length ? `<table class="tabla"><tr><th>${tr('Modelo')}</th><th>${tr('Conversaciones')}</th><th>${tr('Entrada')}</th><th>${tr('Salida')}</th><th style="width:28%">${tr('Proporción')}</th></tr>
-        ${modelos.map(([k, m]) => { const t = m.entrada + m.salida; return `<tr><td><div class="flex">${avatar(k)}<span class="mono">${esc(k)}</span></div></td><td>${m.sesiones}</td><td>${fmtK(m.entrada)}</td><td>${fmtK(m.salida)}</td>
+        ${modelos.map(([k, m]) => { const t = m.entrada + m.salida; return `<tr><td><div class="flex">${avatar(k)}<span class="mono">${esc(k)}</span></div></td><td>${m.sesiones}</td><td>${fmtK(m.entrada)}${m.cacheLeida ? ` <small class="tenue">(${pct(m.cacheLeida, m.entrada)} % ${tr('caché')})</small>` : ''}</td><td>${fmtK(m.salida)}</td>
           <td><div class="flex"><div class="medidor crece" style="margin:0"><i style="width:${total ? t / total * 100 : 0}%"></i></div><b style="min-width:52px;text-align:right">${fmtK(t)}</b></div></td></tr>`; }).join('')}</table>` : vacio('grafica', 'Sin uso en este periodo.')}</div></div>`;
     enlazarControles(v, (id, val) => { if (id === 'dias') { this.dias = +val; this.pintar(v); } });
   },
