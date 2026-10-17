@@ -14,10 +14,11 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const estilos = require('./estilos');
+const { crearPublicador } = require('./publicar');
 
 const ESTILOS_DEFECTO = ['pop', 'karaoke', 'fuego', 'impacto', 'terror', 'atardecer', 'noche', 'tornado', 'arcoiris', 'oro'];
 
-function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecutar = execFile, log = () => { } }) {
+function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecutar = execFile, pedir, log = () => { } }) {
   const dir = path.join(cfg.dir, 'craft');
   const FC = path.join(dir, 'lotes.json'), FE = path.join(dir, 'lotes-estado.json');
   const leer = (f, def) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return def; } };
@@ -38,6 +39,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const scp = (f, remoto, local) => sh('scp', ['-q', '-o', 'BatchMode=yes', `${f.host}:${remoto}`, local]);
   const q = s => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const carpetaFuente = f => path.join(conf.salida, f.nombre || f.id);
+  const publicador = crearPublicador({ conf: () => conf.discordClips, ejecutar, ...(pedir ? { pedir } : {}), log });
 
   // ── 1. buscar streams nuevos en las fuentes ──
   async function revisar() {
@@ -193,9 +195,25 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       c.k4 = { estado: 'listo', mp4: destino, hecho: Date.now() };
       borrarFuentes(c);
       bus?.emit('aviso-externo', { origen: 'Clips', urgente: false, texto: `🎬 4K listo para subir: ${path.basename(destino)}` });
+      if (publicador.activo()) publicar(c);
     } catch (e) { c.k4 = { estado: 'error', error: e.message.slice(0, 300) }; log('[lotes] 4K', id, e.message); }
     guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
+
+  // ── 4K → Google Drive + anuncio en el canal de Discord del streamer (de uno en uno, sin frenar la cola de edición) ──
+  let subidas = Promise.resolve();
+  function publicar(c) {
+    if (['en cola', 'subiendo'].includes(c.publicado?.estado)) return publico(c);
+    c.publicado = { ...c.publicado, estado: 'en cola' }; guardarEst();
+    subidas = subidas.then(async () => {
+      c.publicado = { ...c.publicado, estado: 'subiendo', desde: Date.now() }; bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+      try { c.publicado = await publicador.publicar(c); }
+      catch (e) { c.publicado = { ...c.publicado, estado: 'error', error: e.message.slice(0, 300) }; log('[lotes] publicar', c.id, e.message); }
+      guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    });
+    return publico(c);
+  }
+  for (const c of Object.values(est.clips)) if (['en cola', 'subiendo'].includes(c.publicado?.estado) && publicador.activo()) { c.publicado.estado = 'pendiente'; publicar(c); }   // tras reiniciar
 
   // ── 3. decisiones del usuario ──
   function decidir(id, accion, { estilo } = {}) {
@@ -407,10 +425,14 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       if (c.estado !== 'aprobado') throw Object.assign(new Error('primero apruébalo'), { status: 409 });
       encolar4k(c); return publico(c);
     }
+    if (M === 'POST' && p[3] === 'publicar') {
+      if (c.k4?.estado !== 'listo') throw Object.assign(new Error('todavía no hay 4K de este clip'), { status: 409 });
+      return publicar(c);
+    }
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
 
-  return { revisar, procesar, decidir, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, ESTILOS_DEFECTO };
+  return { revisar, procesar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, ESTILOS_DEFECTO };
 }
 
 module.exports = { crearLotes, ESTILOS_DEFECTO };
