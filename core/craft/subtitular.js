@@ -457,7 +457,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     let nEmojis = 0;
     if (a.emojis ?? (plan?.emojis?.length ? true : E.emojis)) {
       const tamE = Math.round((a.tamEmoji || 190) * k), yE = capY - Math.round(tam * 0.4) - Math.round(tamE * 0.75);
-      const ganchoArriba = gancho && trozos[0].s <= 1.5 && (!rango || rango[0] < 1);   // el gancho ocupa ese sitio los primeros 3,5 s
+      const ganchoArriba = gancho && (a.tituloAnimado !== false || trozos[0].s <= 1.5) && (!rango || rango[0] < 1);   // el gancho ocupa ese sitio los primeros 3,5 s
       let libres, rutas = new Map();
       if (plan?.emojis?.length) {
         try { rutas = emojis.catalogo(plan.emojis.map(x => x.emoji), { carpeta: path.join(datosDir, 'emojis'), python: cfg?.craft?.python }); } catch (e) { avisar(`catálogo de emojis: ${e.message}`); }
@@ -498,12 +498,14 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       if (a.tituloAnimado !== false && vertical) {
         try {
           avisar('título animado (EffectCraft)', 56);
-          const peli = await require('./marca').asegurarTitulo({ linea1: l1, linea2: l2 || '', duracion: dur, escala: 2, carpeta: path.join(datosDir, 'titulos'), mcpLocales, ffmpeg: cfg?.craft?.ffmpeg });
+          // el animado va siempre encima de los subtítulos y dura lo suyo (no se corta cuando empieza a hablar)
+          const durA = Math.max(3.5, dur);
+          const peli = await require('./marca').asegurarTitulo({ linea1: l1, linea2: l2 || '', duracion: durA, escala: 2, carpeta: path.join(datosDir, 'titulos'), mcpLocales, ffmpeg: cfg?.craft?.ffmpeg });
           const it = (await herramienta('media_import', { paths: [peli] }))?.items?.[0];
           if (it == null) throw new Error('FilmCraft no importó el título');
-          const pl = await fc('timeline.place', { item: it, track: 'V4', seconds: 0, duration: t(dur), video: true, audio: false });
+          const pl = await fc('timeline.place', { item: it, track: 'V4', seconds: 0, duration: t(durA), video: true, audio: false });
           const clip = pl?.clips?.[0]; if (clip == null) throw new Error('no se pudo colocar el título');
-          const cy = hueco ? capY - Math.round((l2 ? 40 : 0) * k) : capY - Math.round((l2 ? 300 : 220) * k);
+          const cy = capY - Math.round((l2 ? 300 : 220) * k);
           await fc('effects.setParam', { clip, effect: 'motion', param: 'position', value: [W / 2, cy] });
           await fc('effects.setParam', { clip, effect: 'motion', param: 'scale', value: +(50 * k).toFixed(2) });
           animado = true;
