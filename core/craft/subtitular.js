@@ -171,11 +171,11 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
   }
 
   // exporta sin bloquear y pregunta a FilmCraft cómo va (jobs.list: done/total/etaSeconds) → progreso(0..1, quedanSeg)
-  async function exportar(params, progreso = () => { }, { maxSeg = 3600 } = {}) {
+  async function exportar(params, progreso = () => { }, { maxSeg = 6 * 3600, paradoSeg = 900 } = {}) {   // corta solo si se atasca (15 min sin avanzar)
     const r = await fc('file.exportMedia', { ...params, wait: false });
     const job = r?.job;
     if (job == null) throw new Error(`FilmCraft no empezó a exportar: ${JSON.stringify(r).slice(0, 200)}`);
-    const t0 = Date.now();
+    const t0 = Date.now(); let visto = -1, tVisto = t0;
     for (;;) {
       await new Promise(ok => setTimeout(ok, 2000));
       const lista = await fc('jobs.list');
@@ -185,7 +185,10 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
         if (j.result?.error) throw new Error(`exportar: ${j.result.error}`);
         progreso(1, 0); return j.result;
       }
-      progreso(j.total ? j.done / j.total : j.progress || 0, j.etaSeconds);
+      const av = j.total ? j.done / j.total : j.progress || 0;
+      progreso(av, j.etaSeconds);
+      if (av > visto) { visto = av; tVisto = Date.now(); }
+      if (Date.now() - tVisto > paradoSeg * 1000) { try { await fc('jobs.cancel', { job }); } catch { } throw new Error(`exportar: atascada ${paradoSeg / 60} min sin avanzar, cancelada`); }
       if (Date.now() - t0 > maxSeg * 1000) { try { await fc('jobs.cancel', { job }); } catch { } throw new Error(`exportar: más de ${maxSeg / 60} min, cancelada`); }
     }
   }
