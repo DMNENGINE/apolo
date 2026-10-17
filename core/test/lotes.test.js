@@ -26,7 +26,7 @@ function montar({ medida, conPortadas = false } = {}) {
       if (c.startsWith('ls')) return cb(null, Object.keys(manif).join('\n') + '\nbasura\n', '');
       const m = c.match(/'([^']+)'\/manifiesto/); return cb(null, JSON.stringify(manif[m[1]]), '');
     }
-    if (args.includes('yt_dlp') && args.includes('-g')) return cb(null, 'https://v.youtube/video\nhttps://v.youtube/audio\n', '');   // enlaces directos del tramo
+    if (args.includes('yt_dlp') && args.includes('-j')) return cb(null, JSON.stringify({ requested_formats: [{ url: 'https://v.youtube/video', http_headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-us' } }, { url: 'https://v.youtube/audio', http_headers: { 'User-Agent': 'Mozilla/5.0' } }] }), '');   // enlaces directos + cabeceras
     if (cmd === 'ffmpeg') { const o = args.at(-1); fs.mkdirSync(path.dirname(o), { recursive: true }); fs.writeFileSync(o, 'v'.repeat(20000)); return cb(null, '', ''); }
     if (cmd === 'scp') { fs.mkdirSync(path.dirname(args.at(-1)), { recursive: true }); fs.writeFileSync(args.at(-1), 'video'); return cb(null, '', ''); }
     cb(new Error('?'));
@@ -198,9 +198,10 @@ test('lotes: clip pedido a mano (un tramo del stream): se descarga solo ese tram
   assert.strictEqual(c.rank, 4); assert.strictEqual(c.archivo, '04_05400_300s.mp4'); assert.strictEqual(c.manual, true);
   await new Promise(r => setTimeout(r, 30)); await esperar(l);
   const yt = llamadas.find(x => x.startsWith('ffmpeg'));
-  assert.ok(yt.includes('-ss 5400 -t 300 -i https://v.youtube/video -ss 5400 -t 300 -i https://v.youtube/audio') && yt.includes('-c copy'), yt);
+  assert.ok(yt.includes('-ss 5400 -t 300 -i https://v.youtube/video') && yt.includes('-ss 5400 -t 300 -i https://v.youtube/audio') && yt.includes('-c copy'), yt);
+  assert.ok(yt.includes('-user_agent Mozilla/5.0') && yt.includes('Accept-Language: en-us'), 'con las cabeceras de yt-dlp (sin ellas YouTube da 403)');
   assert.ok(yt.startsWith('ffmpeg -nostdin'), 'nuestro ffmpeg, sin entrada estándar (el de --download-sections se caía dentro de APOLO)');
-  assert.ok(llamadas.some(x => x.includes('yt_dlp') && x.includes(' -g ') && x.includes('watch?v=AAA')), 'yt-dlp solo da los enlaces');
+  assert.ok(llamadas.some(x => x.includes('yt_dlp') && x.includes(' -j ') && x.includes('watch?v=AAA')), 'yt-dlp solo da los enlaces');
   const a = subtitulos.filter(x => !x.soloTranscribir && x.video.endsWith('04_05400_300s.mp4')).at(-1);
   assert.deepStrictEqual(a.disenos, [{ tipo: 'enfoque', desde: 0, hasta: 300 }]); assert.strictEqual(a.efectos, 'no');
   assert.strictEqual(l.estado().clips.find(x => x.id === c.id).estado, 'revisar');

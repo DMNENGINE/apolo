@@ -472,13 +472,28 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     // aunque desde una terminal funcionaba; así es el mismo ffmpeg que ya corta y exporta todo lo demás
     const corre = (cmd, a, timeout) => new Promise((ok, mal) => ejecutar(cmd, a, { windowsHide: true, timeout, maxBuffer: 64 << 20 },
       (e, out, err) => (e ? mal(Object.assign(new Error(String(err || e.message || '').trim().split('\n').slice(-3).join(' ').slice(0, 400) || 'falló'), { completo: String(err || '') })) : ok(String(out || '')))));
-    const bajar = async () => {
-      const enlaces = (await corre(cfg?.craft?.python || 'python', ['-m', 'yt_dlp', '-q', '--no-warnings', '-g', '-f', 'bv*[height<=1920][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1920]+ba',
-        `https://www.youtube.com/watch?v=${stream}`], 120_000)).split('\n').map(s => s.trim()).filter(s => /^https?:/.test(s));
-      if (!enlaces.length) throw new Error('YouTube no dio enlaces del vídeo');
+    // con las cabeceras que usa yt-dlp (navegador, idioma…): sin ellas el servidor de vídeo de YouTube contesta a veces 403
+    const formatos = async () => {
+      const j = JSON.parse(await corre(cfg?.craft?.python || 'python', ['-m', 'yt_dlp', '-q', '--no-warnings', '-j', '-f', 'bv*[height<=1920][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1920]+ba',
+        `https://www.youtube.com/watch?v=${stream}`], 120_000));
+      const fs_ = (j.requested_formats || [j]).filter(x => /^https?:/.test(x.url || '')).slice(0, 2);
+      if (!fs_.length) throw new Error('YouTube no dio enlaces del vídeo');
+      return fs_;
+    };
+    const bajar = async (intento = 1) => {
+      const fs_ = await formatos();
       const parcial = destino + '.tmp.mp4', dur = String(hasta - desde);
-      const entradas = enlaces.slice(0, 2).flatMap(u => ['-ss', String(desde), '-t', dur, '-i', u]);
-      await corre(cfg?.craft?.ffmpeg || 'ffmpeg', ['-nostdin', '-v', 'error', '-y', ...entradas, '-map', '0:v:0', '-map', enlaces.length > 1 ? '1:a:0' : '0:a:0', '-c', 'copy', '-movflags', '+faststart', parcial], 1_800_000);
+      const entradas = fs_.flatMap(x => {
+        const h = x.http_headers || {}, otras = Object.entries(h).filter(([k]) => k !== 'User-Agent').map(([k, v]) => `${k}: ${v}\r\n`).join('');
+        return [...(h['User-Agent'] ? ['-user_agent', h['User-Agent']] : []), ...(otras ? ['-headers', otras] : []), '-ss', String(desde), '-t', dur, '-i', x.url];
+      });
+      try {
+        await corre(cfg?.craft?.ffmpeg || 'ffmpeg', ['-nostdin', '-v', 'error', '-y', ...entradas, '-map', '0:v:0', '-map', fs_.length > 1 ? '1:a:0' : '0:a:0', '-c', 'copy', '-movflags', '+faststart', parcial], 1_800_000);
+      } catch (e) {
+        try { fs.rmSync(parcial, { force: true }); } catch { }
+        if (intento < 2 && /403|Forbidden|Server returned/i.test(e.message)) return bajar(intento + 1);   // enlaces nuevos y otra vez
+        throw e;
+      }
       if (!fs.existsSync(parcial) || fs.statSync(parcial).size < 10_000) throw new Error('ffmpeg no dejó el tramo');
       fs.renameSync(parcial, destino);
     };
