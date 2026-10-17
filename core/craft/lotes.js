@@ -468,10 +468,13 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     const destino = path.join(carpetaFuente(f), `${ref.fecha}_${stream}`, 'originales', archivo);
     fs.mkdirSync(path.dirname(destino), { recursive: true });
     const hms = x => `${Math.floor(x / 3600)}:${String(Math.floor(x % 3600 / 60)).padStart(2, '0')}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
-    const args = ['-m', 'yt_dlp', '-q', '--no-warnings', '--download-sections', `*${hms(desde)}-${hms(hasta)}`, '-f', 'bv*[height<=1920][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1920]+ba',
+    // un tramo lo baja ffmpeg, que escribe su progreso sin parar: sin "-nostats" y sin un búfer grande se llenaba el de
+    // execFile (1 MB) y la descarga moría a medias con "Command failed"
+    const args = ['-m', 'yt_dlp', '-q', '--no-warnings', '--no-progress', '--downloader-args', 'ffmpeg:-nostats -loglevel error',
+      '--download-sections', `*${hms(desde)}-${hms(hasta)}`, '-f', 'bv*[height<=1920][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1920]+ba',
       '--merge-output-format', 'mp4', '-o', destino, `https://www.youtube.com/watch?v=${stream}`];
-    (fs.existsSync(destino) ? Promise.resolve() : new Promise((ok, mal) => ejecutar(cfg?.craft?.python || 'python', args, { windowsHide: true, timeout: 1_800_000 },
-      e => (e || !fs.existsSync(destino) ? mal(e || new Error('yt-dlp no dejó el vídeo')) : ok()))))
+    (fs.existsSync(destino) ? Promise.resolve() : new Promise((ok, mal) => ejecutar(cfg?.craft?.python || 'python', args, { windowsHide: true, timeout: 1_800_000, maxBuffer: 256 << 20 },
+      (e, out, err) => (e || !fs.existsSync(destino) ? mal(new Error(`${String(err || '').trim().split('\n').slice(-2).join(' ').slice(0, 300) || e?.message || 'yt-dlp no dejó el vídeo'}`)) : ok()))))
       .then(() => { c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar(); })
       .catch(e => { c.estado = 'error'; c.error = `no se pudo descargar el tramo: ${String(e.message).slice(0, 300)}`; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); });
     return publico(c);

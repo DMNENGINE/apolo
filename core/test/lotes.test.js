@@ -198,6 +198,7 @@ test('lotes: clip pedido a mano (un tramo del stream): se descarga solo ese tram
   await new Promise(r => setTimeout(r, 30)); await esperar(l);
   const yt = llamadas.find(x => x.includes('yt_dlp'));
   assert.ok(yt.includes('*1:30:00-1:35:00') && yt.includes('watch?v=AAA'), yt);
+  assert.ok(yt.includes('ffmpeg:-nostats') && yt.includes('--no-progress'), 'sin el progreso de ffmpeg (llenaba el búfer y cortaba la descarga)');
   const a = subtitulos.filter(x => !x.soloTranscribir && x.video.endsWith('04_05400_300s.mp4')).at(-1);
   assert.deepStrictEqual(a.disenos, [{ tipo: 'enfoque', desde: 0, hasta: 300 }]); assert.strictEqual(a.efectos, 'no');
   assert.strictEqual(l.estado().clips.find(x => x.id === c.id).estado, 'revisar');
