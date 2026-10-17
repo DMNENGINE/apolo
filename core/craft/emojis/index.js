@@ -56,3 +56,14 @@ function elegir(trozos, { hueco = 2.5, repetir = 12, minSeg = 0.9, extra } = {})
 }
 
 module.exports = { PALABRAS, emojiDe, elegir, ruta, disponibles };
+
+// catálogo completo (catalogo.py): cualquier emoji Unicode de un carácter → png de pegatina. lista de emojis → Map(emoji → ruta)
+function catalogo(lista, { carpeta, python = 'python' }) {
+  const pedir = [...new Set(lista)];
+  if (!pedir.length) return new Map();
+  const { execFileSync } = require('child_process');
+  const out = execFileSync(python, ['-I', path.join(__dirname, 'catalogo.py'), carpeta, ...pedir], { windowsHide: true, timeout: 120_000, env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' } });
+  const j = JSON.parse(String(out).trim().split(/\r?\n/).pop());
+  return new Map(Object.entries(j).filter(([, r]) => r));
+}
+module.exports.catalogo = catalogo;

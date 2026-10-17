@@ -13,6 +13,9 @@ const { spawn } = require('child_process');
 const estilos = require('./estilos');
 const emojis = require('./emojis');
 const efectos = require('./efectos');
+const director = require('./director');
+const disenos = require('./disenos');
+const sonidos = require('./sonidos');
 
 const TPS = 254016000000;                              // ticks de FilmCraft por segundo
 const AMARILLO = '#ffd400';
@@ -99,7 +102,7 @@ const srtCaso = (t, nombres) => {
 // perfiles: los ajustes de un canal de una vez (posición de subtítulos, marca, llamada a seguir, zonas de su vídeo, contexto)
 const PERFILES = {
   lagctrucks: {
-    y: 0.78, marca: 'LAGCTRUCKS', letrero: { nombre1: 'LAGC', nombre2: 'TRUCKS' }, cta: 'Sígueme para más',
+    y: 0.78, marca: 'LAGCTRUCKS', letrero: { nombre1: 'LAGC', nombre2: 'TRUCKS' }, cta: 'Sígueme para más', director: true,
     contexto: 'Stream de LAGCTRUCKS en American Truck Simulator. Saludos al chat, compa, hermano, papi, camión, México.',
     zonas: { cara: [0, 97, 1080, 705], cabina: [0, 705, 1080, 1313], pedales: [0, 1313, 1080, 1920] },
   },
@@ -274,6 +277,24 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const gancho = g ? String(g).toLocaleUpperCase('es') : null;
     const claves = resaltables(palabras, [...id.resaltar, ...(a.resaltar || [])].flatMap(x => String(x).split(/\s+/)));
 
+    // 2b. director: análisis del vídeo (movimiento, caras y volumen por cámara) + plan de edición del modelo
+    //     (diseños, escenas, sonidos, emojis). a.plan = uno ya hecho (re-editar sin que cambie todo)
+    let plan = a.plan && typeof a.plan === 'object' ? a.plan : null, an = null;
+    const datosDir = path.join(cfg?.dir || path.join(os.homedir(), '.apolo'), 'craft');
+    if ((a.director && a.director !== 'no' || plan) && a.zonas?.cara && !rango) {
+      try {
+        avisar('analizando el vídeo (cámaras, caras, volumen)', 9);
+        an = await director.analizar(video, a.zonas, { python: cfg?.craft?.python, cache: path.join(dirSalida, `${path.basename(video, path.extname(video))}.analisis.json`), signal: ctx.signal });
+        if (!plan) { avisar('el director decide la edición', 11); plan = await director.dirigir({ an, palabras, generarJSON, modelo, titulo, contexto: a.contexto, log: m => avisar(m) }); }
+      } catch (e) { avisar(`director no disponible (${e.message}); edición normal`); plan = null; }
+    }
+    if (plan) {
+      if (a.disenos === false || a.disenos === 'no') plan = { ...plan, disenos: [] };
+      else if (Array.isArray(a.disenos)) plan = { ...plan, disenos: director.validar({ disenos: a.disenos }, { dur: an?.duracion || palabras.at(-1).e + 1 }).disenos };
+      if (a.sonidos === false || a.sonidos === 'no') plan = { ...plan, sonidos: [] };
+    }
+    const enDiseno = (s0, s1) => !!plan?.disenos?.some(d => s0 < d.hasta + 0.5 && s1 > d.desde - 0.5);
+
     // 3. proyecto
     avisar('montando en FilmCraft', 12);
     await fc('file.newProject', { name: nombre });
@@ -298,12 +319,14 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const zonas = a.zonas || {};
     const zonaDe = z => (Array.isArray(z) ? z : zonas[z] || a.zonaEnfoque || zonas.cara || [0, 0, W, H]);
     let escenas = (Array.isArray(a.enfoques) ? a.enfoques : []).map(en => ({ ...en, desde: +en.desde, hasta: +en.hasta }));
-    if (a.escenas && a.escenas !== 'no') {
+    if (plan && a.escenas && a.escenas !== 'no' && !(typeof a.escenas === 'number')) {
+      escenas.push(...plan.escenas.map(e => ({ ...e, ...(e.tipo === 'recorrido' ? { hacia: e.zona === 'cara' ? 'cabina' : 'cara' } : {}) })));
+    } else if (a.escenas && a.escenas !== 'no') {
       const enRango = rango ? palabras.filter(p => p.s >= rango[0] && p.e <= rango[1]) : palabras;
       const auto = efectos.elegirEscenas(enRango, { duracion: rango ? rango[1] : DUR, cuantas: typeof a.escenas === 'number' ? a.escenas : undefined });
       escenas.push(...auto.map(e => ({ ...e, zona: 'cara', ...(e.tipo === 'recorrido' ? { hacia: 'cabina' } : {}) })));
     }
-    escenas = escenas.filter(en => en.hasta > en.desde && Object.prototype.hasOwnProperty.call(efectos.TIPOS_ESCENA, en.tipo || 'acercar'));
+    escenas = escenas.filter(en => en.hasta > en.desde && Object.prototype.hasOwnProperty.call(efectos.TIPOS_ESCENA, en.tipo || 'acercar') && !enDiseno(en.desde, en.hasta));
     // vibración de pantalla: temblor = false (ninguna) | { intensidad: 0–100 % de la máxima, tramos: [[desde, hasta], …] (solo ahí) }
     const vib = a.temblor === false || a.temblor === 'no' ? { quitar: true } : a.temblor && typeof a.temblor === 'object' ? a.temblor : null;
     const tramosVib = (vib?.tramos || []).map(x => (Array.isArray(x) ? x : [x.desde, x.hasta]).map(Number)).filter(([d, h]) => h > d);
@@ -329,7 +352,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
         .filter(g => !(sinVibAuto && g === 'temblor'));
       let lista = permitidos.length ? efectos.momentos(trozos, { permitidos, fijos: Array.isArray(modoFx) ? permitidos : null, intro: !rango || rango[0] < 1 }) : [];
       // durante una escena el zoom lo lleva la escena: fuera los golpes de zoom que caigan dentro
-      lista = lista.map(m => ({ ...m, golpes: m.golpes.filter(g => g !== 'zoom' || !escenas.some(en => m.s > en.desde - 1 && m.s < en.hasta + 1)) })).filter(m => m.golpes.length);
+      lista = lista.map(m => ({ ...m, golpes: m.golpes.filter(g => g !== 'zoom' || !escenas.some(en => m.s > en.desde - 1 && m.s < en.hasta + 1)) })).filter(m => m.golpes.length && !enDiseno(m.s, m.e));
       resumenFx = await efectos.aplicar({ fc, clip: v1, t, lista, look: a.look === false ? null : a.look || E.look, golpes: gx });
     }
     if (v1 != null && escenas.length) {
@@ -432,12 +455,21 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
 
     // emojis propios encima del subtítulo cuando se dice una palabra que encaja (core/craft/emojis)
     let nEmojis = 0;
-    if (a.emojis ?? E.emojis) {
+    if (a.emojis ?? (plan?.emojis?.length ? true : E.emojis)) {
       const tamE = Math.round((a.tamEmoji || 190) * k), yE = capY - Math.round(tam * 0.4) - Math.round(tamE * 0.75);
       const ganchoArriba = gancho && trozos[0].s <= 1.5 && (!rango || rango[0] < 1);   // el gancho ocupa ese sitio los primeros 3,5 s
-      const libres = emojis.elegir(trozos).filter(em => !(ganchoArriba && em.s < 3.6) && !(a.cta && em.e > DUR - 4.6));
+      let libres, rutas = new Map();
+      if (plan?.emojis?.length) {
+        try { rutas = emojis.catalogo(plan.emojis.map(x => x.emoji), { carpeta: path.join(datosDir, 'emojis'), python: cfg?.craft?.python }); } catch (e) { avisar(`catálogo de emojis: ${e.message}`); }
+        libres = plan.emojis.filter(x => rutas.has(x.emoji)).map(x => {
+          const tr = trozos.find(c => c.e >= x.t && c.s <= x.t + 0.3);
+          return { emoji: x.emoji, ruta: rutas.get(x.emoji), s: x.t, e: Math.max(x.t + 1.2, Math.min(x.t + 2.2, tr ? tr.e + 0.4 : x.t + 1.5)) };
+        });
+      } else libres = emojis.elegir(trozos);
+      libres = libres.filter(em => !(ganchoArriba && em.s < 3.6) && !(a.cta && em.e > DUR - 4.6))
+        .filter((em, i, l) => i === 0 || em.s >= l[i - 1].e);                      // nunca dos a la vez en la pista
       for (const em of libres) {
-        const r = await fc('graphics.newFromFile', { path: emojis.ruta(em.emoji), time: t(em.s), track: 4 });
+        const r = await fc('graphics.newFromFile', { path: em.ruta || emojis.ruta(em.emoji), time: t(em.s), track: 4 });
         const clip = r?.clip; if (clip == null) continue;
         const sobra = fot(em.s + 5) - fot(em.s) - Math.max(1, fot(em.e) - fot(em.s));      // entra con 5 s: se recorta a su frase
         if (sobra > 0) await fc('timeline.trim', { clip, edge: 'out', mode: 'regular', deltaFrames: -sobra });
@@ -499,6 +531,36 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       { fill_color: AMARILLO, stroke: false, stroke2: false, background: false, shadow: false, tracking: 120 });
     if (a.cta && (!rango || rango[1] >= DUR - 4.5)) await animar(await texto(mayus ? String(a.cta).toLocaleUpperCase('es') : String(a.cta), W / 2, capY - Math.round(225 * k), Math.round(76 * k), Math.max(0, DUR - 4.5), 4.5, 3), Math.max(0, DUR - 4.5));
 
+    // 5b. diseños del director (pantalla con ventanita, podcast): 3 pistas nuevas justo encima del vídeo
+    let nDisenos = 0, nSonidos = 0;
+    if (plan?.disenos?.length) {
+      avisar('diseños (ventanita, podcast)', 57);
+      try {
+        nDisenos = await disenos.montar({ fc, item, t, W, H, fps, disenos: plan.disenos, zonas: a.zonas, an, k, seguimiento: director.seguimiento,
+          piezas: disenos.crearPiezas({ carpeta: path.join(datosDir, 'disenos'), python: cfg?.craft?.python }) });
+      } catch (e) { avisar(`diseños: ${e.message}`); }
+    }
+    // 5c. efectos de sonido propios en 2 pistas de audio nuevas (alternando, para que nunca se pisen)
+    if (plan?.sonidos?.length) {
+      avisar('efectos de sonido', 58);
+      try {
+        const ruta = sonidos.asegurar({ carpeta: path.join(datosDir, 'sonidos'), python: cfg?.craft?.python });
+        const nombres = [...new Set(plan.sonidos.map(x => x.sonido))];
+        const imp2 = await herramienta('media_import', { paths: nombres.map(ruta) });
+        const items = new Map(nombres.map((n, i) => [n, imp2?.items?.[i]]));
+        await fc('sequence.addTracks', { audio: 2 });
+        const nA = (sec?.audio?.length || 1);
+        const fin = [-1, -1];
+        for (const x of plan.sonidos) {
+          const it = items.get(x.sonido); if (it == null) continue;
+          const p = x.t >= fin[0] ? 0 : 1;
+          if (x.t < fin[p]) continue;
+          await fc('timeline.place', { item: it, track: `A${nA + 1 + p}`, seconds: fot(x.t) / fps, video: false, audio: true });
+          fin[p] = x.t + 2.1; nSonidos++;
+        }
+      } catch (e) { avisar(`sonidos: ${e.message}`); }
+    }
+
     // 6. vista previa, guardar y exportar
     fs.mkdirSync(dirSalida, { recursive: true });
     const previa = path.join(dirSalida, `${nombre} - vista previa.png`);
@@ -517,6 +579,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       a.exportar === false ? `Proyecto listo (sin exportar): ${proyecto}` : `Vídeo: ${mp4}`,
       a.exportar === false ? '' : `Subtítulos aparte: ${path.join(dirSalida, nombre + '.srt')}`,
       `Proyecto de FilmCraft: ${proyecto}`,
+      plan ? `Director (${plan.origen || 'plan'}): ${plan.resumen || ''} — ${nDisenos} diseño(s) ${(plan.disenos || []).map(d => `${d.tipo} ${Math.floor(d.desde / 60)}:${String(Math.floor(d.desde % 60)).padStart(2, '0')}`).join(', ')} · ${nSonidos} sonidos` : '',
       `${trozos.length} subtítulos${nEmojis ? ` · ${nEmojis} emojis` : ''}${resumenFx?.golpes ? ` · ${resumenFx.golpes} golpes de efecto` : ''}${resumenFx?.look ? ` · look ${resumenFx.look}` : ''}${nEnfoques ? ` · ${nEnfoques} cambio(s) de escena (${escenas.map(e => `${e.tipo || 'acercar'} ${Math.floor(e.desde / 60)}:${String(Math.floor(e.desde % 60)).padStart(2, '0')}`).join(', ')})` : ''}${fallosSrt ? ` (${fallosSrt} no entraron en el .srt)` : ''} · gancho: ${gancho || '—'} · resaltadas: ${[...claves].slice(0, 12).join(', ') || '—'}`,
       `Revisa estas líneas (Whisper dudó): ${trozos.filter(x => x.confianza != null && x.confianza < 0.6).map(x => `"${x.texto}" (${Math.floor(x.s / 60)}:${String(Math.floor(x.s % 60)).padStart(2, '0')})`).slice(0, 10).join(', ') || 'ninguna'}`,
     ].filter(Boolean).join('\n');
@@ -524,6 +587,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     const datos = { mp4: a.exportar === false ? null : mp4, srt: a.exportar === false ? null : path.join(dirSalida, nombre + '.srt'), proyecto,
       previa: fs.existsSync(previa) ? previa : null, estilo: a.estilo || 'clasico', gancho, subtitulos: trozos.length, emojis: nEmojis,
       escenas: escenas.map(e => ({ tipo: e.tipo || 'acercar', desde: e.desde, hasta: e.hasta })),
+      plan, disenos: nDisenos, sonidos: nSonidos,
       dudas: trozos.filter(x => x.confianza != null && x.confianza < 0.6).map(x => ({ texto: x.texto, s: x.s })).slice(0, 10) };
     return { texto: textoFinal, imagenes, datos };
   }
@@ -544,6 +608,10 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
       avance: { type: 'array', items: { type: 'number' }, description: '[desde, hasta] en segundos: ese trozo del clip se repite al principio como adelanto (recap/gancho de vídeo) y luego va el clip entero' },
       recorte: { type: 'array', items: { type: 'number' }, description: '[desde, hasta] en segundos del clip: dónde empieza y dónde termina (lo de fuera se quita)' },
       temblor: { description: 'vibración de pantalla: false = ninguna; { intensidad: 0–100 (% de la máxima; por defecto 100), tramos: [[desde, hasta], …] en segundos } = solo en esos tramos (sin tramos: la automática a esa intensidad)' },
+      director: { type: 'boolean', description: 'el director analiza el vídeo (cámaras, caras, volumen) y decide diseños, escenas, sonidos y emojis (por defecto con el perfil lagctrucks)' },
+      disenos: { description: 'diseños por tramos: false = ninguno, o [{ tipo: ' + Object.keys(director.DISENOS).join('|') + ', desde, hasta, esquina: derecha|izquierda }]. ' + Object.entries(director.DISENOS).map(([k, v]) => `${k} = ${v}`).join('; ') },
+      sonidos: { type: 'boolean', description: 'efectos de sonido propios (whoosh, impacto, claxon…) donde los ponga el director; false = sin sonidos' },
+      plan: { type: 'object', description: 'plan del director ya hecho (el de una edición anterior) para no rehacerlo' },
       look: { type: 'string', enum: Object.keys(efectos.LOOKS), description: 'look de color del vídeo: ' + Object.keys(efectos.LOOKS).join(', ') },
       emojis: { type: 'boolean', description: 'emojis propios encima del subtítulo cuando se dice una palabra que encaja (por defecto: los del paquete 2 sí)' },
       entrada: { type: 'string', enum: Object.keys(estilos.ENTRADAS), description: 'cambia la animación de entrada del estilo' },

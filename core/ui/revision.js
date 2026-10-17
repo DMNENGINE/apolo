@@ -10,7 +10,7 @@ Object.assign(I18N.dic.en, {
   'Aprobar': 'Approve', 'Descartar': 'Discard', 'Otro estilo': 'Another style', 'Rehacer': 'Redo', 'Ver clip': 'Watch clip',
   'editando…': 'editing…', 'en cola': 'queued', 'revisar': 'to review', 'aprobado': 'approved', 'descartado': 'discarded', 'error': 'error',
   'Editando ahora': 'Editing now', '{n} en cola': '{n} queued', 'Whisper dudó en': 'Whisper was unsure about', 'Chat en ese momento': 'Chat at that moment',
-  'Escenas': 'Scenes', 'No hay clips aquí.': 'No clips here.', 'Aún no hay fuentes configuradas.': 'No sources configured yet.', 'Buscando…': 'Looking…',
+  'Escenas': 'Scenes', 'Director': 'Director', 'ventanita': 'floating cam', 'sin diseños': 'no layouts', 'sonidos': 'sounds', 'No hay clips aquí.': 'No clips here.', 'Aún no hay fuentes configuradas.': 'No sources configured yet.', 'Buscando…': 'Looking…',
   '{n} clips nuevos': '{n} new clips', 'No hay streams nuevos': 'No new streams', 'Aprobado: está en la carpeta de aprobados': 'Approved: it is in the approved folder',
   'Se rehace con otro estilo': 'Being redone with another style', 'Descartado': 'Discarded',
   'Cambios y edición a mano': 'Changes and manual editing', 'Pedir cambio': 'Request change', 'Vibración de pantalla': 'Screen shake',
@@ -22,7 +22,7 @@ Object.assign(I18N.dic.en, {
   'Escribe qué quieres cambiar': 'Write what you want to change', 'Entendiendo el pedido…': 'Understanding the request…', 'usar el momento del vídeo': 'use the video position',
   'Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.':
     'Retouch and save (Ctrl+S) in FilmCraft, then “Export the retouched version”. Note: “Request change” and “Redo” rebuild the clip and manual retouches are lost.',
-  'Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · quita el título · sin emojis': 'E.g.: start with the 0:45–0:47 bit and then the whole clip · remove the shake except 0:40–0:55 · remove the title · no emojis',
+  'Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · pon la cámara en ventanita de 0:30 a 0:40 · modo podcast de 1:00 a 1:15 · sin sonidos · dame otras ideas': 'E.g.: start with the 0:45–0:47 bit and then the whole clip · remove the shake except 0:40–0:55 · floating cam from 0:30 to 0:40 · podcast mode from 1:00 to 1:15 · no sounds · give me other ideas',
   'Dónde empieza y dónde termina': 'Where it starts and ends', 'Empieza en': 'Starts at', 'Termina en': 'Ends at', 'Clip entero': 'Whole clip',
   'Tiempos del vídeo tal como lo ves aquí': 'Times of the video as you see it here', 'Pon dónde empieza y dónde termina (p. ej. 0:00 y 1:37)': 'Set where it starts and ends (e.g. 0:00 and 1:37)',
   'Exportar en 4K': 'Export in 4K', '4K en cola': '4K queued', 'Reintentar 4K': 'Retry 4K', 'Exportando en 4K': 'Exporting in 4K',
@@ -58,7 +58,7 @@ function RV_cambios(c) {
   const modo = tb === false ? 'quitar' : tramo ? 'tramo' : tb ? 'intensidad' : 'tramo';
   const int = tb && tb.intensidad != null ? tb.intensidad : 100;
   return `<details class="rv-cambios"><summary>${tr('Cambios y edición a mano')}</summary>
-    <textarea class="rv-pedido" placeholder="${esc(tr('Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · quita el título · sin emojis'))}"></textarea>
+    <textarea class="rv-pedido" placeholder="${esc(tr('Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · pon la cámara en ventanita de 0:30 a 0:40 · modo podcast de 1:00 a 1:15 · sin sonidos · dame otras ideas'))}"></textarea>
     <div class="rv-fila"><button class="btn pri" data-a="pedir">${tr('Pedir cambio')}</button></div>
     <div class="rv-sub">${tr('Dónde empieza y dónde termina')}</div>
     <div class="rv-fila">${tr('Empieza en')} <input type="text" class="rv-rdesde" value="${RV_mmss(v.dA)}">
@@ -178,6 +178,7 @@ VISTAS.revision = {
           <div class="flex rv-cab"><b>#${c.rank}</b><span class="tenue">${RV_mmss(c.fin - c.inicio)} · ${RV_mmss(c.inicio)} del stream</span><span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}</div>
           ${c.gancho ? `<div class="rv-gancho">${esc(c.gancho)}</div>` : ''}
           ${c.escenas?.length ? `<small class="tenue">${tr('Escenas')}: ${c.escenas.map(s => `${esc(s.tipo)} ${RV_mmss(s.desde)}`).join(' · ')}${c.emojis ? ` · ${c.emojis} emojis` : ''}</small>` : ''}
+          ${c.plan ? `<small class="tenue">🎬 ${tr('Director')}: ${(c.disenos || []).map(d => `${d.tipo === 'podcast' ? '🎙️ podcast' : '🪟 ' + tr('ventanita')} ${RV_mmss(d.desde)}–${RV_mmss(d.hasta)}`).join(' · ') || tr('sin diseños')}${c.sonidos ? ` · 🔊 ${c.sonidos} ${tr('sonidos')}` : ''}${(c.plan.emojis || []).length ? ` · ${c.plan.emojis.map(e => e.emoji).join('')}` : ''}</small>` : ''}
           ${c.dudas?.length ? `<div class="rv-dudas"><small>${tr('Whisper dudó en')}:</small> ${c.dudas.slice(0, 5).map(d => `<span>“${esc(d.texto)}” <i>${RV_mmss(d.s)}</i></span>`).join(' ')}</div>` : ''}
           ${c.chat?.length ? `<details class="rv-chat"><summary>${tr('Chat en ese momento')} (${c.chat.length})</summary>${c.chat.map(m => `<div>${esc(m)}</div>`).join('')}</details>` : ''}
           ${c.error ? `<div class="rv-error">${esc(c.error)}</div>` : ''}

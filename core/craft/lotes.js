@@ -125,7 +125,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       c.estilo = await elegirEstilo(f, c, texto, usados);
     } else c.estilo = c.estiloForzado;
     const { estilo: _e, ...ajustes } = c.ajustes || {};  // cambios pedidos desde Revisión (vibración, efectos, escenas, gancho…)
-    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...ajustes }, ctx);
+    // el plan del director se guarda: pedir un cambio no rehace toda la edición (salvo si cambia el montaje: avance/recorte)
+    const clave = claveMontaje(c);
+    const plan = c.plan && c.planClave === clave ? c.plan : undefined;
+    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...ajustes, ...(plan ? { plan } : {}) }, ctx);
     const d = r.datos || {};
     if (c.estado === 'descartado') {                    // lo descartaron mientras se editaba: fuera lo recién hecho
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) try { if (d[k]) fs.rmSync(d[k], { force: true }); } catch { }
@@ -134,7 +137,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     }
     if (c.mp4 && c.mp4 !== d.mp4) for (const viejo of [c.mp4, c.srt, c.previa, c.proyecto]) try { if (viejo) fs.rmSync(viejo, { force: true }); } catch { }   // al rehacer, fuera la versión anterior
     Object.assign(c, { estado: 'revisar', mp4: d.mp4, srt: d.srt, previa: d.previa, proyecto: d.proyecto, gancho: d.gancho, dudas: d.dudas || [], escenas: d.escenas || [],
-      emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null, retocado: false });
+      emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null, retocado: false, plan: d.plan || null, planClave: clave, disenos: d.plan?.disenos || [], sonidos: d.sonidos || 0 });
     guardarEst();
     bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
@@ -234,11 +237,15 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       prompt: `El vídeo editado dura ${Math.round(v.duracion)} s${v.dA ? ` (los primeros ${v.dA} s son el avance)` : ''}. Da TODOS los tiempos tal como los dice el usuario, en segundos del vídeo editado ("1:05" = 65); `
         + `no los recalcules. Estilo actual: ${c.estilo}. `
         + `Cambios de escena actuales: ${(c.escenas || []).map(e => `${e.tipo} ${Math.round(e.desde)}–${Math.round(e.hasta)} s`).join(', ') || 'ninguno'}. `
+        + `Diseños actuales: ${(c.plan?.disenos || []).map(d => `${d.tipo} ${Math.round(d.desde)}–${Math.round(d.hasta)} s`).join(', ') || 'ninguno'}. `
+        + `Efectos de sonido: ${c.plan?.sonidos?.length || 0}. Emojis: ${(c.plan?.emojis || []).map(e => `${e.emoji} ${Math.round(e.t)} s`).join(', ') || '—'}. `
         + `Ajustes ya aplicados: ${JSON.stringify(c.ajustes || {})}.\n\nLo que pide: "${pedido}"\n\n`
         + 'temblor = la vibración/sacudida de pantalla: "quitar" (ninguna), "tramos" (solo en esos tramos, p. ej. "que solo vibre de 40 a 55"), "intensidad" (la automática más suave/fuerte); intensidad 0–100 = % de la máxima (la actual es 100; "suave" ≈ 25, "media" ≈ 50). '
         + 'avance = repetir un TROZO DEL VÍDEO al principio como adelanto y luego el clip entero ("que empiece con el accidente de 0:45 a 0:47", "recap", "gancho del segundo X", "adelanto"): da desde/hasta en segundos; quitarAvance = true si pide quitarlo. '
         + 'recorte = dónde EMPIEZA y/o dónde TERMINA el clip ("que termine en 1:37", "que empiece en 0:10", "corta el final desde 2:00"): desde y/o hasta (lo que no diga, sin poner); quitarRecorte = true si pide el clip entero otra vez. '
         + 'efectos = los golpes automáticos (zoom, destellos, glitch…). escenas = los cambios de escena (acercamientos a la cara). '
+        + 'disenos = la composición de las cámaras por tramos: pantalla (zoom a la cabina/juego con la cámara de la cara en una VENTANITA flotante) y podcast (pantalla partida arriba cara / abajo cabina); modo "quitar" (sin ninguno), "lista" (exactamente los que pide, con desde/hasta; incluye los actuales que quiera conservar), "auto" (que el director decida otra vez). '
+        + 'sonidos = los efectos de sonido (whoosh, impacto, claxon…): "si" / "no". nuevoPlan = true si pide otra edición distinta / otras ideas / rehacerlo de cero. '
         + 'gancho = SOLO el TEXTO del título que sale al principio ("-" para quitarlo, "" = igual); nunca pongas tiempos en el gancho. respuesta = una frase corta que confirma lo que vas a cambiar.',
       schema: { type: 'object', properties: {
         estilo: { type: 'string', enum: ['igual', ...Object.keys(estilos.ESTILOS)] },
@@ -247,6 +254,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         look: ENUM_IGUAL('ninguno', ...Object.keys(require('./efectos').LOOKS)), gancho: { type: 'string' }, respuesta: { type: 'string' },
         avance: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } } }, quitarAvance: { type: 'boolean' },
         recorte: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } } }, quitarRecorte: { type: 'boolean' },
+        disenos: { type: 'object', properties: { modo: ENUM_IGUAL('quitar', 'lista', 'auto'), lista: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string', enum: ['pantalla', 'podcast'] }, desde: { type: 'number' }, hasta: { type: 'number' }, esquina: { type: 'string', enum: ['derecha', 'izquierda'] } }, required: ['tipo', 'desde', 'hasta'] } } }, required: ['modo'] },
+        sonidos: ENUM_IGUAL('si', 'no'), nuevoPlan: { type: 'boolean' },
       }, required: ['temblor', 'respuesta'] } });
     const d = r?.datos || r || {};
     const aj = {};
@@ -261,6 +270,12 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (d.look && d.look !== 'igual') aj.look = d.look === 'ninguno' ? false : d.look;
     if (d.gancho === '-') aj.gancho = false;
     else if (d.gancho && d.gancho !== 'igual' && !/\d:\d\d/.test(d.gancho)) aj.gancho = d.gancho;   // un "0:45 - 0:47" no es un título
+    const ds = d.disenos || {};                           // tiempos del vídeo editado = los del plan (no se pasan al original)
+    if (ds.modo === 'quitar') aj.disenos = false;
+    else if (ds.modo === 'lista' && ds.lista?.length) aj.disenos = ds.lista.map(x => ({ tipo: x.tipo, desde: +x.desde, hasta: +x.hasta, esquina: x.esquina || 'derecha' }));
+    else if (ds.modo === 'auto') { aj.disenos = null; aj.nuevoPlan = true; }
+    if (d.sonidos === 'no') aj.sonidos = false; else if (d.sonidos === 'si') aj.sonidos = null;
+    if (d.nuevoPlan) aj.nuevoPlan = true;
     if (d.quitarAvance) aj.avance = null;
     else if (d.avance && +d.avance.hasta > +d.avance.desde && +d.avance.desde >= 0) {
       const av = [v.aOrig(+d.avance.desde), v.aOrig(+d.avance.hasta)];
@@ -277,6 +292,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     return { ajustes: aj, respuesta: String(d.respuesta || '') };
   }
 
+  const claveMontaje = c => JSON.stringify([c.ajustes?.avance || null, c.ajustes?.recorte || null]);
+
   // tiempos del vídeo editado (con avance delante y recortado) ↔ tiempos del clip original
   function vista(c) {
     const av = c.ajustes?.avance, rc = c.ajustes?.recorte, dur = c.fin - c.inicio;
@@ -290,6 +307,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     let aj = ajustes && typeof ajustes === 'object' ? ajustes : {}, respuesta = '';
     if (pedido && String(pedido).trim()) ({ ajustes: aj, respuesta } = await interpretar(c, String(pedido).trim().slice(0, 1000)));
     if (!Object.keys(aj).length) throw Object.assign(new Error('no entendí qué cambiar; dilo de otra forma'), { status: 400 });
+    if (aj.nuevoPlan) { c.plan = null; aj = { ...aj }; delete aj.nuevoPlan; }   // el director vuelve a decidir la edición
     const antes = c.ajustes?.temblor;
     c.ajustes = { ...(c.ajustes || {}), ...aj };
     // "más suave" después de "solo de 40 a 55": se quedan los tramos con la nueva intensidad

@@ -36,9 +36,14 @@ function montar() {
     fs.mkdirSync(a.carpeta, { recursive: true });
     const b = path.join(a.carpeta, a.nombre);
     for (const ext of ['.mp4', '.srt', '.png', '.fcproj']) fs.writeFileSync(b + ext, 'x');
-    return { texto: 'ok', imagenes: [], datos: { mp4: b + '.mp4', srt: b + '.srt', previa: b + '.png', proyecto: b + '.fcproj', gancho: 'LA LLORONA', dudas: [{ texto: 'MIGUEL', s: 3 }], escenas: [{ tipo: 'corte', desde: 4, hasta: 6 }], emojis: 2 } };
+    return { texto: 'ok', imagenes: [], datos: { mp4: b + '.mp4', srt: b + '.srt', previa: b + '.png', proyecto: b + '.fcproj', gancho: 'LA LLORONA', dudas: [{ texto: 'MIGUEL', s: 3 }], escenas: [{ tipo: 'corte', desde: 4, hasta: 6 }], emojis: 2,
+      plan: a.plan || { origen: 'modelo', n: subtitulos.length, disenos: [{ tipo: 'pantalla', desde: 10, hasta: 20 }], escenas: [], sonidos: [{ t: 10, sonido: 'whoosh' }], emojis: [] }, sonidos: 1 } };
   } };
-  const generarJSON = async ({ prompt }) => (/Lo que pide: "que termine en 1:37/.test(prompt)
+  const generarJSON = async ({ prompt }) => (/Lo que pide: "quita la ventanita/.test(prompt)
+    ? { datos: { temblor: { modo: 'igual' }, disenos: { modo: 'quitar' }, sonidos: 'no', respuesta: 'Sin ventanita ni sonidos.' } }
+    : /Lo que pide: "dame otras ideas/.test(prompt)
+    ? { datos: { temblor: { modo: 'igual' }, nuevoPlan: true, respuesta: 'Otra edición.' } }
+    : /Lo que pide: "que termine en 1:37/.test(prompt)
     ? { datos: { temblor: { modo: 'tramos', tramos: [{ desde: 12, hasta: 20 }] }, recorte: { hasta: 97 }, respuesta: 'Termina en 1:37.' } }
     : /Lo que pide/.test(prompt)
     ? { datos: { estilo: 'igual', temblor: { modo: 'tramos', tramos: [{ desde: 40, hasta: 55 }], intensidad: 30 }, efectos: 'igual', escenas: 'igual', emojis: 'no', look: 'igual', gancho: '-', respuesta: 'Vibración solo de 0:40 a 0:55 al 30 %, sin emojis ni título.' } }
@@ -147,4 +152,24 @@ test('lotes: recorte y tiempos pedidos sobre el vídeo que se ve (con avance del
   await l.modificar(c.id, { ajustes: { recorte: null } }); await esperar(l);
   assert.strictEqual(subtitulos.at(-1).recorte, undefined, 'clip entero otra vez');
   assert.deepStrictEqual(subtitulos.at(-1).avance, [45, 47], 'el avance se queda');
+});
+
+test('lotes: el plan del director se guarda y se reutiliza al pedir cambios; "otras ideas" o cambiar el montaje lo rehacen', async () => {
+  const { l, subtitulos } = montar();
+  await l.revisar(); await esperar(l);
+  let c = l.estado().clips[0];
+  const ultima = () => subtitulos.filter(x => !x.soloTranscribir && x.video.endsWith(c.archivo)).at(-1);
+  assert.deepStrictEqual(c.disenos, [{ tipo: 'pantalla', desde: 10, hasta: 20 }]);
+  assert.strictEqual(c.sonidos, 1);
+  const primero = c.plan;
+  const r = await l.modificar(c.id, { pedido: 'quita la ventanita y los sonidos' }); await esperar(l);
+  assert.strictEqual(r.ajustes.disenos, false); assert.strictEqual(r.ajustes.sonidos, false);
+  assert.deepStrictEqual(ultima().plan, primero);          // el mismo plan: no cambia toda la edición
+  assert.strictEqual(ultima().disenos, false); assert.strictEqual(ultima().sonidos, false);
+  await l.modificar(c.id, { pedido: 'dame otras ideas' }); await esperar(l);
+  assert.strictEqual(ultima().plan, undefined);            // el director vuelve a decidir
+  await l.modificar(c.id, { ajustes: { emojis: false } }); await esperar(l);
+  assert.ok(ultima().plan);
+  await l.modificar(c.id, { ajustes: { recorte: [0, 100] } }); await esperar(l);
+  assert.strictEqual(ultima().plan, undefined);            // cambió el montaje: los tiempos del plan ya no valen
 });
