@@ -55,3 +55,14 @@ test('diseños: ventanita (zoom a cabina+pedales, cara arriba a la derecha) y po
   assert.ok(q.arriba.kf[1][1][0] <= 540 + 313);                      // …sin enseñar el borde
   assert.strictEqual(q.arriba.kf[0][1][1], -480);                    // entra desde arriba
 });
+
+test('diseños: enfoque a mano dura todo el clip; los pedales van en burbuja abajo a la derecha, bajo los subtítulos', () => {
+  const v = director.validar({ disenos: [{ tipo: 'enfoque', desde: 0, hasta: 300 }] }, { dur: 300, manual: true });
+  assert.deepStrictEqual(v.disenos.map(d => [d.tipo, d.desde, d.hasta]), [['enfoque', 0, 300]]);
+  assert.deepStrictEqual(director.validar({ disenos: [{ tipo: 'enfoque', desde: 0, hasta: 300 }] }, { dur: 300 }).disenos.map(d => [d.desde, d.hasta]), [[3.6, 28.6]]);
+  const b = disenos.planBurbuja({ desde: 0, hasta: 300, zonas: ZONAS, W: 1080, H: 1920 });
+  assert.strictEqual(b.D, 320);
+  assert.ok(b.centro[0] > 800 && b.centro[1] - b.D / 2 > 1498 + 60);   // no pisa los subtítulos (y = 0,78·H)
+  assert.strictEqual(b.mascara.size[0], b.mascara.size[1]);             // redonda
+  assert.strictEqual(b.kf[0][1], 0); assert.strictEqual(b.kf.at(-1)[1], 0);
+});

@@ -26,6 +26,7 @@ function montar() {
       if (c.startsWith('ls')) return cb(null, Object.keys(manif).join('\n') + '\nbasura\n', '');
       const m = c.match(/'([^']+)'\/manifiesto/); return cb(null, JSON.stringify(manif[m[1]]), '');
     }
+    if (args.includes('yt_dlp')) { const o = args[args.indexOf('-o') + 1]; fs.mkdirSync(path.dirname(o), { recursive: true }); fs.writeFileSync(o, 'video'); return cb(null, '', ''); }
     if (cmd === 'scp') { fs.mkdirSync(path.dirname(args.at(-1)), { recursive: true }); fs.writeFileSync(args.at(-1), 'video'); return cb(null, '', ''); }
     cb(new Error('?'));
   };
@@ -172,4 +173,19 @@ test('lotes: el plan del director se guarda y se reutiliza al pedir cambios; "ot
   assert.ok(ultima().plan);
   await l.modificar(c.id, { ajustes: { recorte: [0, 100] } }); await esperar(l);
   assert.strictEqual(ultima().plan, undefined);            // cambió el montaje: los tiempos del plan ya no valen
+});
+
+test('lotes: clip pedido a mano (un tramo del stream): se descarga solo ese tramo, entra en la cola con sus ajustes y sale en Revisión', async () => {
+  const { l, subtitulos, llamadas } = montar();
+  await l.revisar(); await esperar(l);
+  await assert.rejects(l.nuevo({ stream: 'NOEXISTE', desde: 0, hasta: 60 }), /no conozco/);
+  await assert.rejects(l.nuevo({ stream: 'AAA', desde: 100, hasta: 105 }), /entre 10 s/);
+  const c = await l.nuevo({ stream: 'AAA', desde: 5400, hasta: 5700, ajustes: { disenos: [{ tipo: 'enfoque', desde: 0, hasta: 300 }], efectos: 'no' } });
+  assert.strictEqual(c.rank, 4); assert.strictEqual(c.archivo, '04_05400_300s.mp4'); assert.strictEqual(c.manual, true);
+  await new Promise(r => setTimeout(r, 30)); await esperar(l);
+  const yt = llamadas.find(x => x.includes('yt_dlp'));
+  assert.ok(yt.includes('*1:30:00-1:35:00') && yt.includes('watch?v=AAA'), yt);
+  const a = subtitulos.filter(x => !x.soloTranscribir && x.video.endsWith('04_05400_300s.mp4')).at(-1);
+  assert.deepStrictEqual(a.disenos, [{ tipo: 'enfoque', desde: 0, hasta: 300 }]); assert.strictEqual(a.efectos, 'no');
+  assert.strictEqual(l.estado().clips.find(x => x.id === c.id).estado, 'revisar');
 });

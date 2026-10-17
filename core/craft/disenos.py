@@ -29,6 +29,24 @@ def marco(salida, w, h, r, c='22e6ff'):
     im.save(salida)
 
 
+def aro(salida, d, c='22e6ff'):
+    m = 40; N = d + 2 * m; col = color(c)
+    linea = Image.new('L', (N, N), 0)
+    ImageDraw.Draw(linea).ellipse((m - 5, m - 5, m + d + 4, m + d + 4), outline=255, width=9)
+    brillo = linea.filter(ImageFilter.GaussianBlur(14)).point(lambda v: min(255, v * 2))
+    sombra = Image.new('L', (N, N), 0)
+    ImageDraw.Draw(sombra).ellipse((m, m + 10, m + d, m + d + 10), fill=200)
+    sombra = sombra.filter(ImageFilter.GaussianBlur(16))
+    im = Image.new('RGBA', (N, N), (0, 0, 0, 0))
+    im.paste((0, 0, 0, 255), (0, 0), sombra)
+    im.paste(col + (255,), (0, 0), brillo)
+    im.paste((235, 255, 255, 255), (0, 0), linea)
+    hueco = Image.new('L', (N, N), 0)
+    ImageDraw.Draw(hueco).ellipse((m, m, m + d, m + d), fill=255)
+    a = im.getchannel('A'); a.paste(0, (0, 0), hueco); im.putalpha(a)
+    im.save(salida)
+
+
 def raya(salida, w, h, c='22e6ff'):
     col = color(c); H = h + 40
     linea = Image.new('L', (w, H), 0)
@@ -42,7 +60,9 @@ def raya(salida, w, h, c='22e6ff'):
 
 if __name__ == '__main__':
     q, salida = sys.argv[1], sys.argv[2]
-    if q == 'marco':
+    if q == 'aro':
+        aro(salida, int(sys.argv[3]), *(sys.argv[4:5]))
+    elif q == 'marco':
         marco(salida, int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), *(sys.argv[6:7]))
     else:
         raya(salida, int(sys.argv[3]), int(sys.argv[4]), *(sys.argv[5:6]))

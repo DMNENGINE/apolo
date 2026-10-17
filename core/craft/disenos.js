@@ -2,6 +2,7 @@
 // con el mismo vídeo colocado otra vez en el tramo. Fuera del tramo se ve V1 tal cual.
 //  - pantalla: V2 = zoom a la cabina y los pedales · V3 = marco con brillo · V4 = la cámara de la cara en ventanita flotante
 //  - podcast:  V2 = cabina en la mitad de abajo · V3 = raya del medio · V4 = cara en la mitad de arriba; cada mitad sigue a quien sale
+//  - enfoque:  el podcast + V5 = los pedales en una burbuja redonda flotante · V6 = su aro con brillo (para explicaciones)
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -33,7 +34,8 @@ function planPantalla({ desde, hasta, esquina = 'derecha', zonas, W, H, k = W / 
 }
 
 // plan puro del podcast: cada mitad = una zona escalada a media pantalla, siguiendo la x de la cara
-function planPodcast({ desde, hasta, zonas, W, H, an, seguimiento, trans = 0.25 }) {
+// abajo = la zona de la mitad de abajo (por defecto la cabina; p. ej. 'pedales' si la cámara de la cabina no se ve)
+function planPodcast({ desde, hasta, zonas, W, H, an, seguimiento, trans = 0.25, abajo }) {
   const mitad = (nombre, arriba) => {
     const z = zonas[nombre], zw = z[2] - z[0], zh = z[3] - z[1];
     const S = (H / 2) / zh, esc = +(S * 100).toFixed(2);
@@ -48,7 +50,20 @@ function planPodcast({ desde, hasta, zonas, W, H, an, seguimiento, trans = 0.25 
     kf.push([d - trans, [ultimo, Math.round(cy)]], [d, [ultimo, Math.round(cy + fuera)]]);
     return { ancla, esc, kf, mascara: { center: ancla, size: [zw, zh] } };
   };
-  return { arriba: mitad('cara', true), abajo: mitad(zonas.cabina ? 'cabina' : 'cara', false) };
+  return { arriba: mitad('cara', true), abajo: mitad(abajo && zonas[abajo] ? abajo : zonas.cabina ? 'cabina' : 'cara', false) };
+}
+
+// burbuja de los pedales (puro): círculo de la zona, abajo a la derecha, debajo de los subtítulos
+const BURBUJA = { diametro: 320, margen: 30, abajo: 30 };
+function planBurbuja({ desde, hasta, zonas, W, H, k = W / 1080 }) {
+  const z = zonas.pedales;
+  const R = Math.round(Math.min(z[2] - z[0], z[3] - z[1]) * 0.45);
+  const ancla = [Math.round((z[0] + z[2]) / 2), Math.round(z[1] + (z[3] - z[1]) * 0.54)];
+  const D = Math.round(BURBUJA.diametro * k), s = D / (2 * R), esc = +(s * 100).toFixed(2);
+  const centro = [Math.round(W - BURBUJA.margen * k - D / 2), Math.round(H - BURBUJA.abajo * k - D / 2)];
+  const d = hasta - desde, ent = Math.min(0.6, d / 4);
+  return { ancla, centro, D, esc, mascara: { center: ancla, size: [2 * R, 2 * R] },
+    kf: [[0, 0], [ent, 0], [ent + 0.18, +(esc * 1.12).toFixed(2)], [ent + 0.3, esc], [d - 0.22, esc], [d, 0]] };
 }
 
 function crearPiezas({ carpeta, python = 'python' }) {
@@ -61,13 +76,15 @@ function crearPiezas({ carpeta, python = 'python' }) {
   return {
     marco: (w, h, r) => hacer(`marco-${w}x${h}-r${r}.png`, ['marco', w, h, r]),
     raya: (w, h) => hacer(`raya-${w}x${h}.png`, ['raya', w, h]),
+    aro: d => hacer(`aro-${d}.png`, ['aro', d]),
   };
 }
 
 // monta los diseños en FilmCraft. fc = command_run; item = el vídeo importado; t(seg) = ticks a fotograma
 async function montar({ fc, item, t, W, H, fps, disenos, zonas, an, piezas, seguimiento, k = W / 1080 }) {
   if (!disenos?.length || !zonas?.cara) return 0;
-  await fc('sequence.addTracks', { video: 3, videoAfter: 'V1' });
+  const conBurbuja = disenos.some(d => d.tipo === 'enfoque') && zonas.pedales;
+  await fc('sequence.addTracks', { video: conBurbuja ? 5 : 3, videoAfter: 'V1' });
   const TPS = 254016000000;
   const poner = async (track, d) => (await fc('timeline.place', { item, track, seconds: Math.round(d.desde * fps) / fps, sourceIn: t(d.desde),
     duration: t(d.hasta) - t(d.desde), video: true, audio: false }))?.clips?.[0];
@@ -105,7 +122,7 @@ async function montar({ fc, item, t, W, H, fps, disenos, zonas, an, piezas, segu
         await kfMotion(marco, d.desde, [[0, null, 0], [0.18, null, +(100 * e).toFixed(2)], [0.3, null, 100], [p.ventana.kf.at(-2)[0], null, 100], [p.ventana.kf.at(-1)[0], null, 0]]);
       }
       n++;
-    } else if (d.tipo === 'podcast') {
+    } else if (d.tipo === 'podcast' || d.tipo === 'enfoque') {
       const p = planPodcast({ ...d, zonas, W, H, an, seguimiento });
       for (const [track, mitad] of [['V2', p.abajo], ['V4', p.arriba]]) {
         const c = await poner(track, d);
@@ -119,10 +136,24 @@ async function montar({ fc, item, t, W, H, fps, disenos, zonas, an, piezas, segu
         await fc('effects.setParam', { clip: raya, effect: 'motion', param: 'position', value: [W / 2, H / 2] });
         await kfMotion(raya, d.desde, [[0, null, 0], [0.3, null, 100], [d.hasta - d.desde - 0.25, null, 100], [d.hasta - d.desde, null, 0]]);
       }
+      if (d.tipo === 'enfoque' && conBurbuja && d.abajo !== 'pedales') {          // los pedales en burbuja
+        const b = planBurbuja({ ...d, zonas, W, H, k });
+        const c = await poner('V5', d);
+        if (c != null) {
+          await fc('masks.add', { clip: c, effect: 'opacity', shape: 'ellipse', center: b.mascara.center, size: b.mascara.size });
+          await fc('effects.setParam', { clip: c, effect: 'motion', param: 'position', value: b.centro });
+          await kfMotion(c, d.desde, b.kf.map(([dt, esc]) => [dt, null, esc]), { ancla: b.ancla });
+        }
+        const aro = await imagen(piezas.aro(b.D), d, 5);
+        if (aro != null) {
+          await fc('effects.setParam', { clip: aro, effect: 'motion', param: 'position', value: b.centro });
+          await kfMotion(aro, d.desde, b.kf.map(([dt, esc]) => [dt, null, +(100 * esc / b.esc).toFixed(2)]));
+        }
+      }
       n++;
     }
   }
   return n;
 }
 
-module.exports = { PIP, planPantalla, planPodcast, crearPiezas, montar };
+module.exports = { PIP, BURBUJA, planPantalla, planPodcast, planBurbuja, crearPiezas, montar };

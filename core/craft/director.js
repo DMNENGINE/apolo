@@ -11,6 +11,7 @@ const efectos = require('./efectos');
 
 const DISENOS = {
   pantalla: 'zoom a la cabina y los pedales (lo que pasa en el camión/juego) con la cara del streamer en una ventanita flotante en una esquina. Para cuando enseña algo, pasa algo en la carretera/cabina o dice "miren", "fíjense", "checa"',
+  enfoque: 'pantalla partida (arriba la cara del streamer, abajo la cabina) con los pedales en una burbuja redonda flotante. Para explicaciones e información importante',
   podcast: 'pantalla partida estilo podcast: arriba la cara del streamer, abajo la cabina, cada mitad siguiendo la cara de quien sale. Para conversaciones largas con alguien que está en la cabina o tramos de charla tranquila',
 };
 // sonido → [descripción, volumen en dB para la mezcla] (core/craft/sonidos/sonidos.py)
@@ -24,7 +25,7 @@ const SONIDOS = {
   suspenso: ['nota grave que crece 2 s: miedo, tensión', -10],
 };
 // sonido que acompaña solo a cada cosa si el plan no trae uno cerca
-const SONIDO_DE = { pantalla: 'whoosh', podcast: 'swoosh', escalones: 'tambor', corte: 'golpe', temblor: 'impacto', drama: 'suspenso', giro: 'rasgueo', acercar: 'whoosh', lento: 'riser', recorrido: 'whoosh' };
+const SONIDO_DE = { pantalla: 'whoosh', podcast: 'swoosh', enfoque: 'swoosh', escalones: 'tambor', corte: 'golpe', temblor: 'impacto', drama: 'suspenso', giro: 'rasgueo', acercar: 'whoosh', lento: 'riser', recorrido: 'whoosh' };
 const ES_EMOJI = /^(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})️?$/u;
 
 // ── análisis (core/craft/analisis.py), guardado junto a la salida ──
@@ -138,15 +139,16 @@ function instrucciones(dur) {
 }
 
 // plan del modelo → plan válido (puro)
-function validar(plan, { dur, gancho = 3.6, cta = 5, zonas = ['cara', 'cabina', 'pedales'] } = {}) {
+// manual = diseños pedidos a mano: pueden durar todo el clip y empezar en el 0
+function validar(plan, { dur, gancho = 3.6, cta = 5, zonas = ['cara', 'cabina', 'pedales'], manual = false } = {}) {
   const num = v => (Number.isFinite(+v) ? +v : NaN);
   const out = { disenos: [], escenas: [], sonidos: [], emojis: [], resumen: String(plan?.resumen || '').slice(0, 300) };
   for (const d of [...(plan?.disenos || [])].sort((a, b) => num(a.desde) - num(b.desde))) {
     if (!DISENOS[d.tipo]) continue;
-    const desde = Math.max(gancho, num(d.desde)), hasta = Math.min(dur - cta, num(d.hasta));
-    if (!(hasta - desde >= 3) || out.disenos.length >= 3) continue;
-    if (out.disenos.some(o => desde < o.hasta + 4)) continue;
-    out.disenos.push({ tipo: d.tipo, desde: +desde.toFixed(2), hasta: +Math.min(hasta, desde + 25).toFixed(2), esquina: d.esquina === 'izquierda' ? 'izquierda' : 'derecha' });
+    const desde = Math.max(manual ? 0 : gancho, num(d.desde)), hasta = Math.min(manual ? dur : dur - cta, num(d.hasta));
+    if (!(hasta - desde >= 3) || out.disenos.length >= (manual ? 8 : 3)) continue;
+    if (out.disenos.some(o => desde < o.hasta + (manual ? 0 : 4))) continue;
+    out.disenos.push({ tipo: d.tipo, desde: +desde.toFixed(2), hasta: +(manual ? hasta : Math.min(hasta, desde + 25)).toFixed(2), esquina: d.esquina === 'izquierda' ? 'izquierda' : 'derecha', ...(zonas.includes(d.abajo) ? { abajo: d.abajo } : {}) });
   }
   const enDiseno = (a, b) => out.disenos.some(o => a < o.hasta + 0.6 && b > o.desde - 0.6);
   for (const e of [...(plan?.escenas || [])].sort((a, b) => num(a.desde) - num(b.desde))) {

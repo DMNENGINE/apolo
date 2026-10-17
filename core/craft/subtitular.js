@@ -290,7 +290,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg }) {
     }
     if (plan) {
       if (a.disenos === false || a.disenos === 'no') plan = { ...plan, disenos: [] };
-      else if (Array.isArray(a.disenos)) plan = { ...plan, disenos: director.validar({ disenos: a.disenos }, { dur: an?.duracion || palabras.at(-1).e + 1 }).disenos };
+      else if (Array.isArray(a.disenos)) plan = { ...plan, disenos: director.validar({ disenos: a.disenos }, { dur: an?.duracion || palabras.at(-1).e + 1, manual: true }).disenos };
       if (a.sonidos === false || a.sonidos === 'no') plan = { ...plan, sonidos: [] };
     }
     const enDiseno = (s0, s1) => !!plan?.disenos?.some(d => s0 < d.hasta + 0.5 && s1 > d.desde - 0.5);

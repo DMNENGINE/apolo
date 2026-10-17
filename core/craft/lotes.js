@@ -28,6 +28,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const cola = [];                                     // ids de clips por editar (en orden)
   let enCurso = null, revisando = false;
   for (const c of Object.values(est.clips)) if (c.estado === 'editando' || c.estado === 'en cola') { c.estado = 'en cola'; cola.push(c.id); }   // tras reiniciar
+  for (const c of Object.values(est.clips)) if (c.estado === 'descargando') { c.estado = 'error'; c.error = 'la descarga se cortó al reiniciar; pídelo otra vez'; }
   // exportaciones 4K pendientes (van en la misma cola como "4k:<id>")
   for (const c of Object.values(est.clips)) if (c.estado === 'aprobado' && ['en cola', 'exportando'].includes(c.k4?.estado)) { c.k4 = { estado: 'en cola' }; cola.push('4k:' + c.id); }
 
@@ -115,7 +116,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     fs.mkdirSync(path.dirname(original), { recursive: true });
     if (!fs.existsSync(original)) await scp(f, `${f.ruta}/${c.carpeta}/${c.archivo}`, original);
     const comun = { video: original, perfil: f.perfil, carpeta: path.join(base, 'editados'), nombre: `${String(c.rank).padStart(2, '0')}`,
-      tituloClip: String(c.titulo || '').replace(/\s*\((portrait|vertical)\)\s*/i, '').trim() || undefined };
+      tituloClip: c.tituloClip || String(c.titulo || '').replace(/\s*\((portrait|vertical)\)\s*/i, '').trim() || undefined };
     if (!c.estiloForzado) {                             // transcribe primero (queda en caché) para elegir el estilo por lo que se dice
       ctx.progreso('transcribiendo', 2);
       const t = await subtitulador.subtitular({ ...comun, soloTranscribir: true }, ctx);
@@ -244,7 +245,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         + 'avance = repetir un TROZO DEL VÍDEO al principio como adelanto y luego el clip entero ("que empiece con el accidente de 0:45 a 0:47", "recap", "gancho del segundo X", "adelanto"): da desde/hasta en segundos; quitarAvance = true si pide quitarlo. '
         + 'recorte = dónde EMPIEZA y/o dónde TERMINA el clip ("que termine en 1:37", "que empiece en 0:10", "corta el final desde 2:00"): desde y/o hasta (lo que no diga, sin poner); quitarRecorte = true si pide el clip entero otra vez. '
         + 'efectos = los golpes automáticos (zoom, destellos, glitch…). escenas = los cambios de escena (acercamientos a la cara). '
-        + 'disenos = la composición de las cámaras por tramos: pantalla (zoom a la cabina/juego con la cámara de la cara en una VENTANITA flotante) y podcast (pantalla partida arriba cara / abajo cabina); modo "quitar" (sin ninguno), "lista" (exactamente los que pide, con desde/hasta; incluye los actuales que quiera conservar), "auto" (que el director decida otra vez). '
+        + 'disenos = la composición de las cámaras por tramos: pantalla (zoom a la cabina/juego con la cámara de la cara en una VENTANITA flotante) , podcast (pantalla partida arriba cara / abajo cabina) y enfoque (la pantalla partida + los pedales en una burbuja flotante; para explicaciones); modo "quitar" (sin ninguno), "lista" (exactamente los que pide, con desde/hasta; incluye los actuales que quiera conservar), "auto" (que el director decida otra vez). '
         + 'sonidos = los efectos de sonido (whoosh, impacto, claxon…): "si" / "no". nuevoPlan = true si pide otra edición distinta / otras ideas / rehacerlo de cero. '
         + 'gancho = SOLO el TEXTO del título que sale al principio ("-" para quitarlo, "" = igual); nunca pongas tiempos en el gancho. respuesta = una frase corta que confirma lo que vas a cambiar.',
       schema: { type: 'object', properties: {
@@ -254,7 +255,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         look: ENUM_IGUAL('ninguno', ...Object.keys(require('./efectos').LOOKS)), gancho: { type: 'string' }, respuesta: { type: 'string' },
         avance: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } } }, quitarAvance: { type: 'boolean' },
         recorte: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } } }, quitarRecorte: { type: 'boolean' },
-        disenos: { type: 'object', properties: { modo: ENUM_IGUAL('quitar', 'lista', 'auto'), lista: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string', enum: ['pantalla', 'podcast'] }, desde: { type: 'number' }, hasta: { type: 'number' }, esquina: { type: 'string', enum: ['derecha', 'izquierda'] } }, required: ['tipo', 'desde', 'hasta'] } } }, required: ['modo'] },
+        disenos: { type: 'object', properties: { modo: ENUM_IGUAL('quitar', 'lista', 'auto'), lista: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string', enum: ['pantalla', 'podcast', 'enfoque'] }, desde: { type: 'number' }, hasta: { type: 'number' }, esquina: { type: 'string', enum: ['derecha', 'izquierda'] } }, required: ['tipo', 'desde', 'hasta'] } } }, required: ['modo'] },
         sonidos: ENUM_IGUAL('si', 'no'), nuevoPlan: { type: 'boolean' },
       }, required: ['temblor', 'respuesta'] } });
     const d = r?.datos || r || {};
@@ -357,9 +358,37 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (cola.length) procesar();
   }
 
+  // ── 5. clip pedido a mano: un tramo de un stream que ya conocemos (p. ej. 1:30:00–1:35:00) ──
+  // se descarga de YouTube en el PC (yt-dlp, solo ese tramo, vertical) y entra en la cola con los ajustes que se pidan
+  async function nuevo({ stream, desde, hasta, ajustes = {}, titulo } = {}) {
+    const ref = Object.values(est.clips).find(x => x.stream === stream);
+    if (!ref) throw Object.assign(new Error(`no conozco el stream ${stream}`), { status: 404 });
+    desde = +desde; hasta = +hasta;
+    if (!(desde >= 0) || !(hasta - desde >= 10) || hasta - desde > 900) throw Object.assign(new Error('el tramo tiene que durar entre 10 s y 15 min'), { status: 400 });
+    const f = conf.fuentes.find(x => x.id === ref.fuente) || { id: ref.fuente };
+    const rank = Math.max(0, ...Object.values(est.clips).filter(x => x.stream === stream).map(x => x.rank || 0)) + 1;
+    const dur = Math.round(hasta - desde);
+    const archivo = `${String(rank).padStart(2, '0')}_${String(Math.round(desde)).padStart(5, '0')}_${dur}s.mp4`;
+    const id = `${ref.fuente}_${stream}_${String(rank).padStart(2, '0')}`;
+    const c = est.clips[id] = { id, fuente: ref.fuente, stream, titulo: ref.titulo, fecha: ref.fecha, carpeta: ref.carpeta, rank, archivo, inicio: desde, fin: hasta,
+      estado: 'descargando', creado: Date.now(), manual: true, ajustes: ajustes && typeof ajustes === 'object' ? ajustes : {}, ...(titulo ? { tituloClip: String(titulo) } : {}) };
+    guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    const destino = path.join(carpetaFuente(f), `${ref.fecha}_${stream}`, 'originales', archivo);
+    fs.mkdirSync(path.dirname(destino), { recursive: true });
+    const hms = x => `${Math.floor(x / 3600)}:${String(Math.floor(x % 3600 / 60)).padStart(2, '0')}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
+    const args = ['-m', 'yt_dlp', '-q', '--no-warnings', '--download-sections', `*${hms(desde)}-${hms(hasta)}`, '-f', 'bv*[height<=1920][vcodec^=avc1]+ba[ext=m4a]/bv*[height<=1920]+ba',
+      '--merge-output-format', 'mp4', '-o', destino, `https://www.youtube.com/watch?v=${stream}`];
+    (fs.existsSync(destino) ? Promise.resolve() : new Promise((ok, mal) => ejecutar(cfg?.craft?.python || 'python', args, { windowsHide: true, timeout: 1_800_000 },
+      e => (e || !fs.existsSync(destino) ? mal(e || new Error('yt-dlp no dejó el vídeo')) : ok()))))
+      .then(() => { c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar(); })
+      .catch(e => { c.estado = 'error'; c.error = `no se pudo descargar el tramo: ${String(e.message).slice(0, 300)}`; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); });
+    return publico(c);
+  }
+
   async function http(M, p, b = {}) {        // /v1/revision
     if (M === 'GET' && !p[2]) return estado();
     if (M === 'POST' && p[2] === 'revisar') return revisar();
+    if (M === 'POST' && p[2] === 'nuevo') return nuevo(b);
     if (M === 'PATCH' && p[2] === 'config') {
       if (b.salida) conf.salida = String(b.salida);
       if (b.retencionDias) conf.retencionDias = Math.max(1, +b.retencionDias);
@@ -381,7 +410,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
 
-  return { revisar, procesar, decidir, modificar, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, ESTILOS_DEFECTO };
+  return { revisar, procesar, decidir, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, ESTILOS_DEFECTO };
 }
 
 module.exports = { crearLotes, ESTILOS_DEFECTO };
