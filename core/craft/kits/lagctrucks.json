@@ -1,0 +1,27 @@
+{
+  "id": "lagctrucks",
+  "nombre": "LAGCTRUCKS",
+  "descripcion": "Canal de American Truck Simulator con cabina Peterbilt 389 teal: vídeo vertical con cara arriba, cabina en medio y pedales abajo.",
+  "colores": {
+    "primario": "#ffffff",
+    "acento": "#00d9ff",
+    "resaltado": "#ffd400",
+    "contorno": "#000000",
+    "fondo": "#0b1d3a"
+  },
+  "fuente": { "familia": "Trueno", "estilo": "Black" },
+  "marca": "LAGCTRUCKS",
+  "letrero": { "nombre1": "LAGC", "nombre2": "TRUCKS" },
+  "cta": "Sígueme para más",
+  "hashtags": "#lagctrucks #camioneros #troqueros #americantrucksimulator #simulador",
+  "redes": ["youtube", "tiktok", "kick", "instagram", "facebook", "discord"],
+  "contexto": "Stream de LAGCTRUCKS en American Truck Simulator. Saludos al chat, compa, hermano, papi, camión, México.",
+  "video": {
+    "y": 0.78,
+    "director": true,
+    "zonas": { "cara": [0, 97, 1080, 705], "cabina": [0, 705, 1080, 1313], "pedales": [0, 1313, 1080, 1920] }
+  },
+  "zonaSegura": { "arriba": 0.06, "abajo": 0.12, "lados": 0.04, "botones": { "x": 0.88, "desde": 0.42, "hasta": 0.88 } },
+  "audio": { "lufs": -14, "picoMax": -1, "pro": true },
+  "miniatura": { "variantes": 3, "franja": [700, 1150] }
+}

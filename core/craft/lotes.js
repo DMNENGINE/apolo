@@ -14,11 +14,15 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const estilos = require('./estilos');
+const calidad = require('./calidad');
 const { crearPublicador } = require('./publicar');
 
 const ESTILOS_DEFECTO = ['pop', 'karaoke', 'fuego', 'impacto', 'terror', 'atardecer', 'noche', 'tornado', 'arcoiris', 'oro'];
+// ajustes que son listas y se ACUMULAN al pedir cambios (cada comentario añade el suyo)
+const ACUMULABLES = ['correcciones', 'quitarEmojis', 'sinEfectos', 'rotulos'];
 
-function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecutar = execFile, pedir, log = () => { } }) {
+// miniaturas: crearMiniaturas (core/craft/miniatura.js) o nada (sin portadas); kits: crearKits; medir: calidad.medir (inyectables en tests)
+function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecutar = execFile, pedir, log = () => { }, miniaturas = null, kits = require('./kit').crearKits({ cfg }), medir = calidad.medir }) {
   const dir = path.join(cfg.dir, 'craft');
   const FC = path.join(dir, 'lotes.json'), FE = path.join(dir, 'lotes-estado.json');
   const leer = (f, def) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return def; } };
@@ -39,7 +43,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const scp = (f, remoto, local) => sh('scp', ['-q', '-o', 'BatchMode=yes', `${f.host}:${remoto}`, local]);
   const q = s => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const carpetaFuente = f => path.join(conf.salida, f.nombre || f.id);
-  const publicador = crearPublicador({ conf: () => conf.discordClips, ejecutar, ...(pedir ? { pedir } : {}), log });
+  const kitDe = c => { const f = conf.fuentes.find(x => x.id === c.fuente); return f?.perfil ? kits.obtener(f.perfil) : null; };
+  const publicador = crearPublicador({ conf: () => conf.discordClips, ejecutar, ...(pedir ? { pedir } : {}), log, kitDe });
+  const borrar = (...fs_) => { for (const f of fs_.flat()) if (f) try { fs.rmSync(f, { force: true }); } catch { } };
+  const archivosPortadas = c => (c.portadas || []).flatMap(p => [p.jpg, p.pcraft]);
 
   // ── 1. buscar streams nuevos en las fuentes ──
   async function revisar() {
@@ -139,8 +146,24 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       return;
     }
     if (c.mp4 && c.mp4 !== d.mp4) for (const viejo of [c.mp4, c.srt, c.previa, c.proyecto]) try { if (viejo) fs.rmSync(viejo, { force: true }); } catch { }   // al rehacer, fuera la versión anterior
+    // portadas (PhotoCraft): los mejores momentos de cara del vídeo sin nada encima, con el gancho y los colores del kit
+    let portadas = c.portadas || [];
+    if (miniaturas && d.fuente && fs.existsSync(d.fuente) && (kitDe(c)?.miniatura?.variantes ?? 3) > 0) {
+      ctx.progreso('portadas (PhotoCraft)', 99);
+      try {
+        let an = null; try { an = d.analisis ? JSON.parse(fs.readFileSync(d.analisis, 'utf8')) : null; } catch { }
+        const k = kitDe(c), letrero = k?.letrero ? path.join(cfg.dir, 'craft', 'marca', `letrero-${`${k.letrero.nombre1 || ''}${k.letrero.nombre2 || ''}`.replace(/[^\p{L}\d]/gu, '').toLowerCase() || 'marca'}.mov`) : null;
+        const nuevas = await miniaturas.deClip({ video: d.fuente, an, texto: d.gancho || c.tituloClip || c.titulo || '', kit: k, carpeta: path.dirname(d.mp4),
+          nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, letrero: letrero && fs.existsSync(letrero) ? letrero : null });
+        const vale = new Set(nuevas.flatMap(p => [p.jpg, p.pcraft]));
+        borrar(archivosPortadas(c).filter(f => !vale.has(f)));
+        portadas = nuevas.map(p => ({ jpg: p.jpg, pcraft: p.pcraft, t: p.t }));
+      } catch (e) { log('[lotes] portadas', id, e.message); }
+    }
     Object.assign(c, { estado: 'revisar', mp4: d.mp4, srt: d.srt, previa: d.previa, proyecto: d.proyecto, gancho: d.gancho, dudas: d.dudas || [], escenas: d.escenas || [],
-      emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null, retocado: false, plan: d.plan || null, planClave: clave, disenos: d.plan?.disenos || [], sonidos: d.sonidos || 0 });
+      emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null, retocado: false, plan: d.plan || null, planClave: clave, disenos: d.plan?.disenos || [], sonidos: d.sonidos || 0,
+      calidad: d.calidad || null, audioPro: d.audioPro || null, rotulos: d.rotulos || 0, noCorregidas: d.noCorregidas || [],
+      portadas, portada: Math.min(c.portada || 0, Math.max(0, portadas.length - 1)) });
     guardarEst();
     bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
@@ -183,7 +206,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (!base) return;
     try { fs.rmSync(path.join(base, 'originales', c.archivo), { force: true }); } catch { }
     const raiz = path.basename(c.archivo, path.extname(c.archivo)), ed = path.join(base, 'editados');
-    try { for (const n of fs.readdirSync(ed)) if (n.startsWith(raiz + '.') && /\.(a|r)[\d.\-_ar]+\.mp4$/.test(n)) fs.rmSync(path.join(ed, n), { force: true }); } catch { }
+    // montados (avance/recorte) y su versión con el audio de estudio (.master.mp4 + su huella)
+    try { for (const n of fs.readdirSync(ed)) if (n.startsWith(raiz + '.') && (/\.(a|r)[\d.\-_ar]+\.mp4$/.test(n) || /\.master\.mp4(\.json)?$/.test(n))) fs.rmSync(path.join(ed, n), { force: true }); } catch { }
   }
   async function hacer4k(id) {
     const c = est.clips[id]; if (!c || c.estado !== 'aprobado') return;
@@ -192,11 +216,15 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     try {
       await subtitulador.reexportar({ proyecto: c.proyecto, mp4: destino, ancho: ANCHO4K, alto: ALTO4K, srt: false },
         { progreso: (fase, pct, eta) => { c.k4 = { ...c.k4, pct: Math.round(pct ?? c.k4.pct ?? 0), eta: eta ?? null }; } });
-      c.k4 = { estado: 'listo', mp4: destino, hecho: Date.now() };
+      // control antes de dar el 4K por bueno (y antes de subirlo): resolución, duración igual a la versión revisada, audio y vídeo
+      const m = await medir(destino, { ffmpeg: cfg?.craft?.ffmpeg, ligero: true });
+      const q = calidad.evaluar(m, { esperado: { ancho: ANCHO4K, alto: ALTO4K, duracion: c.calidad?.medidas?.duracion } });
+      if (!q.ok) throw new Error(`calidad del 4K: ${q.errores.map(x => x.texto).join('; ')}`);
+      c.k4 = { estado: 'listo', mp4: destino, hecho: Date.now(), medidas: { ancho: m.ancho, alto: m.alto, duracion: m.duracion, bytes: m.bytes } };
       borrarFuentes(c);
       bus?.emit('aviso-externo', { origen: 'Clips', urgente: false, texto: `🎬 4K listo para subir: ${path.basename(destino)}` });
       if (publicador.activo()) publicar(c);
-    } catch (e) { c.k4 = { estado: 'error', error: e.message.slice(0, 300) }; log('[lotes] 4K', id, e.message); }
+    } catch (e) { c.k4 = { estado: 'error', error: e.message.slice(0, 300), ...(fs.existsSync(destino) ? { mp4: destino } : {}) }; log('[lotes] 4K', id, e.message); }
     guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
 
@@ -232,6 +260,14 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       fs.mkdirSync(destino, { recursive: true });
       const nombre = `${c.fecha} ${c.stream} ${String(c.rank).padStart(2, '0')} - ${c.estilo}`;
       for (const [k, ext] of [['mp4', '.mp4'], ['srt', '.srt']]) if (c[k] && fs.existsSync(c[k])) { const d = path.join(destino, nombre + ext); fs.renameSync(c[k], d); c[k] = d; }
+      // la portada elegida va con el vídeo (JPG + .pcraft para retocarla); las otras se borran
+      const elegida = c.portadas?.[c.portada || 0];
+      if (elegida && fs.existsSync(elegida.jpg)) {
+        const p = { t: elegida.t };
+        for (const [k, ext] of [['jpg', '.jpg'], ['pcraft', '.pcraft']]) if (elegida[k] && fs.existsSync(elegida[k])) { p[k] = path.join(destino, `${nombre} - portada${ext}`); fs.renameSync(elegida[k], p[k]); }
+        borrar(archivosPortadas(c).filter(f => f !== elegida.jpg && f !== elegida.pcraft));
+        c.portadas = [p]; c.portada = 0;
+      }
       c.estado = 'aprobado'; c.decidido = Date.now();
       // la versión 4K para subir (salvo exportar4k: false); las fuentes se borran cuando termine
       if (conf.exportar4k !== false && c.proyecto && fs.existsSync(c.proyecto)) { guardarEst(); encolar4k(c); }
@@ -239,6 +275,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     } else if (accion === 'descartar') {
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) if (c[k]) fs.rmSync(c[k], { force: true });
       if (original) fs.rmSync(original, { force: true });
+      borrar(archivosPortadas(c)); c.portadas = [];
       c.estado = 'descartado'; c.decidido = Date.now();
     } else throw Object.assign(new Error('acción'), { status: 400 });
     guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
@@ -265,7 +302,12 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         + 'efectos = los golpes automáticos (zoom, destellos, glitch…). escenas = los cambios de escena (acercamientos a la cara). '
         + 'disenos = la composición de las cámaras por tramos: pantalla (zoom a la cabina/juego con la cámara de la cara en una VENTANITA flotante) , podcast (pantalla partida arriba cara / abajo cabina) y enfoque (la pantalla partida + los pedales en una burbuja flotante; para explicaciones); modo "quitar" (sin ninguno), "lista" (exactamente los que pide, con desde/hasta; incluye los actuales que quiera conservar), "auto" (que el director decida otra vez). '
         + 'sonidos = los efectos de sonido (whoosh, impacto, claxon…): "si" / "no". nuevoPlan = true si pide otra edición distinta / otras ideas / rehacerlo de cero. '
-        + 'gancho = SOLO el TEXTO del título que sale al principio ("-" para quitarlo, "" = igual); nunca pongas tiempos en el gancho. respuesta = una frase corta que confirma lo que vas a cambiar.',
+        + 'gancho = SOLO el TEXTO del título que sale al principio ("-" para quitarlo, "" = igual); nunca pongas tiempos en el gancho. '
+        + 'Si un comentario va con su momento ("En 0:12 …"), cambia SOLO eso y en ese momento: '
+        + 'correcciones = el subtítulo dice algo mal ("no dice X, dice Y", "se escribe Chuy") → [{t, mal: las palabras tal como salen ahora, bien: como deberían}]; '
+        + 'quitarEmojis = [t] donde sobra un emoji; sinEfectos = [{desde, hasta}] donde sobra un zoom/golpe/cambio de escena (unos 2 s alrededor si dice solo un momento); '
+        + 'rotulos = [{t, nombre, sub}] para poner un rótulo con un nombre ("pon el nombre de Don Chuy cuando lo saluda", sub = @usuario o lo que diga). '
+        + 'respuesta = una frase corta que confirma lo que vas a cambiar.',
       schema: { type: 'object', properties: {
         estilo: { type: 'string', enum: ['igual', ...Object.keys(estilos.ESTILOS)] },
         temblor: { type: 'object', properties: { modo: ENUM_IGUAL('quitar', 'tramos', 'intensidad'), intensidad: { type: 'number' }, tramos: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } }, required: ['desde', 'hasta'] } } }, required: ['modo'] },
@@ -275,6 +317,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         recorte: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } } }, quitarRecorte: { type: 'boolean' },
         disenos: { type: 'object', properties: { modo: ENUM_IGUAL('quitar', 'lista', 'auto'), lista: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string', enum: ['pantalla', 'podcast', 'enfoque'] }, desde: { type: 'number' }, hasta: { type: 'number' }, esquina: { type: 'string', enum: ['derecha', 'izquierda'] } }, required: ['tipo', 'desde', 'hasta'] } } }, required: ['modo'] },
         sonidos: ENUM_IGUAL('si', 'no'), nuevoPlan: { type: 'boolean' },
+        correcciones: { type: 'array', items: { type: 'object', properties: { t: { type: 'number' }, mal: { type: 'string' }, bien: { type: 'string' } }, required: ['mal', 'bien'] } },
+        quitarEmojis: { type: 'array', items: { type: 'number' } },
+        sinEfectos: { type: 'array', items: { type: 'object', properties: { desde: { type: 'number' }, hasta: { type: 'number' } }, required: ['desde', 'hasta'] } },
+        rotulos: { type: 'array', items: { type: 'object', properties: { t: { type: 'number' }, nombre: { type: 'string' }, sub: { type: 'string' } }, required: ['t', 'nombre'] } },
       }, required: ['temblor', 'respuesta'] } });
     const d = r?.datos || r || {};
     const aj = {};
@@ -308,6 +354,18 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         d.recorte.hasta != null ? v.aOrig(+d.recorte.hasta) : actual[1]].map(x => Math.min(dur, Math.max(0, +x.toFixed(2))));
       if (rc[1] - rc[0] >= 3) aj.recorte = rc;
     }
+    // por momentos: las correcciones de texto van en tiempos del clip original (se aplican a la transcripción); lo demás, del
+    // vídeo editado (es donde están los emojis, los golpes y los rótulos)
+    const num = x => (Number.isFinite(+x) ? +(+x).toFixed(2) : null);
+    const corr = (d.correcciones || []).filter(x => String(x.mal || '').trim() && String(x.bien || '').trim() && x.mal !== x.bien)
+      .map(x => ({ ...(num(x.t) != null ? { t: v.aOrig(num(x.t)) } : {}), mal: String(x.mal).slice(0, 120), bien: String(x.bien).slice(0, 120) }));
+    if (corr.length) aj.correcciones = corr;
+    const qe = (d.quitarEmojis || []).map(num).filter(x => x != null && x >= 0);
+    if (qe.length) aj.quitarEmojis = qe;
+    const sf = (d.sinEfectos || []).map(x => [num(x.desde), num(x.hasta)]).filter(([a1, b]) => a1 != null && b != null && b > a1);
+    if (sf.length) aj.sinEfectos = sf;
+    const ro = (d.rotulos || []).filter(x => String(x.nombre || '').trim() && num(x.t) != null).map(x => ({ t: num(x.t), nombre: String(x.nombre).slice(0, 40), sub: String(x.sub || '').slice(0, 50) }));
+    if (ro.length) aj.rotulos = ro;
     return { ajustes: aj, respuesta: String(d.respuesta || '') };
   }
 
@@ -320,19 +378,35 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     return { dA, duracion: dA + rh - rd, aOrig: t => +(t < dA ? av[0] + t : t - dA + rd).toFixed(2), aVista: o => +(o - rd + dA).toFixed(2) };
   }
 
-  async function modificar(id, { pedido, ajustes } = {}) {
+  // comentarios por momento (Revisión: "💬 en este momento"): [{ t: s del vídeo editado, texto }] → un pedido con los tiempos delante
+  const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const pedidoDeComentarios = cs => cs.filter(x => String(x?.texto || '').trim()).slice(0, 20)
+    .map(x => (Number.isFinite(+x.t) ? `En ${mmss(+x.t)} (segundo ${(+x.t).toFixed(1)}): ${String(x.texto).trim().slice(0, 300)}` : String(x.texto).trim().slice(0, 300))).join('\n');
+
+  async function modificar(id, { pedido, ajustes, comentarios } = {}) {
     const c = est.clips[id]; if (!c) throw Object.assign(new Error('no existe ese clip'), { status: 404 });
     if (!['revisar', 'error'].includes(c.estado)) throw Object.assign(new Error('el clip se está editando; espera a que termine'), { status: 409 });
+    if (Array.isArray(comentarios) && comentarios.length) pedido = [pedidoDeComentarios(comentarios), pedido].filter(x => x && String(x).trim()).join('\n');
     let aj = ajustes && typeof ajustes === 'object' ? ajustes : {}, respuesta = '';
-    if (pedido && String(pedido).trim()) ({ ajustes: aj, respuesta } = await interpretar(c, String(pedido).trim().slice(0, 1000)));
+    if (pedido && String(pedido).trim()) ({ ajustes: aj, respuesta } = await interpretar(c, String(pedido).trim().slice(0, 3000)));
     if (!Object.keys(aj).length) throw Object.assign(new Error('no entendí qué cambiar; dilo de otra forma'), { status: 400 });
     if (aj.nuevoPlan) { c.plan = null; aj = { ...aj }; delete aj.nuevoPlan; }   // el director vuelve a decidir la edición
-    const antes = c.ajustes?.temblor;
+    const antes = c.ajustes?.temblor, vAntes = vista(c), montajeAntes = claveMontaje(c);
+    for (const k of ACUMULABLES) if (Array.isArray(aj[k]) && Array.isArray(c.ajustes?.[k])) aj = { ...aj, [k]: [...c.ajustes[k], ...aj[k]] };
     c.ajustes = { ...(c.ajustes || {}), ...aj };
+    // si cambia el montaje (avance/recorte), lo marcado en tiempos del vídeo editado (lo de antes y lo de este pedido: todo se
+    // dijo mirando el vídeo de antes) se recoloca para que siga en su sitio
+    if (claveMontaje(c) !== montajeAntes) {
+      const vNueva = vista(c), mover = s => vNueva.aVista(vAntes.aOrig(s));
+      const aj2 = c.ajustes;
+      if (aj2.quitarEmojis) aj2.quitarEmojis = aj2.quitarEmojis.map(mover);
+      if (aj2.sinEfectos) aj2.sinEfectos = aj2.sinEfectos.map(([d, h]) => [mover(d), mover(h)]);
+      if (aj2.rotulos) aj2.rotulos = aj2.rotulos.map(r => ({ ...r, t: mover(r.t) }));
+    }
     // "más suave" después de "solo de 40 a 55": se quedan los tramos con la nueva intensidad
     if (aj.temblor && typeof aj.temblor === 'object' && !aj.temblor.tramos && antes?.tramos) c.ajustes.temblor = { ...antes, ...aj.temblor };
     for (const [k, v] of Object.entries(c.ajustes)) if (v === null) delete c.ajustes[k];   // null = quitar ese ajuste (vuelve a lo automático)
-    if (pedido) (c.pedidos = c.pedidos || []).push({ texto: String(pedido).slice(0, 300), respuesta, cuando: Date.now() });
+    if (pedido) (c.pedidos = c.pedidos || []).push({ texto: String(pedido).slice(0, 600), respuesta, cuando: Date.now(), ...(comentarios?.length ? { comentarios: comentarios.length } : {}) });
     c.estiloForzado = c.ajustes.estilo || c.estilo;
     c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
     return { clip: publico(c), ajustes: c.ajustes, respuesta };
@@ -360,7 +434,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     guardarEst();
   }
 
-  const publico = c => ({ ...c, original: undefined });
+  const publico = c => ({ ...c, original: undefined, cajas: undefined });
   const estado = () => ({ config: conf, enCurso, cola: [...cola], revisando,
     clips: Object.values(est.clips).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || a.rank - b.rank).map(publico),
     estilos: estilos.lista() });
@@ -417,6 +491,17 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (!c) throw Object.assign(new Error('no existe ese clip'), { status: 404 });
     if (M === 'GET' && p[3] === 'video') { if (!c.mp4 || !fs.existsSync(c.mp4)) throw Object.assign(new Error('sin vídeo'), { status: 404 }); return { __archivo: c.mp4 }; }
     if (M === 'GET' && p[3] === 'previa') { if (!c.previa || !fs.existsSync(c.previa)) throw Object.assign(new Error('sin vista previa'), { status: 404 }); return { __archivo: c.previa }; }
+    if (M === 'GET' && p[3] === 'portada') {           // /v1/revision/<id>/portada/<n>
+      const pt = c.portadas?.[+p[4] || 0];
+      if (!pt?.jpg || !fs.existsSync(pt.jpg)) throw Object.assign(new Error('sin portada'), { status: 404 });
+      return { __archivo: pt.jpg };
+    }
+    if (M === 'POST' && p[3] === 'portada') {          // elegir la portada que va con el vídeo (y al anuncio de Discord)
+      const n = Math.round(+b.indice);
+      if (!(n >= 0 && n < (c.portadas?.length || 0))) throw Object.assign(new Error('esa portada no existe'), { status: 400 });
+      c.portada = n; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+      return publico(c);
+    }
     if (M === 'POST' && ['aprobar', 'descartar', 'rehacer'].includes(p[3])) return decidir(c.id, p[3], b);
     if (M === 'POST' && p[3] === 'modificar') return modificar(c.id, b);
     if (M === 'POST' && p[3] === 'abrir') return abrir(c.id);

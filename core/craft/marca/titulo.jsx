@@ -8,9 +8,15 @@ var DURACION = typeof DURACION !== 'undefined' ? DURACION : 3.5;
 var ESCALA = typeof ESCALA !== 'undefined' ? ESCALA : 1;
 var SALIDA_PROYECTO = typeof SALIDA_PROYECTO !== 'undefined' ? SALIDA_PROYECTO : 'D:/RobotCompanion/core/craft/marca/titulo.ecproj';
 
+// colores del kit de marca (0..1); sin kit, los de LAGCTRUCKS
+var COLOR_ACENTO = typeof COLOR_ACENTO !== 'undefined' ? COLOR_ACENTO : [0.13, 0.9, 1];
+var COLOR_TEXTO = typeof COLOR_TEXTO !== 'undefined' ? COLOR_TEXTO : [1, 1, 1];
+var COLOR_FONDO = typeof COLOR_FONDO !== 'undefined' ? COLOR_FONDO : [0.02, 0.07, 0.13];
+
 var E = ESCALA, W = Math.round(1080 * E), H = Math.round(560 * E), DUR = DURACION, FPS = 60;
-var CIAN = [0.13, 0.9, 1], BLANCO = [1, 1, 1], NAVY = [0.02, 0.07, 0.13], TINTA = [0.0, 0.04, 0.09];
-var MAXW = 900 * E, TAM = 118 * E, ROT = -3;
+var CIAN = COLOR_ACENTO, BLANCO = COLOR_TEXTO, NAVY = COLOR_FONDO, TINTA = [0.0, 0.04, 0.09];
+var ANCHO_MAX = typeof ANCHO_MAX !== 'undefined' ? ANCHO_MAX : 900;      // ancho máximo del texto (px a escala 1): lo fija la zona segura del kit
+var MAXW = ANCHO_MAX * E, TAM = 118 * E, ROT = -3;
 var dos = LINEA2 !== '';
 var Y1 = dos ? H / 2 - 82 * E : H / 2, Y2 = H / 2 + 82 * E;
 var SAL = DUR - 0.32;                               // empieza la salida

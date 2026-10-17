@@ -9,6 +9,10 @@ Estación de audio (DAW): pistas, edición, mezcla con plugins, buses, automatiz
 - Posiciones en muestras, `{"seconds": x}` o `"bars_beats:5|1|000"`. Pistas por nombre o id.
 - Comprueba con `inspect_session`. `bounce_mix {path}` devuelve `lufs`, `peak_db` y `true_peak_db`: úsalos para ajustar.
 - No hay grabación sin ventana; sí importar, editar, mezclar y exportar.
+- El `maximizer` limita picos de MUESTRA: para un pico real ≤ −1 dBTP pon `ceiling: -1.5` (con −1 sale ≈ −0,8 dBTP).
+- Los parámetros del plugin van dentro de `params`: `execute mix.insert {track, slot, plugin, params: {…}}`; cambiar uno después: `mix.insert_param {track, slot, param, value}`.
+- Ducking: `automation.set_point {track, param: "volume", at: {seconds}, value: dB}` — la automatización manda sobre el fader.
+- Para voz/clip/podcast usa la receta fija `masterizar_audio` (cadena + ajuste a −14 LUFS en ≤ 4 vueltas, probada).
 
 ## Plugins incluidos (ids)
 `eq_7band` (hpf_on/hpf_freq, bandas low/mid/high), `eq_1band`, `compressor` (threshold, ratio, attack, release, knee, makeup, limiter), `expander_gate`, `de_esser`, `maximizer` (threshold, ceiling), `channel_strip` (gate+comp+eq en uno), `room_reverb`, `plate_reverb`, `mod_delay`, `chorus`, `flanger`, `phaser`, `saturator`, `lofi`, `pitch_shifter`, `gain`, `trim`, `dither`; instrumentos `subtractive_synth`, `drum_synth`, `sampler`.

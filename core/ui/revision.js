@@ -30,6 +30,13 @@ Object.assign(I18N.dic.en, {
   'montando el avance': 'building the teaser', 'montando en FilmCraft': 'assembling in FilmCraft', 'cambios de escena': 'scene changes', 'vibración': 'shake',
   'subtítulos': 'subtitles', 'título, marca y emojis': 'title, brand and emojis', 'exportando': 'exporting', 'abriendo el proyecto': 'opening the project',
   'avance': 'teaser', 'al principio': 'at the start', 'Cambios': 'Changes', 'vibración': 'shake', 'quitada': 'removed', 'solo': 'only', 'al': 'at',
+  'Calidad': 'Quality', 'todo bien': 'all good', '{n} error(es)': '{n} error(s)', '{n} aviso(s)': '{n} warning(s)', 'corregido solo': 'fixed automatically',
+  'audio de estudio': 'studio audio', 'Portada': 'Cover', 'elige la que va con el vídeo': 'pick the one that goes with the video', 'Portada elegida': 'Cover selected',
+  'Comentario en este momento del vídeo (p. ej.: el subtítulo dice Juan y es Chuy · sobra este emoji · sin zoom aquí · pon el nombre de Don Chuy)':
+    'Comment at this moment of the video (e.g.: the subtitle says Juan but it is Chuy · this emoji is too much · no zoom here · show Don Chuy’s name)',
+  '💬 En este momento': '💬 At this moment', 'Enviar {n} comentario(s)': 'Send {n} comment(s)', 'Escribe el comentario': 'Write the comment',
+  'Se rehace con tus comentarios': 'Being redone with your comments', 'no encontré para corregir': 'could not find to fix', 'rótulos': 'lower thirds',
+  'correcciones': 'corrections', 'emojis quitados': 'emojis removed', 'sin efectos': 'no effects', 'pico': 'peak',
 });
 
 const RV_ESTADO = { editando: ['aviso', 'editando…'], 'en cola': ['', 'en cola'], revisar: ['ok', 'revisar'], aprobado: ['ok', 'aprobado'], descartado: ['', 'descartado'], error: ['mal', 'error'] };
@@ -43,8 +50,41 @@ function RV_ajustes(aj) {                                // resumen de los cambi
   else if (tb) out.push(`${tr('vibración')}${tb.tramos ? ` ${tr('solo')} ${tb.tramos.map(([d, h]) => `${RV_mmss(d)}–${RV_mmss(h)}`).join(', ')}` : ''}${tb.intensidad != null ? ` ${tr('al')} ${tb.intensidad} %` : ''}`);
   if (Array.isArray(aj.avance)) out.push(`${tr('avance')} ${RV_mmss(aj.avance[0])}–${RV_mmss(aj.avance[1])} ${tr('al principio')}`);
   if (Array.isArray(aj.recorte)) out.push(`${tr('recorte')} ${RV_mmss(aj.recorte[0])}–${RV_mmss(aj.recorte[1])} ${tr('del original')}`);
-  for (const [k, v] of Object.entries(aj)) if (!['temblor', 'avance', 'recorte'].includes(k)) out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : v}`);
+  if (aj.correcciones?.length) out.push(`${tr('correcciones')}: ${aj.correcciones.map(x => `${x.mal} → ${x.bien}`).join(', ')}`);
+  if (aj.rotulos?.length) out.push(`${tr('rótulos')}: ${aj.rotulos.map(x => `${x.nombre} ${RV_mmss(x.t)}`).join(', ')}`);
+  if (aj.quitarEmojis?.length) out.push(`${tr('emojis quitados')}: ${aj.quitarEmojis.map(RV_mmss).join(', ')}`);
+  if (aj.sinEfectos?.length) out.push(`${tr('sin efectos')}: ${aj.sinEfectos.map(([d, h]) => `${RV_mmss(d)}–${RV_mmss(h)}`).join(', ')}`);
+  for (const [k, v] of Object.entries(aj)) if (!['temblor', 'avance', 'recorte', 'correcciones', 'rotulos', 'quitarEmojis', 'sinEfectos'].includes(k)) out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : Array.isArray(v) ? v.length : v}`);
   return out.join(' · ');
+}
+// control de calidad del clip: chip (OK / avisos / errores) y, desplegado, cada fallo con un enlace a su momento del vídeo
+function RV_calidad(c) {
+  const q = c.calidad; if (!q) return '';
+  const med = q.medidas?.lufs != null ? ` · ${q.medidas.lufs.toFixed(1)} LUFS · ${tr('pico')} ${q.medidas.picoReal?.toFixed(1) ?? '—'} dBTP` : '';
+  const chip = q.errores?.length ? `<span class="chip mal">${tr('Calidad')}: ${tr('{n} error(es)', { n: q.errores.length })}</span>`
+    : q.avisos?.length ? `<span class="chip aviso">${tr('Calidad')}: ${tr('{n} aviso(s)', { n: q.avisos.length })}</span>` : `<span class="chip ok">${tr('Calidad')}: ${tr('todo bien')}</span>`;
+  const items = [...(q.errores || []).map(x => ['mal', x]), ...(q.avisos || []).map(x => ['aviso', x])];
+  const audio = c.audioPro ? `<span class="chip">🎧 ${tr('audio de estudio')}</span>` : '';
+  const extra = `${q.arreglado?.length ? `<small class="tenue">${tr('corregido solo')}: ${esc(q.arreglado.join(', '))}</small>` : ''}${c.noCorregidas?.length ? `<small class="rv-error">${tr('no encontré para corregir')}: ${esc(c.noCorregidas.map(x => x.mal).join(', '))}</small>` : ''}`;
+  if (!items.length) return `<div class="rv-calidad flex" style="gap:6px;flex-wrap:wrap;align-items:center">${chip}${audio}<small class="tenue">${esc(med.replace(/^ · /, ''))}</small>${extra}</div>`;
+  return `<details class="rv-calidad"><summary>${chip}${audio}<small class="tenue">${esc(med.replace(/^ · /, ''))}</small></summary><ul>${items.map(([cls, x]) =>
+    `<li class="${cls}">${x.s != null ? `<button class="rv-ir" data-a="ir" data-t="${x.s}">${RV_mmss(x.s)}</button> ` : ''}${esc(x.texto)}</li>`).join('')}</ul>${extra}</details>`;
+}
+// portadas hechas con PhotoCraft: la elegida va con el vídeo al aprobar y en el anuncio de Discord
+function RV_portadas(c) {
+  if (!c.portadas?.length) return '';
+  const elegir = c.estado === 'revisar' || c.estado === 'aprobado' && c.portadas.length > 1;
+  return `<div class="rv-portadas">${c.portadas.map((p, i) => `<button class="rv-portada${i === (c.portada || 0) ? ' si' : ''}" ${elegir ? `data-a="portada" data-i="${i}"` : 'disabled'} title="${esc(tr('Portada'))} ${i + 1}"><img alt="" data-portada="${esc(c.id)}" data-i="${i}"></button>`).join('')}
+    ${c.portadas.length > 1 && c.estado === 'revisar' ? `<small>${tr('Portada')}: ${tr('elige la que va con el vídeo')}</small>` : ''}</div>`;
+}
+// comentarios anclados a un momento del vídeo (se acumulan aquí y se mandan juntos)
+function RV_comentar(c, pendientes = []) {
+  return `<div class="rv-comentar">
+    <div class="rv-fila"><input type="text" class="rv-ctexto" placeholder="${esc(tr('Comentario en este momento del vídeo (p. ej.: el subtítulo dice Juan y es Chuy · sobra este emoji · sin zoom aquí · pon el nombre de Don Chuy)'))}">
+      <button class="btn" data-a="comentar">${tr('💬 En este momento')}</button></div>
+    <div class="rv-clista">${pendientes.map((x, i) => `<div><button class="rv-ir" data-a="ir" data-t="${x.t}">${RV_mmss(x.t)}</button><span>${esc(x.texto)}</span><button class="x" data-a="quitarcom" data-i="${i}" title="✕">✕</button></div>`).join('')}</div>
+    ${pendientes.length ? `<div class="rv-fila"><button class="btn pri" data-a="enviarcom">${tr('Enviar {n} comentario(s)', { n: pendientes.length })}</button></div>` : ''}
+  </div>`;
 }
 // tiempos del vídeo editado que ves (avance delante, recortado) ↔ tiempos del clip original (lo que se guarda); igual que vista() en lotes.js
 function RV_vista(c) {
@@ -124,13 +164,14 @@ VISTAS.revision = {
       }
     };
     v.oninput = e => { if (e.target.matches('.rv-int')) e.target.parentElement.querySelector('.rv-intv').textContent = e.target.value + ' %'; };
+    v.onkeydown = e => { if (e.key === 'Enter' && e.target.matches('.rv-ctexto')) { e.preventDefault(); e.target.closest('.rv-comentar').querySelector('[data-a="comentar"]').click(); } };
     await this.cargar();
     this.reloj = setInterval(() => this.cargar(true), 3000);
   },
   salir() { clearInterval(this.reloj); },
   async cargar(silencio) {
     let L; try { L = await api('GET', '/revision'); } catch (e) { if (!silencio) aviso(e.message, true); return; }
-    const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado, c.k4?.estado])) + this.filtro;
+    const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado, c.k4?.estado, c.portada, c.portadas?.length])) + this.filtro;
     this.L = L;
     this.pintarEstado(L);
     this.pintarProgreso(L);
@@ -185,11 +226,14 @@ VISTAS.revision = {
           ${c.ajustes && Object.keys(c.ajustes).length ? `<div class="rv-ajustes">${tr('Cambios')}: ${esc(RV_ajustes(c.ajustes))}</div>` : ''}
           ${c.pedidos?.at(-1)?.respuesta ? `<div class="rv-respuesta">${esc(c.pedidos.at(-1).respuesta)}</div>` : ''}
           ${c.retocado ? `<span class="chip">${tr('retocado a mano')}</span>` : ''}
+          ${listo ? RV_calidad(c) : ''}
+          ${listo ? RV_portadas(c) : ''}
           ${c.estado === 'aprobado' ? `<div class="rv-k4 flex" data-k4="${esc(c.id)}">${RV_k4(c)}</div>` : ''}
           ${c.estado === 'revisar' || c.estado === 'error' ? `<div class="rv-acc flex">
             ${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
             <select class="rv-estilo"><option value="">${tr('Otro estilo')}…</option>${opciones}</select><button class="btn" data-a="rehacer">${tr('Rehacer')}</button>
-            <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button></div>${RV_cambios(c)}` : ''}
+            <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button></div>
+            ${c.estado === 'revisar' ? `<div data-coms="${esc(c.id)}">${RV_comentar(c, this.coms?.get(c.id))}</div>` : ''}${RV_cambios(c)}` : ''}
         </div></div>`;
     }).join('')}</div>`).join('');
   },
@@ -198,6 +242,15 @@ VISTAS.revision = {
       const id = img.dataset.previa, k = 'p:' + id + (this.L.clips.find(c => c.id === id)?.editado || '');
       try { if (!this.urls.has(k)) this.urls.set(k, await RV_blob(`/revision/${encodeURIComponent(id)}/previa`)); img.src = this.urls.get(k); } catch { }
     }
+    for (const img of $$('[data-portada]', this.v)) {
+      const id = img.dataset.portada, c = this.L.clips.find(x => x.id === id), k = `po:${id}:${img.dataset.i}:${c?.editado || ''}:${c?.estado || ''}`;
+      try { if (!this.urls.has(k)) this.urls.set(k, await RV_blob(`/revision/${encodeURIComponent(id)}/portada/${img.dataset.i}`)); img.src = this.urls.get(k); } catch { }
+    }
+  },
+  // repinta solo la caja de comentarios de una tarjeta (sin tocar el vídeo que se está viendo)
+  pintarComs(id) {
+    const caja = $(`[data-coms="${CSS.escape(id)}"]`, this.v); if (!caja) return;
+    caja.innerHTML = RV_comentar(this.L.clips.find(c => c.id === id), this.coms.get(id));
   },
   async clic(e) {
     const f = e.target.closest('[data-f]');
@@ -218,6 +271,27 @@ VISTAS.revision = {
     if (a.dataset.a === 'marcar') {                      // ⏱ = el momento en que está el vídeo
       const vid = $('video', tarjeta); if (!vid) return aviso('Dale a ▶ primero', true);
       $('.rv-' + a.dataset.campo, tarjeta).value = RV_mmss(vid.currentTime);
+      return;
+    }
+    if (a.dataset.a === 'ir') {                          // un fallo de calidad o un comentario → ese momento del vídeo
+      const vid = $('video', tarjeta); if (!vid) return aviso('Dale a ▶ primero', true);
+      vid.currentTime = Math.max(0, +a.dataset.t - 0.5); vid.pause();
+      return;
+    }
+    this.coms = this.coms || new Map();
+    if (a.dataset.a === 'comentar') {                    // 💬 = el comentario queda anclado al momento que se ve
+      const vid = $('video', tarjeta); if (!vid) return aviso('Dale a ▶ primero', true);
+      const caja = $('.rv-ctexto', tarjeta), texto = caja.value.trim(); if (!texto) return aviso('Escribe el comentario', true);
+      vid.pause();
+      this.coms.set(id, [...(this.coms.get(id) || []), { t: +vid.currentTime.toFixed(1), texto }].sort((x, y) => x.t - y.t));
+      this.pintarComs(id); $('.rv-ctexto', tarjeta)?.focus();
+      return;
+    }
+    if (a.dataset.a === 'quitarcom') { const l = [...(this.coms.get(id) || [])]; l.splice(+a.dataset.i, 1); this.coms.set(id, l); return this.pintarComs(id); }
+    if (a.dataset.a === 'portada') {
+      a.disabled = true;
+      try { await api('POST', `/revision/${encodeURIComponent(id)}/portada`, { indice: +a.dataset.i }); aviso('Portada elegida'); this.firma = null; await this.cargar(); }
+      catch (er) { aviso(er.message, true); a.disabled = false; }
       return;
     }
     // qué se manda: acción → [ruta, cuerpo]
@@ -252,11 +326,16 @@ VISTAS.revision = {
       }
       ruta = 'modificar'; cuerpo = { ajustes: { recorte } };
     }
+    if (ruta === 'enviarcom') {
+      const comentarios = this.coms.get(id) || []; if (!comentarios.length) return;
+      ruta = 'modificar'; cuerpo = { comentarios }; aviso('Entendiendo el pedido…');
+    }
     if (ruta === 'abrir') aviso('Abriendo FilmCraft…');
     a.disabled = true;
     try {
       const r = await api('POST', `/revision/${encodeURIComponent(id)}/${ruta}`, cuerpo);
-      aviso(ruta === 'modificar' ? (r?.respuesta || 'Se rehace con tus cambios')
+      if (cuerpo.comentarios) this.coms.delete(id);
+      aviso(ruta === 'modificar' ? (r?.respuesta || (cuerpo.comentarios ? 'Se rehace con tus comentarios' : 'Se rehace con tus cambios'))
         : { aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado', abrir: 'Abierto en FilmCraft', exportar: 'Exportando lo retocado', '4k': '4K en cola' }[ruta]);
       if (ruta === 'abrir') { a.disabled = false; return; }
       this.firma = null; await this.cargar();

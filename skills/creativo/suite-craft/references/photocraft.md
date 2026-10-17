@@ -8,6 +8,10 @@ Editor de imagen por capas: retoque, composición, miniaturas, quitar fondos, te
 - Cada `command_run` es un paso de historial; `edit.undo` lo deshace. Antes de experimentar: `image.duplicate {}` o `history.newDocument {}` y trabaja en la copia.
 - `doc_save` a `.png/.jpg/.webp` **aplana** (avisa "layers flattened"). Guarda también `.pcraft` (nativo, con capas) o `.psd` si el usuario querrá retocar después.
 - Los ids de capa los devuelve cada comando (`{"layer": 4}`): úsalos, no los adivines.
+- `doc_place {center}` es un punto `[x, y]` (no `true`). `select.rect {feather}` NO difumina: haz `select.rect` y luego `select.modify.feather {radius}`. Un relleno (`layer.newFillLayer.solidColor`) con selección activa la usa de máscara; su opacidad con `layer.setProps {layer, opacity: 0..1}`.
+- `layer.layerStyle.replace` va así: `{layer, effects: [{kind: "stroke", params: {…}}, {kind: "dropShadow", params: {…}}]}`.
+- `type.create` devuelve `bounds` [x0, y0, x1, y1]: si el texto no cabe, `edit.transform {layer, scaleX, scaleY}` (en %, alrededor de su centro).
+- Para portadas/miniaturas usa la receta fija `hacer_miniatura` (todo esto ya resuelto).
 
 ## Flujo profesional
 1. `doc_new {width, height}` o `doc_open {path}`.

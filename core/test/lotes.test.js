@@ -8,7 +8,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { crearLotes } = require('../craft/lotes');
 
-function montar() {
+function montar({ medida, conPortadas = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotes-'));
   const salida = path.join(dir, 'videos');
   const bus = new EventEmitter(), avisos = [];
@@ -38,9 +38,22 @@ function montar() {
     const b = path.join(a.carpeta, a.nombre);
     for (const ext of ['.mp4', '.srt', '.png', '.fcproj']) fs.writeFileSync(b + ext, 'x');
     return { texto: 'ok', imagenes: [], datos: { mp4: b + '.mp4', srt: b + '.srt', previa: b + '.png', proyecto: b + '.fcproj', gancho: 'LA LLORONA', dudas: [{ texto: 'MIGUEL', s: 3 }], escenas: [{ tipo: 'corte', desde: 4, hasta: 6 }], emojis: 2,
-      plan: a.plan || { origen: 'modelo', n: subtitulos.length, disenos: [{ tipo: 'pantalla', desde: 10, hasta: 20 }], escenas: [], sonidos: [{ t: 10, sonido: 'whoosh' }], emojis: [] }, sonidos: 1 } };
+      plan: a.plan || { origen: 'modelo', n: subtitulos.length, disenos: [{ tipo: 'pantalla', desde: 10, hasta: 20 }], escenas: [], sonidos: [{ t: 10, sonido: 'whoosh' }], emojis: [] }, sonidos: 1,
+      fuente: a.video, calidad: { ok: true, errores: [], avisos: [{ tipo: 'lectura', texto: 'rápido' }], medidas: { duracion: 180, lufs: -14 } } } };
   } };
-  const generarJSON = async ({ prompt }) => (/Lo que pide: "quita la ventanita/.test(prompt)
+  // portadas falsas: escribe los archivos como haría PhotoCraft
+  const portadas = [];
+  const miniaturas = conPortadas ? { async deClip(o) {
+    portadas.push(o);
+    return [0, 1, 2].map(i => { const jpg = path.join(o.carpeta, `${o.nombre} - portada ${i + 1}.jpg`), pcraft = jpg.replace(/\.jpg$/, '.pcraft'); fs.writeFileSync(jpg, 'j'); fs.writeFileSync(pcraft, 'p'); return { t: 10 * (i + 1), variante: i, jpg, pcraft }; });
+  } } : null;
+  const medidas = [];
+  const medir = async (f, o) => { medidas.push([f, o]); return { video: true, audio: true, ancho: 2160, alto: 3840, duracion: 180, bytes: 9, ...(medida || {}) }; };
+  const prompts = [];
+  const generarJSON = async ({ prompt }) => (prompts.push(prompt), /Lo que pide: "En 0:12/.test(prompt)
+    ? { datos: { temblor: { modo: 'igual' }, correcciones: [{ t: 12, mal: 'compa Juan', bien: 'compa Chuy' }], quitarEmojis: [30], sinEfectos: [{ desde: 44, hasta: 47 }],
+      rotulos: [{ t: 12, nombre: 'Don Chuy', sub: '@donchuy' }], respuesta: 'Corrijo el nombre, quito el emoji y el zoom, y pongo el rótulo.' } }
+    : /Lo que pide: "quita la ventanita/.test(prompt)
     ? { datos: { temblor: { modo: 'igual' }, disenos: { modo: 'quitar' }, sonidos: 'no', respuesta: 'Sin ventanita ni sonidos.' } }
     : /Lo que pide: "dame otras ideas/.test(prompt)
     ? { datos: { temblor: { modo: 'igual' }, nuevoPlan: true, respuesta: 'Otra edición.' } }
@@ -51,8 +64,8 @@ function montar() {
     : { datos: { estilo: /llorona/i.test(prompt) ? 'terror' : 'pop' } });
   fs.mkdirSync(path.join(dir, 'craft'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'craft', 'lotes.json'), JSON.stringify({ salida, fuentes: [{ id: 'lagc', nombre: 'LAGCTRUCKS', tipo: 'ssh', host: 'pi', ruta: '~/s', perfil: 'lagctrucks', minClipSeg: 30, minStreamSeg: 600 }] }));
-  const l = crearLotes({ cfg: { dir }, bus, subtitulador, generarJSON, ejecutar });
-  return { l, dir, salida, avisos, llamadas, subtitulos, subtitulador, manif };
+  const l = crearLotes({ cfg: { dir }, bus, subtitulador, generarJSON, ejecutar, medir, miniaturas });
+  return { l, dir, salida, avisos, llamadas, subtitulos, subtitulador, manif, portadas, medidas, prompts };
 }
 const esperar = async (l, fin = 5000) => { const t = Date.now(); while (Date.now() - t < fin) { const e = l.estado(); if (!e.enCurso && !e.cola.length) return e; await new Promise(r => setTimeout(r, 10)); } throw new Error('la cola no terminó'); };
 
@@ -188,4 +201,70 @@ test('lotes: clip pedido a mano (un tramo del stream): se descarga solo ese tram
   const a = subtitulos.filter(x => !x.soloTranscribir && x.video.endsWith('04_05400_300s.mp4')).at(-1);
   assert.deepStrictEqual(a.disenos, [{ tipo: 'enfoque', desde: 0, hasta: 300 }]); assert.strictEqual(a.efectos, 'no');
   assert.strictEqual(l.estado().clips.find(x => x.id === c.id).estado, 'revisar');
+});
+
+test('lotes: portadas al editar (PhotoCraft), se elige una en Revisión y va con el vídeo al aprobar; descartar las borra', async () => {
+  const { l, portadas, salida } = montar({ conPortadas: true });
+  await l.revisar(); let e = await esperar(l);
+  const [a, b] = e.clips;
+  assert.strictEqual(a.portadas.length, 3); assert.strictEqual(a.portada, 0);
+  assert.strictEqual(portadas[0].texto, 'LA LLORONA', 'el gancho va en la portada');
+  assert.ok(portadas[0].video.endsWith('01.mp4'), 'del vídeo sin nada encima');
+  assert.strictEqual(portadas[0].kit.id, 'lagctrucks');
+  assert.ok((await l.http('GET', ['v1', 'revision', a.id, 'portada', '2'])).__archivo.endsWith('portada 3.jpg'));
+  await assert.rejects(l.http('POST', ['v1', 'revision', a.id, 'portada'], { indice: 7 }), /no existe/);
+  assert.strictEqual((await l.http('POST', ['v1', 'revision', a.id, 'portada'], { indice: 1 })).portada, 1);
+  const elegida = a.portadas[1].jpg, otra = a.portadas[0].jpg;
+  const ap = l.decidir(a.id, 'aprobar');
+  assert.strictEqual(ap.portadas.length, 1);
+  assert.ok(ap.portadas[0].jpg.includes(path.join('LAGCTRUCKS', 'aprobados')) && ap.portadas[0].jpg.endsWith(' - portada.jpg') && fs.existsSync(ap.portadas[0].jpg));
+  assert.ok(fs.existsSync(ap.portadas[0].pcraft), 'con su .pcraft para retocarla');
+  assert.ok(!fs.existsSync(elegida) && !fs.existsSync(otra), 'las demás se borran');
+  const deB = b.portadas.map(p => p.jpg);
+  l.decidir(b.id, 'descartar');
+  assert.ok(deB.every(f => !fs.existsSync(f)));
+  await esperar(l);
+  assert.ok(salida);
+});
+
+test('lotes: el 4K pasa control de calidad antes de darlo por bueno y de publicarlo', async () => {
+  const { l, medidas } = montar({ medida: { ancho: 1080, alto: 1920 } });
+  await l.revisar(); await esperar(l);
+  const a = l.estado().clips[0];
+  l.decidir(a.id, 'aprobar'); const e = await esperar(l);
+  const ya = e.clips.find(c => c.id === a.id);
+  assert.strictEqual(ya.k4.estado, 'error'); assert.match(ya.k4.error, /calidad del 4K: resolución 1080×1920/);
+  assert.ok(!ya.publicado, 'no se publica un 4K malo');
+  assert.strictEqual(medidas.at(-1)[1].ligero, true);
+  // duración distinta de la versión revisada (180 s) → exportación cortada
+  const m2 = montar({ medida: { duracion: 95 } });
+  await m2.l.revisar(); await esperar(m2.l);
+  const b = m2.l.estado().clips[0]; m2.l.decidir(b.id, 'aprobar'); const e2 = await esperar(m2.l);
+  assert.match(e2.clips.find(c => c.id === b.id).k4.error, /dura 95\.0 s y debería durar 180\.0 s/);
+});
+
+test('lotes: comentarios por momento → correcciones (al original), emojis/efectos/rótulos (al vídeo editado); se acumulan y siguen en su sitio si cambia el montaje', async () => {
+  const { l, subtitulos, prompts } = montar();
+  await l.revisar(); await esperar(l);
+  const c = l.estado().clips[0];
+  await l.modificar(c.id, { ajustes: { avance: [45, 50] } }); await esperar(l);   // 5 s de avance delante: 0:12 editado = 7 s del original
+  const r = await l.modificar(c.id, { comentarios: [{ t: 12, texto: 'no dice compa Juan, dice compa Chuy; pon su nombre' }, { t: 30, texto: 'sobra el emoji' }, { t: 45.5, texto: 'quita el zoom' }] });
+  assert.match(prompts.at(-1), /En 0:12 \(segundo 12\.0\): no dice compa Juan/);
+  assert.match(prompts.at(-1), /En 0:30 \(segundo 30\.0\): sobra el emoji/);
+  assert.deepStrictEqual(r.ajustes.correcciones, [{ t: 7, mal: 'compa Juan', bien: 'compa Chuy' }]);
+  assert.deepStrictEqual(r.ajustes.quitarEmojis, [30]);
+  assert.deepStrictEqual(r.ajustes.sinEfectos, [[44, 47]]);
+  assert.deepStrictEqual(r.ajustes.rotulos, [{ t: 12, nombre: 'Don Chuy', sub: '@donchuy' }]);
+  await esperar(l);
+  const ult = subtitulos.at(-1);
+  assert.deepStrictEqual(ult.correcciones, [{ t: 7, mal: 'compa Juan', bien: 'compa Chuy' }]);
+  assert.deepStrictEqual(ult.rotulos, [{ t: 12, nombre: 'Don Chuy', sub: '@donchuy' }]);
+  // otro comentario igual: se ACUMULA (no pisa lo anterior)
+  await l.modificar(c.id, { comentarios: [{ t: 12, texto: 'otra vez' }] }); await esperar(l);
+  assert.strictEqual(subtitulos.at(-1).correcciones.length, 2); assert.strictEqual(subtitulos.at(-1).rotulos.length, 2);
+  // quitar el avance (5 s): lo marcado en el vídeo editado se corre 5 s hacia atrás; las correcciones (tiempo original) no cambian
+  await l.modificar(c.id, { ajustes: { avance: null } }); await esperar(l);
+  const fin = subtitulos.at(-1);
+  assert.deepStrictEqual(fin.quitarEmojis, [25, 25]); assert.deepStrictEqual(fin.sinEfectos[0], [39, 42]);
+  assert.strictEqual(fin.rotulos[0].t, 7); assert.strictEqual(fin.correcciones[0].t, 7);
 });

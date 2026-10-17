@@ -1377,4 +1377,20 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .rv-k4 { gap: 8px; flex-wrap: wrap; align-items: center; }
 .rv-k4 .rv-barra { width: 140px; }
 .rv-ruta { word-break: break-all; font-size: 11.5px; }
+/* control de calidad, portadas y comentarios por momento */
+.rv-calidad { font-size: 12.5px; }
+.rv-calidad > summary { cursor: pointer; list-style: none; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.rv-calidad > summary::-webkit-details-marker { display: none; }
+.rv-calidad ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.rv-calidad li.mal { color: var(--mal); } .rv-calidad li.aviso { color: var(--aviso); }
+.rv-ir { background: none; border: 0; padding: 0; color: var(--acento); cursor: pointer; font: inherit; text-decoration: underline; }
+.rv-portadas { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; }
+.rv-portadas small { width: 100%; color: var(--txt-2); }
+.rv-portada { width: 54px; aspect-ratio: 9 / 16; padding: 0; border: 2px solid var(--borde-2); border-radius: 6px; overflow: hidden; background: #000; cursor: pointer; }
+.rv-portada img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rv-portada.si { border-color: var(--acento); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 35%, transparent); }
+.rv-comentar .rv-fila input[type=text].rv-ctexto { flex: 1; min-width: 160px; width: auto; }
+.rv-clista { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; font-size: 12.5px; }
+.rv-clista div { display: flex; gap: 6px; align-items: baseline; }
+.rv-clista .x { background: none; border: 0; color: var(--txt-2); cursor: pointer; padding: 0 2px; }
 @media (max-width: 600px) { .rv-clip { grid-template-columns: 1fr; } .rv-medio { max-height: 70vh; } }

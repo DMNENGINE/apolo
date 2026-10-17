@@ -4,20 +4,35 @@ description: Usa las apps creativas de la suite ArtCraft instaladas en el PC (Fi
 license: MIT
 metadata:
   apolo:
-    version: 1.1.0
+    version: 1.2.0
     autor: DMN / APOLO
-    disparadores: [vídeo, video, clip, clips, subtítulos, subtitulos, subtitula, subtitular, tiktok, short, shorts, reel, reels, edita el video, edita este video, miniatura, thumbnail, foto, fotos, retoca, recorta, logo, svg, vector, plano, planos, cad, dxf, dwg, autocad, pieza, presentación, diapositivas, hoja de cálculo, excel, pdf, audio, podcast, mezcla, filmcraft, photocraft, cadcraft, lightcraft, vectorcraft, effectcraft, figcraft, designcraft, deckcraft, wordcraft, gridcraft, pdfcraft, soundcraft, artcraft]
+    disparadores: [vídeo, video, clip, clips, subtítulos, subtitulos, subtitula, subtitular, tiktok, short, shorts, reel, reels, edita el video, edita este video, miniatura, thumbnail, portada, foto, fotos, retoca, recorta, logo, svg, vector, plano, planos, cad, dxf, dwg, autocad, pieza, presentación, diapositivas, hoja de cálculo, excel, pdf, audio, podcast, mezcla, masteriza, lufs, rótulo, rotulo, lower third, título animado, marca, kit de marca, colores de la marca, calidad, filmcraft, photocraft, cadcraft, lightcraft, vectorcraft, effectcraft, figcraft, designcraft, deckcraft, wordcraft, gridcraft, pdfcraft, soundcraft, artcraft]
 ---
 
 # Suite ArtCraft (apps creativas del PC)
 
 Cada app instalada es **una herramienta tuya** con su nombre: `filmcraft`, `photocraft`, `cadcraft`… Trabajan **sin ventana**: abres/creas, editas con comandos y **exportas a un archivo**; el usuario ve el resultado abriendo ese archivo. Úsalas siempre que haya que *hacer* algo de vídeo, foto, diseño, CAD, documentos o audio — no le expliques al usuario cómo hacerlo a mano.
 
+## Nivel profesional: primero las RECETAS FIJAS
+Para lo que se repite hay herramientas con la receta ya probada con las apps reales: salen igual cada vez, más rápido y sin errores a mitad. **Úsalas antes que montar comandos a mano**; la app suelta solo para lo que no cubren.
+
+| Pide… | Receta fija |
+|---|---|
+| colores, fuente, letrero, hashtags, llamada a seguir de un canal | **`kit_marca`** — léelo SIEMPRE antes de diseñar cualquier pieza y usa SOLO sus colores y su fuente |
+| vídeo/clip para TikTok, Short, Reel | **`subtitular_video`** (con `perfil` = kit: marca, zona segura, audio de estudio y control de calidad incluidos) |
+| miniatura, portada | **`hacer_miniatura`** (PhotoCraft: franja difuminada, título del kit con contorno y sombra, letrero; con un vídeo elige solo las caras más expresivas) |
+| limpiar/masterizar audio, voz, podcast, música de fondo | **`masterizar_audio`** (SoundCraft: cadena de voz + máster a −14 LUFS / −1 dBTP; con `musica`, ducking automático bajo la voz) |
+| rótulo con un nombre, lower third | **`rotulo_animado`** (EffectCraft, WebM con transparencia) |
+| título animado de entrada | **`titulo_animado`** (EffectCraft, WebM con transparencia) |
+| ¿está bien el vídeo/audio? | **`revisar_calidad`** — pásalo SIEMPRE antes de dar por terminado un vídeo o audio hecho a mano |
+
+**Control de calidad (obligatorio al entregar):** sonoridad −14 LUFS ±0,5 (podcast −16) y pico real ≤ −1 dBTP; nada importante fuera de la zona segura de las apps verticales (lados 4 %, arriba 6 %, abajo 12 %, y la columna de botones a la derecha entre el 42 % y el 88 % de la altura); nada que se pise; subtítulos que dé tiempo a leer (≤ 21 letras/s); sin negros, congelados ni silencios largos. Si `revisar_calidad` o el resultado de `subtitular_video` dicen errores, ARRÉGLALOS antes de entregar (o díselo claramente al usuario).
+
 | Pide… | App |
 |---|---|
 | editar/subtitular un vídeo, TikTok, Short, Reel | **`subtitular_video`** (receta completa) o `filmcraft` |
-| animación, títulos animados, motion graphics | `effectcraft` |
-| retocar, recortar, quitar fondo, miniatura | `photocraft` |
+| animación, títulos animados, motion graphics | `rotulo_animado` / `titulo_animado`, o `effectcraft` |
+| retocar, recortar, quitar fondo, miniatura | `hacer_miniatura` o `photocraft` |
 | ajustar color/exposición, muchas fotos a la vez | `lightcraft` |
 | logo, icono, SVG | `vectorcraft` |
 | plano, pieza, cotas, DXF/DWG | `cadcraft` |
@@ -27,7 +42,7 @@ Cada app instalada es **una herramienta tuya** con su nombre: `filmcraft`, `phot
 | documento de texto | `wordcraft` |
 | hoja de cálculo, fórmulas, gráficos | `gridcraft` |
 | leer/editar/unir/dividir PDF | `pdfcraft` |
-| audio, mezcla, podcast | `soundcraft` |
+| audio, mezcla, podcast | `masterizar_audio` o `soundcraft` |
 
 ## Guías profesionales (LÉELAS)
 Cada app tiene su guía en `references/<app>.md` (p. ej. `references/photocraft.md`): reglas verificadas de la app, una receta probada de principio a fin, los comandos clave y los **estándares profesionales** del oficio (tamaños, LUFS, sangrados, rejillas, tipografía) + checklist de entrega. **Antes de la primera tarea con una app en una conversación, léela con `leer_recurso_skill {"nombre":"suite-craft","ruta":"references/<app>.md"}`** y trabaja con ese nivel: no entregues nada sin pasar su checklist.
@@ -50,7 +65,10 @@ Usa **`subtitular_video`** — hace todo en un paso: transcribe palabra a palabr
 - **Animación del texto** (`entrada`): pop, rebote, subir, fundido, caida, deslizar, giro, zoom, glitch, sacudida, ninguna.
 - **Look de color** (`look`): vivo, calido, frio, cine, terror, retro, bn (terror y retro lo traen sus estilos; `look: false` lo quita). Úsalo con cabeza: cambia el color de todo el vídeo.
 - **Cambios de escena**: `escenas: "auto"` elige 2–3 frases fuertes, el tipo según el tono y detecta la cara sola (detector YuNet). A mano con `enfoques: [{tipo, desde, hasta, zona, hacia}]` (frase COMPLETA; tiempos con `soloTranscribir`). Tipos: `acercar` (zoom suave), `escalones` (3 golpes secos, cómico), `corte` (salto con fogonazo), `lento` (se sigue acercando, serio), `giro` (plano inclinado, loco), `recorrido` (cara → `hacia` la cabina), `drama` (lento + blanco y negro, triste), `temblor` (cámara temblando, gritos). 1–3 por clip y separadas; no las pongas en los 3 primeros segundos (gancho) ni en los 5 últimos.
-- **Perfil** `perfil: "lagctrucks"`: subtítulos en los pedales, marca, "Sígueme para más", contexto para Whisper y zonas `cara`, `cabina`, `pedales`. Úsalo siempre en los clips de LAGCTRUCKS.
+- **Perfil = kit de marca** `perfil: "lagctrucks"`: subtítulos en los pedales, letrero, "Sígueme para más", contexto para Whisper, zonas `cara`, `cabina`, `pedales`, colores del título animado, zona segura (los textos no se meten bajo los botones) y **audio de estudio** con SoundCraft. Úsalo siempre en los clips de LAGCTRUCKS. Para otro canal, crea su kit con `kit_marca` (`guardar`).
+- **Rótulos** `rotulos: [{t, nombre, sub}]`: lower third animado con el nombre (p. ej. cuando saluda a alguien del chat). Si no cabe en ese momento (se pisaría con otra cosa) se salta y lo avisa.
+- **Correcciones** `correcciones: [{t, mal, bien}]`: arregla palabras de Whisper sin volver a transcribir. `sinEfectos: [[desde, hasta]]` y `quitarEmojis: [t]` quitan golpes o emojis concretos.
+- **Control de calidad**: al acabar mide el archivo real y la colocación de todo; corrige solo el volumen y devuelve una línea "Calidad: …". Si dice errores, díselo al usuario o arréglalo.
 - Si el audio es ruidoso (juego de fondo, música) o hay nombres raros: primero `soloTranscribir: true`, corrige los textos (y quita lo que no se entiende — mejor sin subtítulo que inventado), y llama otra vez con `subtitulos`.
 - Pasa en `contexto` nombres y jerga que ayuden a Whisper.
 - Para varios clips: uno detrás de otro (FilmCraft es un proceso), avisando al acabar cada uno.
