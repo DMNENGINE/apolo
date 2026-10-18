@@ -315,7 +315,8 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     const rango = Array.isArray(a.rango) && a.rango.length === 2 ? a.rango.map(Number) : null;
     if (rango) trozos = trozos.filter(x => x.s >= rango[0] && x.e <= rango[1]);
     if (a.soloTranscribir) return JSON.stringify({ subtitulos: trozos.map(({ s, e, texto }) => ({ s, e, texto })), nota: 'Corrige lo que haga falta y vuelve a llamar con "subtitulos".' });
-    if (!trozos.length) throw new Error('no se oye nada que subtitular');
+    // sinVoz: true = se edita igual aunque no se diga nada (clips de juego: título, efectos, emojis, audio), sin subtítulos
+    if (!trozos.length && !a.sinVoz) throw new Error('no se oye nada que subtitular');
 
     // 2. gancho + resaltados
     const id = await ideas(palabras, titulo, a.pistas?.titulo);
@@ -370,7 +371,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     await fc('file.newSequenceFromClip', { items: [item] });
     await fc('sequence.addTracks', { video: 4 });                 // V2 subtítulos · V3 marca · V4 gancho/CTA · V5 emojis
     const sec = await herramienta('sequence_inspect');
-    const W = sec?.settings?.width || 1080, H = sec?.settings?.height || 1920, DUR = (sec?.duration || 0) / TPS || trozos.at(-1).e + 1;
+    const W = sec?.settings?.width || 1080, H = sec?.settings?.height || 1920, DUR = (sec?.duration || 0) / TPS || (trozos.at(-1)?.e ?? 9) + 1;
     const vertical = H > W, k = Math.min(W, H) / 1080;
     const capY = Math.round(H * (a.y ?? (vertical ? 0.72 : 0.86)));
     // ancho máximo de un texto a la altura y: en vertical, sin meterse en la columna de botones de TikTok/Shorts/Reels (kit)
@@ -533,7 +534,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
 
     avisar('título, marca y emojis', 56);
     // 5. gancho, marca, llamada a seguir
-    const primero = trozos[0].s;
+    const primero = trozos[0]?.s ?? Infinity;
     if (gancho && (!rango || rango[0] < 1)) {
       // con silencio al principio va en el sitio de los subtítulos; si se habla desde el segundo 1, encima de ellos (pista 3)
       const hueco = primero > 1.5;
@@ -642,7 +643,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     if (a.emojis ?? (plan?.emojis?.length ? true : E.emojis)) {
       avisar('emojis', 57);
       const tamE = Math.round((a.tamEmoji || 190) * k), yE = capY - Math.round(tam * 0.4) - Math.round(tamE * 0.75);
-      const ganchoArriba = gancho && (a.tituloAnimado !== false || trozos[0].s <= 1.5) && (!rango || rango[0] < 1);   // el gancho ocupa ese sitio los primeros 3,5 s
+      const ganchoArriba = gancho && (a.tituloAnimado !== false || primero <= 1.5) && (!rango || rango[0] < 1);   // el gancho ocupa ese sitio los primeros 3,5 s
       const quitar = (Array.isArray(a.quitarEmojis) ? a.quitarEmojis : []).map(Number).filter(Number.isFinite);   // pedidos en Revisión (s del vídeo editado)
       let libres, rutas = new Map();
       if (plan?.emojis?.length) {
@@ -705,7 +706,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     // 6. vista previa, guardar y exportar
     fs.mkdirSync(dirSalida, { recursive: true });
     const previa = path.join(dirSalida, `${nombre} - vista previa.png`);
-    try { await mcpLocales.llamar('filmcraft', 'render_frame', { seconds: trozos[Math.floor(trozos.length / 3)].s + 0.1, max_side: 960 }).then(r => { const img = r?.content?.find(c => c.type === 'image'); if (img) fs.writeFileSync(previa, Buffer.from(img.data, 'base64')); }); } catch { }
+    try { await mcpLocales.llamar('filmcraft', 'render_frame', { seconds: trozos.length ? trozos[Math.floor(trozos.length / 3)].s + 0.1 : DUR / 3, max_side: 960 }).then(r => { const img = r?.content?.find(c => c.type === 'image'); if (img) fs.writeFileSync(previa, Buffer.from(img.data, 'base64')); }); } catch { }
     const proyecto = path.join(dirSalida, `${nombre}.fcproj`);
     await fc('file.saveAs', { path: proyecto });
     const mp4 = path.join(dirSalida, `${nombre}.mp4`);

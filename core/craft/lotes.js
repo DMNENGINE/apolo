@@ -26,7 +26,7 @@ const ACUMULABLES = ['correcciones', 'quitarEmojis', 'sinEfectos', 'rotulos'];
 // miniaturas: crearMiniaturas (core/craft/miniatura.js) o nada (sin portadas); kits: crearKits; medir: calidad.medir;
 // diccionario: crearDiccionario; youtube: crearYouTube; metricas: crearMetricas (inyectables en tests)
 function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecutar = execFile, pedir, log = () => { }, miniaturas = null, kits = require('./kit').crearKits({ cfg }), medir = calidad.medir,
-  diccionario = require('./diccionario').crearDiccionario({ cfg }), youtube, metricas, abrirUrl = null }) {
+  diccionario = require('./diccionario').crearDiccionario({ cfg }), youtube, metricas, abrirUrl = null, medal = null }) {
   const dir = path.join(cfg.dir, 'craft');
   const FC = path.join(dir, 'lotes.json'), FE = path.join(dir, 'lotes-estado.json'), FA = path.join(dir, 'aprendizaje.json');
   youtube = youtube || require('./youtube').crearYouTube({ dir, ...(pedir ? { pedir } : {}), abrir: abrirUrl, log });
@@ -51,7 +51,11 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const scp = (f, remoto, local) => sh('scp', ['-q', '-o', 'BatchMode=yes', `${f.host}:${remoto}`, local]);
   const q = s => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const carpetaFuente = f => path.join(conf.salida, f.nombre || f.id);
-  const kitDe = c => { const f = conf.fuentes.find(x => x.id === c.fuente); return f?.perfil ? kits.obtener(f.perfil) : null; };
+  // los clips de Medal que el usuario elige en el panel van como una fuente más (fija): su kit, sin 4K (el 1080 ya es el
+  // final), editados aunque no se hable y SIN publicar (Drive/Discord/YouTube son del canal de la fuente ssh, no suyos)
+  const FUENTE_MEDAL = { id: 'medal', nombre: 'Medal', tipo: 'medal', perfil: 'medal', escenas: 'auto', publicar: false, exportar4k: false, sinVoz: true };
+  const fuenteDe = id => conf.fuentes.find(x => x.id === id) || (id === 'medal' ? FUENTE_MEDAL : null);
+  const kitDe = c => { const f = fuenteDe(c.fuente); return f?.perfil ? kits.obtener(f.perfil) : null; };
   const publicador = crearPublicador({ conf: () => conf.discordClips, ejecutar, ...(pedir ? { pedir } : {}), log, kitDe });
   const borrar = (...fs_) => { for (const f of fs_.flat()) if (f) try { fs.rmSync(f, { force: true }); } catch { } };
   const archivosPortadas = c => (c.portadas || []).flatMap(p => [p.jpg, p.pcraft]);
@@ -123,7 +127,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
 
   async function editarUno(id) {
     const c = est.clips[id]; if (!c || c.estado !== 'en cola') return;   // descartado mientras esperaba
-    const f = conf.fuentes.find(x => x.id === c.fuente);
+    const f = fuenteDe(c.fuente);
     if (!f) { c.estado = 'error'; c.error = 'la fuente ya no existe'; return; }
     const base = path.join(carpetaFuente(f), `${c.fecha}_${c.stream}`);
     const original = path.join(base, 'originales', c.archivo);
@@ -139,7 +143,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     fs.mkdirSync(path.dirname(original), { recursive: true });
     if (!fs.existsSync(original)) await scp(f, `${f.ruta}/${c.carpeta}/${c.archivo}`, original);
     const comun = { video: original, perfil: f.perfil, carpeta: path.join(base, 'editados'), nombre: `${String(c.rank).padStart(2, '0')}`,
-      tituloClip: c.tituloClip || String(c.titulo || '').replace(/\s*\((portrait|vertical)\)\s*/i, '').trim() || undefined, pistas: pistasDe() };
+      tituloClip: c.tituloClip || String(c.titulo || '').replace(/\s*\((portrait|vertical)\)\s*/i, '').trim() || undefined, pistas: pistasDe(), ...(f.sinVoz ? { sinVoz: true } : {}) };
     if (!c.estiloForzado) {                             // transcribe primero (queda en caché) para elegir el estilo por lo que se dice
       ctx.progreso('transcribiendo', 2);
       const t = await subtitulador.subtitular({ ...comun, soloTranscribir: true }, ctx);
@@ -202,7 +206,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         const listos = del.filter(x => x.estado === 'revisar').length, malos = del.filter(x => x.estado === 'error').length;
         if (listos && !del.some(x => x.avisado)) {
           for (const x of del) x.avisado = true; guardarEst();
-          const f = conf.fuentes.find(x => x.id === c.fuente);
+          const f = fuenteDe(c.fuente);
           bus?.emit('aviso-externo', { origen: 'Clips', urgente: false,
             texto: `🎬 ${listos} clips de ${f?.nombre || c.fuente} (${c.titulo || c.stream}) listos para revisar en el panel → Revisión.${malos ? ` ${malos} fallaron.` : ''} Estilos: ${[...new Set(del.map(x => x.estilo).filter(Boolean))].join(', ')}.` });
         }
@@ -219,7 +223,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     c.k4 = { estado: 'en cola' }; cola.push('4k:' + c.id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
   }
   function borrarFuentes(c) {
-    const f = conf.fuentes.find(x => x.id === c.fuente);
+    const f = fuenteDe(c.fuente);
     const base = f ? path.join(carpetaFuente(f), `${c.fecha}_${c.stream}`) : null;
     if (!base) return;
     try { fs.rmSync(path.join(base, 'originales', c.archivo), { force: true }); } catch { }
@@ -241,7 +245,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       c.k4 = { estado: 'listo', mp4: destino, hecho: Date.now(), medidas: { ancho: m.ancho, alto: m.alto, duracion: m.duracion, bytes: m.bytes } };
       borrarFuentes(c);
       bus?.emit('aviso-externo', { origen: 'Clips', urgente: false, texto: `🎬 4K listo para subir: ${path.basename(destino)}` });
-      if (publicador.activo()) publicar(c);
+      if (publicador.activo() && fuenteDe(c.fuente)?.publicar !== false) publicar(c);
     } catch (e) { c.k4 = { estado: 'error', error: e.message.slice(0, 300), ...(fs.existsSync(destino) ? { mp4: destino } : {}) }; log('[lotes] 4K', id, e.message); }
     guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
@@ -250,7 +254,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   // (ingles.quemado), una versión con los subtítulos y el título en inglés quemados (1080p, mismo plan del director) ──
   async function prepararRedes(id) {
     const c = est.clips[id]; if (!c || c.estado !== 'aprobado') return;
-    const k = kitDe(c), f = conf.fuentes.find(x => x.id === c.fuente);
+    const k = kitDe(c), f = fuenteDe(c.fuente);
     c.en = { ...c.en, estado: 'preparando', desde: Date.now() }; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
     let srtEs = ''; try { srtEs = c.srt && fs.existsSync(c.srt) ? fs.readFileSync(c.srt, 'utf8') : ''; } catch { }
     const avisos = [];
@@ -282,7 +286,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       } catch (e) { avisos.push(`versión en inglés: ${e.message}`); log('[lotes] versión en', id, e.message); }
     }
     c.en = { ...c.en, estado: 'listo', hecho: Date.now(), avisos }; delete c.en.fase; delete c.en.pct;
-    if (conf.exportar4k === false || !c.proyecto) borrarFuentes(c);   // sin 4K detrás, aquí acaba lo que necesita el vídeo de origen
+    if (conf.exportar4k === false || f?.exportar4k === false || !c.proyecto) borrarFuentes(c);   // sin 4K detrás, aquí acaba lo que necesita el vídeo de origen
     guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
   function encolarRedes(c) {
@@ -293,7 +297,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   // ── 4K → Google Drive + anuncio en el canal de Discord del streamer (de uno en uno, sin frenar la cola de edición) ──
   // y después YouTube (programado). El 4K local se borra cuando ya no hace falta (Drive confirmado y YouTube hecho)
   const confYT = () => ({ activo: false, programar: true, ...(conf.youtube || {}) });
-  const ytPara = c => confYT().activo && youtube.conectado() && kitDe(c)?.publicacion?.youtube?.activo !== false;
+  const ytPara = c => confYT().activo && youtube.conectado() && fuenteDe(c.fuente)?.publicar !== false && kitDe(c)?.publicacion?.youtube?.activo !== false;
   let subidas = Promise.resolve();
   function publicar(c) {
     if (['en cola', 'subiendo'].includes(c.publicado?.estado)) return publico(c);
@@ -416,7 +420,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   // ── 3. decisiones del usuario ──
   function decidir(id, accion, { estilo } = {}) {
     const c = est.clips[id]; if (!c) throw Object.assign(new Error('no existe ese clip'), { status: 404 });
-    const f = conf.fuentes.find(x => x.id === c.fuente);
+    const f = fuenteDe(c.fuente);
     const base = f ? path.join(carpetaFuente(f), `${c.fecha}_${c.stream}`) : null;
     const original = base ? path.join(base, 'originales', c.archivo) : null;
     if (accion === 'rehacer') {
@@ -441,7 +445,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       c.estado = 'aprobado'; c.decidido = Date.now();
       encolarRedes(c);                                   // títulos es/en + inglés, antes del 4K (usa el vídeo de origen)
       // la versión 4K para subir (salvo exportar4k: false); las fuentes se borran cuando termine
-      if (conf.exportar4k !== false && c.proyecto && fs.existsSync(c.proyecto)) { guardarEst(); encolar4k(c); }
+      if (conf.exportar4k !== false && f?.exportar4k !== false && c.proyecto && fs.existsSync(c.proyecto)) { guardarEst(); encolar4k(c); }
       else { guardarEst(); procesar(); }                 // sin 4K, las fuentes se borran al terminar lo de redes
     } else if (accion === 'descartar') {
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) if (c[k]) fs.rmSync(c[k], { force: true });
@@ -690,6 +694,45 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     return publico(c);
   }
 
+  // ── 6. un clip de Medal elegido en el panel: se trae al PC, se pasa a vertical si hace falta y entra en la cola ──
+  // formato: vertical (la partida entera en medio con el fondo desenfocado) · recorte (zoom al centro, llena la pantalla) ·
+  // horizontal (tal cual)
+  const FORMATOS = ['vertical', 'recorte', 'horizontal'];
+  const FILTROS = {
+    vertical: '[0:v]split=2[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=24:2,eq=brightness=-0.06[f];[b]scale=1080:-2[g];[f][g]overlay=(W-w)/2:(H-h)/2,setsar=1[v]',
+    recorte: '[0:v]scale=-2:1920,crop=1080:1920,setsar=1[v]',
+  };
+  async function desdeMedal({ id, formato = 'vertical', titulo, estilo, ajustes = {} } = {}) {
+    if (!medal) throw Object.assign(new Error('Medal no está disponible'), { status: 409 });
+    if (!FORMATOS.includes(formato)) throw Object.assign(new Error(`formato: ${FORMATOS.join(' | ')}`), { status: 400 });
+    if (estilo && !estilos.ESTILOS[estilo]) throw Object.assign(new Error(`estilo desconocido: ${estilo}`), { status: 400 });
+    const m = (await medal.cargar()).clips.find(x => x.id === String(id || ''));
+    if (!m) throw Object.assign(new Error('ese clip no está en Medal'), { status: 404 });
+    if (m.tipo !== 'clip') throw Object.assign(new Error('eso es una captura, no un clip'), { status: 400 });
+    const stream = String(m.id).replace(/[^\w-]/g, '_'), cid = `medal_${stream}`;
+    const ya = est.clips[cid];
+    if (ya && !['descartado', 'error'].includes(ya.estado)) return publico(ya);   // ya está (en cola, editándose o en Revisión)
+    const fecha = new Date(m.fecha || Date.now()).toISOString().slice(0, 10);
+    const propio = m.titulo && !/^untitled/i.test(m.titulo) ? m.titulo : '';
+    const c = est.clips[cid] = { id: cid, fuente: 'medal', stream, titulo: `${m.juego || 'Medal'}${propio ? ` · ${propio}` : ''}`, juego: m.juego || null, medal: { id: m.id, compartir: m.compartir },
+      fecha, carpeta: null, rank: 1, archivo: `${stream}.mp4`, inicio: 0, fin: +(m.duracion || 0).toFixed(2), formato, estado: 'descargando', creado: Date.now(), manual: true,
+      ajustes: ajustes && typeof ajustes === 'object' ? ajustes : {}, ...(titulo || propio ? { tituloClip: String(titulo || propio) } : {}), ...(estilo ? { estiloForzado: estilo } : {}) };
+    guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    const destino = path.join(carpetaFuente(FUENTE_MEDAL), `${fecha}_${stream}`, 'originales', c.archivo);
+    (async () => {
+      const bajado = await medal.traer(m.id);
+      fs.mkdirSync(path.dirname(destino), { recursive: true });
+      const md = await medir(bajado, { ffmpeg: cfg?.craft?.ffmpeg, ligero: true });
+      if (md.duracion) c.fin = +(+md.duracion).toFixed(2);
+      if (formato === 'horizontal' || !(md.ancho > md.alto)) fs.copyFileSync(bajado, destino);
+      else await sh(cfg?.craft?.ffmpeg || 'ffmpeg', ['-y', '-v', 'error', '-i', bajado, '-filter_complex', FILTROS[formato], '-map', '[v]', '-map', '0:a?',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', destino], { timeout: 1_800_000 });
+    })()
+      .then(() => { c.estado = 'en cola'; c.error = null; cola.push(cid); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar(); })
+      .catch(e => { c.estado = 'error'; c.error = `no se pudo preparar el clip de Medal: ${String(e.message).slice(0, 300)}`; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); });
+    return publico(c);
+  }
+
   async function http(M, p, b = {}, consulta = {}) {   // /v1/revision
     if (M === 'GET' && !p[2]) return estado();
     if (M === 'POST' && p[2] === 'revisar') return revisar();
@@ -720,6 +763,22 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (p[2] === 'metricas') {                           // GET lo aprendido · POST medir ahora (tarda 1–3 min; se avisa por el bus)
       if (M === 'GET') return { aprendido, metricasEn: est.metricasEn || null, midiendo: !!midiendo, cuentas: cuentas() };
       if (M === 'POST') { actualizarMetricas().catch(e => log('[lotes] métricas', e.message)); return { iniciado: true }; }
+    }
+    if (p[2] === 'medal') {                              // GET ?juego&texto&limite · GET <id>/miniatura · POST {id, formato, titulo, estilo}
+      if (!medal) throw Object.assign(new Error('Medal no está disponible'), { status: 409 });
+      if (M === 'GET' && p[3] && p[4] === 'miniatura') {
+        const f = await medal.miniatura(decodeURIComponent(p[3]), path.join(dir, 'medal-miniaturas'));
+        if (!f) throw Object.assign(new Error('sin miniatura'), { status: 404 });
+        return { __archivo: f };
+      }
+      if (M === 'GET') {
+        const ca = await medal.cargar();
+        const r = await medal.buscar({ juego: consulta.juego, texto: consulta.texto, tipo: 'clip', orden: consulta.orden || 'reciente', limite: Math.min(120, +consulta.limite || 60) });
+        const en = Object.fromEntries(Object.values(est.clips).filter(x => x.medal).map(x => [x.medal.id, { id: x.id, estado: x.estado }]));
+        return { instalado: ca.instalado, carpeta: ca.carpeta, errores: ca.errores, juegos: await medal.juegos(), total: r.total,
+          clips: r.clips.map(x => ({ id: x.id, titulo: x.titulo, juego: x.juego, fecha: x.fecha, duracion: x.duracion, local: !!x.local, ancho: x.ancho, alto: x.alto, vistas: x.vistas, compartir: x.compartir, enRevision: en[x.id] || null })) };
+      }
+      if (M === 'POST') return desdeMedal(b);
     }
     if (p[2] === 'diccionario') {                        // GET ?kit · POST {kit, mal, bien} añade · POST {kit, quitar: mal} quita
       const kit = String((M === 'GET' ? consulta?.kit : b.kit) || kitPorDefecto() || '');
@@ -770,7 +829,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
 
-  return { revisar, procesar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, prepararRedes, actualizarMetricas, aYouTube, reintentarYouTube, ESTILOS_DEFECTO };
+  return { revisar, procesar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, prepararRedes, actualizarMetricas, aYouTube, reintentarYouTube, desdeMedal, ESTILOS_DEFECTO };
 }
 
 module.exports = { crearLotes, ESTILOS_DEFECTO };

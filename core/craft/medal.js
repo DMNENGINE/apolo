@@ -51,7 +51,7 @@ function normalizar(f) {
     id: f.remoto || f.local || rc.contentId, tipo,
     titulo: m.title || rc.contentTitle || '', juego: rc.category?.categoryName || '', juegoId: f.categoria || rc.categoryId || null,
     fecha: rc.created || (f.creado ? f.creado * 1000 : null), duracion: m.clipDuration || rc.videoLengthSeconds || null,
-    local, miniatura: f.miniatura || null, compartir: rc.contentShareUrl || null,
+    local, miniatura: f.miniatura || null, miniaturaUrl: rc.thumbnail480p || rc.thumbnailUrl || rc.thumbnail360p || null, compartir: rc.contentShareUrl || null,
     video: rc.contentUrl || null, caduca: rc.urlsExpireAt || null, foto: tipo === 'captura' ? rc.contentUrl || rc.thumbnailUrl || null : null,
     vistas: rc.views ?? null, likes: rc.likes ?? null, favorito: !!m.isFavorited, etiquetas: [...(m.userTags || []), ...(m.tags || [])].map(x => (typeof x === 'string' ? x : x?.name)).filter(Boolean),
     ancho: rc.sourceWidth || null, alto: rc.sourceHeight || null, descripcion: rc.contentDescription || '',
@@ -94,7 +94,7 @@ function crearMedal({ cfg, ejecutar = execFile, pedir = globalThis.fetch, raices
         if (!(VIDEO.test(e.name) || FOTO.test(e.name)) || conocidos.has(path.resolve(f).toLowerCase())) continue;
         const st = fs.statSync(f);
         out.push({ id: 'archivo:' + path.relative(carpeta, f), tipo: VIDEO.test(e.name) ? 'clip' : 'captura', titulo: path.basename(e.name, path.extname(e.name)),
-          juego: nivel > 0 ? path.basename(path.dirname(f)) : '', juegoId: null, fecha: st.mtimeMs, duracion: null, local: f, miniatura: null, compartir: null,
+          juego: nivel > 0 ? path.basename(path.dirname(f)) : '', juegoId: null, fecha: st.mtimeMs, duracion: null, local: f, miniatura: FOTO.test(e.name) ? f : null, miniaturaUrl: null, compartir: null,
           video: null, caduca: null, foto: null, vistas: null, likes: null, favorito: false, etiquetas: [], ancho: null, alto: null, descripcion: '', bytes: st.size });
       }
     };
@@ -164,6 +164,20 @@ function crearMedal({ cfg, ejecutar = execFile, pedir = globalThis.fetch, raices
     return destino;
   }
 
+  // miniatura para elegir en el panel: la que Medal guarda en el PC, o la de su nube (se guarda en caché); null si no hay
+  async function miniatura(id, cacheDir) {
+    const c = (await cargar()).clips.find(x => x.id === id); if (!c) return null;
+    if (c.miniatura && fs.existsSync(c.miniatura)) return c.miniatura;
+    if (!c.miniaturaUrl || !cacheDir) return null;
+    const f = path.join(cacheDir, `${String(id).replace(/[^\w-]/g, '_')}.jpg`);
+    if (fs.existsSync(f)) return f;
+    const r = await pedir(c.miniaturaUrl).catch(() => null);
+    if (!r?.ok) return null;
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
+    return f;
+  }
+
   const fecha = t => (t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') : '?');
   const mmss = s => (s == null ? '' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`);
   const linea = c => `- [${c.id}] ${c.tipo === 'captura' ? '📷' : '🎬'} ${c.titulo || '(sin título)'} · ${c.juego || '—'} · ${fecha(c.fecha)}${c.duracion ? ` · ${mmss(c.duracion)}` : ''}`
@@ -198,7 +212,7 @@ function crearMedal({ cfg, ejecutar = execFile, pedir = globalThis.fetch, raices
     },
   };
 
-  return { cargar, juegos, traer, buscar: async o => filtrar((await cargar()).clips, o), HERRAMIENTA };
+  return { cargar, juegos, traer, miniatura, buscar: async o => filtrar((await cargar()).clips, o), HERRAMIENTA };
 }
 
 module.exports = { crearMedal, decodificar, normalizar, filtrar };

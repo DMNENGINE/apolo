@@ -1,0 +1,19 @@
+{
+  "id": "medal",
+  "nombre": "Mis clips (Medal)",
+  "descripcion": "Clips de partidas del usuario grabados con Medal (Call of Duty, ARC Raiders, Battlefield…): pantalla de juego entera, a veces con chat de voz.",
+  "colores": {
+    "primario": "#ffffff",
+    "acento": "#3dff9a",
+    "resaltado": "#ffd400",
+    "contorno": "#000000",
+    "fondo": "#05070a"
+  },
+  "fuente": { "familia": "Trueno", "estilo": "Black" },
+  "hashtags": "#gaming #clips #callofduty #arcraiders #gamer",
+  "contexto": "Clip de una partida de videojuego (Call of Duty, ARC Raiders, Battlefield, GTA V…) con chat de voz en español entre amigos.",
+  "video": { "y": 0.74 },
+  "audio": { "lufs": -14, "picoMax": -1, "pro": true },
+  "miniatura": { "variantes": 3 },
+  "ingles": { "srt": true, "quemado": false, "cta": "Follow for more" }
+}

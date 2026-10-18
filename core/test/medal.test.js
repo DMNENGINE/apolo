@@ -104,3 +104,56 @@ test('medal: enlace caducado → pide abrir Medal; sin Medal lo dice claro', asy
     assert.ok(/no está instalado|elementos/.test(r));
   } finally { process.env.APPDATA = antes; }
 });
+
+test('lotes + Medal: el clip elegido se trae, se pasa a vertical (fondo desenfocado o zoom), se edita con el kit medal aunque no se hable y al aprobar no hay 4K ni se publica', async () => {
+  const { EventEmitter } = require('events');
+  const { crearLotes } = require('../craft/lotes');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotes-medal-'));
+  const bajado = path.join(dir, 'bajado.mp4'); fs.writeFileSync(bajado, 'horizontal');
+  const lista = [{ id: 'C1', tipo: 'clip', titulo: 'Archienemigo', juego: 'Call of Duty: Black Ops 7', fecha: Date.UTC(2026, 6, 4), duracion: 29.7, compartir: 'https://medal.tv/c/C1', local: null, etiquetas: [], descripcion: '' },
+    { id: 'C2', tipo: 'clip', titulo: 'Untitled', juego: 'ARC Raiders', fecha: Date.UTC(2026, 1, 26), duracion: 120, local: null, etiquetas: [], descripcion: '' },
+    { id: 'S1', tipo: 'captura', titulo: 'x', juego: 'ATS', fecha: 1, local: null, etiquetas: [], descripcion: '' }];
+  const medal = { async cargar() { return { clips: lista, instalado: true, carpeta: dir, errores: [] }; }, traidos: [], async traer(id) { this.traidos.push(id); return bajado; },
+    async juegos() { return [{ juego: 'Call of Duty: Black Ops 7', clips: 1 }]; }, async buscar(o) { const r = filtrar(lista, o); return r; }, async miniatura() { return bajado; } };
+  const ffmpeg = [];
+  const ejecutar = (cmd, args, o, cb) => { if (/ffmpeg/.test(cmd)) { ffmpeg.push(args); fs.writeFileSync(args.at(-1), 'vertical'); } cb(null, '', ''); };
+  const subs = [], reexp = [];
+  const subtitulador = { async reexportar(o) { reexp.push(o); return o; }, async subtitular(a) {
+    subs.push(a);
+    if (a.soloTranscribir) return JSON.stringify({ subtitulos: [] });
+    fs.mkdirSync(a.carpeta, { recursive: true });
+    const b = path.join(a.carpeta, a.nombre);
+    for (const e of ['.mp4', '.png', '.fcproj']) fs.writeFileSync(b + e, 'x');
+    return { datos: { mp4: b + '.mp4', srt: null, previa: b + '.png', proyecto: b + '.fcproj', gancho: 'ARCHIENEMIGO', fuente: a.video, calidad: { ok: true, errores: [], avisos: [], medidas: { duracion: 29.7 } } } };
+  } };
+  fs.mkdirSync(path.join(dir, 'craft'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'craft', 'lotes.json'), JSON.stringify({ salida: path.join(dir, 'videos'), fuentes: [], discordClips: { canal: '9', token: 'x', rclone: 'rclone' } }));
+  const l = crearLotes({ cfg: { dir }, bus: new EventEmitter(), subtitulador, ejecutar, medal, generarJSON: async ({ prompt }) => ({ datos: /Devuelve es y en/.test(prompt) ? { es: { titulo: 'Archienemigo' }, en: { titulo: 'Arch nemesis' } } : { estilo: 'impacto' } }),
+    medir: async f => (f === bajado ? { ancho: 1280, alto: 720, duracion: 29.77 } : { ancho: 1080, alto: 1920, duracion: 29.77 }), youtube: { conectado: () => true, estado: () => ({}) }, metricas: {} });
+  const esp = async fn => { const t = Date.now(); while (Date.now() - t < 5000) { const r = fn(); if (r) return r; await new Promise(ok => setTimeout(ok, 10)); } throw new Error('no llegó'); };
+
+  await assert.rejects(l.desdeMedal({ id: 'S1' }), /captura/);
+  await assert.rejects(l.desdeMedal({ id: 'nada' }), /no está en Medal/);
+  await assert.rejects(l.desdeMedal({ id: 'C1', formato: 'cuadrado' }), /formato/);
+  const c0 = await l.http('POST', ['', 'revision', 'medal'], { id: 'C1' });
+  assert.deepStrictEqual([c0.id, c0.fuente, c0.estado, c0.tituloClip, c0.formato], ['medal_C1', 'medal', 'descargando', 'Archienemigo', 'vertical']);
+  const c = await esp(() => l.estado().clips.find(x => x.id === 'medal_C1' && x.estado === 'revisar'));
+  assert.deepStrictEqual(medal.traidos, ['C1']);
+  assert.match(ffmpeg[0][ffmpeg[0].indexOf('-filter_complex') + 1], /boxblur.*overlay/, 'vertical con el fondo desenfocado');
+  const ed = subs.find(a => !a.soloTranscribir);
+  assert.deepStrictEqual([ed.perfil, ed.sinVoz, ed.tituloClip], ['medal', true, 'Archienemigo']);
+  assert.strictEqual(c.fin, 29.77);
+  assert.strictEqual((await l.http('POST', ['', 'revision', 'medal'], { id: 'C1' })).estado, 'revisar', 'pedirlo otra vez no lo duplica');
+  const g = await l.http('GET', ['', 'revision', 'medal'], {}, { juego: 'black' });
+  assert.deepStrictEqual(g.clips.map(x => [x.id, x.enRevision?.estado]), [['C1', 'revisar']]);
+  // zoom al centro, y horizontal tal cual (sin ffmpeg)
+  await l.desdeMedal({ id: 'C2', formato: 'recorte' });
+  await esp(() => l.estado().clips.find(x => x.id === 'medal_C2' && x.estado === 'revisar'));
+  assert.match(ffmpeg[1][ffmpeg[1].indexOf('-filter_complex') + 1], /crop=1080:1920/);
+  // aprobar: títulos sí, 4K y publicación no (no son del canal de la fuente)
+  l.decidir('medal_C1', 'aprobar');
+  const ap = await esp(() => { const x = l.estado().clips.find(y => y.id === 'medal_C1'); return x.en?.estado === 'listo' ? x : null; });
+  assert.strictEqual(ap.textos.en.titulo, 'Arch nemesis');
+  assert.strictEqual(reexp.length, 0, 'sin 4K'); assert.ok(!ap.k4 && !ap.publicado && !ap.youtube);
+  assert.ok(fs.existsSync(ap.mp4) && ap.mp4.includes(path.join('Medal', 'aprobados')));
+});
