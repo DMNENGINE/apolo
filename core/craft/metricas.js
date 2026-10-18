@@ -42,7 +42,27 @@ function emparejar(clips, videos) {
     (out[x.c.id] = out[x.c.id] || {})[x.v.plataforma] = { ...x.v, como: x.soloDuracion ? 'duracion' : 'titulo' };
     usados.add(clave(x.v));
   }
-  return { pares: out, libres: videos.filter(v => !usados.has(clave(v))) };
+  const libres = videos.filter(v => !usados.has(clave(v)));
+  cruzar(clips, out, libres);
+  return { pares: out, libres: libres.filter(v => !Object.values(out).some(o => o[v.plataforma]?.id === v.id)) };
+}
+
+// el mismo recorte en la otra red: si un clip ya se encontró en una plataforma (p. ej. el streamer lo recortó a 97 s y le
+// puso otro título), en la otra se busca un vídeo de esa misma duración (±1,5 s) publicado después de aprobarlo; vale solo si
+// es el único así (puro; cambia `pares`)
+function cruzar(clips, pares, libres) {
+  let n = 0;
+  for (const c of clips) {
+    const p = pares[c.id]; if (!p) continue;
+    const desde = (c.decidido || c.editado || 0) - 2 * 3600e3;
+    for (const [plat, v] of Object.entries(p)) for (const otra of ['youtube', 'tiktok']) {
+      if (otra === plat || p[otra] || !v.duracion) continue;
+      const cand = libres.filter(x => x.plataforma === otra && x.fecha >= desde && x.fecha <= desde + 30 * DIA && Math.abs((x.duracion || 0) - v.duracion) <= 1.5
+        && !Object.values(pares).some(o => o[otra]?.id === x.id));
+      if (cand.length === 1) { p[otra] = { ...cand[0], como: 'misma-duracion' }; n++; }
+    }
+  }
+  return n;
 }
 
 // lo aprendido (puro): rendimiento de un clip = media de log2(vistas / mediana del canal en esa plataforma), +retención si la
@@ -158,11 +178,11 @@ function crearMetricas({ python = 'python', ejecutar = execFile, youtube = null,
     }
     const todos = [...canal.youtube, ...canal.tiktok];
     const { pares, libres } = emparejar(clips, todos);
-    try { await emparejarConModelo(clips, libres, pares); } catch (e) { errores.push(`emparejar: ${e.message}`); }
+    try { if (await emparejarConModelo(clips, libres, pares)) cruzar(clips, pares, libres); } catch (e) { errores.push(`emparejar: ${e.message}`); }
     return { canal, pares, errores };
   }
 
   return { medir, deYouTube, deTikTok };
 }
 
-module.exports = { crearMetricas, emparejar, aprender, pistas, mejoresHoras, parecido, durClip };
+module.exports = { crearMetricas, emparejar, cruzar, aprender, pistas, mejoresHoras, parecido, durClip };

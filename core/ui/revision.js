@@ -105,8 +105,8 @@ function RV_publicacion(c, L) {
   else if (y?.estado === 'en cola') chips.push(`<span class="chip">📺 YouTube: ${tr('en cola')}${y.publicarEn ? ` · ${esc(RV_fecha(y.publicarEn))}` : ''}</span>`);
   else if (y?.estado === 'esperando cuota') chips.push(`<span class="chip aviso" title="${esc(y.error || '')}">📺 ${tr('YouTube: sin cuota hoy, sigue mañana')}</span>`);
   else if (y?.estado === 'error') chips.push(`<span class="chip mal" title="${esc(y.error || '')}">📺 YouTube: ${tr('error')}</span>`);
-  if (en?.estado === 'listo') chips.push(`<span class="chip${en.avisos?.length ? ' aviso' : ''}" title="${esc((en.avisos || []).join(' · '))}">🇺🇸 ${en.srt ? tr('subtítulos EN') : ''}${en.mp4 ? ` + ${tr('versión EN')}` : ''}${!en.srt && !en.mp4 ? tr('inglés: nada') : ''}</span>`);
-  else if (en?.estado) chips.push(`<span class="chip aviso">🇺🇸 ${esc(tr(en.estado))}${en.pct ? ` ${en.pct} %` : ''}</span>`);
+  if (en?.estado === 'listo') chips.push(`<span class="chip${en.avisos?.length ? ' aviso' : ''}" title="${esc((en.avisos || []).join(' · '))}">🌎 ${en.srt ? tr('subtítulos EN') : ''}${en.mp4 ? ` + ${tr('versión EN')}` : ''}${!en.srt && !en.mp4 ? tr('inglés: nada') : ''}</span>`);
+  else if (en?.estado) chips.push(`<span class="chip aviso">🌎 ${esc(tr(en.estado))}${en.pct ? ` ${en.pct} %` : ''}</span>`);
   const met = ['youtube', 'tiktok'].filter(k => m[k]).map(k => `<a href="${esc(m[k].url)}" target="_blank" rel="noopener" class="rv-met">${k === 'youtube' ? '📺' : '🎵'} 👁 ${RV_num(m[k].vistas)} · ❤ ${RV_num(m[k].likes)} · 💬 ${RV_num(m[k].comentarios)}${m[k].retencion != null ? ` · ⏱ ${m[k].retencion} %` : ''}</a>`).join('');
   const tx = c.textos ? `<details class="rv-textos"><summary>${tr('Títulos para redes')}</summary><div><b>ES</b> ${esc(c.textos.es?.titulo || '')}<br><small class="tenue">${esc(c.textos.es?.descripcion || '')}</small></div><div><b>EN</b> ${esc(c.textos.en?.titulo || '')}<br><small class="tenue">${esc(c.textos.en?.descripcion || '')}</small></div></details>` : '';
   const puedeYT = L?.youtube?.conectado && c.k4?.estado === 'listo' && !['listo', 'subiendo', 'en cola'].includes(y?.estado);

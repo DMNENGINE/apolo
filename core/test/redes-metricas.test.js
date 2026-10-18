@@ -143,6 +143,12 @@ test('métricas: empareja por id, por título + duración y no adivina con durac
   assert.deepStrictEqual([pares.a.youtube.como, pares.b.tiktok.como], ['id', 'titulo']);
   assert.ok(!pares.c && !pares.d, 'dos clips de 80 s: solo por duración no se decide');
   assert.deepStrictEqual(libres.map(v => v.id).sort(), ['T2', 'T3'], 'el de antes de aprobar no cuenta');
+  // el streamer lo recortó a 97 s y le puso otro título en TikTok: la misma duración en la otra red, si es la única
+  const largo = { ...clips[0], k4: { medidas: { duracion: 150 } } };
+  const otro = met.emparejar([largo], [videos[0], { plataforma: 'tiktok', id: 'T9', titulo: 'Me chocaron', duracion: 97, fecha: ap + 30 * h, vistas: 13000 }]);
+  assert.deepStrictEqual([otro.pares.a.tiktok?.id, otro.pares.a.tiktok?.como], ['T9', 'misma-duracion']);
+  const dos = met.emparejar([largo], [videos[0], ...['T8', 'T9'].map(id => ({ plataforma: 'tiktok', id, titulo: 'x', duracion: 97, fecha: ap + 30 * h }))]);
+  assert.ok(!dos.pares.a.tiktok, 'dos candidatos: no adivina');
 
   const canal = { youtube: [{ vistas: 2000 }, { vistas: 2000 }], tiktok: [{ vistas: 10000 }, { vistas: 10000 }] };
   const conM = [
