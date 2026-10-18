@@ -1,6 +1,7 @@
 // Recetas fijas de la suite como herramientas del agente: en vez de improvisar comandos app por app, el modelo decide el
 // contenido y la receta (probada) lo ejecuta igual cada vez. Todas leen el kit de marca.
 //   kit_marca · revisar_calidad · hacer_miniatura (PhotoCraft) · masterizar_audio (SoundCraft) · rotulo_animado / titulo_animado (EffectCraft)
+//   clips_medal: buscar/traer los clips del usuario en Medal (core/craft/medal.js)
 'use strict';
 const os = require('os');
 const path = require('path');
@@ -60,8 +61,9 @@ function crearHerramientasCraft({ mcpLocales, cfg }) {
     },
   };
 
-  const HERRAMIENTAS = [kits.HERRAMIENTA, require('./calidad').crearHerramienta({ cfg, kits }), miniaturas.HERRAMIENTA, audio.HERRAMIENTA, ROTULO, TITULO];
-  return { kits, miniaturas, audio, HERRAMIENTAS };
+  const medal = require('./medal').crearMedal({ cfg });   // clips y capturas del usuario en Medal
+  const HERRAMIENTAS = [kits.HERRAMIENTA, require('./calidad').crearHerramienta({ cfg, kits }), miniaturas.HERRAMIENTA, audio.HERRAMIENTA, ROTULO, TITULO, medal.HERRAMIENTA];
+  return { kits, miniaturas, audio, medal, HERRAMIENTAS };
 }
 
 module.exports = { crearHerramientasCraft };
