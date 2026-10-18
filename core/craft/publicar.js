@@ -27,16 +27,17 @@ function crearPublicador({ conf, ejecutar = execFile, pedir = globalThis.fetch, 
     return { id, remoto, bytes, ver: `https://drive.google.com/file/d/${id}/view`, descargar: `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t` };
   }
 
-  // la portada elegida también a Drive, junto al vídeo (para ponerla de portada en TikTok/Shorts) → enlace de descarga
-  async function subirPortada(c, drive) {
-    const jpg = c.portadas?.[c.portada || 0]?.jpg;
-    if (!jpg || !fs.existsSync(jpg)) return null;
-    const remoto = drive.remoto.replace(/\.mp4$/i, '') + ' - portada.jpg';
-    await rclone('copyto', jpg, remoto);
+  // un archivo más junto al vídeo en Drive (portada, subtítulos en inglés, versión en inglés) → enlace de descarga
+  async function subirJunto(drive, local, sufijo) {
+    if (!local || !fs.existsSync(local)) return null;
+    const remoto = drive.remoto.replace(/\.mp4$/i, '') + sufijo;
+    await rclone('copyto', local, remoto);
     const enlace = (await rclone('link', remoto)).trim();
     const id = (enlace.match(/[?&]id=([\w-]+)/) || enlace.match(/\/d\/([\w-]+)/) || [])[1];
     return id ? { id, remoto, descargar: `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t` } : null;
   }
+  // la portada elegida también a Drive, junto al vídeo (para ponerla de portada en TikTok/Shorts)
+  const subirPortada = (c, drive) => subirJunto(drive, c.portadas?.[c.portada || 0]?.jpg, ' - portada.jpg');
 
   async function portada(c) {
     const jpg = path.join(os.tmpdir(), `portada-${process.pid}-${Date.now()}.jpg`);
@@ -44,21 +45,27 @@ function crearPublicador({ conf, ejecutar = execFile, pedir = globalThis.fetch, 
     catch (e) { log('[publicar] portada', e.message); return null; }
   }
 
-  async function anunciar(c, drive, portadaDrive) {
+  async function anunciar(c, drive, portadaDrive, extras = {}) {
     const k = conf(), token = fs.readFileSync(k.token, 'utf8').trim();
     const bytes = drive.bytes || (fs.existsSync(c.k4.mp4) ? fs.statSync(c.k4.mp4).size : 0);
     const mb = Math.round(bytes / 1048576), dur = Math.round(c.fin - c.inicio);
     const titulo = c.tituloClip || c.gancho || `Clip ${c.rank}`;
     const kit = kitDe(c);
-    const texto = [c.gancho, k.hashtags || kit?.hashtags || '#lagctrucks #camioneros #troqueros #americantrucksimulator #simulador'].filter(Boolean).join(' ');
+    const hashtags = k.hashtags || kit?.hashtags || '#lagctrucks #camioneros #troqueros #americantrucksimulator #simulador';
+    const texto = [c.textos?.es?.titulo || c.gancho, hashtags].filter(Boolean).join(' ');
+    const textoEn = c.textos?.en?.titulo && c.textos.en.titulo !== c.textos?.es?.titulo ? [c.textos.en.titulo, kit?.hashtagsEn || hashtags].join(' ') : '';
+    const yt = ['en cola', 'subiendo', 'listo'].includes(c.youtube?.estado) ? c.youtube : null;   // APOLO lo sube a YouTube: que el streamer no lo suba a mano
     // la portada elegida en Revisión (PhotoCraft); si no hay, un fotograma del 4K
     const elegida = c.portadas?.[c.portada || 0]?.jpg;
     const propia = elegida && fs.existsSync(elegida);
-    const jpg = propia ? elegida : fs.existsSync(c.k4.mp4) ? await portada(c) : null;
+    const hecha = propia ? elegida : fs.existsSync(c.k4.mp4) ? await portada(c) : null;
+    const jpg = hecha && fs.existsSync(hecha) ? hecha : null;
     const color = /^#[0-9a-f]{6}$/i.test(kit?.colores?.acento || '') ? parseInt(kit.colores.acento.slice(1), 16) : 0x00d9ff;
     const cuerpo = {
       embeds: [{ title: `🎬 ${titulo}`.slice(0, 256), color,
-        description: `Texto para redes:\n\`\`\`${texto.slice(0, 900)}\`\`\``,
+        description: `Texto para redes:\n\`\`\`${texto.slice(0, 900)}\`\`\``
+          + (textoEn ? `\nEn inglés (cuentas en inglés / EE. UU.):\n\`\`\`${textoEn.slice(0, 600)}\`\`\`` : '')
+          + (yt ? `\n📺 **YouTube: ya lo sube APOLO** (${yt.publicarEn ? `se publica <t:${Math.floor(yt.publicarEn / 1000)}:f>` : 'publicado'}) — no lo subas a YouTube a mano.` : ''),
         fields: [{ name: 'Duración', value: `${Math.floor(dur / 60)}:${String(dur % 60).padStart(2, '0')}`, inline: true },
           { name: 'Calidad', value: `4K vertical${mb ? ` · ${mb} MB` : ''}`, inline: true },
           { name: 'Stream', value: `[${String(c.titulo || c.stream).replace(/\s*\((portrait|vertical)\)\s*/i, '').trim().slice(0, 80)}](https://www.youtube.com/watch?v=${c.stream})`, inline: true }],
@@ -67,7 +74,9 @@ function crearPublicador({ conf, ejecutar = execFile, pedir = globalThis.fetch, 
       components: [{ type: 1, components: [
         { type: 2, style: 5, label: 'Descargar 4K', emoji: { name: '⬇️' }, url: drive.descargar },
         { type: 2, style: 5, label: 'Ver en Drive', emoji: { name: '▶️' }, url: drive.ver },
-        ...(portadaDrive ? [{ type: 2, style: 5, label: 'Descargar portada', emoji: { name: '🖼️' }, url: portadaDrive.descargar }] : [])] }],
+        ...(portadaDrive ? [{ type: 2, style: 5, label: 'Descargar portada', emoji: { name: '🖼️' }, url: portadaDrive.descargar }] : []),
+        ...(extras.en ? [{ type: 2, style: 5, label: 'Versión en inglés', emoji: { name: '🇺🇸' }, url: extras.en.descargar }] : []),
+        ...(extras.srtEn ? [{ type: 2, style: 5, label: 'Subtítulos EN (.srt)', emoji: { name: '💬' }, url: extras.srtEn.descargar }] : [])] }],
       allowed_mentions: { parse: [] },
     };
     const fd = new FormData();
@@ -79,25 +88,42 @@ function crearPublicador({ conf, ejecutar = execFile, pedir = globalThis.fetch, 
     return d.id;
   }
 
-  // sube (si no estaba ya en Drive) y anuncia; devuelve lo que hay que guardar en c.publicado
-  async function publicar(c) {
+  // borra el 4K local si Drive tiene el mismo tamaño (libera disco); true si se borró
+  async function liberar(c) {
+    const drive = c.publicado?.drive;
+    if (!drive?.remoto || !c.k4?.mp4 || !fs.existsSync(c.k4.mp4)) return false;
+    const remoto = JSON.parse(await rclone('lsjson', drive.remoto))[0];
+    if (remoto && remoto.Size === fs.statSync(c.k4.mp4).size) { fs.rmSync(c.k4.mp4, { force: true }); return true; }
+    log('[publicar] el tamaño en Drive no cuadra; no se borra', c.k4.mp4);
+    return false;
+  }
+  // el 4K de vuelta desde Drive (para subir a YouTube un clip cuyo 4K local ya se borró)
+  async function traer(c, destino) {
+    if (!c.publicado?.drive?.remoto) throw new Error('el clip no está en Drive');
+    await rclone('copyto', c.publicado.drive.remoto, destino);
+    return destino;
+  }
+
+  // sube (si no estaba ya en Drive) y anuncia; devuelve lo que hay que guardar en c.publicado.
+  // borrarLocal: false → el 4K se queda (p. ej. aún falta subirlo a YouTube) y se borra luego con liberar()
+  async function publicar(c, { borrarLocal = conf().borrarLocal } = {}) {
     if (!activo()) throw new Error('falta discordClips.canal / token en lotes.json');
     const yaEnDrive = c.publicado?.drive?.id;
     if (!yaEnDrive && (!c.k4?.mp4 || !fs.existsSync(c.k4.mp4))) throw new Error('el clip no tiene el 4K exportado');
     const drive = yaEnDrive ? c.publicado.drive : await subirDrive(c);
     let portadaDrive = c.publicado?.portadaDrive || null;
     if (!portadaDrive) try { portadaDrive = await subirPortada(c, drive); } catch (e) { log('[publicar] portada a Drive', e.message); }
-    const mensaje = await anunciar(c, drive, portadaDrive);
-    let borrado = false;
-    if (conf().borrarLocal && fs.existsSync(c.k4.mp4)) {
-      const remoto = JSON.parse(await rclone('lsjson', drive.remoto))[0];
-      if (remoto && remoto.Size === fs.statSync(c.k4.mp4).size) { fs.rmSync(c.k4.mp4, { force: true }); borrado = true; }
-      else log('[publicar] el tamaño en Drive no cuadra; no se borra', c.k4.mp4);
+    const extras = { ...(c.publicado?.extras || {}) };
+    for (const [k, local, sufijo] of [['srtEn', c.en?.srt, ' - EN.srt'], ['en', c.en?.mp4, ' - EN.mp4']]) {
+      if (!extras[k] && local) try { extras[k] = await subirJunto(drive, local, sufijo); } catch (e) { log('[publicar]', k, e.message); }
+      if (!extras[k]) delete extras[k];
     }
-    return { estado: 'listo', drive, mensaje, hecho: Date.now(), ...(portadaDrive ? { portadaDrive } : {}), ...(borrado ? { borradoLocal: true } : {}) };
+    const mensaje = await anunciar(c, drive, portadaDrive, extras);
+    const borrado = borrarLocal ? await liberar({ ...c, publicado: { drive } }) : false;
+    return { estado: 'listo', drive, mensaje, hecho: Date.now(), ...(portadaDrive ? { portadaDrive } : {}), ...(Object.keys(extras).length ? { extras } : {}), ...(borrado ? { borradoLocal: true } : {}) };
   }
 
-  return { publicar, activo };
+  return { publicar, activo, liberar, traer };
 }
 
 module.exports = { crearPublicador };

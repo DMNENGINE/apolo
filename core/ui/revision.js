@@ -37,6 +37,20 @@ Object.assign(I18N.dic.en, {
   '💬 En este momento': '💬 At this moment', 'Enviar {n} comentario(s)': 'Send {n} comment(s)', 'Escribe el comentario': 'Write the comment',
   'Se rehace con tus comentarios': 'Being redone with your comments', 'no encontré para corregir': 'could not find to fix', 'rótulos': 'lower thirds',
   'correcciones': 'corrections', 'emojis quitados': 'emojis removed', 'sin efectos': 'no effects', 'pico': 'peak',
+  'sale': 'goes live', 'YouTube: sin cuota hoy, sigue mañana': 'YouTube: out of quota today, continues tomorrow', 'subtítulos EN': 'EN subtitles', 'versión EN': 'EN version', 'inglés: nada': 'English: nothing',
+  'preparando': 'preparing', 'editando': 'editing', 'listo': 'done', 'subiendo': 'uploading', 'Títulos para redes': 'Titles for social media', 'Subir a YouTube': 'Upload to YouTube', 'Títulos es/en': 'ES/EN titles',
+  'Enlace de su publicación (TikTok/YouTube) si no la encuentra': 'Link to its post (TikTok/YouTube) if it is not found',
+  'Para que APOLO suba y programe los clips: en Google Cloud crea un proyecto, activa «YouTube Data API v3» y «YouTube Analytics API», crea un ID de cliente OAuth de tipo «App de escritorio» y pega aquí su JSON.':
+    'For APOLO to upload and schedule clips: in Google Cloud create a project, enable “YouTube Data API v3” and “YouTube Analytics API”, create an OAuth client ID of type “Desktop app” and paste its JSON here.',
+  'Guardar': 'Save', 'Conectar el canal de YouTube': 'Connect the YouTube channel', 'Esperando a que aceptes en el navegador…': 'Waiting for you to accept in the browser…',
+  'Subir solo al aprobar': 'Upload automatically on approve', 'Programar a las mejores horas': 'Schedule at the best hours', 'Desconectar': 'Disconnect',
+  'Estilos': 'Styles', 'Momentos': 'Moments', 'Diseños': 'Layouts', 'Horas': 'Hours', 'Mejores': 'Best', 'la media del canal': 'the channel average', 'con 5+ clips medidos ya decide estilos, títulos y horas': 'with 5+ measured clips it starts choosing styles, titles and hours',
+  'Aún no hay clips publicados medidos. Mide una vez al día lo publicado en YouTube y TikTok y empareja cada publicación con su clip.': 'No published clips measured yet. Once a day it measures what was posted on YouTube and TikTok and matches each post with its clip.',
+  'Publicación y aprendizaje': 'Publishing and learning', '{n} clips medidos': '{n} clips measured', 'diccionario': 'dictionary', 'Lo aprendido': 'What it learned', 'Midiendo…': 'Measuring…', 'Medir ahora': 'Measure now', 'última vez': 'last time',
+  'Diccionario del canal': 'Channel dictionary', 'Lo que corriges en los subtítulos se aprende aquí y sale bien en los clips siguientes.': 'What you fix in the subtitles is learned here and comes out right in the next clips.',
+  'como sale': 'as it comes out', 'como debe ser': 'as it should be', 'Añadir': 'Add', 'Reacción del chat': 'Chat reaction', 'risa': 'laughs', 'choque': 'crash', 'hype': 'hype', 'apoyo': 'support', 'charla': 'chat',
+  'Activado': 'On', 'Desactivado': 'Off', 'Pega el JSON': 'Paste the JSON', 'Guardado': 'Saved', 'Acepta en el navegador que se abrió': 'Accept in the browser window that opened', 'Desconectado': 'Disconnected', 'Midiendo… (1–3 min)': 'Measuring… (1–3 min)',
+  'Pon cómo sale y cómo debe ser': 'Write how it comes out and how it should be', 'Pega el enlace': 'Paste the link', 'En cola para YouTube': 'Queued for YouTube', 'Preparando títulos e inglés': 'Preparing titles and English', 'Vinculado: se mide en la próxima pasada': 'Linked: measured on the next pass',
 });
 
 const RV_ESTADO = { editando: ['aviso', 'editando…'], 'en cola': ['', 'en cola'], revisar: ['ok', 'revisar'], aprobado: ['ok', 'aprobado'], descartado: ['', 'descartado'], error: ['mal', 'error'] };
@@ -77,6 +91,55 @@ function RV_portadas(c) {
   return `<div class="rv-portadas">${c.portadas.map((p, i) => `<button class="rv-portada${i === (c.portada || 0) ? ' si' : ''}" ${elegir ? `data-a="portada" data-i="${i}"` : 'disabled'} title="${esc(tr('Portada'))} ${i + 1}"><img alt="" data-portada="${esc(c.id)}" data-i="${i}"></button>`).join('')}
     ${c.portadas.length > 1 && c.estado === 'revisar' ? `<small>${tr('Portada')}: ${tr('elige la que va con el vídeo')}</small>` : ''}</div>`;
 }
+const RV_num = n => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n || 0));
+const RV_fecha = t => new Date(t).toLocaleString(I18N.locale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+// lo que pasa con un aprobado después del 4K: Drive/Discord, YouTube (programado), títulos es/en, inglés y cómo le va
+function RV_publicacion(c, L) {
+  const p = c.publicado, y = c.youtube, en = c.en, m = c.metricas || {};
+  const chips = [];
+  if (p?.estado === 'listo') chips.push(`<span class="chip ok">Drive + Discord ✓</span>`);
+  else if (p?.estado === 'subiendo' || p?.estado === 'en cola') chips.push(`<span class="chip aviso">Drive + Discord: ${esc(tr(p.estado))}</span>`);
+  else if (p?.estado === 'error') chips.push(`<span class="chip mal" title="${esc(p.error || '')}">Drive + Discord: ${tr('error')}</span>`);
+  if (y?.estado === 'listo') chips.push(`<a class="chip ok" href="${esc(y.url)}" target="_blank" rel="noopener">📺 YouTube ✓${y.publicarEn && y.publicarEn > Date.now() ? ` · ${tr('sale')} ${esc(RV_fecha(y.publicarEn))}` : ''}</a>`);
+  else if (y?.estado === 'subiendo') chips.push(`<span class="chip aviso">📺 YouTube ${y.pct || 0} %</span>`);
+  else if (y?.estado === 'en cola') chips.push(`<span class="chip">📺 YouTube: ${tr('en cola')}${y.publicarEn ? ` · ${esc(RV_fecha(y.publicarEn))}` : ''}</span>`);
+  else if (y?.estado === 'esperando cuota') chips.push(`<span class="chip aviso" title="${esc(y.error || '')}">📺 ${tr('YouTube: sin cuota hoy, sigue mañana')}</span>`);
+  else if (y?.estado === 'error') chips.push(`<span class="chip mal" title="${esc(y.error || '')}">📺 YouTube: ${tr('error')}</span>`);
+  if (en?.estado === 'listo') chips.push(`<span class="chip${en.avisos?.length ? ' aviso' : ''}" title="${esc((en.avisos || []).join(' · '))}">🇺🇸 ${en.srt ? tr('subtítulos EN') : ''}${en.mp4 ? ` + ${tr('versión EN')}` : ''}${!en.srt && !en.mp4 ? tr('inglés: nada') : ''}</span>`);
+  else if (en?.estado) chips.push(`<span class="chip aviso">🇺🇸 ${esc(tr(en.estado))}${en.pct ? ` ${en.pct} %` : ''}</span>`);
+  const met = ['youtube', 'tiktok'].filter(k => m[k]).map(k => `<a href="${esc(m[k].url)}" target="_blank" rel="noopener" class="rv-met">${k === 'youtube' ? '📺' : '🎵'} 👁 ${RV_num(m[k].vistas)} · ❤ ${RV_num(m[k].likes)} · 💬 ${RV_num(m[k].comentarios)}${m[k].retencion != null ? ` · ⏱ ${m[k].retencion} %` : ''}</a>`).join('');
+  const tx = c.textos ? `<details class="rv-textos"><summary>${tr('Títulos para redes')}</summary><div><b>ES</b> ${esc(c.textos.es?.titulo || '')}<br><small class="tenue">${esc(c.textos.es?.descripcion || '')}</small></div><div><b>EN</b> ${esc(c.textos.en?.titulo || '')}<br><small class="tenue">${esc(c.textos.en?.descripcion || '')}</small></div></details>` : '';
+  const puedeYT = L?.youtube?.conectado && c.k4?.estado === 'listo' && !['listo', 'subiendo', 'en cola'].includes(y?.estado);
+  return `<div class="rv-pub"><div class="flex" style="gap:6px;flex-wrap:wrap">${chips.join('')}</div>
+    ${met ? `<div class="rv-mets">${met}</div>` : ''}${tx}
+    <div class="rv-fila">${puedeYT ? `<button class="btn" data-a="youtube">📺 ${tr('Subir a YouTube')}</button>` : ''}${!c.textos && !['en cola', 'preparando', 'editando'].includes(en?.estado) ? `<button class="btn fantasma" data-a="redes">${tr('Títulos es/en')}</button>` : ''}
+      <input type="text" class="rv-vurl" placeholder="${esc(tr('Enlace de su publicación (TikTok/YouTube) si no la encuentra'))}"><button class="btn fantasma" data-a="vincular">🔗</button></div></div>`;
+}
+// arriba de la lista: YouTube (conectar / subir solo), lo aprendido de las métricas y el diccionario del canal
+function RV_panel(L, dic) {
+  const y = L.youtube || {}, ap = L.aprendido;
+  const yt = !y.configurado ? `<p class="tenue">${tr('Para que APOLO suba y programe los clips: en Google Cloud crea un proyecto, activa «YouTube Data API v3» y «YouTube Analytics API», crea un ID de cliente OAuth de tipo «App de escritorio» y pega aquí su JSON.')}</p>
+      <textarea class="rv-ytjson" rows="3" placeholder='{"installed":{"client_id":"…","client_secret":"…"}}'></textarea><button class="btn" data-g="ytcliente">${tr('Guardar')}</button>`
+    : !y.conectado ? `<button class="btn pri" data-g="ytconectar">📺 ${tr('Conectar el canal de YouTube')}</button>${y.conectando ? `<small class="tenue">${tr('Esperando a que aceptes en el navegador…')}</small>` : ''}`
+      : `<div class="flex" style="gap:10px;flex-wrap:wrap;align-items:center"><span class="chip ok">📺 ${esc(y.canal?.titulo || 'YouTube')}</span>
+        <label><input type="checkbox" class="rv-ytactivo" ${y.activo ? 'checked' : ''}> ${tr('Subir solo al aprobar')}</label>
+        <label><input type="checkbox" class="rv-ytprog" ${y.programar !== false ? 'checked' : ''}> ${tr('Programar a las mejores horas')}</label>
+        <button class="btn fantasma" data-g="ytdesconectar">${tr('Desconectar')}</button></div>`;
+  const top = g => Object.entries(g || {}).filter(([, v]) => v.n >= 1).slice(0, 4).map(([k, v]) => `${esc(k)} <b>×${v.factor}</b> <small>(${v.n})</small>`).join(' · ') || '—';
+  const apr = ap?.muestras ? `<div class="rv-apr"><div>${tr('Estilos')}: ${top(ap.estilos)}</div><div>${tr('Momentos')}: ${top(ap.momentos)}</div><div>${tr('Diseños')}: ${top(ap.disenos)}</div><div>${tr('Horas')}: ${top(ap.horas)}</div>
+      ${ap.mejores?.length ? `<div>${tr('Mejores')}: ${ap.mejores.slice(0, 3).map(x => `“${esc(x.titulo || x.gancho || '')}” ${RV_num(x.vistas)}`).join(' · ')}</div>` : ''}<small class="tenue">×1 = ${tr('la media del canal')} · ${tr('con 5+ clips medidos ya decide estilos, títulos y horas')}</small></div>`
+    : `<p class="tenue">${tr('Aún no hay clips publicados medidos. Mide una vez al día lo publicado en YouTube y TikTok y empareja cada publicación con su clip.')}</p>`;
+  const dl = dic?.entradas || [];
+  return `<details class="caja pad rv-panel"${RV_panelAbierto ? ' open' : ''}><summary><b>${tr('Publicación y aprendizaje')}</b> <small class="tenue">· YouTube ${y.conectado ? '✓' : '—'} · ${tr('{n} clips medidos', { n: ap?.muestras || 0 })} · ${tr('diccionario')}: ${dl.length}</small></summary>
+    <h4>📺 YouTube</h4>${yt}
+    <h4>📈 ${tr('Lo aprendido')} <button class="btn fantasma" data-g="medir" ${L.midiendo ? 'disabled' : ''}>${L.midiendo ? tr('Midiendo…') : tr('Medir ahora')}</button>${L.metricasEn ? ` <small class="tenue">${tr('última vez')}: ${esc(RV_fecha(L.metricasEn))}</small>` : ''}</h4>${apr}
+    ${ap?.errores?.length ? `<small class="rv-error">${esc(ap.errores.join(' · '))}</small>` : ''}
+    <h4>📖 ${tr('Diccionario del canal')}</h4><p class="tenue">${tr('Lo que corriges en los subtítulos se aprende aquí y sale bien en los clips siguientes.')}</p>
+    <div class="rv-dic">${dl.map(x => `<span class="chip">${esc(x.mal)} → <b>${esc(x.bien)}</b> <button class="x" data-g="dicquitar" data-mal="${esc(x.mal)}">✕</button></span>`).join('') || `<small class="tenue">—</small>`}</div>
+    <div class="rv-fila"><input type="text" class="rv-dmal" placeholder="${esc(tr('como sale'))}"><input type="text" class="rv-dbien" placeholder="${esc(tr('como debe ser'))}"><button class="btn" data-g="dicanadir">${tr('Añadir')}</button></div>
+  </details>`;
+}
+let RV_panelAbierto = false;
 // comentarios anclados a un momento del vídeo (se acumulan aquí y se mandan juntos)
 function RV_comentar(c, pendientes = []) {
   return `<div class="rv-comentar">
@@ -152,10 +215,16 @@ VISTAS.revision = {
     v.innerHTML = `<div class="pagina">${cabecera('Revisión', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.',
       `<button class="btn" id="rvBuscar">${ic('buscar')}${tr('Buscar clips ahora')}</button>`)}
       <div id="rvEstado"></div>
+      <div id="rvPanel"></div>
       <div class="rv-filtros">${RV_FILTROS.map(([k, t]) => `<button class="btn ${k === this.filtro ? 'pri' : 'fantasma'}" data-f="${k}">${tr(t)} <span class="rv-n" data-n="${k}"></span></button>`).join('')}</div>
       <div id="rvLista"></div></div>`;
     v.onclick = e => this.clic(e);
     v.onchange = e => {
+      if (e.target.matches('.rv-ytactivo, .rv-ytprog')) {
+        api('POST', '/revision/youtube', e.target.matches('.rv-ytactivo') ? { activo: e.target.checked } : { programar: e.target.checked })
+          .then(() => aviso(e.target.checked ? 'Activado' : 'Desactivado')).catch(er => aviso(er.message, true));
+        return;
+      }
       if (e.target.matches('.rv-acc .rv-estilo')) e.target.closest('.rv-acc').querySelector('[data-a="rehacer"]').disabled = false;
       if (e.target.matches('.rv-vmodo')) {
         const box = e.target.closest('.rv-cambios');
@@ -171,9 +240,10 @@ VISTAS.revision = {
   salir() { clearInterval(this.reloj); },
   async cargar(silencio) {
     let L; try { L = await api('GET', '/revision'); } catch (e) { if (!silencio) aviso(e.message, true); return; }
-    const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado, c.k4?.estado, c.portada, c.portadas?.length])) + this.filtro;
+    const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado, c.k4?.estado, c.portada, c.portadas?.length, c.publicado?.estado, c.youtube?.estado, c.en?.estado, c.textos ? 1 : 0, c.metricas?.youtube?.at, c.metricas?.tiktok?.at])) + this.filtro;
     this.L = L;
     this.pintarEstado(L);
+    this.pintarPanel(L);
     this.pintarProgreso(L);
     for (const [k] of RV_FILTROS) { const n = k === 'todos' ? L.clips.length : L.clips.filter(c => c.estado === k).length; const el = $(`[data-n="${k}"]`, this.v); if (el) el.textContent = n || ''; }
     if (silencio && firma === this.firma) return;        // nada cambió: no se repinta (no corta el vídeo que estás viendo)
@@ -182,6 +252,33 @@ VISTAS.revision = {
     $('#rvLista', this.v).innerHTML = this.lista(L);
     this.pintarProgreso(L);
     this.cargarPrevias();
+  },
+  // panel de publicación: solo se repinta si cambió algo y no estás escribiendo en él
+  async pintarPanel(L, forzar) {
+    const el = $('#rvPanel', this.v); if (!el) return;
+    const firma = JSON.stringify([L.youtube, L.aprendido?.actualizado, L.metricasEn, L.midiendo, L.diccionario]);
+    if (!forzar && (firma === this.firmaPanel || el.contains(document.activeElement))) return;
+    this.firmaPanel = firma;
+    let dic = null; try { dic = await api('GET', '/revision/diccionario'); } catch { }
+    el.innerHTML = RV_panel(L, dic);
+    $('.rv-panel', el).ontoggle = e => { RV_panelAbierto = e.target.open; };
+  },
+  async clicPanel(g) {
+    const panel = $('#rvPanel', this.v);
+    try {
+      if (g.dataset.g === 'ytcliente') { const t = $('.rv-ytjson', panel).value.trim(); if (!t) return aviso('Pega el JSON', true); await api('POST', '/revision/youtube', { cliente: t }); aviso('Guardado'); }
+      if (g.dataset.g === 'ytconectar') { await api('POST', '/revision/youtube/conectar'); aviso('Acepta en el navegador que se abrió'); }
+      if (g.dataset.g === 'ytdesconectar') { await api('POST', '/revision/youtube/desconectar'); aviso('Desconectado'); }
+      if (g.dataset.g === 'medir') { await api('POST', '/revision/metricas'); aviso('Midiendo… (1–3 min)'); }
+      if (g.dataset.g === 'dicquitar') await api('POST', '/revision/diccionario', { quitar: g.dataset.mal });
+      if (g.dataset.g === 'dicanadir') {
+        const mal = $('.rv-dmal', panel).value.trim(), bien = $('.rv-dbien', panel).value.trim();
+        if (!mal || !bien) return aviso('Pon cómo sale y cómo debe ser', true);
+        await api('POST', '/revision/diccionario', { mal, bien });
+      }
+      document.activeElement?.blur?.();
+      const L = await api('GET', '/revision'); this.L = L; await this.pintarPanel(L, true);
+    } catch (er) { aviso(er.message, true); }
   },
   // barra de la tarjeta que se está editando: se actualiza sola (sin repintar la lista, no corta lo que estás viendo)
   pintarProgreso(L) {
@@ -216,7 +313,7 @@ VISTAS.revision = {
       return `<div class="caja rv-clip" data-id="${esc(c.id)}">
         <div class="rv-medio">${listo ? `<img class="rv-previa" alt="" data-previa="${esc(c.id)}"><button class="rv-play" data-a="ver" title="${esc(tr('Ver clip'))}">▶</button>` : `<div class="rv-hueco">${esc(tr(txt))}</div>`}</div>
         <div class="rv-info">
-          <div class="flex rv-cab"><b>#${c.rank}</b><span class="tenue">${RV_mmss(c.fin - c.inicio)} · ${RV_mmss(c.inicio)} del stream</span><span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}</div>
+          <div class="flex rv-cab"><b>#${c.rank}</b><span class="tenue">${RV_mmss(c.fin - c.inicio)} · ${RV_mmss(c.inicio)} del stream</span><span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}${c.momento?.tipo ? `<span class="chip" title="${esc(tr('Reacción del chat'))}">${{ risa: '😂', choque: '💥', hype: '🔥', apoyo: '💲', charla: '💬' }[c.momento.tipo] || '💬'} ${esc(tr(c.momento.tipo))}${c.momento.autores ? ` · ${c.momento.autores} 👤` : ''}</span>` : ''}</div>
           ${c.gancho ? `<div class="rv-gancho">${esc(c.gancho)}</div>` : ''}
           ${c.escenas?.length ? `<small class="tenue">${tr('Escenas')}: ${c.escenas.map(s => `${esc(s.tipo)} ${RV_mmss(s.desde)}`).join(' · ')}${c.emojis ? ` · ${c.emojis} emojis` : ''}</small>` : ''}
           ${c.plan ? `<small class="tenue">🎬 ${tr('Director')}: ${(c.disenos || []).map(d => `${d.tipo === 'podcast' ? '🎙️ podcast' : '🪟 ' + tr('ventanita')} ${RV_mmss(d.desde)}–${RV_mmss(d.hasta)}`).join(' · ') || tr('sin diseños')}${c.sonidos ? ` · 🔊 ${c.sonidos} ${tr('sonidos')}` : ''}${(c.plan.emojis || []).length ? ` · ${c.plan.emojis.map(e => e.emoji).join('')}` : ''}</small>` : ''}
@@ -228,7 +325,8 @@ VISTAS.revision = {
           ${c.retocado ? `<span class="chip">${tr('retocado a mano')}</span>` : ''}
           ${listo ? RV_calidad(c) : ''}
           ${listo ? RV_portadas(c) : ''}
-          ${c.estado === 'aprobado' ? `<div class="rv-k4 flex" data-k4="${esc(c.id)}">${RV_k4(c)}</div>` : ''}
+          ${c.estado === 'aprobado' ? `<div class="rv-k4 flex" data-k4="${esc(c.id)}">${RV_k4(c)}</div>${RV_publicacion(c, L)}` : ''}
+          ${c.diccionario ? `<small class="tenue">📖 ${tr('diccionario')}: ${c.diccionario}</small>` : ''}
           ${c.estado === 'revisar' || c.estado === 'error' ? `<div class="rv-acc flex">
             ${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
             <select class="rv-estilo"><option value="">${tr('Otro estilo')}…</option>${opciones}</select><button class="btn" data-a="rehacer">${tr('Rehacer')}</button>
@@ -260,8 +358,10 @@ VISTAS.revision = {
       try { const r = await api('POST', '/revision/revisar'); aviso(r.nuevos ? tr('{n} clips nuevos', { n: r.nuevos }) : 'No hay streams nuevos'); } catch (er) { aviso(er.message, true); }
       b.disabled = false; return this.cargar();
     }
+    const g = e.target.closest('[data-g]'); if (g) return this.clicPanel(g);
     const a = e.target.closest('[data-a]'); if (!a) return;
-    const tarjeta = a.closest('.rv-clip'), id = tarjeta.dataset.id;
+    const tarjeta = a.closest('.rv-clip'); if (!tarjeta) return;
+    const id = tarjeta.dataset.id;
     if (a.dataset.a === 'ver') {
       const medio = $('.rv-medio', tarjeta); medio.innerHTML = `<div class="rv-hueco">…</div>`;
       try { const url = await RV_blob(`/revision/${encodeURIComponent(id)}/video`); medio.innerHTML = `<video src="${url}" controls autoplay playsinline></video>`; }
@@ -330,13 +430,15 @@ VISTAS.revision = {
       const comentarios = this.coms.get(id) || []; if (!comentarios.length) return;
       ruta = 'modificar'; cuerpo = { comentarios }; aviso('Entendiendo el pedido…');
     }
+    if (ruta === 'vincular') { cuerpo = { url: $('.rv-vurl', tarjeta).value.trim() }; if (!cuerpo.url) return aviso('Pega el enlace', true); }
     if (ruta === 'abrir') aviso('Abriendo FilmCraft…');
     a.disabled = true;
     try {
       const r = await api('POST', `/revision/${encodeURIComponent(id)}/${ruta}`, cuerpo);
       if (cuerpo.comentarios) this.coms.delete(id);
       aviso(ruta === 'modificar' ? (r?.respuesta || (cuerpo.comentarios ? 'Se rehace con tus comentarios' : 'Se rehace con tus cambios'))
-        : { aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado', abrir: 'Abierto en FilmCraft', exportar: 'Exportando lo retocado', '4k': '4K en cola' }[ruta]);
+        : { aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado', abrir: 'Abierto en FilmCraft', exportar: 'Exportando lo retocado', '4k': '4K en cola',
+          youtube: 'En cola para YouTube', redes: 'Preparando títulos e inglés', vincular: 'Vinculado: se mide en la próxima pasada' }[ruta]);
       if (ruta === 'abrir') { a.disabled = false; return; }
       this.firma = null; await this.cargar();
     } catch (er) { aviso(er.message, true); a.disabled = false; }

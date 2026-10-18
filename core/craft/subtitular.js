@@ -182,7 +182,7 @@ function montarFuente(entrada, salida, { avance, recorte }, ffmpeg = 'ffmpeg') {
 }
 
 // ── edición en FilmCraft ──
-function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod.crearKits({ cfg }), audio = require('./audio').crearAudio({ mcpLocales, cfg }), medir = calidad.medir }) {
+function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod.crearKits({ cfg }), audio = require('./audio').crearAudio({ mcpLocales, cfg }), medir = calidad.medir, diccionario = require('./diccionario').crearDiccionario({ cfg }) }) {
   async function fc(id, params = {}) {
     // exportar un clip de 3 min con muchas animaciones pasa de 10 min en CPU: si se corta, FilmCraft sigue exportando y atasca lo siguiente
     const r = await mcpLocales.llamar('filmcraft', 'command_run', { id, params }, id === 'file.exportMedia' ? { timeoutSeg: 3600 } : {});
@@ -220,12 +220,13 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     }
   }
 
-  async function ideas(palabras, titulo) {               // gancho + palabras clave con el modelo del cerebro (si falla, título del archivo)
+  // pista = lo aprendido de cómo le fue a los clips publicados (metricas.js)
+  async function ideas(palabras, titulo, pista = '') {   // gancho + palabras clave con el modelo del cerebro (si falla, título del archivo)
     if (!generarJSON || !palabras.length) return { gancho: titulo || null, resaltar: [] };
     try {
       const texto = palabras.map(p => p.w).join(' ').slice(0, 6000);
       const r = await generarJSON({ modelo: modelo?.(), system: 'Editas clips verticales para TikTok/Shorts en español.', prompt:
-        `Título del clip: "${titulo}"\nTranscripción:\n${texto}\n\nDevuelve: gancho = título corto y llamativo para los primeros segundos (máx. 6 palabras, sin emojis, basado en el título y lo que se dice); resaltar = 4–12 palabras CLAVE que aparecen tal cual en la transcripción (nombres, cifras, lo sorprendente; nunca artículos ni muletillas).`,
+        `Título del clip: "${titulo}"\nTranscripción:\n${texto}\n\n${pista ? `${pista}\n\n` : ''}Devuelve: gancho = título corto y llamativo para los primeros segundos (máx. 6 palabras, sin emojis, basado en el título y lo que se dice); resaltar = 4–12 palabras CLAVE que aparecen tal cual en la transcripción (nombres, cifras, lo sorprendente; nunca artículos ni muletillas).`,
         schema: { type: 'object', properties: { gancho: { type: 'string' }, resaltar: { type: 'array', items: { type: 'string' } } }, required: ['gancho', 'resaltar'] } });
       const d = r?.datos || r;
       return { gancho: String(d.gancho || titulo).toLocaleUpperCase('es').slice(0, 60), resaltar: (d.resaltar || []).map(String).slice(0, 16) };
@@ -252,7 +253,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     const opTrozos = { maxPalabras: E.modo === 'palabra' ? 1 : E.maxPalabras || 3, maxLetras: E.maxLetras || 22 };
 
     // 1. palabras / subtítulos
-    let palabras = [], trozos, noCorregidas = [];
+    let palabras = [], trozos, noCorregidas = [], delDiccionario = 0;
     if (Array.isArray(a.subtitulos) && a.subtitulos.length) {
       // subtítulos corregidos a mano: las palabras se reparten a partes iguales dentro de cada uno
       trozos = a.subtitulos.filter(t => String(t.texto || '').trim() && +t.e > +t.s).map(t => {
@@ -270,10 +271,17 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
       try { const j = JSON.parse(fs.readFileSync(cache, 'utf8')); if (j.huella === huella) tr = j; } catch { }
       if (!tr) {
         avisar('transcribiendo (1–4 min)…');
-        tr = await transcribir(video, { python: c.python, modelo: modeloW, idioma: a.idioma || c.idioma || 'es', contexto: a.contexto || '', gpu: !!c.gpu, signal: ctx.signal });
+        // las palabras del diccionario del canal van de pista a Whisper (no entran en la huella: que crezca no obliga a transcribir otra vez)
+        const pista = K && a.diccionario !== false ? diccionario.pista(K.id) : '';
+        tr = await transcribir(video, { python: c.python, modelo: modeloW, idioma: a.idioma || c.idioma || 'es', contexto: [a.contexto, pista].filter(Boolean).join(' ').slice(0, 900), gpu: !!c.gpu, signal: ctx.signal });
         fs.mkdirSync(dirSalida, { recursive: true }); fs.writeFileSync(cache, JSON.stringify({ ...tr, huella }));
       }
       palabras = tr.palabras;
+      if (K && a.diccionario !== false) {                // lo que el usuario ya corrigió en otros clips de este canal
+        const r = diccionario.aplicar(K.id, palabras);
+        palabras = r.palabras; delDiccionario = r.cambios;
+        if (r.cambios) avisar(`diccionario del canal: ${r.cambios} palabra(s) corregida(s)`);
+      }
       if (Array.isArray(a.correcciones) && a.correcciones.length) {   // texto corregido en Revisión (sin volver a pasar Whisper)
         const r = corregirPalabras(palabras, a.correcciones);
         palabras = r.palabras; noCorregidas = r.sinAplicar;
@@ -310,7 +318,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     if (!trozos.length) throw new Error('no se oye nada que subtitular');
 
     // 2. gancho + resaltados
-    const id = await ideas(palabras, titulo);
+    const id = await ideas(palabras, titulo, a.pistas?.titulo);
     const g = a.gancho === false ? null : a.gancho || id.gancho || titulo || null;
     const gancho = g ? String(g).toLocaleUpperCase('es') : null;
     const claves = resaltables(palabras, [...id.resaltar, ...(a.resaltar || [])].flatMap(x => String(x).split(/\s+/)));
@@ -323,7 +331,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
       try {
         avisar('analizando el vídeo (cámaras, caras, volumen)', 9);
         an = await director.analizar(video, a.zonas, { python: cfg?.craft?.python, cache: path.join(dirSalida, `${path.basename(video, path.extname(video))}.analisis.json`), signal: ctx.signal });
-        if (!plan) { avisar('el director decide la edición', 11); plan = await director.dirigir({ an, palabras, generarJSON, modelo, titulo, contexto: a.contexto, log: m => avisar(m) }); }
+        if (!plan) { avisar('el director decide la edición', 11); plan = await director.dirigir({ an, palabras, generarJSON, modelo, titulo, contexto: [a.contexto, a.pistas?.director].filter(Boolean).join(' '), log: m => avisar(m) }); }
       } catch (e) { avisar(`director no disponible (${e.message}); edición normal`); plan = null; }
     }
     if (plan) {
@@ -757,7 +765,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     const datos = { mp4: a.exportar === false ? null : mp4, srt: a.exportar === false ? null : path.join(dirSalida, nombre + '.srt'), proyecto,
       previa: fs.existsSync(previa) ? previa : null, estilo: a.estilo || 'clasico', gancho, subtitulos: trozos.length, emojis: nEmojis,
       escenas: escenas.map(e => ({ tipo: e.tipo || 'acercar', desde: e.desde, hasta: e.hasta })),
-      plan, disenos: nDisenos, sonidos: nSonidos, rotulos: nRotulos, calidad: qa, audioPro: audioPro && { lufs: audioPro.lufs, picoReal: audioPro.picoReal, reutilizado: !!audioPro.reutilizado },
+      plan, disenos: nDisenos, sonidos: nSonidos, rotulos: nRotulos, calidad: qa, diccionario: delDiccionario, audioPro: audioPro && { lufs: audioPro.lufs, picoReal: audioPro.picoReal, reutilizado: !!audioPro.reutilizado },
       noCorregidas, cajas,
       // para las portadas: el vídeo SIN nada encima (montado si hubo avance/recorte) y su análisis (caras, volumen)
       fuente: video, analisis: an ? path.join(dirSalida, `${path.basename(video, path.extname(video))}.analisis.json`) : null,

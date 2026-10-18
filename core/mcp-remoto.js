@@ -228,4 +228,4 @@ function crearMcpRemotos({ cfg, registrar, quitar, abrir = abrirNavegador, fetch
   return { conectar, desconectar, estado, llamar, conectado, http: httpApi, token, rpc, refrescarHerramientas, flujo: fid => flujos.get(fid), CONOCIDOS };
 }
 
-module.exports = { crearMcpRemotos, CONOCIDOS };
+module.exports = { crearMcpRemotos, CONOCIDOS, abrirNavegador };

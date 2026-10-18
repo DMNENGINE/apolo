@@ -16,25 +16,33 @@ const { execFile } = require('child_process');
 const estilos = require('./estilos');
 const calidad = require('./calidad');
 const { crearPublicador } = require('./publicar');
+const redes = require('./redes');
+const metricasMod = require('./metricas');
 
 const ESTILOS_DEFECTO = ['pop', 'karaoke', 'fuego', 'impacto', 'terror', 'atardecer', 'noche', 'tornado', 'arcoiris', 'oro'];
 // ajustes que son listas y se ACUMULAN al pedir cambios (cada comentario añade el suyo)
 const ACUMULABLES = ['correcciones', 'quitarEmojis', 'sinEfectos', 'rotulos'];
 
-// miniaturas: crearMiniaturas (core/craft/miniatura.js) o nada (sin portadas); kits: crearKits; medir: calidad.medir (inyectables en tests)
-function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecutar = execFile, pedir, log = () => { }, miniaturas = null, kits = require('./kit').crearKits({ cfg }), medir = calidad.medir }) {
+// miniaturas: crearMiniaturas (core/craft/miniatura.js) o nada (sin portadas); kits: crearKits; medir: calidad.medir;
+// diccionario: crearDiccionario; youtube: crearYouTube; metricas: crearMetricas (inyectables en tests)
+function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecutar = execFile, pedir, log = () => { }, miniaturas = null, kits = require('./kit').crearKits({ cfg }), medir = calidad.medir,
+  diccionario = require('./diccionario').crearDiccionario({ cfg }), youtube, metricas, abrirUrl = null }) {
   const dir = path.join(cfg.dir, 'craft');
-  const FC = path.join(dir, 'lotes.json'), FE = path.join(dir, 'lotes-estado.json');
+  const FC = path.join(dir, 'lotes.json'), FE = path.join(dir, 'lotes-estado.json'), FA = path.join(dir, 'aprendizaje.json');
+  youtube = youtube || require('./youtube').crearYouTube({ dir, ...(pedir ? { pedir } : {}), abrir: abrirUrl, log });
+  metricas = metricas || metricasMod.crearMetricas({ python: cfg?.craft?.python || 'python', ejecutar, youtube, generarJSON, modelo, log });
   const leer = (f, def) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return def; } };
   const guardarJ = (f, o) => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(f, JSON.stringify(o, null, 2)); };
   let conf = { salida: path.join(os.homedir(), 'Videos', 'APOLO'), retencionDias: 7, fuentes: [], ...leer(FC, {}) };
   const est = { vistos: {}, clips: {}, ...leer(FE, {}) };
+  let aprendido = leer(FA, null);                      // lo aprendido de las métricas (metricas.aprender)
   const guardarConf = () => guardarJ(FC, conf), guardarEst = () => guardarJ(FE, est);
   const cola = [];                                     // ids de clips por editar (en orden)
   let enCurso = null, revisando = false;
   for (const c of Object.values(est.clips)) if (c.estado === 'editando' || c.estado === 'en cola') { c.estado = 'en cola'; cola.push(c.id); }   // tras reiniciar
   for (const c of Object.values(est.clips)) if (c.estado === 'descargando') { c.estado = 'error'; c.error = 'la descarga se cortó al reiniciar; pídelo otra vez'; }
-  // exportaciones 4K pendientes (van en la misma cola como "4k:<id>")
+  // textos para redes + inglés ("en:<id>") y exportaciones 4K ("4k:<id>") pendientes: van en la misma cola, en ese orden
+  for (const c of Object.values(est.clips)) if (c.estado === 'aprobado' && ['en cola', 'preparando'].includes(c.en?.estado)) { c.en = { ...c.en, estado: 'en cola' }; cola.push('en:' + c.id); }
   for (const c of Object.values(est.clips)) if (c.estado === 'aprobado' && ['en cola', 'exportando'].includes(c.k4?.estado)) { c.k4 = { estado: 'en cola' }; cola.push('4k:' + c.id); }
 
   const sh = (cmd, args, { timeout = 600_000 } = {}) => new Promise((ok, mal) =>
@@ -47,6 +55,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const publicador = crearPublicador({ conf: () => conf.discordClips, ejecutar, ...(pedir ? { pedir } : {}), log, kitDe });
   const borrar = (...fs_) => { for (const f of fs_.flat()) if (f) try { fs.rmSync(f, { force: true }); } catch { } };
   const archivosPortadas = c => (c.portadas || []).flatMap(p => [p.jpg, p.pcraft]);
+  const pistasDe = () => metricasMod.pistas(aprendido);
+  const zonaDe = k => k?.publicacion?.zona || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   // ── 1. buscar streams nuevos en las fuentes ──
   async function revisar() {
@@ -79,6 +89,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
             if (est.clips[id]) continue;
             est.clips[id] = { id, fuente: f.id, stream: m.video, titulo: m.titulo, fecha: m.fecha, carpeta, rank: c.rank, archivo: c.archivo,
               inicio: c.inicio, fin: c.fin, chat: (c.chat || []).slice(0, 12).map(x => (typeof x === 'string' ? x : x.texto || x.mensaje || '')).filter(Boolean),
+              // lo que el detector de la Pi sabe del momento: de qué tipo fue la reacción del chat, cuánta gente y cuánta en inglés
+              ...(c.tipo ? { momento: { tipo: c.tipo, autores: c.autores ?? null, ingles: c.ingles ?? null, puntaje: c.puntaje ?? null } } : {}),
               estado: 'en cola', creado: Date.now() };
             cola.push(id); nuevos++;
           }
@@ -98,7 +110,9 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (!generarJSON) return permitidos[0];
     try {
       const r = await generarJSON({ modelo: modelo?.(), system: 'Eres editor de clips verticales para TikTok/Shorts. Eliges el estilo de subtítulos que mejor va con el tono del clip.',
-        prompt: `Lo que se dice en el clip:\n${transcripcion.slice(0, 2500)}\n\nLo que escribía el chat en ese momento:\n${clip.chat.join(' | ').slice(0, 800)}\n\n`
+        prompt: `Lo que se dice en el clip:\n${transcripcion.slice(0, 2500)}\n\nLo que escribía el chat en ese momento:\n${(clip.chat || []).join(' | ').slice(0, 800)}\n\n`
+          + (clip.momento?.tipo ? `El chat reaccionó sobre todo con: ${clip.momento.tipo}${clip.momento.autores ? ` (${clip.momento.autores} personas)` : ''}.\n` : '')
+          + (pistasDe().estilo ? `${pistasDe().estilo}\n\n` : '')
           + `Estilos disponibles:\n${permitidos.map(e => `- ${e}: ${estilos.ESTILOS[e].descripcion}`).join('\n')}\n\n`
           + `Ya usados en este stream (evita repetir mucho): ${usados.join(', ') || 'ninguno'}.\nElige UNO por el tono (miedo/fantasmas → terror, risas → arcoiris o tornado, épico/récord → oro o impacto, charla tranquila → noche o karaoke, energía → pop o fuego).`,
         schema: { type: 'object', properties: { estilo: { type: 'string', enum: permitidos }, motivo: { type: 'string' } }, required: ['estilo'] } });
@@ -125,7 +139,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     fs.mkdirSync(path.dirname(original), { recursive: true });
     if (!fs.existsSync(original)) await scp(f, `${f.ruta}/${c.carpeta}/${c.archivo}`, original);
     const comun = { video: original, perfil: f.perfil, carpeta: path.join(base, 'editados'), nombre: `${String(c.rank).padStart(2, '0')}`,
-      tituloClip: c.tituloClip || String(c.titulo || '').replace(/\s*\((portrait|vertical)\)\s*/i, '').trim() || undefined };
+      tituloClip: c.tituloClip || String(c.titulo || '').replace(/\s*\((portrait|vertical)\)\s*/i, '').trim() || undefined, pistas: pistasDe() };
     if (!c.estiloForzado) {                             // transcribe primero (queda en caché) para elegir el estilo por lo que se dice
       ctx.progreso('transcribiendo', 2);
       const t = await subtitulador.subtitular({ ...comun, soloTranscribir: true }, ctx);
@@ -163,7 +177,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     Object.assign(c, { estado: 'revisar', mp4: d.mp4, srt: d.srt, previa: d.previa, proyecto: d.proyecto, gancho: d.gancho, dudas: d.dudas || [], escenas: d.escenas || [],
       emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null, retocado: false, plan: d.plan || null, planClave: clave, disenos: d.plan?.disenos || [], sonidos: d.sonidos || 0,
       calidad: d.calidad || null, audioPro: d.audioPro || null, rotulos: d.rotulos || 0, noCorregidas: d.noCorregidas || [],
-      portadas, portada: Math.min(c.portada || 0, Math.max(0, portadas.length - 1)) });
+      portadas, portada: Math.min(c.portada || 0, Math.max(0, portadas.length - 1)), fuenteVideo: d.fuente || null, diccionario: d.diccionario || 0 });
+    // las correcciones que sí se aplicaron pasan al diccionario del canal (los clips siguientes ya salen bien)
+    const corr = (c.ajustes?.correcciones || []).filter(x => !(d.noCorregidas || []).some(n => n.mal === x.mal && n.bien === x.bien));
+    if (corr.length && f.perfil) try { diccionario.aprender(f.perfil, corr, c.id); } catch (e) { log('[lotes] diccionario', e.message); }
     guardarEst();
     bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
@@ -173,6 +190,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     while (cola.length) {
       const id = cola.shift(); enCurso = id;
       if (id.startsWith('4k:')) { await hacer4k(id.slice(3)); enCurso = null; continue; }
+      if (id.startsWith('en:')) { await prepararRedes(id.slice(3)); enCurso = null; continue; }
       try { await editarUno(id); }
       catch (e) { const c = est.clips[id]; if (c) { c.estado = 'error'; c.error = e.message.slice(0, 400); guardarEst(); } log('[lotes]', id, e.message); }
       if (est.clips[id]?.progreso) { delete est.clips[id].progreso; guardarEst(); }
@@ -228,20 +246,172 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
 
+  // ── al aprobar, antes del 4K: título y descripción para redes (es + en), subtítulos en inglés (.srt) y, si el kit lo pide
+  // (ingles.quemado), una versión con los subtítulos y el título en inglés quemados (1080p, mismo plan del director) ──
+  async function prepararRedes(id) {
+    const c = est.clips[id]; if (!c || c.estado !== 'aprobado') return;
+    const k = kitDe(c), f = conf.fuentes.find(x => x.id === c.fuente);
+    c.en = { ...c.en, estado: 'preparando', desde: Date.now() }; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    let srtEs = ''; try { srtEs = c.srt && fs.existsSync(c.srt) ? fs.readFileSync(c.srt, 'utf8') : ''; } catch { }
+    const avisos = [];
+    if (!c.textos) c.textos = await redes.textosRedes({ gancho: c.gancho, transcripcion: redes.leerSrt(srtEs).map(x => x.texto).join(' '), titulo: c.titulo, kit: k, stream: c.stream, generarJSON, modelo, pistas: pistasDe().titulo });
+    if (k?.ingles?.srt !== false && srtEs && !(c.en.srt && fs.existsSync(c.en.srt))) {
+      try {
+        const en = await redes.traducirSrt(srtEs, { generarJSON, modelo, contexto: k?.contexto });
+        const destino = c.mp4.replace(/\.mp4$/i, '.en.srt');
+        fs.writeFileSync(destino, en); c.en.srt = destino;
+      } catch (e) { avisos.push(`subtítulos en inglés: ${e.message}`); log('[lotes] srt en', id, e.message); }
+    }
+    if (k?.ingles?.quemado && c.en.srt && !(c.en.mp4 && fs.existsSync(c.en.mp4))) {
+      try {
+        if (!c.fuenteVideo || !fs.existsSync(c.fuenteVideo)) throw new Error('ya no está el vídeo de origen');
+        c.en.estado = 'editando'; guardarEst();
+        // el vídeo de origen ya va montado (avance/recorte): los tiempos de los subtítulos y del plan son los de ese vídeo
+        const { correcciones: _c, avance: _a, recorte: _r, gancho: _g, estilo: _e, temblor, ...aj } = c.ajustes || {};
+        const subs = redes.leerSrt(fs.readFileSync(c.en.srt, 'utf8'));
+        const ctx = { progreso: (fase, pct) => { c.en = { ...c.en, fase: String(fase).replace(/…$/, ''), pct: Math.round(pct ?? c.en.pct ?? 0) }; } };
+        const r = await subtitulador.subtitular({ video: c.fuenteVideo, perfil: f?.perfil, carpeta: path.dirname(c.fuenteVideo), nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo} EN`,
+          estilo: c.estilo, escenas: f?.escenas ?? 'auto', ...aj, ...(temblor === false || (temblor && !_a && !_r) ? { temblor } : {}), plan: c.plan || undefined, subtitulos: subs,
+          gancho: c.textos?.ganchoEn || c.gancho || false, cta: k?.ingles?.cta || 'Follow for more', diccionario: false }, ctx);
+        const d = r.datos || {};
+        const destino = c.mp4.replace(/\.mp4$/i, ' EN.mp4');
+        fs.renameSync(d.mp4, destino);
+        borrar(d.srt, d.previa, d.proyecto);
+        c.en = { ...c.en, mp4: destino, calidad: d.calidad || null };
+        if (d.calidad && !d.calidad.ok) avisos.push(`versión en inglés: ${(d.calidad.errores || []).map(x => x.texto).join('; ')}`);
+      } catch (e) { avisos.push(`versión en inglés: ${e.message}`); log('[lotes] versión en', id, e.message); }
+    }
+    c.en = { ...c.en, estado: 'listo', hecho: Date.now(), avisos }; delete c.en.fase; delete c.en.pct;
+    if (conf.exportar4k === false || !c.proyecto) borrarFuentes(c);   // sin 4K detrás, aquí acaba lo que necesita el vídeo de origen
+    guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+  }
+  function encolarRedes(c) {
+    if (['en cola', 'preparando', 'editando'].includes(c.en?.estado)) return;
+    c.en = { ...c.en, estado: 'en cola' }; cola.push('en:' + c.id);
+  }
+
   // ── 4K → Google Drive + anuncio en el canal de Discord del streamer (de uno en uno, sin frenar la cola de edición) ──
+  // y después YouTube (programado). El 4K local se borra cuando ya no hace falta (Drive confirmado y YouTube hecho)
+  const confYT = () => ({ activo: false, programar: true, ...(conf.youtube || {}) });
+  const ytPara = c => confYT().activo && youtube.conectado() && kitDe(c)?.publicacion?.youtube?.activo !== false;
   let subidas = Promise.resolve();
   function publicar(c) {
     if (['en cola', 'subiendo'].includes(c.publicado?.estado)) return publico(c);
     c.publicado = { ...c.publicado, estado: 'en cola' }; guardarEst();
+    const conYT = ytPara(c) && !['listo', 'subiendo'].includes(c.youtube?.estado);
+    if (conYT) reservarHueco(c);                         // el anuncio ya dice a qué hora sale en YouTube
     subidas = subidas.then(async () => {
       c.publicado = { ...c.publicado, estado: 'subiendo', desde: Date.now() }; bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
-      try { c.publicado = await publicador.publicar(c); }
+      try { c.publicado = await publicador.publicar(c, { borrarLocal: conYT ? false : conf.discordClips?.borrarLocal }); }
       catch (e) { c.publicado = { ...c.publicado, estado: 'error', error: e.message.slice(0, 300) }; log('[lotes] publicar', c.id, e.message); }
       guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+      if (conYT) await subirYouTube(c);
     });
     return publico(c);
   }
+
+  // hora de publicación: la siguiente libre entre las del kit (o las que mejor han funcionado), sin pasar de maxPorDia
+  function reservarHueco(c) {
+    const k = kitDe(c), py = k?.publicacion?.youtube || {};
+    if (confYT().programar === false) { c.youtube = { ...c.youtube, estado: 'en cola', publicarEn: null }; return; }
+    if (c.youtube?.publicarEn && c.youtube.publicarEn > Date.now() + 15 * 60_000) { c.youtube = { ...c.youtube, estado: 'en cola' }; return; }
+    const ocupados = Object.values(est.clips).filter(x => x.id !== c.id && x.youtube?.publicarEn && x.youtube.estado !== 'error').map(x => x.youtube.publicarEn);
+    const t = redes.siguienteHueco({ horas: metricasMod.mejoresHoras(aprendido, py.horas || ['12:00', '18:00', '21:00']), zona: zonaDe(k), ocupados, maxPorDia: py.maxPorDia || 3 });
+    c.youtube = { ...c.youtube, estado: 'en cola', publicarEn: t };
+  }
+
+  async function subirYouTube(c) {
+    const k = kitDe(c), py = k?.publicacion?.youtube || {};
+    if (!c.youtube?.estado || c.youtube.estado === 'error' || c.youtube.estado === 'esperando cuota') reservarHueco(c);
+    if (c.youtube.publicarEn && c.youtube.publicarEn < Date.now() + 15 * 60_000) reservarHueco(c);   // la hora reservada ya pasó (p. ej. esperó cuota)
+    c.youtube = { ...c.youtube, estado: 'subiendo', pct: 0, desde: Date.now(), error: null }; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    let archivo = c.k4?.mp4, temporal = null;
+    try {
+      if (!archivo || !fs.existsSync(archivo)) {             // el 4K local ya se borró: de vuelta desde Drive
+        temporal = path.join(os.tmpdir(), `apolo-yt-${process.pid}-${Date.now()}.mp4`);
+        await publicador.traer(c, temporal); archivo = temporal;
+      }
+      const tx = c.textos || redes.textosBase({ gancho: c.gancho, kit: k, stream: c.stream });
+      const tags = (py.hashtags || k?.hashtags || '').split(/\s+/).filter(h => h.startsWith('#'));
+      const tagsEn = (k?.ingles?.hashtags || py.hashtags || k?.hashtags || '').split(/\s+/).filter(h => h.startsWith('#'));
+      const v = await youtube.subir({ archivo, titulo: redes.tituloConHashtags(tx.es.titulo, tags.join(' ')), descripcion: `${tx.es.descripcion}\n\n${tags.join(' ')}`,
+        etiquetas: [...new Set([...tags, ...tagsEn].map(h => h.slice(1)))], idioma: 'es', idiomaAudio: 'es', privacidad: py.privacidad || 'public', publicarEn: c.youtube.publicarEn,
+        localizaciones: tx.en?.titulo ? { en: { title: redes.tituloConHashtags(tx.en.titulo, tagsEn.join(' ')), description: `${tx.en.descripcion}\n\n${tagsEn.join(' ')}` } } : null,
+        progreso: pct => { c.youtube = { ...c.youtube, pct }; } });
+      const avisos = [];
+      const jpg = c.portadas?.[c.portada || 0]?.jpg;
+      if (jpg && fs.existsSync(jpg)) {
+        try {
+          let foto = jpg;
+          if (fs.statSync(jpg).size > 2_000_000) { foto = path.join(os.tmpdir(), `apolo-yt-portada-${Date.now()}.jpg`); await sh(cfg?.craft?.ffmpeg || 'ffmpeg', ['-y', '-v', 'error', '-i', jpg, '-vf', 'scale=720:-2', '-q:v', '4', foto]); }
+          await youtube.portada(v.id, foto);
+          if (foto !== jpg) borrar(foto);
+        } catch (e) { avisos.push(`portada: ${e.message}`); }
+      }
+      if (c.en?.srt && fs.existsSync(c.en.srt)) try { await youtube.subtitulos(v.id, { idioma: 'en', nombre: 'English', srt: fs.readFileSync(c.en.srt, 'utf8') }); } catch (e) { avisos.push(`subtítulos en inglés: ${e.message}`); }
+      c.youtube = { estado: 'listo', id: v.id, url: `https://www.youtube.com/shorts/${v.id}`, publicarEn: c.youtube.publicarEn, hecho: Date.now(), avisos };
+      const cuando = c.youtube.publicarEn ? new Date(c.youtube.publicarEn).toLocaleString('es', { timeZone: zonaDe(k), weekday: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'ya';
+      bus?.emit('aviso-externo', { origen: 'Clips', urgente: false, texto: `📺 Subido a YouTube: «${tx.es.titulo}». Se publica ${cuando}.${avisos.length ? ` Ojo: ${avisos.join('; ')}` : ''}` });
+    } catch (e) {
+      // sin cuota hoy: lo vuelve a intentar la tarea de cada 15 min cuando YouTube reinicia la cuota (medianoche de California)
+      if (e.cuota) c.youtube = { ...c.youtube, estado: 'esperando cuota', error: e.message.slice(0, 200), reintentar: siguienteMedianochePT() };
+      else c.youtube = { ...c.youtube, estado: 'error', error: e.message.slice(0, 300) };
+      log('[lotes] youtube', c.id, e.message);
+    } finally {
+      if (temporal) borrar(temporal);
+      if (conf.discordClips?.borrarLocal && c.publicado?.estado === 'listo' && c.youtube?.estado !== 'esperando cuota') try { if (await publicador.liberar(c)) c.publicado.borradoLocal = true; } catch (e) { log('[lotes] liberar', e.message); }
+      guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    }
+  }
+  const siguienteMedianochePT = () => redes.instanteEn(redes.fechaEn(Date.now() + 864e5, 'America/Los_Angeles'), '00:10', 'America/Los_Angeles');
+  function reintentarYouTube() {
+    for (const c of Object.values(est.clips)) if (c.youtube?.estado === 'esperando cuota' && Date.now() >= (c.youtube.reintentar || 0) && ytPara(c)) {
+      c.youtube = { ...c.youtube, estado: 'en cola' };
+      subidas = subidas.then(() => subirYouTube(c));
+    }
+  }
+  function aYouTube(c) {                                 // a mano desde Revisión (también clips publicados antes de conectar YouTube)
+    if (c.estado !== 'aprobado') throw Object.assign(new Error('primero apruébalo'), { status: 409 });
+    if (!youtube.conectado()) throw Object.assign(new Error('YouTube no está conectado'), { status: 409 });
+    if (['en cola', 'subiendo'].includes(c.youtube?.estado)) return publico(c);
+    if (c.youtube?.estado === 'listo') throw Object.assign(new Error('ya está en YouTube'), { status: 409 });
+    if (!(c.k4?.mp4 && fs.existsSync(c.k4.mp4)) && !c.publicado?.drive?.remoto) throw Object.assign(new Error('no hay 4K ni copia en Drive'), { status: 409 });
+    reservarHueco(c); guardarEst();
+    subidas = subidas.then(() => subirYouTube(c));
+    return publico(c);
+  }
   for (const c of Object.values(est.clips)) if (['en cola', 'subiendo'].includes(c.publicado?.estado) && publicador.activo()) { c.publicado.estado = 'pendiente'; publicar(c); }   // tras reiniciar
+  for (const c of Object.values(est.clips)) if (['en cola', 'subiendo'].includes(c.youtube?.estado) && c.publicado?.estado === 'listo') { c.youtube.estado = 'en cola'; subidas = subidas.then(() => subirYouTube(c)); }
+
+  // ── métricas: una vez al día (desde la tarea de cada 15 min) — vistas, likes y retención de lo publicado → lo aprendido ──
+  let midiendo = null;
+  function medibles() { return Object.values(est.clips).filter(c => c.estado === 'aprobado' && (c.publicado?.estado === 'listo' || c.youtube?.id || c.vinculos) && Date.now() - (c.decidido || 0) < 60 * 864e5); }
+  function cuentas() {
+    const out = {};
+    for (const f of conf.fuentes) { const k = f.perfil && kits.obtener(f.perfil); for (const [p, h] of Object.entries(k?.cuentas || {})) if (!out[p]) out[p] = h; }
+    return out;
+  }
+  async function actualizarMetricas() {
+    if (midiendo) return midiendo;
+    midiendo = (async () => {
+      const clips = medibles();
+      const r = await metricas.medir(clips, cuentas());
+      for (const c of clips) {
+        const p = r.pares[c.id]; if (!p) continue;
+        c.metricas = { ...(c.metricas || {}) };
+        for (const [plat, v] of Object.entries(p)) c.metricas[plat] = { id: v.id, url: v.url, titulo: v.titulo, fecha: v.fecha, duracion: v.duracion, vistas: v.vistas, likes: v.likes, comentarios: v.comentarios,
+          ...(v.compartidos != null ? { compartidos: v.compartidos } : {}), ...(v.retencion != null ? { retencion: v.retencion, segundosMedios: v.segundosMedios } : {}), como: v.como, at: Date.now() };
+      }
+      const k = conf.fuentes[0]?.perfil ? kits.obtener(conf.fuentes[0].perfil) : null;
+      aprendido = { ...metricasMod.aprender(Object.values(est.clips).filter(c => c.metricas), r.canal, { zona: zonaDe(k) }), errores: r.errores,
+        canal: { youtube: r.canal.youtube?.length || 0, tiktok: r.canal.tiktok?.length || 0 } };
+      guardarJ(FA, aprendido);
+      est.metricasEn = Date.now(); guardarEst();
+      bus?.emit('lotes', { tipo: 'metricas', muestras: aprendido.muestras });
+      return aprendido;
+    })().finally(() => { midiendo = null; });
+    return midiendo;
+  }
 
   // ── 3. decisiones del usuario ──
   function decidir(id, accion, { estilo } = {}) {
@@ -269,9 +439,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         c.portadas = [p]; c.portada = 0;
       }
       c.estado = 'aprobado'; c.decidido = Date.now();
+      encolarRedes(c);                                   // títulos es/en + inglés, antes del 4K (usa el vídeo de origen)
       // la versión 4K para subir (salvo exportar4k: false); las fuentes se borran cuando termine
       if (conf.exportar4k !== false && c.proyecto && fs.existsSync(c.proyecto)) { guardarEst(); encolar4k(c); }
-      else borrarFuentes(c);
+      else { guardarEst(); procesar(); }                 // sin 4K, las fuentes se borran al terminar lo de redes
     } else if (accion === 'descartar') {
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) if (c[k]) fs.rmSync(c[k], { force: true });
       if (original) fs.rmSync(original, { force: true });
@@ -437,10 +608,23 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const publico = c => ({ ...c, original: undefined, cajas: undefined });
   const estado = () => ({ config: conf, enCurso, cola: [...cola], revisando,
     clips: Object.values(est.clips).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || a.rank - b.rank).map(publico),
-    estilos: estilos.lista() });
+    estilos: estilos.lista(), youtube: { ...youtube.estado(), ...confYT() }, aprendido, metricasEn: est.metricasEn || null, midiendo: !!midiendo,
+    diccionario: Object.fromEntries([...new Set(conf.fuentes.map(f => f.perfil).filter(Boolean))].map(k => [k, diccionario.lista(k).length])) });
+  const kitPorDefecto = () => conf.fuentes.find(f => f.perfil)?.perfil || null;
+  // un enlace de YouTube o TikTok → { plataforma, id }
+  function enlaceA(url) {
+    const u = String(url || '').trim();
+    let m = u.match(/tiktok\.com\/.*\/video\/(\d+)/); if (m) return { plataforma: 'tiktok', id: m[1] };
+    m = u.match(/(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([\w-]{11})/); if (m) return { plataforma: 'youtube', id: m[1] };
+    throw Object.assign(new Error('pon un enlace de YouTube o de TikTok'), { status: 400 });
+  }
 
   // tarea interna cada 15 min (la crea programar(), que solo llama el daemon)
-  tareas?.registrarInterna('lotes', async () => { await revisar(); limpiar(); return ''; });
+  tareas?.registrarInterna('lotes', async () => {
+    await revisar(); limpiar(); reintentarYouTube();
+    if (Date.now() - (est.metricasEn || 0) > 20 * 3600e3 && medibles().length) actualizarMetricas().catch(e => log('[lotes] métricas', e.message));
+    return '';
+  });
   function programar() {
     if (!tareas) return;
     const ya = tareas.lista().find(t => t.accion?.tipo === 'interna' && t.accion.nombre === 'lotes');
@@ -506,7 +690,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     return publico(c);
   }
 
-  async function http(M, p, b = {}) {        // /v1/revision
+  async function http(M, p, b = {}, consulta = {}) {   // /v1/revision
     if (M === 'GET' && !p[2]) return estado();
     if (M === 'POST' && p[2] === 'revisar') return revisar();
     if (M === 'POST' && p[2] === 'nuevo') return nuevo(b);
@@ -515,6 +699,34 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       if (b.retencionDias) conf.retencionDias = Math.max(1, +b.retencionDias);
       if (Array.isArray(b.fuentes)) conf.fuentes = b.fuentes;
       guardarConf(); programar(); return { config: conf };
+    }
+    // YouTube del canal: GET estado · POST {cliente: JSON de Google} · POST {activo, programar} · POST conectar · POST desconectar
+    if (p[2] === 'youtube') {
+      if (M === 'GET') return { ...youtube.estado(), ...confYT() };
+      if (M === 'POST' && p[3] === 'conectar') {
+        const r = await youtube.conectar();
+        youtube.esperarConexion()?.then(() => { conf.youtube = { ...confYT(), activo: true }; guardarConf(); bus?.emit('aviso-externo', { origen: 'Clips', urgente: false, texto: `📺 YouTube conectado${youtube.estado().canal ? `: ${youtube.estado().canal.titulo}` : ''}. Los clips aprobados se suben y se programan solos.` }); }).catch(() => { });
+        return r;
+      }
+      if (M === 'POST' && p[3] === 'desconectar') { conf.youtube = { ...confYT(), activo: false }; guardarConf(); return { ...youtube.desconectar(), ...confYT() }; }
+      if (M === 'POST') {
+        if (b.cliente) youtube.ponerCliente(b.cliente);
+        if (typeof b.activo === 'boolean' || typeof b.programar === 'boolean') {
+          conf.youtube = { ...confYT(), ...(typeof b.activo === 'boolean' ? { activo: b.activo } : {}), ...(typeof b.programar === 'boolean' ? { programar: b.programar } : {}) }; guardarConf();
+        }
+        return { ...youtube.estado(), ...confYT() };
+      }
+    }
+    if (p[2] === 'metricas') {                           // GET lo aprendido · POST medir ahora (tarda 1–3 min; se avisa por el bus)
+      if (M === 'GET') return { aprendido, metricasEn: est.metricasEn || null, midiendo: !!midiendo, cuentas: cuentas() };
+      if (M === 'POST') { actualizarMetricas().catch(e => log('[lotes] métricas', e.message)); return { iniciado: true }; }
+    }
+    if (p[2] === 'diccionario') {                        // GET ?kit · POST {kit, mal, bien} añade · POST {kit, quitar: mal} quita
+      const kit = String((M === 'GET' ? consulta?.kit : b.kit) || kitPorDefecto() || '');
+      if (!kit) throw Object.assign(new Error('no hay kit'), { status: 400 });
+      if (M === 'POST' && b.quitar) diccionario.quitar(kit, b.quitar);
+      else if (M === 'POST') diccionario.anadir(kit, b.mal, b.bien);
+      return { kit, entradas: diccionario.lista(kit) };
     }
     const c = p[2] && est.clips[decodeURIComponent(p[2])];
     if (!c) throw Object.assign(new Error('no existe ese clip'), { status: 404 });
@@ -543,10 +755,22 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       if (c.k4?.estado !== 'listo') throw Object.assign(new Error('todavía no hay 4K de este clip'), { status: 409 });
       return publicar(c);
     }
+    if (M === 'POST' && p[3] === 'youtube') return aYouTube(c);
+    if (M === 'POST' && p[3] === 'redes') {            // (re)hacer títulos es/en y lo de inglés de un aprobado (p. ej. de antes de tener esto)
+      if (c.estado !== 'aprobado') throw Object.assign(new Error('primero apruébalo'), { status: 409 });
+      if (b.textos === true) delete c.textos;
+      encolarRedes(c); guardarEst(); procesar(); return publico(c);
+    }
+    if (M === 'POST' && p[3] === 'vincular') {         // "este clip es esta publicación" (si el emparejado automático no lo encontró)
+      const { plataforma, id } = enlaceA(b.url);
+      c.vinculos = { ...(c.vinculos || {}), [plataforma]: id };
+      if (c.metricas?.[plataforma] && c.metricas[plataforma].id !== id) delete c.metricas[plataforma];
+      guardarEst(); return publico(c);
+    }
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
 
-  return { revisar, procesar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, ESTILOS_DEFECTO };
+  return { revisar, procesar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, prepararRedes, actualizarMetricas, aYouTube, reintentarYouTube, ESTILOS_DEFECTO };
 }
 
 module.exports = { crearLotes, ESTILOS_DEFECTO };

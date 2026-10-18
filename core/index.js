@@ -169,11 +169,12 @@ function crearNucleo(opciones = {}) {
   // recetas fijas de la suite (kit de marca, control de calidad, portadas, audio de estudio, rótulo/título animados)
   const craft = require('./craft/herramientas').crearHerramientasCraft({ mcpLocales, cfg });
   require('./herramientas').registrar(craft.HERRAMIENTAS);
-  const subtitulador = require('./craft/subtitular').crearSubtitulador({ mcpLocales, generarJSON: generarJSONvivo, modelo: modeloCerebro, cfg, kits: craft.kits, audio: craft.audio });
+  const diccionarioCraft = require('./craft/diccionario').crearDiccionario({ cfg });   // lo corregido en Revisión, por canal
+  const subtitulador = require('./craft/subtitular').crearSubtitulador({ mcpLocales, generarJSON: generarJSONvivo, modelo: modeloCerebro, cfg, kits: craft.kits, audio: craft.audio, diccionario: diccionarioCraft });
   require('./herramientas').registrar([subtitulador.HERRAMIENTA]);              // subtitular_video: clip → TikTok con subtítulos (FilmCraft)
   // editor automático por lotes: trae clips de otra máquina, los edita y los deja en revisión (#/revision) → /v1/revision
   const lotes = require('./craft/lotes').crearLotes({ cfg, bus, tareas, subtitulador, generarJSON: generarJSONvivo, modelo: modeloCerebro, log: (...a) => console.log(...a),
-    miniaturas: craft.miniaturas, kits: craft.kits });
+    miniaturas: craft.miniaturas, kits: craft.kits, diccionario: diccionarioCraft, abrirUrl: require('./mcp-remoto').abrirNavegador });
   nucleo.lotes = lotes; nucleo.extensiones.revision = { http: (...a) => lotes.http(...a) };
   // biblioteca de diseño: patrones aprendidos de apps reales en Mobbin; API /v1/diseno
   const diseno = require('./diseno').crearDiseno({ cfg, mcpRemotos, generarJSON: generarJSONvivo, memoria, tareas, bus });

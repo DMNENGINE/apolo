@@ -23,5 +23,12 @@
   },
   "zonaSegura": { "arriba": 0.06, "abajo": 0.12, "lados": 0.04, "botones": { "x": 0.88, "desde": 0.42, "hasta": 0.88 } },
   "audio": { "lufs": -14, "picoMax": -1, "pro": true },
-  "miniatura": { "variantes": 3, "franja": [700, 1150] }
+  "miniatura": { "variantes": 3, "franja": [700, 1150] },
+  "cuentas": { "youtube": "@lagctrucks", "tiktok": "@lagctrucks" },
+  "publicacion": {
+    "zona": "America/Mexico_City",
+    "youtube": { "horas": ["12:00", "18:00", "21:00"], "maxPorDia": 3, "privacidad": "public", "hashtags": "#simulator #ats #truck #truckdriver #lagctrucks" }
+  },
+  "ingles": { "srt": true, "quemado": false, "cta": "Follow for more", "hashtags": "#simulator #ats #truck #truckdriver #trucking #lagctrucks" },
+  "hashtagsEn": "#simulator #ats #truck #truckdriver #trucking #lagctrucks"
 }

@@ -1394,3 +1394,19 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .rv-clista div { display: flex; gap: 6px; align-items: baseline; }
 .rv-clista .x { background: none; border: 0; color: var(--txt-2); cursor: pointer; padding: 0 2px; }
 @media (max-width: 600px) { .rv-clip { grid-template-columns: 1fr; } .rv-medio { max-height: 70vh; } }
+/* Revisión: publicación (Drive/Discord/YouTube/inglés), métricas y panel de aprendizaje */
+.rv-pub { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.rv-pub a.chip { text-decoration: none; }
+.rv-pub .rv-fila input.rv-vurl { width: 210px; }
+.rv-mets { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.rv-met { color: var(--txt); text-decoration: none; background: var(--capa-2); border-radius: 8px; padding: 3px 8px; }
+.rv-textos > summary { cursor: pointer; color: var(--txt-2); }
+.rv-textos > div { margin-top: 4px; }
+.rv-panel { margin: 10px 0; font-size: 13px; }
+.rv-panel > summary { cursor: pointer; }
+.rv-panel h4 { margin: 14px 0 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rv-panel textarea { width: 100%; background: var(--capa-2); color: var(--txt); border: 1px solid var(--borde-2); border-radius: 8px; padding: 6px 8px; font: 12px ui-monospace, monospace; margin-bottom: 6px; }
+.rv-panel .rv-fila input[type=text] { width: 150px; }
+.rv-apr { display: flex; flex-direction: column; gap: 3px; }
+.rv-dic { display: flex; flex-wrap: wrap; gap: 4px; }
+.rv-dic .x { background: none; border: 0; color: var(--txt-2); cursor: pointer; padding: 0 0 0 4px; }
