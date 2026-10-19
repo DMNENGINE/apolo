@@ -113,7 +113,7 @@ function iniciar(opciones = {}) {
   const local = ip => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
   const ipDe = req => String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
   // eventos para clientes remotos: si no hay ninguno conectado se guardan (máx. 100, 15 min) y se entregan al conectar
-  n.remotos = 0; n.paneles = 0; n.motores = {}; const cola = [];
+  n.remotos = 0; n.paneles = 0; n.panelFoco = new Set(); n.motores = {}; const cola = [];
   n.bus.on('remoto', e => { if (!n.remotos) { cola.push({ t: Date.now(), e }); if (cola.length > 100) cola.shift(); } });
   // app móvil: tokens de dispositivo con alcance limitado; cfg.red.moviles abre la LAN privada SOLO a /m/ y a esos tokens
   const MV = require('./movil');
@@ -308,6 +308,12 @@ function iniciar(opciones = {}) {
         }
       }
       if (p[1] === 'agentes' && M === 'GET') return json(res, 200, n.subagentes.lista());
+      // la pestaña del panel avisa si la estás mirando (main.js baja la isla detrás del navegador mientras tanto)
+      if (p[1] === 'panel' && p[2] === 'foco' && M === 'POST' && !disp) {
+        const b = await leer(req), pid = String(b.pid || '').slice(0, 20);
+        if (pid) { if (b.activo) n.panelFoco.add(pid); else n.panelFoco.delete(pid); n.bus.emit('panel-foco', { activo: n.panelFoco.size > 0 }); }
+        return json(res, 200, { ok: true });
+      }
       if (p[1] === 'eventos' && M === 'GET') {
         const enviar = sse(res);
         const g = l => enviar({ tipo: 'registro', ...l }); if (!disp) n.bus.on('registro', g);   // los registros no van al móvil
@@ -333,7 +339,11 @@ function iniciar(opciones = {}) {
         const hk = () => enviar({ tipo: 'permisos-externos' }); n.bus.on('nodo-permiso', hk); n.bus.on('nodo-refrescar', hk);   // permisos de los hooks de Claude Code (main.js)
         const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
         req.on('close', () => { clearInterval(ping); n.bus.off('permiso', a); n.bus.off('permiso-resuelto', b); n.bus.off('evento', c); n.bus.off('tarea', d); n.bus.off('agente', ag); n.bus.off('control', ctl); n.bus.off('memoria-uso', mu); n.bus.off('servicios', sv); n.bus.off('registro', g); n.bus.off('nodo-permiso', hk); n.bus.off('nodo-refrescar', hk);
-          if (esPanel) { n.paneles--; n.bus.emit('panel-conexion', { abiertos: n.paneles }); }
+          if (esPanel) {
+            n.paneles--; n.bus.emit('panel-conexion', { abiertos: n.paneles });
+            const pid = u.searchParams.get('pid');           // pestaña cerrada (o colgada): ya no la estás mirando
+            if (pid && n.panelFoco.delete(pid)) n.bus.emit('panel-foco', { activo: n.panelFoco.size > 0 });
+          }
           if (esRemoto) { n.bus.off('remoto', rem); n.remotos--; n.bus.emit('remoto-conexion', { conectados: n.remotos }); }
           if (esMotor) {
             n.bus.off('motor', mot); n.motores[cliente]--;

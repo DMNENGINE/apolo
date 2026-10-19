@@ -375,7 +375,8 @@ function conectarEventos() {
   flujoGlobal?.abort(); flujoGlobal = new AbortController();
   const marcar = ok => { const p = $('#puntoConexion'); if (p) p.className = 'punto ' + (ok ? 'ok' : 'mal'); };
   marcar(true);
-  flujo('GET', '/eventos?panel=1', undefined, e => {   // panel=1: mientras esté abierto la isla se puede ocultar
+  // panel=1 + pid: APOLO sabe que esta pestaña existe y, con avisarFoco(), si la estás mirando (la isla pasa detrás mientras tanto)
+  flujo('GET', `/eventos?panel=1&pid=${PANEL_ID}`, undefined, e => {
     if (e.tipo === 'permiso') { E.pendientes.set(e.id, e); pintarPermisos(); robotsLog(`? ${tr('permiso')}: ${NOMBRE_HERR[e.herramienta] || e.herramienta}`); }
     else if (e.tipo === 'permiso-resuelto') { E.pendientes.delete(e.id); pintarPermisos(); }
     else if (e.tipo === 'avatar' && typeof AV_cargarGlobal === 'function') { AV_cargarGlobal().catch(() => { }); }   // AV_aplicarGlobal re-monta el compañero
@@ -391,7 +392,20 @@ function conectarEventos() {
     }
     for (const o of E.oyentes) { try { o(e); } catch { } }
   }, flujoGlobal.signal).catch(() => { }).finally(() => { if (!flujoGlobal.signal.aborted) { marcar(false); setTimeout(conectarEventos, 3000); } });
+  setTimeout(() => avisarFoco(true), 500);              // tras (re)conectar, el daemon vuelve a saber si se está mirando
 }
+// ¿estás usando el panel? (pestaña visible y ventana del navegador delante). La isla no se esconde: solo deja de estar
+// encima de todo mientras tanto y vuelve en cuanto cambias de ventana o de pestaña
+const PANEL_ID = Math.random().toString(36).slice(2, 10);
+let focoAvisado = null;
+function avisarFoco(forzar) {
+  const activo = document.visibilityState === 'visible' && document.hasFocus();
+  if (!forzar && activo === focoAvisado) return;
+  focoAvisado = activo;
+  if (TOKEN) api('POST', '/panel/foco', { pid: PANEL_ID, activo }).catch(() => { });
+}
+for (const ev of ['focus', 'blur']) window.addEventListener(ev, () => avisarFoco());
+document.addEventListener('visibilitychange', () => avisarFoco());
 
 // ---------- barra lateral ----------
 const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['turno', 'Turno de noche', 'luna'], ['auto', 'Automatizaciones', 'reloj'], ['skills', 'Skills', 'pieza'], ['memoria', 'Memoria', 'cerebro'], ['wrapped', 'Wrapped', 'chispa'], ['uso', 'Uso', 'grafica']];

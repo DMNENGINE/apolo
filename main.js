@@ -475,20 +475,35 @@ async function discordComoPlugin() {
   console.log('[discord] usando el plugin del SDK (plugins/discord)');
 }
 
-// isla oculta mientras el panel está abierto (userData/isla-prefs.json {ocultarConPanel})
-let panelesAbiertos = 0, islaOcultaPorPanel = false;
+// mientras usas el panel (pestaña visible y navegador delante) la isla pasa DETRÁS de las ventanas; nunca se esconde. Antes se
+// ocultaba con solo tener una pestaña del panel abierta (aunque fuera en segundo plano) y parecía que desaparecía sin razón.
+// userData/isla-prefs.json {detrasConPanel} (por defecto sí)
+let panelMirado = false, islaDetras = false, temporizadorDetras = null;
 const PREFS_ISLA = () => path.join(app.getPath('userData'), 'isla-prefs.json');
 function prefsIsla() { try { return JSON.parse(fs.readFileSync(PREFS_ISLA(), 'utf8')); } catch { return {}; } }
-const ocultarConPanel = () => prefsIsla().ocultarConPanel !== false;
-function ponerOcultarConPanel(v) {
-  try { fs.writeFileSync(PREFS_ISLA(), JSON.stringify({ ...prefsIsla(), ocultarConPanel: !!v }, null, 2)); } catch { }
-  aplicarOcultarConPanel();
+const detrasConPanel = () => prefsIsla().detrasConPanel !== false;
+function ponerDetrasConPanel(v) {
+  try { fs.writeFileSync(PREFS_ISLA(), JSON.stringify({ ...prefsIsla(), detrasConPanel: !!v }, null, 2)); } catch { }
+  aplicarDetrasConPanel();
 }
-function aplicarOcultarConPanel() {
+// al fondo de la pila de ventanas (SetWindowPos HWND_BOTTOM, sin activarla ni moverla): sigue visible donde no la tape nada
+function mandarAlFondo() {
   if (!win || win.isDestroyed()) return;
-  const ocultar = ocultarConPanel() && panelesAbiertos > 0;
-  if (ocultar && !islaOcultaPorPanel) { islaOcultaPorPanel = true; win.hide(); }
-  else if (!ocultar && islaOcultaPorPanel) { islaOcultaPorPanel = false; win.showInactive(); win.setAlwaysOnTop(true, 'screen-saver'); }
+  const b = win.getNativeWindowHandle(), hwnd = (b.length >= 8 ? b.readBigUInt64LE(0) : BigInt(b.readUInt32LE(0))).toString();
+  const ps = `Add-Type -Name V -Namespace A -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetWindowPos(System.IntPtr h, System.IntPtr d, int x, int y, int cx, int cy, uint f);';`
+    + ` [void][A.V]::SetWindowPos([System.IntPtr]${hwnd}, [System.IntPtr]1, 0, 0, 0, 0, 0x13)`;
+  require('child_process').execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true, timeout: 15_000 }, () => { });
+}
+function aplicarDetrasConPanel() {
+  if (!win || win.isDestroyed()) return;
+  clearTimeout(temporizadorDetras);
+  temporizadorDetras = setTimeout(() => {               // los cambios de foco llegan en ráfagas: se aplica el último
+    if (!win || win.isDestroyed()) return;
+    const detras = detrasConPanel() && panelMirado;
+    if (!win.isVisible()) win.showInactive();           // pase lo que pase, la isla se ve
+    if (detras && !islaDetras) { islaDetras = true; win.setAlwaysOnTop(false); mandarAlFondo(); }
+    else if (!detras && islaDetras) { islaDetras = false; win.setAlwaysOnTop(true, 'screen-saver'); win.showInactive(); }
+  }, 250);
 }
 
 // panel web del núcleo: el token va en el #hash (no viaja al servidor) y el panel lo guarda y lo borra de la URL
@@ -587,8 +602,8 @@ async function startNucleo() {
     movil.sendAviso(`🛑 **${tr('PÁNICO')}** (${e.origen}): ${tr('todo parado hasta reanudar.')}`, 'red');
   });
   nucleo.bus.on('panico-fin', avisarPanico);
-  // con el panel de control abierto la isla se esconde y vuelve al cerrarlo (opción de la bandeja, encendida por defecto)
-  nucleo.bus.on('panel-conexion', ({ abiertos }) => { panelesAbiertos = abiertos; aplicarOcultarConPanel(); });
+  // mientras miras el panel la isla pasa detrás y vuelve encima al cambiar de ventana (opción de la bandeja, encendida por defecto)
+  nucleo.bus.on('panel-foco', ({ activo }) => { panelMirado = !!activo; aplicarDetrasConPanel(); });
   ipcMain.on('panico', (_e, on) => (on ? nucleo.panico.activar('isla') : nucleo.panico.reanudar('isla')));
   ipcMain.handle('panico-estado', () => nucleo.panico.estado());
   ipcMain.on('salir-gamer', () => { if (nucleo.gamer) nucleo.gamer.desactivar({ motivo: 'desde la isla' }).catch(() => { }); });
@@ -703,7 +718,7 @@ function buildTray() {
     { type: 'separator' },
     { label: `🤖 ${tr('Núcleo')}: ${tr('isla')} → ${(puente && puente.destino('isla')) || 'Claude Code'} · Discord → ${(puente && puente.destino('discord')) || 'Claude Code'}`, enabled: false },
     { label: `🖥️ ${tr('Abrir panel de control')}`, click: () => abrirPanel() },
-    { label: tr('Ocultar la isla mientras el panel está abierto'), type: 'checkbox', checked: ocultarConPanel(), click: i => ponerOcultarConPanel(i.checked) },
+    { label: tr('Isla detrás mientras usas el panel'), type: 'checkbox', checked: detrasConPanel(), click: i => ponerDetrasConPanel(i.checked) },
     nucleo?.panico?.activo() ? { label: `▶ ${tr('Reanudar (salir del pánico)')}`, click: () => nucleo.panico.reanudar('bandeja') } : { label: `🛑 ${tr('Pánico: parar todo')}  Ctrl+Alt+Esc`, click: () => nucleo?.panico?.activar('bandeja') },
     { label: `✨ ${tr('Asistente de bienvenida')}`, click: () => abrirPanel('/bienvenida') },
     { label: `💬 ${tr('Conectar ChatGPT (tu plan, sin API key)')}`, click: () => abrirPanel('/ajustes/modelos') },
