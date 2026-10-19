@@ -271,7 +271,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         if (!c.fuenteVideo || !fs.existsSync(c.fuenteVideo)) throw new Error('ya no está el vídeo de origen');
         c.en.estado = 'editando'; guardarEst();
         // el vídeo de origen ya va montado (avance/recorte): los tiempos de los subtítulos y del plan son los de ese vídeo
-        const { correcciones: _c, avance: _a, recorte: _r, gancho: _g, estilo: _e, temblor, ...aj } = c.ajustes || {};
+        const { correcciones: _c, subtitulosFijos: _sf, avance: _a, recorte: _r, gancho: _g, estilo: _e, temblor, ...aj } = c.ajustes || {};
         const subs = redes.leerSrt(fs.readFileSync(c.en.srt, 'utf8'));
         const ctx = { progreso: (fase, pct) => { c.en = { ...c.en, fase: String(fase).replace(/…$/, ''), pct: Math.round(pct ?? c.en.pct ?? 0) }; } };
         const r = await subtitulador.subtitular({ video: c.fuenteVideo, perfil: f?.perfil, carpeta: path.dirname(c.fuenteVideo), nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo} EN`,
@@ -427,6 +427,11 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       if (c.estado === 'editando' || c.estado === 'en cola') return publico(c);
       if (estilo && !estilos.ESTILOS[estilo]) throw Object.assign(new Error(`estilo desconocido: ${estilo}`), { status: 400 });
       c.estiloForzado = estilo || (f?.estilos?.length ? f.estilos : ESTILOS_DEFECTO).find(e => e !== c.estilo);
+      c.estado = 'en cola'; cola.push(id); guardarEst(); procesar();
+    } else if (accion === 'repetir') {                   // misma edición y mismo estilo (p. ej. tras mejorar la transcripción)
+      if (c.estado === 'editando' || c.estado === 'en cola') return publico(c);
+      if (!['revisar', 'error'].includes(c.estado)) throw Object.assign(new Error('solo se repiten clips en revisión'), { status: 409 });
+      c.estiloForzado = c.estilo;
       c.estado = 'en cola'; cola.push(id); guardarEst(); procesar();
     } else if (accion === 'aprobar') {
       if (!c.mp4 || !fs.existsSync(c.mp4)) throw Object.assign(new Error('el clip no tiene vídeo editado'), { status: 409 });
@@ -585,6 +590,37 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     c.estiloForzado = c.ajustes.estilo || c.estilo;
     c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
     return { clip: publico(c), ajustes: c.ajustes, respuesta };
+  }
+
+  // editor de subtítulos de Revisión: se ven y se editan en tiempos del vídeo editado; se guardan en tiempos del clip original
+  // (ajustes.subtitulosFijos) para que sigan en su sitio si luego cambia el avance o el recorte
+  function subtitulos(id) {
+    const c = est.clips[id]; if (!c) throw Object.assign(new Error('no existe ese clip'), { status: 404 });
+    const v = vista(c);
+    let srt = ''; try { srt = c.srt && fs.existsSync(c.srt) ? fs.readFileSync(c.srt, 'utf8') : ''; } catch { }
+    // los del avance son una copia de los del clip: se ven pero se editan en su sitio
+    const lista = redes.leerSrt(srt).map(x => ({ s: +x.s.toFixed(2), e: +x.e.toFixed(2), texto: x.texto, ...(x.s < v.dA - 0.01 ? { adelanto: true } : {}) }));
+    return { subtitulos: lista, dA: v.dA, duracion: v.duracion, aMano: !!c.ajustes?.subtitulosFijos };
+  }
+  function guardarSubtitulos(id, { subtitulos: lista, restaurar } = {}) {
+    const c = est.clips[id]; if (!c) throw Object.assign(new Error('no existe ese clip'), { status: 404 });
+    if (!['revisar', 'error'].includes(c.estado)) throw Object.assign(new Error('el clip se está editando; espera a que termine'), { status: 409 });
+    c.ajustes = { ...(c.ajustes || {}) };
+    if (restaurar) delete c.ajustes.subtitulosFijos;
+    else {
+      if (!Array.isArray(lista)) throw Object.assign(new Error('faltan los subtítulos'), { status: 400 });
+      const v = vista(c);
+      const fijos = lista.filter(x => !x.adelanto && String(x.texto || '').trim() && +x.e > +x.s && +x.s >= v.dA - 0.01)
+        .map(x => ({ s: v.aOrig(Math.max(v.dA, +x.s)), e: v.aOrig(+x.e), texto: String(x.texto).replace(/\s+/g, ' ').trim().slice(0, 120) }))
+        .filter(x => x.e > x.s).sort((x, y) => x.s - y.s);
+      if (!fijos.length) throw Object.assign(new Error('no queda ningún subtítulo'), { status: 400 });
+      c.ajustes.subtitulosFijos = fijos;
+      delete c.ajustes.correcciones;                     // ya van dentro del texto editado
+    }
+    (c.pedidos = c.pedidos || []).push({ texto: restaurar ? 'subtítulos automáticos otra vez' : 'subtítulos editados a mano', respuesta: '', cuando: Date.now() });
+    c.estiloForzado = c.estilo;
+    c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
+    return publico(c);
   }
 
   // abre el proyecto en FilmCraft con ventana; "exportar" (después de guardar allí) lo vuelve a exportar tal cual
@@ -802,8 +838,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       c.portada = n; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
       return publico(c);
     }
-    if (M === 'POST' && ['aprobar', 'descartar', 'rehacer'].includes(p[3])) return decidir(c.id, p[3], b);
+    if (M === 'POST' && ['aprobar', 'descartar', 'rehacer', 'repetir'].includes(p[3])) return decidir(c.id, p[3], b);
     if (M === 'POST' && p[3] === 'modificar') return modificar(c.id, b);
+    if (M === 'GET' && p[3] === 'subtitulos') return subtitulos(c.id);
+    if (M === 'POST' && p[3] === 'subtitulos') return guardarSubtitulos(c.id, b);
     if (M === 'POST' && p[3] === 'abrir') return abrir(c.id);
     if (M === 'POST' && p[3] === 'exportar') return reexportar(c.id);
     if (M === 'POST' && p[3] === '4k') {

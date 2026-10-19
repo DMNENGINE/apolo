@@ -57,6 +57,26 @@ function trocear(palabras, { maxPalabras = 3, maxLetras = 22, pausa = 0.6, minSe
 }
 const limpiar = t => String(t).replace(/[.,;:]+$/, '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('es');
 
+// subtítulos editados a mano en Revisión [{s, e, texto}] (tiempos del clip original) → palabras repartidas a partes iguales
+// dentro de cada uno, marcadas con su bloque `b` (sobreviven a avance/recorte y a correcciones) (puro)
+function palabrasDeFijos(fijos) {
+  return fijos.filter(t => String(t.texto || '').trim() && +t.e > +t.s).sort((x, y) => x.s - y.s).flatMap((t, b) => {
+    const ws = String(t.texto).trim().split(/\s+/), paso = (+t.e - +t.s) / ws.length;
+    return ws.map((w, i) => ({ w, s: +(+t.s + i * paso).toFixed(3), e: +(+t.s + (i + 1) * paso).toFixed(3), p: 1, b }));
+  });
+}
+// …y de vuelta a subtítulos: cada bloque tal cual lo dejó el usuario (los estilos de una palabra por pantalla sí se trocean)
+function agruparFijos(palabras, opciones = {}) {
+  if ((opciones.maxPalabras || 3) <= 1) return trocear(palabras, opciones);
+  const out = [];
+  for (const p of palabras) {
+    const u = out.at(-1);
+    if (u && u.b === p.b && p.s - u.e < 0.05) { u.palabras.push(p); u.e = p.e; } else out.push({ b: p.b, s: p.s, e: p.e, palabras: [p] });
+  }
+  return out.map(t => ({ s: +t.s.toFixed(3), e: +t.e.toFixed(3), texto: limpiar(t.palabras.map(p => p.w).join(' ')), original: t.palabras.map(p => p.w).join(' '),
+    palabras: t.palabras.map(p => ({ w: p.w, s: p.s, e: p.e })), confianza: null })).filter(t => t.texto);
+}
+
 // nombres propios (mayúscula a mitad de frase), números y las palabras clave que diga el modelo → amarillo
 function resaltables(palabras, extra = []) {
   const out = new Set(extra.map(x => String(x).toLocaleUpperCase('es')));
@@ -254,7 +274,16 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
 
     // 1. palabras / subtítulos
     let palabras = [], trozos, noCorregidas = [], delDiccionario = 0;
-    if (Array.isArray(a.subtitulos) && a.subtitulos.length) {
+    const fijos = Array.isArray(a.subtitulosFijos) && a.subtitulosFijos.length ? a.subtitulosFijos : null;
+    if (fijos) {
+      // editados a mano en Revisión (tiempos del clip original): no se transcribe, cada subtítulo queda como lo dejó el usuario
+      palabras = palabrasDeFijos(fijos);
+      if (Array.isArray(a.correcciones) && a.correcciones.length) {
+        const r = corregirPalabras(palabras, a.correcciones);
+        palabras = r.palabras; noCorregidas = r.sinAplicar;
+      }
+      trozos = agruparFijos(palabras, opTrozos);
+    } else if (Array.isArray(a.subtitulos) && a.subtitulos.length) {
       // subtítulos corregidos a mano: las palabras se reparten a partes iguales dentro de cada uno
       trozos = a.subtitulos.filter(t => String(t.texto || '').trim() && +t.e > +t.s).map(t => {
         const ws = String(t.texto).trim().split(/\s+/), paso = (+t.e - +t.s) / ws.length;
@@ -309,7 +338,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
         ...(avance ? palabras.filter(p => p.s >= avance[0] - 0.05 && p.e <= avance[1] + 0.05).map(p => ({ ...p, s: Math.max(0, p.s - avance[0]), e: Math.min(dAvance, p.e - avance[0]) })) : []),
         ...palabras.filter(p => p.s >= rd - 0.05 && p.e <= rh + 0.05).map(p => ({ ...p, s: Math.max(dAvance, p.s + corrimiento), e: p.e + corrimiento })),
       ];
-      trozos = trocear(palabras, opTrozos);
+      trozos = fijos ? agruparFijos(palabras, opTrozos) : trocear(palabras, opTrozos);
       if (!trozos.length) throw new Error('en ese tramo no se dice nada que subtitular');
     }
     // rango [desde, hasta] en segundos: solo ese tramo (muestras rápidas de un estilo)
@@ -860,4 +889,4 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
   return { subtitular, reexportar, abrirEnApp, HERRAMIENTA };
 }
 
-module.exports = { crearSubtitulador, montarPalabras, trocear, resaltables, rangosResaltados, tituloDeArchivo, dosLineas, srtCaso, limpiar, transcribir, corregirPalabras, cajaTexto };
+module.exports = { crearSubtitulador, montarPalabras, trocear, palabrasDeFijos, agruparFijos, resaltables, rangosResaltados, tituloDeArchivo, dosLineas, srtCaso, limpiar, transcribir, corregirPalabras, cajaTexto };

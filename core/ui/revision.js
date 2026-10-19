@@ -69,11 +69,12 @@ function RV_ajustes(aj) {                                // resumen de los cambi
   else if (tb) out.push(`${tr('vibración')}${tb.tramos ? ` ${tr('solo')} ${tb.tramos.map(([d, h]) => `${RV_mmss(d)}–${RV_mmss(h)}`).join(', ')}` : ''}${tb.intensidad != null ? ` ${tr('al')} ${tb.intensidad} %` : ''}`);
   if (Array.isArray(aj.avance)) out.push(`${tr('avance')} ${RV_mmss(aj.avance[0])}–${RV_mmss(aj.avance[1])} ${tr('al principio')}`);
   if (Array.isArray(aj.recorte)) out.push(`${tr('recorte')} ${RV_mmss(aj.recorte[0])}–${RV_mmss(aj.recorte[1])} ${tr('del original')}`);
+  if (aj.subtitulosFijos?.length) out.push(tr('subtítulos editados a mano ({n})', { n: aj.subtitulosFijos.length }));
   if (aj.correcciones?.length) out.push(`${tr('correcciones')}: ${aj.correcciones.map(x => `${x.mal} → ${x.bien}`).join(', ')}`);
   if (aj.rotulos?.length) out.push(`${tr('rótulos')}: ${aj.rotulos.map(x => `${x.nombre} ${RV_mmss(x.t)}`).join(', ')}`);
   if (aj.quitarEmojis?.length) out.push(`${tr('emojis quitados')}: ${aj.quitarEmojis.map(RV_mmss).join(', ')}`);
   if (aj.sinEfectos?.length) out.push(`${tr('sin efectos')}: ${aj.sinEfectos.map(([d, h]) => `${RV_mmss(d)}–${RV_mmss(h)}`).join(', ')}`);
-  for (const [k, v] of Object.entries(aj)) if (!['temblor', 'avance', 'recorte', 'correcciones', 'rotulos', 'quitarEmojis', 'sinEfectos'].includes(k)) out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : Array.isArray(v) ? v.length : v}`);
+  for (const [k, v] of Object.entries(aj)) if (!['temblor', 'avance', 'recorte', 'subtitulosFijos', 'correcciones', 'rotulos', 'quitarEmojis', 'sinEfectos'].includes(k)) out.push(`${k}: ${v === false ? 'no' : v === true ? 'sí' : Array.isArray(v) ? v.length : v}`);
   return out.join(' · ');
 }
 // control de calidad del clip: chip (OK / avisos / errores) y, desplegado, cada fallo con un enlace a su momento del vídeo
@@ -216,6 +217,159 @@ function RV_cambios(c) {
     <small class="tenue">${tr('Retoca y guarda (Ctrl+S) en FilmCraft, luego «Exportar lo retocado». Ojo: «Pedir cambio» y «Rehacer» montan el clip de nuevo y se pierde lo retocado a mano.')}</small>
   </details>`;
 }
+// ── editor de subtítulos: cada subtítulo es un bloque en su línea de tiempo (arrastrar = mover, bordes = alargar/acortar)
+// y una fila con sus tiempos y su texto. Tiempos del vídeo editado; el servidor los guarda en tiempos del clip original.
+const RV_t = s => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+const RV_ST_MIN = 0.2;                                   // duración mínima de un subtítulo (s)
+function RV_subs(c) {
+  return `<details class="rv-cambios rv-subs" data-subs="${esc(c.id)}"><summary>${tr('✏️ Subtítulos a mano')}${c.ajustes?.subtitulosFijos ? ` <span class="chip">${tr('editados')}</span>` : ''}</summary>
+    <div class="rv-stcaja"><div class="tenue">${tr('Cargando…')}</div></div></details>`;
+}
+const RV_ED = {
+  // e = { id, lista, dA, duracion, px, sel, sucio, vid, caja, tarjeta }
+  pintar(e) {
+    const W = Math.max(1, e.duracion) * e.px, marcas = [];
+    for (let s = 0; s <= e.duracion; s++) marcas.push(`<i style="left:${s * e.px}px" class="${s % 5 ? '' : 'g'}">${s % 5 ? '' : RV_mmss(s)}</i>`);
+    e.caja.innerHTML = `
+      <div class="rv-st"><div class="rv-stpista" style="width:${W}px">
+        <div class="rv-stregla">${marcas.join('')}</div>
+        ${e.dA ? `<div class="rv-stav" style="width:${e.dA * e.px}px" title="${esc(tr('Adelanto: copia de un trozo del clip; se edita en su sitio'))}"></div>` : ''}
+        ${e.lista.map((x, i) => `<div class="rv-stb${i === e.sel ? ' sel' : ''}${x.adelanto ? ' av' : ''}" data-i="${i}" style="left:${x.s * e.px}px;width:${Math.max(4, (x.e - x.s) * e.px)}px" title="${esc(x.texto)}">
+          ${x.adelanto ? '' : '<b class="h iz"></b>'}<span>${esc(x.texto)}</span>${x.adelanto ? '' : '<b class="h de"></b>'}</div>`).join('')}
+        <div class="rv-stcab"></div></div></div>
+      <div class="rv-fila">
+        <button class="btn fantasma" data-st="play">⏯</button>
+        <button class="btn fantasma" data-st="zoom-" title="${esc(tr('Alejar'))}">－</button><button class="btn fantasma" data-st="zoom+" title="${esc(tr('Acercar'))}">＋</button>
+        <button class="btn" data-st="nuevo">${tr('＋ Subtítulo aquí')}</button>
+        <button class="btn" data-st="dividir" ${e.sel == null ? 'disabled' : ''}>${tr('✂ Dividir')}</button>
+        <button class="btn" data-st="unir" ${e.sel == null ? 'disabled' : ''}>${tr('⇥ Unir con el siguiente')}</button>
+        <button class="btn mal" data-st="borrar" ${e.sel == null ? 'disabled' : ''}>${tr('Borrar')}</button></div>
+      <div class="rv-stlista">${e.lista.map((x, i) => `<div class="rv-stf${i === e.sel ? ' sel' : ''}${x.adelanto ? ' av' : ''}" data-i="${i}">
+        <button class="rv-ir" data-st="ir" data-i="${i}">${RV_t(x.s)}</button>
+        <input type="text" class="rv-sts" data-i="${i}" value="${RV_t(x.s)}" ${x.adelanto ? 'disabled' : ''}>
+        <input type="text" class="rv-ste" data-i="${i}" value="${RV_t(x.e)}" ${x.adelanto ? 'disabled' : ''}>
+        <input type="text" class="rv-stt" data-i="${i}" value="${esc(x.texto)}" ${x.adelanto ? `disabled title="${esc(tr('Adelanto: se edita en su sitio del clip'))}"` : ''}></div>`).join('')}</div>
+      <div class="rv-fila"><button class="btn pri" data-st="guardar">${tr('Guardar y rehacer el vídeo')}</button>
+        ${e.aMano ? `<button class="btn fantasma" data-st="restaurar">${tr('Volver a los automáticos')}</button>` : ''}
+        <small class="tenue rv-stsucio">${e.sucio ? tr('Cambios sin guardar') : tr('Clic en un bloque para ir a ese momento · arrastra para moverlo · tira de los bordes para cambiar cuándo entra y sale')}</small></div>`;
+    this.cabezal(e, true);
+    const sc = e.caja.querySelector('.rv-st'), t = e.vid ? e.vid.currentTime : 0;
+    if (e.scroll != null) sc.scrollLeft = e.scroll;      // al repintar (zoom, dividir…) la pista no salta
+    if (e.scroll == null || t * e.px < sc.scrollLeft || t * e.px > sc.scrollLeft + sc.clientWidth) sc.scrollLeft = t * e.px - sc.clientWidth / 3;
+    sc.onscroll = () => { e.scroll = sc.scrollLeft; };
+    sc.onpointerdown = ev => this.arrastrar(e, ev);
+  },
+  // un subtítulo cambió: se recoloca su bloque y su fila sin repintar todo (no pierde el foco del texto)
+  refrescar(e, i) {
+    const x = e.lista[i], b = e.caja.querySelector(`.rv-stb[data-i="${i}"]`);
+    if (b) { b.style.left = x.s * e.px + 'px'; b.style.width = Math.max(4, (x.e - x.s) * e.px) + 'px'; b.querySelector('span').textContent = x.texto; b.title = x.texto; }
+    const f = e.caja.querySelector(`.rv-stf[data-i="${i}"]`);
+    if (f) {
+      f.querySelector('.rv-ir').textContent = RV_t(x.s);
+      for (const [cl, v] of [['.rv-sts', x.s], ['.rv-ste', x.e]]) { const inp = f.querySelector(cl); if (inp !== document.activeElement) inp.value = RV_t(v); }
+    }
+    this.sucio(e);
+  },
+  sucio(e) { e.sucio = true; const s = e.caja.querySelector('.rv-stsucio'); if (s) s.textContent = tr('Cambios sin guardar'); },
+  elegir(e, i, ir) {
+    e.sel = i; this.pintar(e);
+    if (ir && e.vid && i != null) { e.vid.currentTime = e.lista[i].s + 0.01; }
+    e.caja.querySelector(`.rv-stf[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
+  },
+  // límites de un subtítulo: no pisa a sus vecinos ni entra en el adelanto
+  limites(e, i) {
+    const x = e.lista[i];
+    const ant = e.lista.slice(0, i).filter(y => !y.adelanto).at(-1), sig = e.lista.slice(i + 1).find(y => !y.adelanto);
+    return { min: Math.max(e.dA, ant ? ant.e : 0, x.adelanto ? 0 : e.dA), max: sig ? sig.s : e.duracion };
+  },
+  arrastrar(e, ev) {
+    const pista = e.caja.querySelector('.rv-stpista'), r0 = pista.getBoundingClientRect(), t = (ev.clientX - r0.left) / e.px;
+    const b = ev.target.closest('.rv-stb');
+    if (!b) { if (e.vid) e.vid.currentTime = Math.max(0, Math.min(e.duracion, t)); return; }   // clic en la pista = ir ahí
+    const i = +b.dataset.i, x = e.lista[i];
+    if (e.sel !== i) { e.sel = i; e.caja.querySelectorAll('.rv-stb.sel, .rv-stf.sel').forEach(n => n.classList.remove('sel')); b.classList.add('sel'); e.caja.querySelector(`.rv-stf[data-i="${i}"]`)?.classList.add('sel'); e.caja.querySelectorAll('[data-st="dividir"],[data-st="unir"],[data-st="borrar"]').forEach(n => { n.disabled = false; }); }
+    if (x.adelanto) { if (e.vid) e.vid.currentTime = x.s + 0.01; return; }
+    const modo = ev.target.classList.contains('iz') ? 'iz' : ev.target.classList.contains('de') ? 'de' : 'mover';
+    const { min, max } = this.limites(e, i), s0 = x.s, e0 = x.e, x0 = ev.clientX;
+    let movido = false;
+    b.setPointerCapture(ev.pointerId); ev.preventDefault();
+    const mover = m => {
+      const d = (m.clientX - x0) / e.px; if (Math.abs(m.clientX - x0) > 3) movido = true; if (!movido) return;
+      const q = v => Math.round(v * 20) / 20;           // de 0,05 en 0,05 s
+      if (modo === 'mover') { const len = e0 - s0, s = Math.min(max - len, Math.max(min, q(s0 + d))); x.s = +s.toFixed(2); x.e = +(s + len).toFixed(2); }
+      if (modo === 'iz') x.s = +Math.min(x.e - RV_ST_MIN, Math.max(min, q(s0 + d))).toFixed(2);
+      if (modo === 'de') x.e = +Math.max(x.s + RV_ST_MIN, Math.min(max, q(e0 + d))).toFixed(2);
+      this.refrescar(e, i);
+      if (e.vid) e.vid.currentTime = modo === 'de' ? Math.max(x.s, x.e - 0.3) : x.s + 0.01;
+    };
+    const soltar = () => { b.removeEventListener('pointermove', mover); b.removeEventListener('pointerup', soltar); if (!movido && e.vid) e.vid.currentTime = x.s + 0.01; };
+    b.addEventListener('pointermove', mover); b.addEventListener('pointerup', soltar);
+  },
+  // cabezal + fila del subtítulo que se ve ahora; la pista sigue al vídeo mientras se reproduce
+  cabezal(e, forzar) {
+    if (!e.caja.isConnected) return false;
+    const t = e.vid ? e.vid.currentTime : 0, cab = e.caja.querySelector('.rv-stcab'); if (!cab) return true;
+    cab.style.left = t * e.px + 'px';
+    const i = e.lista.findIndex(x => t >= x.s && t < x.e);
+    if (i !== e.ahora || forzar) {
+      e.ahora = i;
+      e.caja.querySelectorAll('.rv-stf.ahora, .rv-stb.ahora').forEach(n => n.classList.remove('ahora'));
+      const fila = i >= 0 && e.caja.querySelector(`.rv-stf[data-i="${i}"]`);
+      if (fila) {
+        fila.classList.add('ahora'); e.caja.querySelector(`.rv-stb[data-i="${i}"]`)?.classList.add('ahora');
+        const l = fila.parentElement;                   // la lista sigue al vídeo (sin mover la página)
+        if (e.vid && !e.vid.paused && (fila.offsetTop < l.scrollTop || fila.offsetTop + fila.offsetHeight > l.scrollTop + l.clientHeight)) l.scrollTop = fila.offsetTop - l.clientHeight / 3;
+      }
+    }
+    // la pista sigue al vídeo mientras suena o si saltaste a otro momento (no mientras arrastras un bloque)
+    const sc = e.caja.querySelector('.rv-st'), salto = e.tUlt != null && Math.abs(t - e.tUlt) > 1;
+    e.tUlt = t;
+    if (e.vid && (!e.vid.paused || salto) && (t * e.px < sc.scrollLeft || t * e.px > sc.scrollLeft + sc.clientWidth - 40)) sc.scrollLeft = t * e.px - (salto ? sc.clientWidth / 3 : 40);
+    return true;
+  },
+  accion(e, a, boton) {
+    const L = e.lista, i = e.sel, t = e.vid ? e.vid.currentTime : 0;
+    if (a === 'play') { if (e.vid) e.vid.paused ? e.vid.play() : e.vid.pause(); return; }
+    if (a === 'zoom+' || a === 'zoom-') { e.px = Math.min(400, Math.max(15, e.px * (a === 'zoom+' ? 1.5 : 1 / 1.5))); e.scroll = null; return this.pintar(e); }
+    if (a === 'ir') return this.elegir(e, +boton.dataset.i, true);
+    if (a === 'nuevo') {
+      if (t < e.dA) return aviso('Eso es el adelanto: ve al momento del clip', true);
+      if (L.some(x => !x.adelanto && t >= x.s && t < x.e)) return aviso('Ahí ya hay un subtítulo: usa «Dividir» o mueve el vídeo a un hueco', true);
+      const sig = L.find(x => !x.adelanto && x.s > t), fin = Math.min(t + 1.5, sig ? sig.s : e.duracion);
+      if (fin - t < RV_ST_MIN) return aviso('No cabe: no hay hueco aquí', true);
+      L.push({ s: +t.toFixed(2), e: +fin.toFixed(2), texto: '' }); L.sort((x, y) => x.s - y.s);
+      this.sucio(e); this.elegir(e, L.findIndex(x => x.s === +t.toFixed(2) && !x.texto));
+      e.caja.querySelector(`.rv-stt[data-i="${e.sel}"]`)?.focus();
+      return;
+    }
+    if (i == null || L[i]?.adelanto) return;
+    if (a === 'borrar') { L.splice(i, 1); this.sucio(e); return this.elegir(e, null); }
+    if (a === 'dividir') {
+      const x = L[i], corte = t > x.s + RV_ST_MIN && t < x.e - RV_ST_MIN ? t : (x.s + x.e) / 2, ws = x.texto.split(/\s+/).filter(Boolean);
+      const mitad = Math.max(1, Math.round(ws.length * (corte - x.s) / (x.e - x.s)));
+      L.splice(i, 1, { s: x.s, e: +corte.toFixed(2), texto: ws.slice(0, mitad).join(' ') }, { s: +corte.toFixed(2), e: x.e, texto: ws.slice(mitad).join(' ') });
+      this.sucio(e); return this.elegir(e, i);
+    }
+    if (a === 'unir') {
+      const j = L.findIndex((y, k) => k > i && !y.adelanto); if (j < 0) return aviso('No hay uno después', true);
+      L.splice(i, j - i + 1, { s: L[i].s, e: L[j].e, texto: `${L[i].texto} ${L[j].texto}`.trim() });
+      this.sucio(e); return this.elegir(e, i);
+    }
+  },
+  // escribir en las filas: texto al momento; los tiempos al salir del campo (se ajustan a los vecinos)
+  escribir(e, inp, final) {
+    const i = +inp.dataset.i, x = e.lista[i]; if (!x || x.adelanto) return;
+    if (inp.matches('.rv-stt')) { x.texto = inp.value; return this.refrescar(e, i); }
+    if (!final) return;
+    const v = RV_seg(inp.value), { min, max } = this.limites(e, i);
+    if (!Number.isFinite(v)) { inp.value = RV_t(inp.matches('.rv-sts') ? x.s : x.e); return; }
+    if (inp.matches('.rv-sts')) x.s = +Math.min(x.e - RV_ST_MIN, Math.max(min, v)).toFixed(2);
+    else x.e = +Math.max(x.s + RV_ST_MIN, Math.min(max, v)).toFixed(2);
+    inp.value = RV_t(inp.matches('.rv-sts') ? x.s : x.e);
+    this.refrescar(e, i);
+  },
+};
+
 // la versión 4K de un clip aprobado: en cola / exportando con % / lista (con su archivo) / error con reintento
 function RV_k4(c) {
   const k = c.k4;
@@ -262,8 +416,17 @@ VISTAS.revision = {
         $('.rv-intfila', box).hidden = e.target.value === 'quitar';
       }
     };
-    v.oninput = e => { if (e.target.matches('.rv-int')) e.target.parentElement.querySelector('.rv-intv').textContent = e.target.value + ' %'; };
-    v.onkeydown = e => { if (e.key === 'Enter' && e.target.matches('.rv-ctexto')) { e.preventDefault(); e.target.closest('.rv-comentar').querySelector('[data-a="comentar"]').click(); } };
+    v.oninput = e => {
+      if (e.target.matches('.rv-int')) e.target.parentElement.querySelector('.rv-intv').textContent = e.target.value + ' %';
+      if (e.target.matches('.rv-stt')) { const ed = this.editorDe(e.target); if (ed) RV_ED.escribir(ed, e.target, false); }
+    };
+    v.addEventListener('change', e => { if (e.target.matches('.rv-sts, .rv-ste')) { const ed = this.editorDe(e.target); if (ed) RV_ED.escribir(ed, e.target, true); } });
+    v.onkeydown = e => {
+      if (e.key === 'Enter' && e.target.matches('.rv-ctexto')) { e.preventDefault(); e.target.closest('.rv-comentar').querySelector('[data-a="comentar"]').click(); }
+      if (e.key === 'Enter' && e.target.matches('.rv-sts, .rv-ste, .rv-stt')) { e.preventDefault(); e.target.blur(); }
+    };
+    // <details> no burbujea 'toggle': se escucha en captura, una sola vez por vista
+    if (!v.__rvToggle) { v.__rvToggle = true; v.addEventListener('toggle', e => { if (e.target.matches?.('.rv-subs') && e.target.open) this.abrirSubs(e.target); }, true); }
     await this.cargar();
     this.reloj = setInterval(() => this.cargar(true), 3000);
   },
@@ -403,7 +566,7 @@ VISTAS.revision = {
             ${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
             <select class="rv-estilo"><option value="">${tr('Otro estilo')}…</option>${opciones}</select><button class="btn" data-a="rehacer">${tr('Rehacer')}</button>
             <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button></div>
-            ${c.estado === 'revisar' ? `<div data-coms="${esc(c.id)}">${RV_comentar(c, this.coms?.get(c.id))}</div>` : ''}${RV_cambios(c)}` : ''}
+            ${c.estado === 'revisar' ? `<div data-coms="${esc(c.id)}">${RV_comentar(c, this.coms?.get(c.id))}</div>${RV_subs(c)}` : ''}${RV_cambios(c)}` : ''}
         </div></div>`;
     }).join('')}</div>`).join('');
   },
@@ -416,6 +579,43 @@ VISTAS.revision = {
       const id = img.dataset.portada, c = this.L.clips.find(x => x.id === id), k = `po:${id}:${img.dataset.i}:${c?.editado || ''}:${c?.estado || ''}`;
       try { if (!this.urls.has(k)) this.urls.set(k, await RV_blob(`/revision/${encodeURIComponent(id)}/portada/${img.dataset.i}`)); img.src = this.urls.get(k); } catch { }
     }
+  },
+  // ▶ en la tarjeta: el vídeo editado (por fetch→blob, lleva el token)
+  async verVideo(tarjeta, id, autoplay = true) {
+    const medio = $('.rv-medio', tarjeta); medio.innerHTML = `<div class="rv-hueco">…</div>`;
+    try { const url = await RV_blob(`/revision/${encodeURIComponent(id)}/video`); medio.innerHTML = `<video src="${url}" controls ${autoplay ? 'autoplay' : ''} playsinline></video>`; }
+    catch (er) { medio.innerHTML = `<div class="rv-hueco">${esc(er.message)}</div>`; }
+    return $('video', medio);
+  },
+  editorDe(el) { const d = el.closest('.rv-subs'); return d && this.eds?.get(d.dataset.subs); },
+  async abrirSubs(det) {
+    const id = det.dataset.subs, tarjeta = det.closest('.rv-clip'), caja = $('.rv-stcaja', det);
+    this.eds = this.eds || new Map();
+    let e = this.eds.get(id);
+    const vid = $('video', tarjeta) || await this.verVideo(tarjeta, id, false);
+    if (!e || !e.sucio) {
+      let r; try { r = await api('GET', `/revision/${encodeURIComponent(id)}/subtitulos`); } catch (er) { caja.innerHTML = `<div class="rv-error">${esc(er.message)}</div>`; return; }
+      if (!r.subtitulos.length) { caja.innerHTML = `<div class="tenue">${tr('Este clip no tiene subtítulos (.srt).')}</div>`; return; }
+      e = { id, lista: r.subtitulos, dA: r.dA || 0, duracion: Math.max(r.duracion || 0, r.subtitulos.at(-1).e), aMano: r.aMano, px: 100, sel: null, sucio: false };
+      this.eds.set(id, e);
+    }
+    Object.assign(e, { caja, vid, ahora: undefined, scroll: null });
+    RV_ED.pintar(e);
+    const tic = () => { if (det.open && RV_ED.cabezal(e)) requestAnimationFrame(tic); };
+    requestAnimationFrame(tic);
+  },
+  async clicSubs(b) {
+    const e = this.editorDe(b); if (!e) return;
+    const a = b.dataset.st;
+    if (a !== 'guardar' && a !== 'restaurar') return RV_ED.accion(e, a, b);
+    if (a === 'guardar' && e.lista.some(x => !x.adelanto && !x.texto.trim())) return aviso('Hay subtítulos vacíos: escríbelos o bórralos', true);
+    b.disabled = true;
+    try {
+      await api('POST', `/revision/${encodeURIComponent(e.id)}/subtitulos`, a === 'restaurar' ? { restaurar: true } : { subtitulos: e.lista });
+      this.eds.delete(e.id);
+      aviso(a === 'restaurar' ? 'Se rehace con los subtítulos automáticos' : 'Guardado: se rehace el vídeo con tus subtítulos');
+      this.firma = null; await this.cargar();
+    } catch (er) { aviso(er.message, true); b.disabled = false; }
   },
   // repinta solo la caja de comentarios de una tarjeta (sin tocar el vídeo que se está viendo)
   pintarComs(id) {
@@ -433,15 +633,11 @@ VISTAS.revision = {
     if (e.target.closest('#rvMedal')) return this.abrirMedal();
     const mb = e.target.closest('[data-m]'); if (mb) return this.clicMedal(mb);
     const g = e.target.closest('[data-g]'); if (g) return this.clicPanel(g);
+    const st = e.target.closest('[data-st]'); if (st) return this.clicSubs(st);
     const a = e.target.closest('[data-a]'); if (!a) return;
     const tarjeta = a.closest('.rv-clip'); if (!tarjeta) return;
     const id = tarjeta.dataset.id;
-    if (a.dataset.a === 'ver') {
-      const medio = $('.rv-medio', tarjeta); medio.innerHTML = `<div class="rv-hueco">…</div>`;
-      try { const url = await RV_blob(`/revision/${encodeURIComponent(id)}/video`); medio.innerHTML = `<video src="${url}" controls autoplay playsinline></video>`; }
-      catch (er) { medio.innerHTML = `<div class="rv-hueco">${esc(er.message)}</div>`; }
-      return;
-    }
+    if (a.dataset.a === 'ver') { await this.verVideo(tarjeta, id); return; }
     if (a.dataset.a === 'marcar') {                      // ⏱ = el momento en que está el vídeo
       const vid = $('video', tarjeta); if (!vid) return aviso('Dale a ▶ primero', true);
       $('.rv-' + a.dataset.campo, tarjeta).value = RV_mmss(vid.currentTime);

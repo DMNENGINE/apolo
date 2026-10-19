@@ -1424,3 +1424,34 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .rv-mfoto span { position: absolute; right: 5px; bottom: 5px; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; padding: 1px 5px; border-radius: 4px; }
 .rv-mtit { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rv-mclip .btn { font-size: 12px; padding: 5px 8px; }
+
+/* Revisión · editor de subtítulos: bloques en su línea de tiempo + filas con tiempos y texto */
+.rv-st { position: relative; overflow-x: auto; overflow-y: hidden; background: var(--capa-2); border: 1px solid var(--borde); border-radius: 8px; margin-top: 4px; touch-action: pan-x; user-select: none; }
+.rv-stpista { position: relative; height: 74px; min-width: 100%; }
+.rv-stregla { position: absolute; inset: 0 0 auto 0; height: 18px; border-bottom: 1px solid var(--borde); }
+.rv-stregla i { position: absolute; top: 0; height: 5px; border-left: 1px solid var(--borde-2); font: 10px/1 var(--mono); font-style: normal; color: var(--txt-3); padding: 7px 0 0 3px; }
+.rv-stregla i.g { height: 18px; box-sizing: border-box; }
+.rv-stav { position: absolute; top: 18px; bottom: 0; left: 0; background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--txt-3) 14%, transparent) 6px 12px); }
+.rv-stb { position: absolute; top: 26px; height: 40px; box-sizing: border-box; background: color-mix(in srgb, var(--acento) 22%, var(--capa)); border: 1px solid color-mix(in srgb, var(--acento) 55%, transparent); border-radius: 6px; cursor: grab; overflow: hidden; display: flex; align-items: center; }
+.rv-stb span { flex: 1; min-width: 0; padding: 0 7px; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--txt); pointer-events: none; }
+.rv-stb .h { width: 7px; align-self: stretch; cursor: ew-resize; flex: none; background: color-mix(in srgb, var(--acento) 35%, transparent); }
+.rv-stb.sel { border-color: var(--acento); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 45%, transparent); z-index: 2; }
+.rv-stb.ahora { background: color-mix(in srgb, var(--acento) 40%, var(--capa)); }
+.rv-stb.av { opacity: .45; cursor: pointer; border-style: dashed; }
+.rv-stcab { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--mal); pointer-events: none; z-index: 3; }
+.rv-stlista { position: relative; max-height: 320px; overflow-y: auto; margin-top: 8px; border: 1px solid var(--borde); border-radius: 8px; }
+.rv-stf { display: grid; grid-template-columns: 58px 64px 64px 1fr; gap: 6px; align-items: center; padding: 4px 6px; border-bottom: 1px solid var(--borde); font-size: 13px; }
+.rv-stf:last-child { border-bottom: 0; }
+.rv-stf input { min-width: 0; background: var(--capa-2); color: var(--txt); border: 1px solid var(--borde-2); border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 13px; }
+.rv-stf .rv-sts, .rv-stf .rv-ste { font-family: var(--mono); font-size: 12px; }
+.rv-stf.sel { background: color-mix(in srgb, var(--acento) 10%, transparent); }
+.rv-stf.ahora { box-shadow: inset 3px 0 0 var(--acento); }
+.rv-stf.av { opacity: .5; }
+@media (max-width: 700px) { .rv-stf { grid-template-columns: 52px 1fr; } .rv-stf .rv-sts, .rv-stf .rv-ste { display: none; } }
+/* con el editor abierto la tarjeta ocupa la fila entera y el vídeo se queda a la vista */
+.rv-clip:has(.rv-subs[open]) { grid-column: 1 / -1; grid-template-columns: 280px 1fr; }
+.rv-clip:has(.rv-subs[open]) .rv-medio { position: sticky; top: 12px; }
+.rv-subs[open] .rv-stpista { height: 84px; }
+.rv-subs[open] .rv-stb { height: 48px; }
+.rv-subs[open] .rv-stb span { font-size: 12px; }
+@media (max-width: 700px) { .rv-clip:has(.rv-subs[open]) { grid-template-columns: 1fr; } .rv-clip:has(.rv-subs[open]) .rv-medio { max-height: 60vh; } }

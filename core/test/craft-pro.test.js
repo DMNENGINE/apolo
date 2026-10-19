@@ -247,3 +247,18 @@ test('publicar: la portada elegida va al anuncio y a Drive (botón "Descargar po
   assert.ok(archivos.includes('files[0]'));
   assert.ok(fs.existsSync(jpg), 'la portada elegida no se borra al anunciar');
 });
+
+test('subtítulos a mano: cada bloque queda tal cual, sobrevive al avance y se trocea solo en estilos de una palabra', () => {
+  const { palabrasDeFijos, agruparFijos } = require('../craft/subtitular');
+  const p = palabrasDeFijos([{ s: 12, e: 13, texto: 'mi hermano' }, { s: 10, e: 11.5, texto: 'Ya volteamos la Scania' }, { s: 14, e: 14, texto: 'nada' }]);
+  assert.deepStrictEqual(agruparFijos(p).map(t => [t.s, t.e, t.texto]), [[10, 11.5, 'YA VOLTEAMOS LA SCANIA'], [12, 13, 'MI HERMANO']]);
+  // avance [10, 11.5] delante y el clip desde 9: la copia del adelanto y el original quedan como dos subtítulos
+  const dA = 1.5, corr = dA - 9;
+  const montado = [...p.filter(x => x.s >= 10 && x.e <= 11.5).map(x => ({ ...x, s: x.s - 10, e: x.e - 10 })), ...p.map(x => ({ ...x, s: x.s + corr, e: x.e + corr }))];
+  assert.deepStrictEqual(agruparFijos(montado).map(t => t.texto), ['YA VOLTEAMOS LA SCANIA', 'YA VOLTEAMOS LA SCANIA', 'MI HERMANO']);
+  // una corrección dentro de un bloque no lo parte
+  const { corregirPalabras } = require('../craft/subtitular');
+  const c = corregirPalabras(p, [{ t: 10.5, mal: 'Scania', bien: 'Scania roja' }]).palabras;
+  assert.deepStrictEqual(agruparFijos(c).map(t => t.texto), ['YA VOLTEAMOS LA SCANIA ROJA', 'MI HERMANO']);
+  assert.strictEqual(agruparFijos(p, { maxPalabras: 1 }).length, 6);
+});
