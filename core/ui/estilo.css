@@ -1448,10 +1448,36 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .rv-stf.ahora { box-shadow: inset 3px 0 0 var(--acento); }
 .rv-stf.av { opacity: .5; }
 @media (max-width: 700px) { .rv-stf { grid-template-columns: 52px 1fr; } .rv-stf .rv-sts, .rv-stf .rv-ste { display: none; } }
-/* con el editor abierto la tarjeta ocupa la fila entera y el vídeo se queda a la vista */
-.rv-clip:has(.rv-subs[open]) { grid-column: 1 / -1; grid-template-columns: 280px 1fr; }
-.rv-clip:has(.rv-subs[open]) .rv-medio { position: sticky; top: 12px; }
-.rv-subs[open] .rv-stpista { height: 84px; }
-.rv-subs[open] .rv-stb { height: 48px; }
-.rv-subs[open] .rv-stb span { font-size: 12px; }
-@media (max-width: 700px) { .rv-clip:has(.rv-subs[open]) { grid-template-columns: 1fr; } .rv-clip:has(.rv-subs[open]) .rv-medio { max-height: 60vh; } }
+/* Revisión · editor de un clip (#/revision/<id>): cabecera, vídeo + pestañas, línea de tiempo abajo */
+.rve { padding: 14px 18px 0; display: flex; flex-direction: column; gap: 12px; min-height: 100%; box-sizing: border-box; }
+.rve-cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rve-tit { display: flex; flex-direction: column; min-width: 0; max-width: 42vw; }
+.rve-tit b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rve-sp { flex: 1; }
+.rve-n { font-size: 12px; min-width: 40px; text-align: center; }
+.rve-cab .rv-acc { gap: 6px; }
+.rve-cuerpo { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.rve-video .rv-medio { height: min(64vh, 680px); width: auto; aspect-ratio: 9 / 16; }
+.rve-lado { min-width: 0; display: flex; flex-direction: column; height: min(64vh, 680px); }
+.rve-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--borde); margin-bottom: 10px; flex-wrap: wrap; }
+.rve-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--txt-2); padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.rve-tabs button.on { color: var(--txt); border-bottom-color: var(--acento); }
+.rve-panel { flex: 1; min-height: 0; overflow-y: auto; display: none; flex-direction: column; gap: 8px; }
+.rve-panel.on { display: flex; }
+.rve-panel .rv-cambios { border-top: 0; padding-top: 0; }
+.rve-subs { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.rve .rv-stlista { max-height: none; flex: 1; min-height: 0; margin-top: 0; }
+.rve-pista { position: sticky; bottom: 0; z-index: 4; background: var(--fondo); padding: 8px 0 14px; border-top: 1px solid var(--borde); }
+.rve .rv-stpista { height: 100px; }
+.rve .rv-stb { height: 60px; align-items: stretch; }
+.rve .rv-stb span { align-self: center; font-size: 12px; white-space: normal; line-height: 1.2; max-height: 2.4em; overflow: hidden; }
+.rve-trab { max-width: 560px; }
+.rve-trab .rv-prog { margin-bottom: 6px; }
+@media (max-width: 900px) {
+  .rve { padding: 58px 12px 0; }
+  .rve-tit { max-width: 100%; flex-basis: 100%; order: -1; }
+  .rve-cuerpo { grid-template-columns: 1fr; }
+  .rve-video .rv-medio { height: 52vh; margin: 0 auto; }
+  .rve-lado { height: auto; }
+  .rve-panel { overflow: visible; }
+}

@@ -90,6 +90,18 @@ function RV_calidad(c) {
   return `<details class="rv-calidad"><summary>${chip}${audio}<small class="tenue">${esc(med.replace(/^ · /, ''))}</small></summary><ul>${items.map(([cls, x]) =>
     `<li class="${cls}">${x.s != null ? `<button class="rv-ir" data-a="ir" data-t="${x.s}">${RV_mmss(x.s)}</button> ` : ''}${esc(x.texto)}</li>`).join('')}</ul>${extra}</details>`;
 }
+const RV_chipCalidad = c => { const q = c.calidad || {}; return q.errores?.length ? `<span class="chip mal">${tr('Calidad')}: ${tr('{n} error(es)', { n: q.errores.length })}</span>` : q.avisos?.length ? `<span class="chip aviso">${tr('Calidad')}: ${tr('{n} aviso(s)', { n: q.avisos.length })}</span>` : `<span class="chip ok">${tr('Calidad')}: ${tr('todo bien')}</span>`; };
+// lo que se sabe de la edición: escenas, director, dudas de Whisper (con salto a su momento), chat, cambios pedidos, calidad
+function RV_info(c, listo = true) {
+  return `${c.escenas?.length ? `<small class="tenue">${tr('Escenas')}: ${c.escenas.map(s => `${esc(s.tipo)} ${RV_mmss(s.desde)}`).join(' · ')}${c.emojis ? ` · ${c.emojis} emojis` : ''}</small>` : ''}
+    ${c.plan ? `<small class="tenue">🎬 ${tr('Director')}: ${(c.disenos || []).map(d => `${d.tipo === 'podcast' ? '🎙️ podcast' : '🪟 ' + tr('ventanita')} ${RV_mmss(d.desde)}–${RV_mmss(d.hasta)}`).join(' · ') || tr('sin diseños')}${c.sonidos ? ` · 🔊 ${c.sonidos} ${tr('sonidos')}` : ''}${(c.plan.emojis || []).length ? ` · ${c.plan.emojis.map(e => e.emoji).join('')}` : ''}</small>` : ''}
+    ${c.dudas?.length ? `<div class="rv-dudas"><small>${tr('Whisper dudó en')}:</small> ${c.dudas.slice(0, 5).map(d => `<span><button class="rv-ir" data-a="ir" data-t="${d.s}">${RV_mmss(d.s)}</button> “${esc(d.texto)}”</span>`).join(' ')}</div>` : ''}
+    ${c.chat?.length ? `<details class="rv-chat"><summary>${tr('Chat en ese momento')} (${c.chat.length})</summary>${c.chat.map(m => `<div>${esc(m)}</div>`).join('')}</details>` : ''}
+    ${c.ajustes && Object.keys(c.ajustes).length ? `<div class="rv-ajustes">${tr('Cambios')}: ${esc(RV_ajustes(c.ajustes))}</div>` : ''}
+    ${c.pedidos?.at(-1)?.respuesta ? `<div class="rv-respuesta">${esc(c.pedidos.at(-1).respuesta)}</div>` : ''}
+    ${c.retocado ? `<span class="chip">${tr('retocado a mano')}</span>` : ''}
+    ${listo ? RV_calidad(c) : ''}`;
+}
 // portadas hechas con PhotoCraft: la elegida va con el vídeo al aprobar y en el anuncio de Discord
 function RV_portadas(c) {
   if (!c.portadas?.length) return '';
@@ -185,12 +197,12 @@ function RV_vista(c) {
   const dA = av ? av[1] - av[0] : 0, rd = rc ? rc[0] : 0, rh = rc ? rc[1] : dur;
   return { dA, rd, rh, dur, duracion: dA + rh - rd, aOrig: t => +(t < dA ? av[0] + t : t - dA + rd).toFixed(2), aVista: o => +(o - rd + dA).toFixed(2) };
 }
-function RV_cambios(c) {
+function RV_cambios(c, abierto) {
   const v = RV_vista(c);
   const tb = c.ajustes?.temblor, t0 = tb?.tramos?.[0], tramo = t0 && [v.aVista(t0[0]), v.aVista(t0[1])];
   const modo = tb === false ? 'quitar' : tramo ? 'tramo' : tb ? 'intensidad' : 'tramo';
   const int = tb && tb.intensidad != null ? tb.intensidad : 100;
-  return `<details class="rv-cambios"><summary>${tr('Cambios y edición a mano')}</summary>
+  return `<details class="rv-cambios"${abierto ? ' open' : ''}><summary>${tr('Cambios y edición a mano')}</summary>
     <textarea class="rv-pedido" placeholder="${esc(tr('Ej.: que empiece con el trozo de 0:45 a 0:47 y luego el clip entero · quita la vibración menos de 0:40 a 0:55 · pon la cámara en ventanita de 0:30 a 0:40 · modo podcast de 1:00 a 1:15 · sin sonidos · dame otras ideas'))}"></textarea>
     <div class="rv-fila"><button class="btn pri" data-a="pedir">${tr('Pedir cambio')}</button></div>
     <div class="rv-sub">${tr('Dónde empieza y dónde termina')}</div>
@@ -221,16 +233,13 @@ function RV_cambios(c) {
 // y una fila con sus tiempos y su texto. Tiempos del vídeo editado; el servidor los guarda en tiempos del clip original.
 const RV_t = s => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
 const RV_ST_MIN = 0.2;                                   // duración mínima de un subtítulo (s)
-function RV_subs(c) {
-  return `<details class="rv-cambios rv-subs" data-subs="${esc(c.id)}"><summary>${tr('✏️ Subtítulos a mano')}${c.ajustes?.subtitulosFijos ? ` <span class="chip">${tr('editados')}</span>` : ''}</summary>
-    <div class="rv-stcaja"><div class="tenue">${tr('Cargando…')}</div></div></details>`;
-}
 const RV_ED = {
-  // e = { id, lista, dA, duracion, px, sel, sucio, vid, caja, tarjeta }
+  // e = { id, lista, dA, duracion, px, sel, sucio, vid, caja } · caja = el editor del clip (.rve): dentro van .rve-pista
+  // (línea de tiempo abajo, a todo lo ancho) y .rve-subs (las filas, en la pestaña Subtítulos)
   pintar(e) {
     const W = Math.max(1, e.duracion) * e.px, marcas = [];
     for (let s = 0; s <= e.duracion; s++) marcas.push(`<i style="left:${s * e.px}px" class="${s % 5 ? '' : 'g'}">${s % 5 ? '' : RV_mmss(s)}</i>`);
-    e.caja.innerHTML = `
+    e.caja.querySelector('.rve-pista').innerHTML = `
       <div class="rv-st"><div class="rv-stpista" style="width:${W}px">
         <div class="rv-stregla">${marcas.join('')}</div>
         ${e.dA ? `<div class="rv-stav" style="width:${e.dA * e.px}px" title="${esc(tr('Adelanto: copia de un trozo del clip; se edita en su sitio'))}"></div>` : ''}
@@ -243,15 +252,16 @@ const RV_ED = {
         <button class="btn" data-st="nuevo">${tr('＋ Subtítulo aquí')}</button>
         <button class="btn" data-st="dividir" ${e.sel == null ? 'disabled' : ''}>${tr('✂ Dividir')}</button>
         <button class="btn" data-st="unir" ${e.sel == null ? 'disabled' : ''}>${tr('⇥ Unir con el siguiente')}</button>
-        <button class="btn mal" data-st="borrar" ${e.sel == null ? 'disabled' : ''}>${tr('Borrar')}</button></div>
+        <button class="btn mal" data-st="borrar" ${e.sel == null ? 'disabled' : ''}>${tr('Borrar')}</button>
+        <small class="tenue rv-stsucio">${e.sucio ? tr('Cambios sin guardar') : tr('Clic en un bloque para ir a ese momento · arrastra para moverlo · tira de los bordes para cambiar cuándo entra y sale')}</small></div>`;
+    e.caja.querySelector('.rve-subs').innerHTML = `
       <div class="rv-stlista">${e.lista.map((x, i) => `<div class="rv-stf${i === e.sel ? ' sel' : ''}${x.adelanto ? ' av' : ''}" data-i="${i}">
         <button class="rv-ir" data-st="ir" data-i="${i}">${RV_t(x.s)}</button>
         <input type="text" class="rv-sts" data-i="${i}" value="${RV_t(x.s)}" ${x.adelanto ? 'disabled' : ''}>
         <input type="text" class="rv-ste" data-i="${i}" value="${RV_t(x.e)}" ${x.adelanto ? 'disabled' : ''}>
         <input type="text" class="rv-stt" data-i="${i}" value="${esc(x.texto)}" ${x.adelanto ? `disabled title="${esc(tr('Adelanto: se edita en su sitio del clip'))}"` : ''}></div>`).join('')}</div>
       <div class="rv-fila"><button class="btn pri" data-st="guardar">${tr('Guardar y rehacer el vídeo')}</button>
-        ${e.aMano ? `<button class="btn fantasma" data-st="restaurar">${tr('Volver a los automáticos')}</button>` : ''}
-        <small class="tenue rv-stsucio">${e.sucio ? tr('Cambios sin guardar') : tr('Clic en un bloque para ir a ese momento · arrastra para moverlo · tira de los bordes para cambiar cuándo entra y sale')}</small></div>`;
+        ${e.aMano ? `<button class="btn fantasma" data-st="restaurar">${tr('Volver a los automáticos')}</button>` : ''}</div>`;
     this.cabezal(e, true);
     const sc = e.caja.querySelector('.rv-st'), t = e.vid ? e.vid.currentTime : 0;
     if (e.scroll != null) sc.scrollLeft = e.scroll;      // al repintar (zoom, dividir…) la pista no salta
@@ -274,7 +284,8 @@ const RV_ED = {
   elegir(e, i, ir) {
     e.sel = i; this.pintar(e);
     if (ir && e.vid && i != null) { e.vid.currentTime = e.lista[i].s + 0.01; }
-    e.caja.querySelector(`.rv-stf[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
+    const f = e.caja.querySelector(`.rv-stf[data-i="${i}"]`), l = f?.parentElement;   // sin mover la página
+    if (f && (f.offsetTop < l.scrollTop || f.offsetTop + f.offsetHeight > l.scrollTop + l.clientHeight)) l.scrollTop = f.offsetTop - l.clientHeight / 3;
   },
   // límites de un subtítulo: no pisa a sus vecinos ni entra en el adelanto
   limites(e, i) {
@@ -393,8 +404,17 @@ async function RV_blob(ruta) {
 
 VISTAS.revision = {
   filtro: 'revisar',
-  async pintar(v) {
+  async pintar(v, sub) {
     this.salir(); this.v = v; this.urls = this.urls || new Map();
+    this.idEd = sub ? decodeURIComponent(sub) : null;    // #/revision/<clip> = editor de ese clip
+    this.manejadores(v);
+    if (this.idEd) {
+      this.firmaEd = null;
+      v.innerHTML = `<div class="rve" data-id="${esc(this.idEd)}"><div class="tenue pad">${tr('Cargando…')}</div></div>`;
+      await this.cargar();
+      this.reloj = setInterval(() => this.cargar(true), 3000);
+      return;
+    }
     v.innerHTML = `<div class="pagina">${cabecera('Revisión', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.',
       `<button class="btn" id="rvMedal">🎮 ${tr('Elegir de Medal')}</button><button class="btn" id="rvBuscar">${ic('buscar')}${tr('Buscar clips ahora')}</button>`)}
       <div id="rvEstado"></div>
@@ -402,8 +422,13 @@ VISTAS.revision = {
       <div id="rvPanel"></div>
       <div class="rv-filtros">${RV_FILTROS.map(([k, t]) => `<button class="btn ${k === this.filtro ? 'pri' : 'fantasma'}" data-f="${k}">${tr(t)} <span class="rv-n" data-n="${k}"></span></button>`).join('')}</div>
       <div id="rvLista"></div></div>`;
+    await this.cargar();
+    this.reloj = setInterval(() => this.cargar(true), 3000);
+  },
+  manejadores(v) {
     v.onclick = e => this.clic(e);
     v.onchange = e => {
+      if (e.target.matches('.rv-sts, .rv-ste')) { const ed = this.editorDe(e.target); if (ed) RV_ED.escribir(ed, e.target, true); return; }
       if (e.target.matches('.rv-ytactivo, .rv-ytprog')) {
         api('POST', '/revision/youtube', e.target.matches('.rv-ytactivo') ? { activo: e.target.checked } : { programar: e.target.checked })
           .then(() => aviso(e.target.checked ? 'Activado' : 'Desactivado')).catch(er => aviso(er.message, true));
@@ -420,19 +445,25 @@ VISTAS.revision = {
       if (e.target.matches('.rv-int')) e.target.parentElement.querySelector('.rv-intv').textContent = e.target.value + ' %';
       if (e.target.matches('.rv-stt')) { const ed = this.editorDe(e.target); if (ed) RV_ED.escribir(ed, e.target, false); }
     };
-    v.addEventListener('change', e => { if (e.target.matches('.rv-sts, .rv-ste')) { const ed = this.editorDe(e.target); if (ed) RV_ED.escribir(ed, e.target, true); } });
     v.onkeydown = e => {
       if (e.key === 'Enter' && e.target.matches('.rv-ctexto')) { e.preventDefault(); e.target.closest('.rv-comentar').querySelector('[data-a="comentar"]').click(); }
       if (e.key === 'Enter' && e.target.matches('.rv-sts, .rv-ste, .rv-stt')) { e.preventDefault(); e.target.blur(); }
+      // en el editor: espacio = reproducir/pausar, ← → = un segundo atrás/adelante (si no estás escribiendo)
+      if (this.idEd && !e.target.matches('input, textarea, select, video, button') && !e.ctrlKey && !e.metaKey) {
+        const vid = $('.rve-video video', v); if (!vid) return;
+        if (e.key === ' ') { e.preventDefault(); vid.paused ? vid.play() : vid.pause(); }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); vid.currentTime = Math.max(0, vid.currentTime + (e.key === 'ArrowLeft' ? -1 : 1)); }
+      }
     };
-    // <details> no burbujea 'toggle': se escucha en captura, una sola vez por vista
-    if (!v.__rvToggle) { v.__rvToggle = true; v.addEventListener('toggle', e => { if (e.target.matches?.('.rv-subs') && e.target.open) this.abrirSubs(e.target); }, true); }
-    await this.cargar();
-    this.reloj = setInterval(() => this.cargar(true), 3000);
   },
-  salir() { clearInterval(this.reloj); },
+  salir() {
+    clearInterval(this.reloj); this.ed = null;
+    for (const u of this.urlsVideo || []) URL.revokeObjectURL(u);
+    this.urlsVideo = [];
+  },
   async cargar(silencio) {
     let L; try { L = await api('GET', '/revision'); } catch (e) { if (!silencio) aviso(e.message, true); return; }
+    if (this.idEd) { this.L = L; return this.pintarEditor(L, silencio); }
     const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado, c.k4?.estado, c.portada, c.portadas?.length, c.publicado?.estado, c.youtube?.estado, c.en?.estado, c.textos ? 1 : 0, c.metricas?.youtube?.at, c.metricas?.tiktok?.at])) + this.filtro;
     this.L = L;
     this.pintarEstado(L);
@@ -550,23 +581,15 @@ VISTAS.revision = {
         <div class="rv-info">
           <div class="flex rv-cab"><b>#${c.rank}</b><span class="tenue">${RV_mmss(c.fin - c.inicio)} · ${c.fuente === 'medal' ? `🎮 Medal${c.formato && c.formato !== 'vertical' ? ` · ${esc(tr(c.formato))}` : ''}` : `${RV_mmss(c.inicio)} del stream`}</span><span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}${c.momento?.tipo ? `<span class="chip" title="${esc(tr('Reacción del chat'))}">${{ risa: '😂', choque: '💥', hype: '🔥', apoyo: '💲', charla: '💬' }[c.momento.tipo] || '💬'} ${esc(tr(c.momento.tipo))}${c.momento.autores ? ` · ${c.momento.autores} 👤` : ''}</span>` : ''}</div>
           ${c.gancho ? `<div class="rv-gancho">${esc(c.gancho)}</div>` : ''}
-          ${c.escenas?.length ? `<small class="tenue">${tr('Escenas')}: ${c.escenas.map(s => `${esc(s.tipo)} ${RV_mmss(s.desde)}`).join(' · ')}${c.emojis ? ` · ${c.emojis} emojis` : ''}</small>` : ''}
-          ${c.plan ? `<small class="tenue">🎬 ${tr('Director')}: ${(c.disenos || []).map(d => `${d.tipo === 'podcast' ? '🎙️ podcast' : '🪟 ' + tr('ventanita')} ${RV_mmss(d.desde)}–${RV_mmss(d.hasta)}`).join(' · ') || tr('sin diseños')}${c.sonidos ? ` · 🔊 ${c.sonidos} ${tr('sonidos')}` : ''}${(c.plan.emojis || []).length ? ` · ${c.plan.emojis.map(e => e.emoji).join('')}` : ''}</small>` : ''}
-          ${c.dudas?.length ? `<div class="rv-dudas"><small>${tr('Whisper dudó en')}:</small> ${c.dudas.slice(0, 5).map(d => `<span>“${esc(d.texto)}” <i>${RV_mmss(d.s)}</i></span>`).join(' ')}</div>` : ''}
-          ${c.chat?.length ? `<details class="rv-chat"><summary>${tr('Chat en ese momento')} (${c.chat.length})</summary>${c.chat.map(m => `<div>${esc(m)}</div>`).join('')}</details>` : ''}
           ${c.error ? `<div class="rv-error">${esc(c.error)}</div>` : ''}
-          ${c.ajustes && Object.keys(c.ajustes).length ? `<div class="rv-ajustes">${tr('Cambios')}: ${esc(RV_ajustes(c.ajustes))}</div>` : ''}
-          ${c.pedidos?.at(-1)?.respuesta ? `<div class="rv-respuesta">${esc(c.pedidos.at(-1).respuesta)}</div>` : ''}
-          ${c.retocado ? `<span class="chip">${tr('retocado a mano')}</span>` : ''}
-          ${listo ? RV_calidad(c) : ''}
-          ${listo ? RV_portadas(c) : ''}
+          ${c.estado === 'revisar' ? (c.calidad ? `<div class="flex" style="gap:6px;flex-wrap:wrap">${RV_chipCalidad(c)}${c.ajustes?.subtitulosFijos ? `<span class="chip">✏️ ${tr('subtítulos a mano')}</span>` : ''}</div>` : '') : RV_info(c, listo)}
+          ${c.estado === 'revisar' ? '' : listo ? RV_portadas(c) : ''}
           ${c.estado === 'aprobado' ? `<div class="rv-k4 flex" data-k4="${esc(c.id)}">${RV_k4(c)}</div>${RV_publicacion(c, L)}` : ''}
           ${c.diccionario ? `<small class="tenue">📖 ${tr('diccionario')}: ${c.diccionario}</small>` : ''}
           ${c.estado === 'revisar' || c.estado === 'error' ? `<div class="rv-acc flex">
-            ${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
-            <select class="rv-estilo"><option value="">${tr('Otro estilo')}…</option>${opciones}</select><button class="btn" data-a="rehacer">${tr('Rehacer')}</button>
-            <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button></div>
-            ${c.estado === 'revisar' ? `<div data-coms="${esc(c.id)}">${RV_comentar(c, this.coms?.get(c.id))}</div>${RV_subs(c)}` : ''}${RV_cambios(c)}` : ''}
+            <a class="btn pri" href="#/revision/${encodeURIComponent(c.id)}">✏️ ${tr('Abrir editor')}</a>
+            ${c.estado === 'revisar' ? `<button class="btn" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
+            <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button></div>` : ''}
         </div></div>`;
     }).join('')}</div>`).join('');
   },
@@ -583,25 +606,75 @@ VISTAS.revision = {
   // ▶ en la tarjeta: el vídeo editado (por fetch→blob, lleva el token)
   async verVideo(tarjeta, id, autoplay = true) {
     const medio = $('.rv-medio', tarjeta); medio.innerHTML = `<div class="rv-hueco">…</div>`;
-    try { const url = await RV_blob(`/revision/${encodeURIComponent(id)}/video`); medio.innerHTML = `<video src="${url}" controls ${autoplay ? 'autoplay' : ''} playsinline></video>`; }
+    try {
+      const url = await RV_blob(`/revision/${encodeURIComponent(id)}/video`);
+      (this.urlsVideo = this.urlsVideo || []).push(url);  // pesan (cientos de MB): se sueltan al salir
+      medio.innerHTML = `<video src="${url}" controls ${autoplay ? 'autoplay' : ''} playsinline></video>`;
+    }
     catch (er) { medio.innerHTML = `<div class="rv-hueco">${esc(er.message)}</div>`; }
     return $('video', medio);
   },
-  editorDe(el) { const d = el.closest('.rv-subs'); return d && this.eds?.get(d.dataset.subs); },
-  async abrirSubs(det) {
-    const id = det.dataset.subs, tarjeta = det.closest('.rv-clip'), caja = $('.rv-stcaja', det);
-    this.eds = this.eds || new Map();
-    let e = this.eds.get(id);
-    const vid = $('video', tarjeta) || await this.verVideo(tarjeta, id, false);
-    if (!e || !e.sucio) {
-      let r; try { r = await api('GET', `/revision/${encodeURIComponent(id)}/subtitulos`); } catch (er) { caja.innerHTML = `<div class="rv-error">${esc(er.message)}</div>`; return; }
-      if (!r.subtitulos.length) { caja.innerHTML = `<div class="tenue">${tr('Este clip no tiene subtítulos (.srt).')}</div>`; return; }
-      e = { id, lista: r.subtitulos, dA: r.dA || 0, duracion: Math.max(r.duracion || 0, r.subtitulos.at(-1).e), aMano: r.aMano, px: 100, sel: null, sucio: false };
-      this.eds.set(id, e);
-    }
-    Object.assign(e, { caja, vid, ahora: undefined, scroll: null });
+  // ── editor de un clip (#/revision/<id>): cabecera con las decisiones, vídeo grande, pestañas al lado y la línea de tiempo
+  // de los subtítulos abajo a todo lo ancho ──
+  tab: 'subs',
+  editorDe(el) { return el.closest('.rve') ? this.ed : null; },
+  // los clips por los que se navega con ‹ ›: los pendientes, en el mismo orden que la lista
+  pendientes(L) { return L.clips.filter(x => ['revisar', 'error', 'editando', 'en cola'].includes(x.estado)); },
+  pintarEditor(L, silencio) {
+    const raiz = $('.rve', this.v); if (!raiz) return;
+    const c = L.clips.find(x => x.id === this.idEd);
+    if (!c) { raiz.innerHTML = `<div class="rve-cab"><a class="btn fantasma" href="#/revision">← ${tr('Revisión')}</a></div><div class="caja pad rv-vacio">${tr('Ese clip ya no está en Revisión.')}</div>`; return; }
+    const trabajando = ['editando', 'en cola'].includes(c.estado);
+    const firma = JSON.stringify([trabajando, c.estado, c.editado, c.estilo, c.portada, c.portadas?.length]);
+    if (silencio && firma === this.firmaEd) { if (trabajando) { const p = $('.rve-trab .rve-prog', raiz); if (p) p.innerHTML = c.estado === 'en cola' ? esc(tr('En cola: empieza cuando terminen los de delante')) : RV_progreso(c.progreso); } return; }
+    // no se repinta encima de lo que estás haciendo (subtítulos sin guardar, escribiendo, comentarios sin enviar)
+    if (silencio && !trabajando && (this.ed?.sucio || (raiz.contains(document.activeElement) && document.activeElement.matches('input, textarea')) || this.coms?.get(c.id)?.length)) return;
+    this.firmaEd = firma;
+    const lista = this.pendientes(L), i = lista.findIndex(x => x.id === c.id), ant = lista[i - 1], sig = lista[i + 1];
+    const [cls, txt] = RV_ESTADO[c.estado] || ['', c.estado];
+    const nav = (x, t, s) => x ? `<a class="btn fantasma" href="#/revision/${encodeURIComponent(x.id)}" title="${esc(tr(t))}">${s}</a>` : `<button class="btn fantasma" disabled>${s}</button>`;
+    const TABS = [['subs', '✏️ ' + tr('Subtítulos')], ['coms', '💬 ' + tr('Comentarios')], ['cambios', '🛠 ' + tr('Cambios')], ['portada', '🖼 ' + tr('Portada')], ['info', 'ℹ️ ' + tr('Info')]];
+    raiz.innerHTML = `
+      <div class="rve-cab">
+        <a class="btn fantasma" href="#/revision">← ${tr('Revisión')}</a>
+        <div class="rve-tit"><b>#${c.rank} · ${esc(c.gancho || c.titulo || c.stream)}</b>
+          <small class="tenue">${esc(c.fecha)} · ${RV_mmss(c.fin - c.inicio)} · ${c.fuente === 'medal' ? '🎮 Medal' : `${RV_mmss(c.inicio)} ${tr('del stream')}`}</small></div>
+        <span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}${c.calidad ? RV_chipCalidad(c) : ''}
+        <span class="rve-sp"></span>
+        ${nav(ant, 'Clip anterior', '‹')}<span class="tenue rve-n">${i + 1} / ${lista.length}</span>${nav(sig, 'Clip siguiente', '›')}
+        ${trabajando ? '' : `${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
+        <span class="rv-acc flex"><select class="rv-estilo"><option value="">${tr('Otro estilo')}…</option>${L.estilos.map(e => `<option value="${esc(e.id)}">${esc(e.nombre)}</option>`).join('')}</select><button class="btn" data-a="rehacer">${tr('Rehacer')}</button></span>
+        <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button>`}
+      </div>
+      ${trabajando ? `<div class="caja pad rve-trab"><div class="rve-prog">${c.estado === 'en cola' ? esc(tr('En cola: empieza cuando terminen los de delante')) : RV_progreso(c.progreso)}</div>
+        <p class="tenue">${tr('APOLO está rehaciendo este clip. Cuando termine se abre aquí solo.')}</p></div>` : `
+      <div class="rve-cuerpo">
+        <div class="rve-video"><div class="rv-medio"><div class="rv-hueco">…</div></div></div>
+        <div class="rve-lado">
+          <div class="rve-tabs">${TABS.map(([k, t]) => `<button data-tab="${k}" class="${k === this.tab ? 'on' : ''}">${t}</button>`).join('')}</div>
+          <div class="rve-panel${this.tab === 'subs' ? ' on' : ''}" data-p="subs"><div class="rve-subs"><div class="tenue">${tr('Cargando…')}</div></div></div>
+          <div class="rve-panel${this.tab === 'coms' ? ' on' : ''}" data-p="coms"><div data-coms="${esc(c.id)}">${RV_comentar(c, this.coms?.get(c.id))}</div>
+            <small class="tenue">${tr('Pausa el vídeo donde algo está mal, escribe qué cambiar y añádelo. Al enviar, APOLO lo entiende y rehace el clip.')}</small></div>
+          <div class="rve-panel${this.tab === 'cambios' ? ' on' : ''}" data-p="cambios">${RV_cambios(c, true)}</div>
+          <div class="rve-panel${this.tab === 'portada' ? ' on' : ''}" data-p="portada">${RV_portadas(c) || `<div class="tenue">${tr('Este clip no tiene portadas.')}</div>`}</div>
+          <div class="rve-panel${this.tab === 'info' ? ' on' : ''}" data-p="info">${c.error ? `<div class="rv-error">${esc(c.error)}</div>` : ''}${RV_info(c)}</div>
+        </div>
+      </div>
+      <div class="rve-pista"></div>`}`;
+    if (trabajando) return;
+    this.cargarPrevias();
+    this.abrirEditor(raiz, c);
+  },
+  async abrirEditor(raiz, c) {
+    const vid = await this.verVideo(raiz, c.id, false);
+    if (!vid || this.idEd !== c.id) return;
+    vid.classList.add('rve-vid');
+    let r; try { r = await api('GET', `/revision/${encodeURIComponent(c.id)}/subtitulos`); }
+    catch (er) { $('.rve-subs', raiz).innerHTML = `<div class="rv-error">${esc(er.message)}</div>`; return; }
+    if (!r.subtitulos.length) { $('.rve-subs', raiz).innerHTML = `<div class="tenue">${tr('Este clip no tiene subtítulos (.srt).')}</div>`; return; }
+    const e = this.ed = { id: c.id, lista: r.subtitulos, dA: r.dA || 0, duracion: Math.max(r.duracion || 0, r.subtitulos.at(-1).e), aMano: r.aMano, px: 140, sel: null, sucio: false, caja: raiz, vid, scroll: null };
     RV_ED.pintar(e);
-    const tic = () => { if (det.open && RV_ED.cabezal(e)) requestAnimationFrame(tic); };
+    const tic = () => { if (this.ed === e && RV_ED.cabezal(e)) requestAnimationFrame(tic); };
     requestAnimationFrame(tic);
   },
   async clicSubs(b) {
@@ -612,9 +685,9 @@ VISTAS.revision = {
     b.disabled = true;
     try {
       await api('POST', `/revision/${encodeURIComponent(e.id)}/subtitulos`, a === 'restaurar' ? { restaurar: true } : { subtitulos: e.lista });
-      this.eds.delete(e.id);
+      this.ed = null;
       aviso(a === 'restaurar' ? 'Se rehace con los subtítulos automáticos' : 'Guardado: se rehace el vídeo con tus subtítulos');
-      this.firma = null; await this.cargar();
+      this.firmaEd = null; await this.cargar();
     } catch (er) { aviso(er.message, true); b.disabled = false; }
   },
   // repinta solo la caja de comentarios de una tarjeta (sin tocar el vídeo que se está viendo)
@@ -623,6 +696,17 @@ VISTAS.revision = {
     caja.innerHTML = RV_comentar(this.L.clips.find(c => c.id === id), this.coms.get(id));
   },
   async clic(e) {
+    // salir del editor (← Revisión, ‹ ›) con subtítulos sin guardar: primero un aviso, el segundo clic sale
+    const enlace = e.target.closest('a[href^="#/revision"]');
+    if (enlace && this.ed?.sucio && !this.avisadoSalir) { e.preventDefault(); this.avisadoSalir = true; return aviso('Tienes cambios sin guardar en los subtítulos. Vuelve a pulsar para salir sin guardarlos', true); }
+    if (enlace) { this.avisadoSalir = false; return; }
+    const tb = e.target.closest('[data-tab]');
+    if (tb) {
+      this.tab = tb.dataset.tab;
+      $$('.rve-tabs [data-tab]', this.v).forEach(b => b.classList.toggle('on', b === tb));
+      $$('.rve-panel', this.v).forEach(p => p.classList.toggle('on', p.dataset.p === this.tab));
+      return;
+    }
     const f = e.target.closest('[data-f]');
     if (f) { this.filtro = f.dataset.f; this.firma = null; $$('[data-f]', this.v).forEach(b => b.className = 'btn ' + (b.dataset.f === this.filtro ? 'pri' : 'fantasma')); return this.cargar(); }
     if (e.target.closest('#rvBuscar')) {
@@ -635,7 +719,7 @@ VISTAS.revision = {
     const g = e.target.closest('[data-g]'); if (g) return this.clicPanel(g);
     const st = e.target.closest('[data-st]'); if (st) return this.clicSubs(st);
     const a = e.target.closest('[data-a]'); if (!a) return;
-    const tarjeta = a.closest('.rv-clip'); if (!tarjeta) return;
+    const tarjeta = a.closest('.rv-clip, .rve'); if (!tarjeta) return;
     const id = tarjeta.dataset.id;
     if (a.dataset.a === 'ver') { await this.verVideo(tarjeta, id); return; }
     if (a.dataset.a === 'marcar') {                      // ⏱ = el momento en que está el vídeo
@@ -703,9 +787,21 @@ VISTAS.revision = {
     if (ruta === 'vincular') { cuerpo = { url: $('.rv-vurl', tarjeta).value.trim() }; if (!cuerpo.url) return aviso('Pega el enlace', true); }
     if (ruta === 'abrir') aviso('Abriendo FilmCraft…');
     a.disabled = true;
+    // en el editor, aprobar o descartar pasa solo al siguiente clip pendiente (o vuelve a la lista)
+    const pasar = !!this.idEd && ['aprobar', 'descartar'].includes(ruta);
+    const siguiente = pasar && (() => {
+      const l = this.pendientes(this.L).filter(x => ['revisar', 'error'].includes(x.estado)), i = l.findIndex(x => x.id === id);
+      return l[i + 1] || l[i - 1] || null;
+    })();
     try {
       const r = await api('POST', `/revision/${encodeURIComponent(id)}/${ruta}`, cuerpo);
       if (cuerpo.comentarios) this.coms.delete(id);
+      if (pasar) {
+        aviso(ruta === 'aprobar' ? 'Aprobado: está en la carpeta de aprobados' : 'Descartado');
+        this.ed = null; location.hash = siguiente ? `#/revision/${encodeURIComponent(siguiente.id)}` : '#/revision';
+        return;
+      }
+      if (this.idEd) this.firmaEd = null;
       aviso(ruta === 'modificar' ? (r?.respuesta || (cuerpo.comentarios ? 'Se rehace con tus comentarios' : 'Se rehace con tus cambios'))
         : { aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado', abrir: 'Abierto en FilmCraft', exportar: 'Exportando lo retocado', '4k': '4K en cola',
           youtube: 'En cola para YouTube', redes: 'Preparando títulos e inglés', vincular: 'Vinculado: se mide en la próxima pasada' }[ruta]);
