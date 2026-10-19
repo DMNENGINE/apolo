@@ -123,7 +123,7 @@ function crearAudio({ mcpLocales, cfg, ejecutar = execFile }) {
       let palabras = null;
       if (a.musica) {                                   // los tramos con voz salen de Whisper (para el ducking)
         ctx.progreso?.('transcribiendo para saber cuándo se habla');
-        try { palabras = (await require('./subtitular').transcribir(ent, { python: cfg?.craft?.python, modelo: cfg?.craft?.whisper || 'large-v3', gpu: !!cfg?.craft?.gpu }))?.palabras || null; } catch { }
+        try { palabras = (await require('./subtitular').transcribir(ent, { python: cfg?.craft?.python, modelo: cfg?.craft?.whisper || 'large-v3', gpu: cfg?.craft?.gpu !== false }))?.palabras || null; } catch { }
       }
       const r = await masterizar({ entrada: ent, salida: esVideo ? base + '.wav' : salida, lufs: a.lufs ?? k?.audio?.lufs ?? -14, picoMax: k?.audio?.picoMax ?? -1,
         musica: a.musica && path.resolve(ctx.cwd || os.homedir(), a.musica), palabras, progreso: t => ctx.progreso?.(t) });

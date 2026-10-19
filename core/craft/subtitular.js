@@ -147,11 +147,11 @@ function detectarCara(video, desde, hasta, zona, python = 'python') {
 }
 
 // ── transcripción ──
-function transcribir(video, { python = 'python', modelo = 'large-v3', idioma = 'es', contexto = '', gpu = false, signal } = {}) {
+function transcribir(video, { python = 'python', modelo = 'large-v3', idioma = 'es', contexto = '', gpu = true, signal } = {}) {
   const salida = path.join(os.tmpdir(), `apolo-palabras-${Date.now()}.json`);
   return new Promise((ok, mal) => {
     const p = spawn(python, [path.join(__dirname, 'palabras.py'), video, salida, modelo, idioma || 'auto', contexto].filter((x, i) => i < 5 || x),
-      { windowsHide: true, env: { ...process.env, PYTHONIOENCODING: 'utf-8', ...(gpu ? { APOLO_WHISPER_GPU: '1' } : {}) } });
+      { windowsHide: true, env: { ...process.env, PYTHONIOENCODING: 'utf-8', APOLO_WHISPER_GPU: gpu ? '1' : '0' } });
     let err = '';
     p.stderr.on('data', d => { err += d; });
     signal?.addEventListener('abort', () => p.kill(), { once: true });
@@ -266,14 +266,15 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
       const c = cfg?.craft || {};
       const modeloW = a.modeloWhisper || c.whisper || 'large-v3';
       const cache = path.join(dirSalida, `${base}.palabras.json`);
-      const huella = `${fs.statSync(video).size}:${fs.statSync(video).mtimeMs}:${modeloW}:${a.contexto || ''}`;
+      // v3 = voz aislada con Demucs + Whisper por lotes: las transcripciones viejas (con huecos) se rehacen
+      const huella = `v3:${fs.statSync(video).size}:${fs.statSync(video).mtimeMs}:${modeloW}:${a.contexto || ''}`;
       let tr = null;
       try { const j = JSON.parse(fs.readFileSync(cache, 'utf8')); if (j.huella === huella) tr = j; } catch { }
       if (!tr) {
         avisar('transcribiendo (1–4 min)…');
         // las palabras del diccionario del canal van de pista a Whisper (no entran en la huella: que crezca no obliga a transcribir otra vez)
         const pista = K && a.diccionario !== false ? diccionario.pista(K.id) : '';
-        tr = await transcribir(video, { python: c.python, modelo: modeloW, idioma: a.idioma || c.idioma || 'es', contexto: [a.contexto, pista].filter(Boolean).join(' ').slice(0, 900), gpu: !!c.gpu, signal: ctx.signal });
+        tr = await transcribir(video, { python: c.python, modelo: modeloW, idioma: a.idioma || c.idioma || 'es', contexto: [a.contexto, pista].filter(Boolean).join(' ').slice(0, 900), gpu: c.gpu !== false, signal: ctx.signal });
         fs.mkdirSync(dirSalida, { recursive: true }); fs.writeFileSync(cache, JSON.stringify({ ...tr, huella }));
       }
       palabras = tr.palabras;
