@@ -64,13 +64,24 @@ async function intentar(texto, archivo, { voz, rate = '+0%', pitch = '+0Hz', vol
   });
 }
 
-async function sintetizar(texto, archivo, opciones, timeoutMs = 12_000) {
-  try { return await intentar(texto, archivo, opciones, timeoutMs); }
-  catch (e) {
-    if (!/403/.test(e.message)) throw e;
-    await corregirReloj();                           // reloj del PC desfasado: el token caduca cada 5 min
-    return intentar(texto, archivo, opciones, timeoutMs);
+const espera = ms => new Promise(ok => setTimeout(ok, ms));
+async function una(texto, archivo, opciones, timeoutMs) {
+  for (let i = 0; ; i++) {
+    try { return await intentar(texto, archivo, opciones, timeoutMs); }
+    catch (e) {
+      if (/403/.test(e.message) && i === 0) { await corregirReloj(); continue; }   // reloj del PC desfasado: el token caduca cada 5 min
+      if (/429/.test(e.message) && i < 4) { await espera(400 * (i + 1)); continue; } // demasiadas peticiones: esperar y reintentar
+      throw e;
+    }
   }
+}
+// el servidor da 429 con 2+ WebSockets a la vez (la isla pide todos los trozos de una frase juntos y los que fallaban
+// salían con la voz de Windows) → de una en una
+let cola = Promise.resolve();
+function sintetizar(texto, archivo, opciones, timeoutMs = 12_000) {
+  const p = cola.then(() => una(texto, archivo, opciones, timeoutMs));
+  cola = p.catch(() => { });
+  return p;
 }
 
 module.exports = { sintetizar };

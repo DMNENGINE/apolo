@@ -71,8 +71,10 @@ function createPuente({ nucleo, dataDir, toIsland, onPermiso, reply }) {
     else if (e.tipo === 'herramienta') { const [tool_name, tool_input] = comoHook(e.nombre, e.args); toIsland({ ...base, hook_event_name: 'PreToolUse', tool_name, tool_input }); }
     else if (e.tipo === 'resultado') toIsland({ ...base, hook_event_name: /^(error|DENEGADO)/.test(e.resultado) ? 'PostToolUseFailure' : 'PostToolUse', tool_name: comoHook(e.nombre)[0] });
     else if (e.tipo === 'fin' || e.tipo === 'error') {
-      toIsland({ ...base, hook_event_name: e.tipo === 'fin' ? 'Stop' : 'StopFailure' });
-      if (s.tarea || s.padre) return;                        // las tareas responden por el evento 'tarea'; los subagentes, a su agente
+      // las de fondo (tareas, subagentes, conciencia…) se cierran en silencio: un Stop haría decir "Listo, terminé" sin que pidieras nada
+      const deFondo = s.tarea || s.padre || s.soloLectura || ['conciencia', 'eval', 'subagente'].includes(s.canal);
+      toIsland({ ...base, hook_event_name: deFondo ? 'SessionEnd' : e.tipo === 'fin' ? 'Stop' : 'StopFailure' });
+      if (s.tarea || s.padre) return;                      // las tareas responden por el evento 'tarea'; los subagentes, a su agente
       if (s.canal === 'consejo' && !origen.has(s.id)) return; // consejo lanzado desde el panel o por una herramienta: no va a ningún canal
       const o = origen.get(s.id) || 'isla';
       reply(o, e.tipo === 'fin' ? (e.texto || '(sin respuesta)') : `❌ ${e.error}`, s.modelo);
