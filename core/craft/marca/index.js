@@ -19,9 +19,13 @@ function cliEffectCraft(mcpLocales) {
 const ejecutar = (cmd, args, timeout) => new Promise((ok, mal) => execFile(cmd, args, { windowsHide: true, timeout, maxBuffer: 16 << 20, encoding: 'utf8' },
   (e, out, err) => (e ? mal(new Error(`${path.basename(cmd)}: ${(err || out || e.message).trim().slice(-300)}`)) : ok(out))));
 
-// devuelve la ruta del .mov; lo crea si no existe (≈ 20 s). nombre1 en blanco + nombre2 en cian
-async function asegurarLetrero({ nombre1 = 'LAGC', nombre2 = 'TRUCKS', carpeta, mcpLocales, python = 'python' }) {
-  const clave = `${nombre1}${nombre2}`.replace(/[^\p{L}\d]/gu, '').toLowerCase() || 'marca';
+// devuelve la ruta del .mov; lo crea si no existe (≈ 20 s). nombre1 en blanco + nombre2 en cian.
+// redes = los iconos de la derecha (por defecto los 6); un clip para Facebook lleva solo el de Facebook, etc.
+const REDES_TODAS = ['youtube', 'tiktok', 'kick', 'instagram', 'facebook', 'discord'];
+async function asegurarLetrero({ nombre1 = 'LAGC', nombre2 = 'TRUCKS', redes, carpeta, mcpLocales, python = 'python' }) {
+  const lista = (Array.isArray(redes) ? redes : REDES_TODAS).filter(r => REDES_TODAS.includes(r));
+  const todas = lista.length === REDES_TODAS.length && lista.every((r, i) => r === REDES_TODAS[i]);
+  const clave = (`${nombre1}${nombre2}`.replace(/[^\p{L}\d]/gu, '').toLowerCase() || 'marca') + (todas ? '' : '-' + (lista.join('-') || 'sinredes'));
   const mov = path.join(carpeta, `letrero-${clave}.mov`);
   if (fs.existsSync(mov)) return mov;
   const cli = cliEffectCraft(mcpLocales);
@@ -33,7 +37,8 @@ async function asegurarLetrero({ nombre1 = 'LAGC', nombre2 = 'TRUCKS', carpeta, 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'letrero-'));
   const jsx = path.join(tmp, 'letrero.jsx'), proyecto = path.join(tmp, 'letrero.ecproj');
   const v = (k, x) => `var ${k} = ${JSON.stringify(String(x).replace(/\\/g, '/'))};\n`;
-  fs.writeFileSync(jsx, v('NOMBRE1', nombre1) + v('NOMBRE2', nombre2) + v('DIR_ICONOS', iconos) + v('SALIDA_PROYECTO', proyecto) + fs.readFileSync(path.join(DIR, 'letrero.jsx'), 'utf8'));
+  fs.writeFileSync(jsx, v('NOMBRE1', nombre1) + v('NOMBRE2', nombre2) + `var REDES = ${JSON.stringify(lista)};
+` + v('DIR_ICONOS', iconos) + v('SALIDA_PROYECTO', proyecto) + fs.readFileSync(path.join(DIR, 'letrero.jsx'), 'utf8'));
   try {
     await ejecutar(cli, ['--empty', 'script', jsx], 120_000);
     const parcial = mov + '.tmp.mov';
@@ -98,4 +103,4 @@ function asegurarRotulo({ nombre, sub = '', duracion = 4, escala = 1, colores, f
       ...(fuente?.familia ? { FUENTE: `${fuente.familia}-${fuente.estilo || 'Black'}` } : {}), ...varsColor(colores) } });
 }
 
-module.exports = { asegurarLetrero, asegurarTitulo, asegurarRotulo, renderJsx, varsColor, rgb, BUCLE, ALTO_ROTULO, X0_ROTULO, PLACA_TITULO };
+module.exports = { REDES_TODAS, asegurarLetrero, asegurarTitulo, asegurarRotulo, renderJsx, varsColor, rgb, BUCLE, ALTO_ROTULO, X0_ROTULO, PLACA_TITULO };

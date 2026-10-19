@@ -182,6 +182,9 @@ function obtener(nombre) {
   if (!e) throw new Error(`no existe el estilo "${nombre}". Hay: ${Object.keys(ESTILOS).join(', ')}`);
   return e;
 }
-const lista = () => Object.entries(ESTILOS).map(([id, e]) => ({ id, paquete: e.paquete || 'base', nombre: e.nombre, descripcion: e.descripcion }));
+// colores de cada estilo, para que Revisión enseñe de dónde parte quien los cambia
+const coloresDe = e => ({ texto: typeof e.relleno === 'string' ? e.relleno : e.relleno?.de || '#ffffff', contorno: e.contorno?.color || e.brillo?.color || null,
+  destacado: e.activo || e.resaltado || e.colores?.[0] || null, caja: e.caja?.color || null });
+const lista = () => Object.entries(ESTILOS).map(([id, e]) => ({ id, paquete: e.paquete || 'base', nombre: e.nombre, descripcion: e.descripcion, colores: coloresDe(e), emojis: !!e.emojis }));
 
 module.exports = { ESTILOS, ENTRADAS, props, obtener, lista };

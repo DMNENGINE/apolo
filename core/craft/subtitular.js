@@ -57,6 +57,18 @@ function trocear(palabras, { maxPalabras = 3, maxLetras = 22, pausa = 0.6, minSe
 }
 const limpiar = t => String(t).replace(/[.,;:]+$/, '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('es');
 
+// redes para las que puede ir un clip (el banner de arriba lleva solo la suya)
+const PLATAFORMAS = ['youtube', 'facebook', 'tiktok', 'instagram', 'kick'];
+// colores propios elegidos en Revisión sobre un estilo: { texto, contorno, destacado, caja } en #rrggbb (puro)
+function conColores(E, c) {
+  if (!c || typeof c !== 'object') return E;
+  const ok = v => /^#[0-9a-f]{6}$/i.test(String(v || '')), X = { ...E };
+  if (ok(c.texto)) X.relleno = c.texto;
+  if (ok(c.contorno)) { if (X.contorno) X.contorno = { ...X.contorno, color: c.contorno }; if (X.brillo) X.brillo = { ...X.brillo, color: c.contorno }; }
+  if (ok(c.destacado)) { if (X.activo) X.activo = c.destacado; else X.resaltado = c.destacado; X.colores = null; }
+  if (ok(c.caja) && X.caja) X.caja = { ...X.caja, color: c.caja };
+  return X;
+}
 // subtítulos editados a mano en Revisión [{s, e, texto}] (tiempos del clip original) → palabras repartidas a partes iguales
 // dentro de cada uno, marcadas con su bloque `b` (sobreviven a avance/recorte y a correcciones) (puro)
 function palabrasDeFijos(fijos) {
@@ -268,7 +280,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     // título para el gancho: el que pase quien llama (p. ej. el del stream) o el del archivo si dice algo (no "02_33430_145s")
     const delArchivo = tituloDeArchivo(video);
     const titulo = a.tituloClip ? String(a.tituloClip).toLocaleUpperCase('es') : (delArchivo.replace(/[^\p{L}]/gu, '').length >= 4 ? delArchivo : '');
-    const E = estilos.obtener(a.estilo);
+    const E = conColores(estilos.obtener(a.estilo), a.colorSubs);
     try { require('./fuentes/instalar').asegurarFuentes(); } catch (e) { avisar(`no se pudo instalar la fuente Trueno: ${e.message}`); }
     const opTrozos = { maxPalabras: E.modo === 'palabra' ? 1 : E.maxPalabras || 3, maxLetras: E.maxLetras || 22 };
 
@@ -615,11 +627,14 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
       if (g) await animar(g, 0);
     }
     // marca arriba: el letrero animado de EffectCraft (bucle de 6 s repetido en V3) o, sin él, el texto amarillo
+    // banner: false = sin nada arriba. plataforma = la red para la que es el clip: el banner lleva solo su icono (un logo de
+    // YouTube en un Reel de Facebook puede hundir el vídeo)
     let conLetrero = false;
-    if (a.letrero && a.letrero !== false && vertical) {
+    const plataforma = PLATAFORMAS.includes(a.plataforma) ? a.plataforma : null;
+    if (a.banner !== false && a.letrero && a.letrero !== false && vertical) {
       try {
         const marcaMod = require('./marca');
-        const mov = await marcaMod.asegurarLetrero({ ...a.letrero, carpeta: path.join(cfg?.dir || path.join(os.homedir(), '.apolo'), 'craft', 'marca'), mcpLocales, python: cfg?.craft?.python });
+        const mov = await marcaMod.asegurarLetrero({ ...a.letrero, ...(plataforma ? { redes: [plataforma] } : {}), carpeta: path.join(cfg?.dir || path.join(os.homedir(), '.apolo'), 'craft', 'marca'), mcpLocales, python: cfg?.craft?.python });
         const item = (await herramienta('media_import', { paths: [mov] }))?.items?.[0];
         if (item == null) throw new Error('FilmCraft no importó el letrero');
         for (let ini = 0; ini < DUR - 0.05; ini += marcaMod.BUCLE) {
@@ -634,7 +649,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
         cajas.push({ tipo: 'marca', s: 0, e: DUR, caja: [0, 0, W, Math.round(150 * k)] });
       } catch (e) { avisar(`letrero animado no disponible (${e.message}); va el texto`); }
     }
-    if (a.marca && !conLetrero) await texto(String(a.marca), W / 2, Math.round(H * (a.yMarca ?? 0.0375)), Math.round(56 * k), 0, DUR, 2,
+    if (a.marca && !conLetrero && a.banner !== false) await texto(String(a.marca), W / 2, Math.round(H * (a.yMarca ?? 0.0375)), Math.round(56 * k), 0, DUR, 2,
       { fill_color: K?.colores?.resaltado || AMARILLO, stroke: false, stroke2: false, background: false, shadow: false, tracking: 120 }, 'marca');
     if (a.cta && (!rango || rango[1] >= DUR - 4.5)) await animar(await texto(mayus ? String(a.cta).toLocaleUpperCase('es') : String(a.cta), W / 2, capY - Math.round(225 * k), Math.round(76 * k), Math.max(0, DUR - 4.5), 4.5, 3, {}, 'cta'), Math.max(0, DUR - 4.5));
 
@@ -839,6 +854,9 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
       entrada: { type: 'string', enum: Object.keys(estilos.ENTRADAS), description: 'cambia la animación de entrada del estilo' },
       marca: { type: 'string', description: 'texto fijo arriba, p. ej. el nombre del canal' },
       letrero: { description: 'letrero animado arriba (EffectCraft): { nombre1, nombre2 } (blanco + cian, con iconos de redes) o false para el texto simple' },
+      banner: { type: 'boolean', description: 'false = nada arriba (ni letrero ni marca)' },
+      plataforma: { type: 'string', enum: PLATAFORMAS, description: 'red para la que es el clip: el letrero lleva solo su icono (sin logos de otras redes)' },
+      colorSubs: { type: 'object', description: 'colores propios de los subtítulos sobre el estilo: { texto, contorno, destacado, caja } en #rrggbb' },
       cta: { type: 'string', description: 'llamada a seguir en los últimos segundos, p. ej. "Sígueme para más"' },
       gancho: { description: 'título de los primeros segundos (texto) o false para no ponerlo; por defecto lo propone el modelo' },
       tituloClip: { type: 'string', description: 'de qué va el clip o el título del stream (ayuda a proponer el gancho)' },
@@ -889,4 +907,4 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
   return { subtitular, reexportar, abrirEnApp, HERRAMIENTA };
 }
 
-module.exports = { crearSubtitulador, montarPalabras, trocear, palabrasDeFijos, agruparFijos, resaltables, rangosResaltados, tituloDeArchivo, dosLineas, srtCaso, limpiar, transcribir, corregirPalabras, cajaTexto };
+module.exports = { crearSubtitulador, montarPalabras, trocear, palabrasDeFijos, agruparFijos, conColores, PLATAFORMAS, resaltables, rangosResaltados, tituloDeArchivo, dosLineas, srtCaso, limpiar, transcribir, corregirPalabras, cajaTexto };

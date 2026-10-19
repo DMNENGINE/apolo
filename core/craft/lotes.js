@@ -297,7 +297,9 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   // ── 4K → Google Drive + anuncio en el canal de Discord del streamer (de uno en uno, sin frenar la cola de edición) ──
   // y después YouTube (programado). El 4K local se borra cuando ya no hace falta (Drive confirmado y YouTube hecho)
   const confYT = () => ({ activo: false, programar: true, ...(conf.youtube || {}) });
-  const ytPara = c => confYT().activo && youtube.conectado() && fuenteDe(c.fuente)?.publicar !== false && kitDe(c)?.publicacion?.youtube?.activo !== false;
+  // un clip marcado para otra red (Facebook, TikTok…) en Revisión no se sube solo a YouTube; se puede subir a mano
+  const ytPara = c => confYT().activo && youtube.conectado() && fuenteDe(c.fuente)?.publicar !== false && kitDe(c)?.publicacion?.youtube?.activo !== false
+    && (!c.ajustes?.plataforma || c.ajustes.plataforma === 'youtube');
   let subidas = Promise.resolve();
   function publicar(c) {
     if (['en cola', 'subiendo'].includes(c.publicado?.estado)) return publico(c);

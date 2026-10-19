@@ -1,12 +1,12 @@
 // Letrero de marca para la parte de arriba de los clips (EffectCraft, modelo de objetos estilo After Effects). MIT.
 // Placa de cristal oscuro con borde cian brillante, nombre en blanco + cian con relieve y resplandor, destello que cruza
 // el nombre y los iconos de redes (iconos.py) dando un saltito uno detrás de otro. Bucle de 6 s, fondo transparente.
-// Uso: effectcraft-cli --empty script letrero.jsx  (variables: NOMBRE1, NOMBRE2, DIR_ICONOS, SALIDA_PROYECTO)
+// Uso: effectcraft-cli --empty script letrero.jsx  (variables: NOMBRE1, NOMBRE2, REDES, DIR_ICONOS, SALIDA_PROYECTO)
 var NOMBRE1 = typeof NOMBRE1 !== 'undefined' ? NOMBRE1 : 'LAGC';
 var NOMBRE2 = typeof NOMBRE2 !== 'undefined' ? NOMBRE2 : 'TRUCKS';
 var DIR_ICONOS = typeof DIR_ICONOS !== 'undefined' ? DIR_ICONOS : 'D:/RobotCompanion/core/craft/marca/iconos';
 var SALIDA_PROYECTO = typeof SALIDA_PROYECTO !== 'undefined' ? SALIDA_PROYECTO : 'D:/RobotCompanion/core/craft/marca/letrero.ecproj';
-var REDES = ['youtube', 'tiktok', 'kick', 'instagram', 'facebook', 'discord'];
+var REDES = typeof REDES !== 'undefined' ? REDES : ['youtube', 'tiktok', 'kick', 'instagram', 'facebook', 'discord'];   // o solo la red del clip
 
 var W = 1080, H = 150, DUR = 6, FPS = 60;
 var CIAN = [0.13, 0.9, 1], BLANCO = [1, 1, 1], NAVY = [0.02, 0.07, 0.13];

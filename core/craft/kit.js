@@ -90,7 +90,7 @@ function validar(k) {
 function perfil(k) {
   if (!k) return {};
   const v = k.video || {};
-  return { kit: k, y: v.y, marca: k.marca, letrero: k.letrero, cta: k.cta, director: v.director, contexto: k.contexto, zonas: v.zonas || {}, ...(k.audio?.pro ? { audioPro: true } : {}), lufs: k.audio?.lufs };
+  return { kit: k, y: v.y, marca: k.marca, letrero: k.letrero && { ...k.letrero, ...(Array.isArray(k.redes) ? { redes: k.redes } : {}) }, cta: k.cta, director: v.director, contexto: k.contexto, zonas: v.zonas || {}, ...(k.audio?.pro ? { audioPro: true } : {}), lufs: k.audio?.lufs };
 }
 
 // lo más ancho que puede ser un texto centrado a la altura y (fracción) sin meterse en la columna de botones ni en los lados

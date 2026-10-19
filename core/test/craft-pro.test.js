@@ -262,3 +262,22 @@ test('subtítulos a mano: cada bloque queda tal cual, sobrevive al avance y se t
   assert.deepStrictEqual(agruparFijos(c).map(t => t.texto), ['YA VOLTEAMOS LA SCANIA ROJA', 'MI HERMANO']);
   assert.strictEqual(agruparFijos(p, { maxPalabras: 1 }).length, 6);
 });
+
+test('estilo a medida: colores propios sobre el estilo, banner con solo la red del clip', () => {
+  const { conColores, PLATAFORMAS } = require('../craft/subtitular');
+  const estilos = require('../craft/estilos');
+  const pop = estilos.obtener('pop');
+  assert.strictEqual(conColores(pop, null), pop);
+  const x = conColores(pop, { texto: '#ff0000', contorno: '#00ff00', destacado: '#0000ff', caja: '#123456', malo: 'rojo' });
+  assert.strictEqual(x.relleno, '#ff0000'); assert.strictEqual(x.contorno.color, '#00ff00'); assert.strictEqual(x.resaltado, '#0000ff');
+  assert.strictEqual(x.caja, pop.caja, 'sin caja en el estilo no se inventa una');
+  assert.strictEqual(pop.relleno, '#ffffff', 'el estilo original no se toca');
+  const k = conColores(estilos.obtener('karaoke'), { destacado: '#abcdef', texto: 'no' });
+  assert.strictEqual(k.activo, '#abcdef'); assert.strictEqual(k.relleno, estilos.obtener('karaoke').relleno);
+  assert.ok(estilos.lista().every(e => e.colores && e.colores.texto));
+  assert.deepStrictEqual(PLATAFORMAS.includes('facebook') && PLATAFORMAS.includes('youtube'), true);
+  // el kit pasa sus redes al letrero
+  const kitMod = require('../craft/kit');
+  const p = kitMod.perfil(JSON.parse(fs.readFileSync(path.join(__dirname, '../craft/kits/lagctrucks.json'), 'utf8')));
+  assert.deepStrictEqual(p.letrero.redes, ['youtube', 'tiktok', 'kick', 'instagram', 'facebook', 'discord']);
+});

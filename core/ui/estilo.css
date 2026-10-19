@@ -1481,3 +1481,22 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
   .rve-lado { height: auto; }
   .rve-panel { overflow: visible; }
 }
+/* Revisión · pestaña Estilo */
+.rve-estilo { display: flex; flex-direction: column; gap: 8px; }
+.rve-estilo .rv-sub { margin-top: 6px; }
+.rve-estilos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+.rve-est { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--borde-2); border-radius: 8px; cursor: pointer; font-size: 13px; background: var(--capa-2); }
+.rve-est input { display: none; }
+.rve-est.on { border-color: var(--acento); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 35%, transparent); }
+.rve-puntos { display: flex; flex: none; }
+.rve-puntos i { width: 13px; height: 13px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .5); margin-right: -4px; }
+.rve-check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.rve-colores { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.rve-color { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.rve-color input { width: 38px; height: 28px; padding: 0; border: 1px solid var(--borde-2); border-radius: 6px; background: none; cursor: pointer; }
+.rve-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--borde-2); border-radius: 8px; overflow: hidden; align-self: flex-start; }
+.rve-seg label { cursor: pointer; }
+.rve-seg input { display: none; }
+.rve-seg span { display: block; padding: 6px 12px; font-size: 13px; color: var(--txt-2); border-right: 1px solid var(--borde-2); }
+.rve-seg label:last-child span { border-right: 0; }
+.rve-seg input:checked + span { background: color-mix(in srgb, var(--acento) 22%, transparent); color: var(--txt); font-weight: 600; }
