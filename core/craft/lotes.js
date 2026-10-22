@@ -30,7 +30,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const dir = path.join(cfg.dir, 'craft');
   const FC = path.join(dir, 'lotes.json'), FE = path.join(dir, 'lotes-estado.json'), FA = path.join(dir, 'aprendizaje.json');
   youtube = youtube || require('./youtube').crearYouTube({ dir, ...(pedir ? { pedir } : {}), abrir: abrirUrl, log });
-  metricas = metricas || metricasMod.crearMetricas({ python: cfg?.craft?.python || 'python', ejecutar, youtube, generarJSON, modelo, log });
+  const FM = path.join(cfg.dir, 'craft', 'meta.json');   // token de la página de Facebook/Instagram (fuera del repo)
+  metricas = metricas || metricasMod.crearMetricas({ python: cfg?.craft?.python || 'python', ejecutar, youtube, generarJSON, modelo, log, meta: { config: () => leer(FM, null) } });
   const leer = (f, def) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return def; } };
   const guardarJ = (f, o) => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(f, JSON.stringify(o, null, 2)); };
   let conf = { salida: path.join(os.homedir(), 'Videos', 'APOLO'), retencionDias: 7, fuentes: [], ...leer(FC, {}) };
@@ -679,7 +680,9 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     const u = String(url || '').trim();
     let m = u.match(/tiktok\.com\/.*\/video\/(\d+)/); if (m) return { plataforma: 'tiktok', id: m[1] };
     m = u.match(/(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([\w-]{11})/); if (m) return { plataforma: 'youtube', id: m[1] };
-    throw Object.assign(new Error('pon un enlace de YouTube o de TikTok'), { status: 400 });
+    m = u.match(/facebook\.com\/(?:reel\/|.*\/videos\/|watch\/?\?v=)(\d+)/); if (m) return { plataforma: 'facebook', id: m[1] };
+    m = u.match(/instagram\.com\/(?:reels?|p)\/([\w-]+)/); if (m) return { plataforma: 'instagram', id: m[1] };
+    throw Object.assign(new Error('pon un enlace de YouTube, TikTok, Facebook o Instagram'), { status: 400 });
   }
 
   // pausa: deja de editar (corta lo que esté haciendo y lo devuelve al principio de la cola, sin perder nada) hasta reanudar.
@@ -828,6 +831,12 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         }
         return { ...youtube.estado(), ...confYT() };
       }
+    }
+    if (p[2] === 'meta') {                               // Facebook/Instagram: GET estado (sin token) · POST conectar · DELETE desconectar
+      const cf = leer(FM, null);
+      if (M === 'GET') return { conectado: !!cf?.token, pagina: cf?.nombre || null, instagram: cf?.ig_usuario || null, largo: !!cf?.largo };
+      if (M === 'DELETE') { try { fs.unlinkSync(FM); } catch { } return { conectado: false }; }
+      if (M === 'POST') { const r = await metricasMod.conectarMeta({ token: b.token, appId: b.appId, appSecret: b.appSecret, pagina: b.pagina }); guardarJ(FM, r.guardar); return { conectado: true, ...r.publico }; }
     }
     if (p[2] === 'metricas') {                           // GET lo aprendido · POST medir ahora (tarda 1–3 min; se avisa por el bus)
       if (M === 'GET') return { aprendido, metricasEn: est.metricasEn || null, midiendo: !!midiendo, cuentas: cuentas() };

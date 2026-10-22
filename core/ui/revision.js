@@ -47,7 +47,7 @@ Object.assign(I18N.dic.en, {
   'Guardar': 'Save', 'Conectar el canal de YouTube': 'Connect the YouTube channel', 'Esperando a que aceptes en el navegador…': 'Waiting for you to accept in the browser…',
   'Subir solo al aprobar': 'Upload automatically on approve', 'Programar a las mejores horas': 'Schedule at the best hours', 'Desconectar': 'Disconnect',
   'Estilos': 'Styles', 'Momentos': 'Moments', 'Diseños': 'Layouts', 'Horas': 'Hours', 'Mejores': 'Best', 'la media del canal': 'the channel average', 'con 5+ clips medidos ya decide estilos, títulos y horas': 'with 5+ measured clips it starts choosing styles, titles and hours',
-  'Aún no hay clips publicados medidos. Mide una vez al día lo publicado en YouTube y TikTok y empareja cada publicación con su clip.': 'No published clips measured yet. Once a day it measures what was posted on YouTube and TikTok and matches each post with its clip.',
+  'Aún no hay clips publicados medidos. Mide una vez al día lo publicado en YouTube, TikTok, Facebook e Instagram y empareja cada publicación con su clip.': 'No published clips measured yet. Once a day it measures what was posted on YouTube and TikTok and matches each post with its clip.',
   'Publicación y aprendizaje': 'Publishing and learning', '{n} clips medidos': '{n} clips measured', 'diccionario': 'dictionary', 'Lo aprendido': 'What it learned', 'Midiendo…': 'Measuring…', 'Medir ahora': 'Measure now', 'última vez': 'last time',
   'Diccionario del canal': 'Channel dictionary', 'Lo que corriges en los subtítulos se aprende aquí y sale bien en los clips siguientes.': 'What you fix in the subtitles is learned here and comes out right in the next clips.',
   'como sale': 'as it comes out', 'como debe ser': 'as it should be', 'Añadir': 'Add', 'Reacción del chat': 'Chat reaction', 'risa': 'laughs', 'choque': 'crash', 'hype': 'hype', 'apoyo': 'support', 'charla': 'chat',
@@ -157,7 +157,7 @@ function RV_publicacion(c, L) {
   else if (y?.estado === 'error') chips.push(`<span class="chip mal" title="${esc(y.error || '')}">📺 YouTube: ${tr('error')}</span>`);
   if (en?.estado === 'listo') chips.push(`<span class="chip${en.avisos?.length ? ' aviso' : ''}" title="${esc((en.avisos || []).join(' · '))}">🌎 ${en.srt ? tr('subtítulos EN') : ''}${en.mp4 ? ` + ${tr('versión EN')}` : ''}${!en.srt && !en.mp4 ? tr('inglés: nada') : ''}</span>`);
   else if (en?.estado) chips.push(`<span class="chip aviso">🌎 ${esc(tr(en.estado))}${en.pct ? ` ${en.pct} %` : ''}</span>`);
-  const met = ['youtube', 'tiktok'].filter(k => m[k]).map(k => `<a href="${esc(m[k].url)}" target="_blank" rel="noopener" class="rv-met">${k === 'youtube' ? '📺' : '🎵'} 👁 ${RV_num(m[k].vistas)} · ❤ ${RV_num(m[k].likes)} · 💬 ${RV_num(m[k].comentarios)}${m[k].retencion != null ? ` · ⏱ ${m[k].retencion} %` : ''}</a>`).join('');
+  const met = ['youtube', 'tiktok', 'facebook', 'instagram'].filter(k => m[k]).map(k => `<a href="${esc(m[k].url)}" target="_blank" rel="noopener" class="rv-met" title="${k}">${{ youtube: '📺', tiktok: '🎵', facebook: '📘', instagram: '📸' }[k]} 👁 ${RV_num(m[k].vistas)} · ❤ ${RV_num(m[k].likes)} · 💬 ${RV_num(m[k].comentarios)}${m[k].compartidos ? ` · ↗ ${RV_num(m[k].compartidos)}` : ''}${m[k].retencion != null ? ` · ⏱ ${m[k].retencion} %` : ''}</a>`).join('');
   const tx = c.textos ? `<details class="rv-textos"><summary>${tr('Títulos para redes')}</summary><div><b>ES</b> ${esc(c.textos.es?.titulo || '')}<br><small class="tenue">${esc(c.textos.es?.descripcion || '')}</small></div><div><b>EN</b> ${esc(c.textos.en?.titulo || '')}<br><small class="tenue">${esc(c.textos.en?.descripcion || '')}</small></div></details>` : '';
   const puedeYT = L?.youtube?.conectado && c.k4?.estado === 'listo' && !['listo', 'subiendo', 'en cola'].includes(y?.estado);
   return `<div class="rv-pub"><div class="flex" style="gap:6px;flex-wrap:wrap">${chips.join('')}</div>
@@ -166,6 +166,14 @@ function RV_publicacion(c, L) {
       <input type="text" class="rv-vurl" placeholder="${esc(tr('Enlace de su publicación (TikTok/YouTube) si no la encuentra'))}"><button class="btn fantasma" data-a="vincular">🔗</button></div></div>`;
 }
 // arriba de la lista: YouTube (conectar / subir solo), lo aprendido de las métricas y el diccionario del canal
+// Facebook e Instagram (API Graph de Meta): pegar el token de la página una vez; solo se usa para LEER las métricas
+function RV_meta(m) {
+  if (m?.conectado) return `<div class="flex" style="gap:10px;flex-wrap:wrap;align-items:center"><span class="chip ok">📘 ${esc(m.pagina || 'Facebook')}</span>${m.instagram ? `<span class="chip ok">📸 @${esc(m.instagram)}</span>` : `<span class="chip">${tr('Instagram: vincula una cuenta profesional a la página')}</span>`}
+    ${m.largo ? '' : `<small class="tenue">${tr('Token sin el secreto de la app: caduca en ~1 h. Vuelve a conectar con el id y el secreto de la app para que no caduque.')}</small>`}<button class="btn fantasma" data-g="metadesconectar">${tr('Desconectar')}</button></div>`;
+  return `<p class="tenue">${tr('Para medir Facebook e Instagram: en developers.facebook.com crea una app (tipo Empresa). En «Herramientas → Explorador de la API Graph» elige tu app, pulsa «Generar token» con los permisos pages_show_list, pages_read_engagement, read_insights, instagram_basic e instagram_manage_insights, y pega aquí el token. Con el id y el secreto de la app (Configuración → Básica) no caduca. Solo se usa para leer métricas; se guarda en tu equipo, no se sube a ningún sitio.')}</p>
+    <div class="rv-fila"><input type="password" class="rv-metatoken" placeholder="${esc(tr('token de usuario'))}" autocomplete="off"><input type="text" class="rv-metaapp" placeholder="${esc(tr('id de la app (opcional)'))}" autocomplete="off"><input type="password" class="rv-metasec" placeholder="${esc(tr('secreto de la app (opcional)'))}" autocomplete="off"><button class="btn" data-g="metaconectar">${tr('Conectar')}</button></div>`;
+}
+
 function RV_panel(L, dic) {
   const y = L.youtube || {}, ap = L.aprendido;
   const yt = !y.configurado ? `<p class="tenue">${tr('Para que APOLO suba y programe los clips: en Google Cloud crea un proyecto, activa «YouTube Data API v3» y «YouTube Analytics API», crea un ID de cliente OAuth de tipo «App de escritorio» y pega aquí su JSON.')}</p>
@@ -178,10 +186,11 @@ function RV_panel(L, dic) {
   const top = g => Object.entries(g || {}).filter(([, v]) => v.n >= 1).slice(0, 4).map(([k, v]) => `${esc(k)} <b>×${v.factor}</b> <small>(${v.n})</small>`).join(' · ') || '—';
   const apr = ap?.muestras ? `<div class="rv-apr"><div>${tr('Estilos')}: ${top(ap.estilos)}</div><div>${tr('Momentos')}: ${top(ap.momentos)}</div><div>${tr('Diseños')}: ${top(ap.disenos)}</div><div>${tr('Horas')}: ${top(ap.horas)}</div>
       ${ap.mejores?.length ? `<div>${tr('Mejores')}: ${ap.mejores.slice(0, 3).map(x => `“${esc(x.titulo || x.gancho || '')}” ${RV_num(x.vistas)}`).join(' · ')}</div>` : ''}<small class="tenue">×1 = ${tr('la media del canal')} · ${tr('con 5+ clips medidos ya decide estilos, títulos y horas')}</small></div>`
-    : `<p class="tenue">${tr('Aún no hay clips publicados medidos. Mide una vez al día lo publicado en YouTube y TikTok y empareja cada publicación con su clip.')}</p>`;
+    : `<p class="tenue">${tr('Aún no hay clips publicados medidos. Mide una vez al día lo publicado en YouTube, TikTok, Facebook e Instagram y empareja cada publicación con su clip.')}</p>`;
   const dl = dic?.entradas || [];
   return `<details class="caja pad rv-panel"${RV_panelAbierto ? ' open' : ''}><summary><b>${tr('Publicación y aprendizaje')}</b> <small class="tenue">· YouTube ${y.conectado ? '✓' : '—'} · ${tr('{n} clips medidos', { n: ap?.muestras || 0 })} · ${tr('diccionario')}: ${dl.length}</small></summary>
     <h4>📺 YouTube</h4>${yt}
+    <h4>📘 Facebook · 📸 Instagram</h4>${RV_meta(L.meta)}
     <h4>📈 ${tr('Lo aprendido')} <button class="btn fantasma" data-g="medir" ${L.midiendo ? 'disabled' : ''}>${L.midiendo ? tr('Midiendo…') : tr('Medir ahora')}</button>${L.metricasEn ? ` <small class="tenue">${tr('última vez')}: ${esc(RV_fecha(L.metricasEn))}</small>` : ''}</h4>${apr}
     ${ap?.errores?.length ? `<small class="rv-error">${esc(ap.errores.join(' · '))}</small>` : ''}
     <h4>📖 ${tr('Diccionario del canal')}</h4><p class="tenue">${tr('Lo que corriges en los subtítulos se aprende aquí y sale bien en los clips siguientes.')}</p>
@@ -504,7 +513,7 @@ VISTAS.revision = {
   async cargar(silencio) {
     let L; try { L = await api('GET', '/revision'); } catch (e) { if (!silencio) aviso(e.message, true); return; }
     if (this.idEd) { this.L = L; return this.pintarEditor(L, silencio); }
-    const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado, c.k4?.estado, c.portada, c.portadas?.length, c.publicado?.estado, c.youtube?.estado, c.en?.estado, c.textos ? 1 : 0, c.metricas?.youtube?.at, c.metricas?.tiktok?.at])) + this.filtro;
+    const firma = JSON.stringify(L.clips.map(c => [c.id, c.estado, c.estilo, c.editado, c.k4?.estado, c.portada, c.portadas?.length, c.publicado?.estado, c.youtube?.estado, c.en?.estado, c.textos ? 1 : 0, c.metricas?.youtube?.at, c.metricas?.tiktok?.at, c.metricas?.facebook?.at, c.metricas?.instagram?.at])) + this.filtro;
     this.L = L;
     this.pintarEstado(L);
     this.pintarPanel(L);
@@ -520,7 +529,8 @@ VISTAS.revision = {
   // panel de publicación: solo se repinta si cambió algo y no estás escribiendo en él
   async pintarPanel(L, forzar) {
     const el = $('#rvPanel', this.v); if (!el) return;
-    const firma = JSON.stringify([L.youtube, L.aprendido?.actualizado, L.metricasEn, L.midiendo, L.diccionario]);
+    try { L.meta = await api('GET', '/revision/meta'); } catch { L.meta = null; }
+    const firma = JSON.stringify([L.youtube, L.meta, L.aprendido?.actualizado, L.metricasEn, L.midiendo, L.diccionario]);
     if (!forzar && (firma === this.firmaPanel || el.contains(document.activeElement))) return;
     this.firmaPanel = firma;
     let dic = null; try { dic = await api('GET', '/revision/diccionario'); } catch { }
@@ -533,6 +543,12 @@ VISTAS.revision = {
       if (g.dataset.g === 'ytcliente') { const t = $('.rv-ytjson', panel).value.trim(); if (!t) return aviso('Pega el JSON', true); await api('POST', '/revision/youtube', { cliente: t }); aviso('Guardado'); }
       if (g.dataset.g === 'ytconectar') { await api('POST', '/revision/youtube/conectar'); aviso('Acepta en el navegador que se abrió'); }
       if (g.dataset.g === 'ytdesconectar') { await api('POST', '/revision/youtube/desconectar'); aviso('Desconectado'); }
+      if (g.dataset.g === 'metaconectar') {
+        const token = $('.rv-metatoken', panel).value.trim(); if (!token) return aviso('Pega el token', true);
+        const r = await api('POST', '/revision/meta', { token, appId: $('.rv-metaapp', panel).value.trim() || undefined, appSecret: $('.rv-metasec', panel).value.trim() || undefined });
+        aviso(`Conectado: ${r.pagina}${r.instagram ? ' + @' + r.instagram : ' (sin Instagram profesional vinculado)'}`);
+      }
+      if (g.dataset.g === 'metadesconectar') { await api('DELETE', '/revision/meta'); aviso('Desconectado'); }
       if (g.dataset.g === 'medir') { await api('POST', '/revision/metricas'); aviso('Midiendo… (1–3 min)'); }
       if (g.dataset.g === 'dicquitar') await api('POST', '/revision/diccionario', { quitar: g.dataset.mal });
       if (g.dataset.g === 'dicanadir') {
