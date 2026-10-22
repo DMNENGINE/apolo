@@ -272,3 +272,31 @@ test('lotes: comentarios por momento → correcciones (al original), emojis/efec
   assert.deepStrictEqual(fin.quitarEmojis, [25, 25]); assert.deepStrictEqual(fin.sinEfectos[0], [39, 42]);
   assert.strictEqual(fin.rotulos[0].t, 7); assert.strictEqual(fin.correcciones[0].t, 7);
 });
+
+test('lotes: pausa corta lo que se está editando, lo devuelve a la cola sin perderlo, se guarda y al reanudar sigue', async () => {
+  const { l, dir, subtitulador } = montar();
+  const normal = subtitulador.subtitular.bind(subtitulador);
+  let empezo = false;
+  subtitulador.subtitular = async (a, ctx) => {     // la edición "larga": no acaba hasta que la pausan
+    if (a.soloTranscribir) return normal(a, ctx);
+    empezo = true;
+    await new Promise((ok, mal) => ctx.signal.addEventListener('abort', () => mal(Object.assign(new Error('edición pausada'), { pausado: true })), { once: true }));
+  };
+  await l.revisar();
+  for (let t = Date.now(); !empezo && Date.now() - t < 3000;) await new Promise(r => setTimeout(r, 10));
+  assert.ok(empezo, 'empezó a editar');
+  const r = await l.HERRAMIENTA.ejecutar({ accion: 'pausar' });
+  assert.match(r, /En pausa/);
+  for (let t = Date.now(); l.estado().enCurso && Date.now() - t < 3000;) await new Promise(r => setTimeout(r, 10));
+  let e = l.estado();
+  assert.strictEqual(e.pausado, true); assert.strictEqual(e.enCurso, null);
+  assert.deepStrictEqual(e.clips.map(c => [c.rank, c.estado, c.error || null]), [[1, 'en cola', null], [3, 'en cola', null]], 'nada en error, todo en cola');
+  assert.deepStrictEqual(e.cola, ['lagc_AAA_01', 'lagc_AAA_03'], 'el cortado vuelve el primero');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'craft', 'lotes.json'), 'utf8')).pausado, true, 'sobrevive a reiniciar');
+  l.procesar(); await new Promise(r => setTimeout(r, 50));
+  assert.strictEqual(l.estado().enCurso, null, 'en pausa no arranca nada');
+  subtitulador.subtitular = normal;
+  assert.strictEqual((await l.http('POST', ['v1', 'revision', 'reanudar'])).pausado, false);
+  e = await esperar(l);
+  assert.deepStrictEqual(e.clips.map(c => [c.rank, c.estado]), [[1, 'revisar'], [3, 'revisar']]);
+});

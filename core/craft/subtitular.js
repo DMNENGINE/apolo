@@ -230,13 +230,14 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
   }
 
   // exporta sin bloquear y pregunta a FilmCraft cómo va (jobs.list: done/total/etaSeconds) → progreso(0..1, quedanSeg)
-  async function exportar(params, progreso = () => { }, { maxSeg = 6 * 3600, paradoSeg = 900 } = {}) {   // corta solo si se atasca (15 min sin avanzar)
+  async function exportar(params, progreso = () => { }, { maxSeg = 6 * 3600, paradoSeg = 900, signal } = {}) {   // corta solo si se atasca (15 min sin avanzar) o si la pausan (signal)
     const r = await fc('file.exportMedia', { ...params, wait: false });
     const job = r?.job;
     if (job == null) throw new Error(`FilmCraft no empezó a exportar: ${JSON.stringify(r).slice(0, 200)}`);
     const t0 = Date.now(); let visto = -1, tVisto = t0;
     for (;;) {
       await new Promise(ok => setTimeout(ok, 2000));
+      if (signal?.aborted) { try { await fc('jobs.cancel', { job }); } catch { } throw Object.assign(new Error('exportar: pausada'), { pausado: true }); }
       const lista = await fc('jobs.list');
       const j = (Array.isArray(lista) ? lista : lista?.items || []).find(x => x.id === job);
       if (!j) throw new Error('FilmCraft perdió la exportación');
@@ -273,7 +274,10 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     let video = path.resolve(ctx.cwd || os.homedir(), String(a.video || ''));
     if (!fs.existsSync(video)) throw new Error(`no existe el vídeo: ${video}`);
     if (!mcpLocales.obtener('filmcraft')?.activo) throw new Error('FilmCraft no está instalado o está desactivado (Configuración → Apps MCP locales → Detectar)');
-    const avisar = (t, pct, eta) => ctx.progreso?.(t, pct, eta);   // pct 0–100 de la edición entera (si se sabe)
+    const avisar = (t, pct, eta) => {                  // pct 0–100 de la edición entera (si se sabe); si la pausan, para en el siguiente paso
+      if (ctx.signal?.aborted) throw Object.assign(new Error('edición pausada'), { pausado: true });
+      ctx.progreso?.(t, pct, eta);
+    };
     const base = path.basename(video, path.extname(video)).replace(/\s*\([^)]*\)\s*$/, '');
     const dirSalida = a.carpeta ? path.resolve(ctx.cwd || os.homedir(), a.carpeta) : path.join(path.dirname(video), 'editados');
     const nombre = a.nombre || `${base} (subtitulado)`;
@@ -757,7 +761,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     const mp4 = path.join(dirSalida, `${nombre}.mp4`);
     const exportarA = (lufs, de = 60, a1 = 95) => exportar({ path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: lufs,
       captionSidecar: 'srt', hardwareEncoding: 'auto', ...(rango ? { range: 'custom', startSeconds: rango[0], endSeconds: rango[1] } : {}) },
-    (p, eta) => avisar('exportando', de + p * (a1 - de), eta));
+    (p, eta) => avisar('exportando', de + p * (a1 - de), eta), { signal: ctx.signal });
     // 7. control de calidad antes de enseñarlo: diseño (zona segura, botones, solapes, lectura) + el archivo real (sonoridad, pico
     // real, negro, congelado, silencio, duración). La sonoridad y el pico se corrigen solos reexportando una vez con el objetivo ajustado
     let qa = null;
@@ -880,7 +884,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     if (previa) try { const r = await mcpLocales.llamar('filmcraft', 'render_frame', { seconds: segPrevia, max_side: 960 }); const img = r?.content?.find(c => c.type === 'image'); if (img) fs.writeFileSync(previa, Buffer.from(img.data, 'base64')); } catch { }
     await exportar({ path: mp4, format: 'h264', bitrateMode: 'crf', crf: 18, audioCodec: 'aac', loudnessLufs: lufs, hardwareEncoding: 'auto',
       ...(srt ? { captionSidecar: 'srt' } : {}), ...(ancho && alto ? { width: ancho, height: alto } : {}) },
-    (p, eta) => ctx.progreso?.('exportando', 5 + p * 95, eta));
+    (p, eta) => ctx.progreso?.('exportando', 5 + p * 95, eta), { signal: ctx.signal });
     try { await fc('file.closeProject', { force: true }); } catch { }
     return { mp4, previa };
   }

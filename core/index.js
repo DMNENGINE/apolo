@@ -175,6 +175,7 @@ function crearNucleo(opciones = {}) {
   // editor automático por lotes: trae clips de otra máquina, los edita y los deja en revisión (#/revision) → /v1/revision
   const lotes = require('./craft/lotes').crearLotes({ cfg, bus, tareas, subtitulador, generarJSON: generarJSONvivo, modelo: modeloCerebro, log: (...a) => console.log(...a),
     miniaturas: craft.miniaturas, kits: craft.kits, diccionario: diccionarioCraft, abrirUrl: require('./mcp-remoto').abrirNavegador, medal: craft.medal });
+  require('./herramientas').registrar([lotes.HERRAMIENTA]);                    // editor_clips: estado / pausar / reanudar la edición automática
   nucleo.lotes = lotes; nucleo.extensiones.revision = { http: (...a) => lotes.http(...a) };
   // biblioteca de diseño: patrones aprendidos de apps reales en Mobbin; API /v1/diseno
   const diseno = require('./diseno').crearDiseno({ cfg, mcpRemotos, generarJSON: generarJSONvivo, memoria, tareas, bus });

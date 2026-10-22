@@ -39,6 +39,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const guardarConf = () => guardarJ(FC, conf), guardarEst = () => guardarJ(FE, est);
   const cola = [];                                     // ids de clips por editar (en orden)
   let enCurso = null, revisando = false;
+  let parar = null;                                    // AbortController del trabajo en curso (lo dispara la pausa)
   for (const c of Object.values(est.clips)) if (c.estado === 'editando' || c.estado === 'en cola') { c.estado = 'en cola'; cola.push(c.id); }   // tras reiniciar
   for (const c of Object.values(est.clips)) if (c.estado === 'descargando') { c.estado = 'error'; c.error = 'la descarga se cortó al reiniciar; pídelo otra vez'; }
   // textos para redes + inglés ("en:<id>") y exportaciones 4K ("4k:<id>") pendientes: van en la misma cola, en ese orden
@@ -133,7 +134,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     const original = path.join(base, 'originales', c.archivo);
     c.estado = 'editando'; c.error = null; c.progreso = { fase: 'empezando', pct: 0, desde: Date.now() }; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
     // progreso en vivo (solo en memoria; la página lo pide cada pocos segundos): fase, % de la edición entera y lo que le queda a la exportación
-    const ctx = { progreso: (fase, pct, eta) => { c.progreso = { ...c.progreso, fase: String(fase).replace(/…$/, ''), ...(pct != null ? { pct: Math.round(Math.min(100, Math.max(c.progreso?.pct || 0, pct))) } : {}), eta: eta ?? null }; } };
+    const ctx = { signal: parar?.signal, progreso: (fase, pct, eta) => { c.progreso = { ...c.progreso, fase: String(fase).replace(/…$/, ''), ...(pct != null ? { pct: Math.round(Math.min(100, Math.max(c.progreso?.pct || 0, pct))) } : {}), eta: eta ?? null }; } };
     if (c.reexportar) {                                 // retocado a mano en FilmCraft: solo volver a exportar su proyecto
       await subtitulador.reexportar({ proyecto: c.proyecto, mp4: c.mp4, previa: c.previa, segPrevia: Math.min(20, (c.fin - c.inicio) / 3) }, ctx);
       Object.assign(c, { estado: 'revisar', editado: Date.now(), reexportar: false, retocado: true });
@@ -190,15 +191,21 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   }
 
   async function procesar() {
-    if (enCurso) return;
-    while (cola.length) {
-      const id = cola.shift(); enCurso = id;
-      if (id.startsWith('4k:')) { await hacer4k(id.slice(3)); enCurso = null; continue; }
-      if (id.startsWith('en:')) { await prepararRedes(id.slice(3)); enCurso = null; continue; }
+    if (enCurso || conf.pausado) return;
+    while (cola.length && !conf.pausado) {
+      const id = cola.shift(); enCurso = id; parar = new AbortController();
+      if (id.startsWith('4k:')) { await hacer4k(id.slice(3)); enCurso = null; parar = null; continue; }
+      if (id.startsWith('en:')) { await prepararRedes(id.slice(3)); enCurso = null; parar = null; continue; }
       try { await editarUno(id); }
-      catch (e) { const c = est.clips[id]; if (c) { c.estado = 'error'; c.error = e.message.slice(0, 400); guardarEst(); } log('[lotes]', id, e.message); }
+      catch (e) {
+        const c = est.clips[id];
+        if (parar.signal.aborted && c?.estado === 'editando') { c.estado = 'en cola'; c.error = null; cola.unshift(id); guardarEst(); log('[lotes]', id, 'pausado, vuelve a la cola'); }
+        else { if (c) { c.estado = 'error'; c.error = e.message.slice(0, 400); guardarEst(); } log('[lotes]', id, e.message); }
+      }
       if (est.clips[id]?.progreso) { delete est.clips[id].progreso; guardarEst(); }
-      enCurso = null;
+      bus?.emit('lotes', { tipo: 'clip', clip: publico(est.clips[id] || { id }) });
+      enCurso = null; parar = null;
+      if (conf.pausado) break;
       const c = est.clips[id];
       // ¿se acabó ese stream? → aviso con el resumen
       if (c && !cola.some(x => est.clips[x]?.stream === c.stream)) {
@@ -237,7 +244,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     c.k4 = { estado: 'exportando', pct: 0, desde: Date.now() }; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
     try {
       await subtitulador.reexportar({ proyecto: c.proyecto, mp4: destino, ancho: ANCHO4K, alto: ALTO4K, srt: false },
-        { progreso: (fase, pct, eta) => { c.k4 = { ...c.k4, pct: Math.round(pct ?? c.k4.pct ?? 0), eta: eta ?? null }; } });
+        { signal: parar?.signal, progreso: (fase, pct, eta) => { c.k4 = { ...c.k4, pct: Math.round(pct ?? c.k4.pct ?? 0), eta: eta ?? null }; } });
       // control antes de dar el 4K por bueno (y antes de subirlo): resolución, duración igual a la versión revisada, audio y vídeo
       const m = await medir(destino, { ffmpeg: cfg?.craft?.ffmpeg, ligero: true });
       const q = calidad.evaluar(m, { esperado: { ancho: ANCHO4K, alto: ALTO4K, duracion: c.calidad?.medidas?.duracion } });
@@ -246,7 +253,10 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       borrarFuentes(c);
       bus?.emit('aviso-externo', { origen: 'Clips', urgente: false, texto: `🎬 4K listo para subir: ${path.basename(destino)}` });
       if (publicador.activo() && fuenteDe(c.fuente)?.publicar !== false) publicar(c);
-    } catch (e) { c.k4 = { estado: 'error', error: e.message.slice(0, 300), ...(fs.existsSync(destino) ? { mp4: destino } : {}) }; log('[lotes] 4K', id, e.message); }
+    } catch (e) {
+      if (parar?.signal.aborted) { c.k4 = { estado: 'en cola' }; cola.unshift('4k:' + id); try { fs.rmSync(destino, { force: true }); } catch { } }   // pausado: vuelve al principio de la cola
+      else { c.k4 = { estado: 'error', error: e.message.slice(0, 300), ...(fs.existsSync(destino) ? { mp4: destino } : {}) }; log('[lotes] 4K', id, e.message); }
+    }
     guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
   }
 
@@ -648,7 +658,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   }
 
   const publico = c => ({ ...c, original: undefined, cajas: undefined });
-  const estado = () => ({ config: conf, enCurso, cola: [...cola], revisando,
+  const estado = () => ({ config: conf, enCurso, cola: [...cola], revisando, pausado: !!conf.pausado,
     clips: Object.values(est.clips).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || a.rank - b.rank).map(publico),
     estilos: estilos.lista(), youtube: { ...youtube.estado(), ...confYT() }, aprendido, metricasEn: est.metricasEn || null, midiendo: !!midiendo,
     diccionario: Object.fromEntries([...new Set(conf.fuentes.map(f => f.perfil).filter(Boolean))].map(k => [k, diccionario.lista(k).length])) });
@@ -659,6 +669,15 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     let m = u.match(/tiktok\.com\/.*\/video\/(\d+)/); if (m) return { plataforma: 'tiktok', id: m[1] };
     m = u.match(/(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([\w-]{11})/); if (m) return { plataforma: 'youtube', id: m[1] };
     throw Object.assign(new Error('pon un enlace de YouTube o de TikTok'), { status: 400 });
+  }
+
+  // pausa: deja de editar (corta lo que esté haciendo y lo devuelve al principio de la cola, sin perder nada) hasta reanudar.
+  // Sigue buscando streams nuevos; solo no edita ni exporta. Queda guardada en lotes.json (sobrevive a reiniciar APOLO)
+  function pausar(si = true) {
+    conf.pausado = !!si; guardarConf();
+    if (si) parar?.abort(); else procesar();
+    bus?.emit('lotes', { tipo: 'pausa', pausado: conf.pausado });
+    return { pausado: conf.pausado, enCurso, cola: cola.length };
   }
 
   // tarea interna cada 15 min (la crea programar(), que solo llama el daemon)
@@ -775,6 +794,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     if (M === 'GET' && !p[2]) return estado();
     if (M === 'POST' && p[2] === 'revisar') return revisar();
     if (M === 'POST' && p[2] === 'nuevo') return nuevo(b);
+    if (M === 'POST' && (p[2] === 'pausar' || p[2] === 'reanudar')) return pausar(p[2] === 'pausar');
     if (M === 'PATCH' && p[2] === 'config') {
       if (b.salida) conf.salida = String(b.salida);
       if (b.retencionDias) conf.retencionDias = Math.max(1, +b.retencionDias);
@@ -869,7 +889,24 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
 
-  return { revisar, procesar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, prepararRedes, actualizarMetricas, aYouTube, reintentarYouTube, desdeMedal, ESTILOS_DEFECTO };
+  // para que el usuario se lo pida a APOLO (voz, Discord, chat): "pausa la edición de clips hasta que me duerma"
+  const HERRAMIENTA = {
+    nombre: 'editor_clips', riesgo: a => (a?.accion === 'estado' ? 'lectura' : 'escritura'),
+    descripcion: 'El editor automático de clips (Revisión: clips de los streams que APOLO edita solo con FilmCraft). '
+      + 'accion: estado (qué edita, cuántos en cola, si está en pausa) · pausar (deja de editar/exportar YA; lo que estaba haciendo vuelve a la cola sin perderse; '
+      + 'sigue pausado aunque APOLO se reinicie) · reanudar (sigue con la cola). Úsalo cuando el usuario pida parar/pausar/dejar de editar clips para liberar el PC.',
+    parametros: { type: 'object', properties: { accion: { type: 'string', enum: ['estado', 'pausar', 'reanudar'] } }, required: ['accion'] },
+    resumen: a => a.accion,
+    ejecutar: async a => {
+      if (a.accion === 'pausar' || a.accion === 'reanudar') pausar(a.accion === 'pausar');
+      const ed = enCurso && est.clips[enCurso.replace(/^(4k|en):/, '')];
+      return `${conf.pausado ? '⏸️ En pausa' : '▶️ Activo'} · ${cola.length} en cola`
+        + (ed && !conf.pausado ? ` · ahora: ${/^4k:/.test(enCurso) ? 'exportando 4K' : 'editando'} #${ed.rank} (${ed.titulo || ed.stream})` : '')
+        + (conf.pausado && a.accion === 'pausar' && ed ? ' · lo que estaba haciendo se está parando y vuelve a la cola' : '');
+    },
+  };
+
+  return { HERRAMIENTA, revisar, procesar, pausar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, prepararRedes, actualizarMetricas, aYouTube, reintentarYouTube, desdeMedal, ESTILOS_DEFECTO };
 }
 
 module.exports = { crearLotes, ESTILOS_DEFECTO };

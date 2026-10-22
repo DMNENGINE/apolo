@@ -6,7 +6,9 @@ NAV_APP.splice(NAV_APP.findIndex(n => n[0] === 'reuniones'), 0, ['revision', 'Re
 
 Object.assign(I18N.dic.en, {
   'Revisión': 'Review', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.': 'Clips edited automatically from your streams. Watch them and decide: approve, another style or discard. Nothing is published without your approval.',
-  'Buscar clips ahora': 'Look for clips now', 'Por revisar': 'To review', 'Aprobados': 'Approved', 'Descartados': 'Discarded', 'Todos': 'All',
+  'Buscar clips ahora': 'Look for clips now', 'Pausar edición': 'Pause editing', 'Reanudar edición': 'Resume editing',
+  'Edición en pausa': 'Editing paused', 'no edita ni exporta hasta que la reanudes; lo que estaba haciendo vuelve a la cola sin perderse.': "won't edit or export until you resume it; whatever it was doing goes back to the queue, nothing is lost.",
+  'En pausa': 'Paused', 'Reanudado': 'Resumed', 'Por revisar': 'To review', 'Aprobados': 'Approved', 'Descartados': 'Discarded', 'Todos': 'All',
   'Aprobar': 'Approve', 'Descartar': 'Discard', 'Otro estilo': 'Another style', 'Rehacer': 'Redo', 'Ver clip': 'Watch clip',
   'editando…': 'editing…', 'en cola': 'queued', 'revisar': 'to review', 'aprobado': 'approved', 'descartado': 'discarded', 'error': 'error',
   'Editando ahora': 'Editing now', '{n} en cola': '{n} queued', 'Whisper dudó en': 'Whisper was unsure about', 'Chat en ese momento': 'Chat at that moment',
@@ -446,7 +448,7 @@ VISTAS.revision = {
       return;
     }
     v.innerHTML = `<div class="pagina">${cabecera('Revisión', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.',
-      `<button class="btn" id="rvMedal">🎮 ${tr('Elegir de Medal')}</button><button class="btn" id="rvBuscar">${ic('buscar')}${tr('Buscar clips ahora')}</button>`)}
+      `<button class="btn" id="rvPausa">⏸️ ${tr('Pausar edición')}</button><button class="btn" id="rvMedal">🎮 ${tr('Elegir de Medal')}</button><button class="btn" id="rvBuscar">${ic('buscar')}${tr('Buscar clips ahora')}</button>`)}
       <div id="rvEstado"></div>
       <div id="rvMedalCaja" hidden></div>
       <div id="rvPanel"></div>
@@ -600,6 +602,8 @@ VISTAS.revision = {
   },
   pintarEstado(L) {
     const el = $('#rvEstado', this.v); if (!el) return;
+    const bp = $('#rvPausa', this.v); if (bp) { bp.textContent = L.pausado ? `▶️ ${tr('Reanudar edición')}` : `⏸️ ${tr('Pausar edición')}`; bp.className = 'btn' + (L.pausado ? ' pri' : ''); }
+    if (L.pausado) { el.innerHTML = `<div class="caja pad"><span class="punto"></span><b>⏸️ ${tr('Edición en pausa')}</b> · ${tr('no edita ni exporta hasta que la reanudes; lo que estaba haciendo vuelve a la cola sin perderse.')}${L.cola.length ? ` · ${tr('{n} en cola', { n: L.cola.length })}` : ''}</div>`; return; }
     const es4k = /^4k:/.test(L.enCurso || ''), ed = L.enCurso && L.clips.find(c => c.id === L.enCurso.replace(/^4k:/, ''));
     if (es4k && ed) { el.innerHTML = `<div class="caja pad rv-trabajando"><span class="punto aviso"></span><b>${tr('Exportando en 4K')}:</b> ${esc(ed.titulo || ed.stream)} · #${ed.rank} · <b>${ed.k4?.pct || 0} %</b>${ed.k4?.eta ? ` · ${tr('quedan')} ~${RV_mmss(ed.k4.eta)}` : ''}${L.cola.length ? ` · ${tr('{n} en cola', { n: L.cola.length })}` : ''}</div>`; return; }
     el.innerHTML = !L.config.fuentes.length ? `<div class="caja pad tenue">${tr('Aún no hay fuentes configuradas.')}</div>`
@@ -752,6 +756,11 @@ VISTAS.revision = {
       const b = e.target.closest('#rvBuscar'); b.disabled = true; aviso('Buscando…');
       try { const r = await api('POST', '/revision/revisar'); aviso(r.nuevos ? tr('{n} clips nuevos', { n: r.nuevos }) : 'No hay streams nuevos'); } catch (er) { aviso(er.message, true); }
       b.disabled = false; return this.cargar();
+    }
+    if (e.target.closest('#rvPausa')) {
+      const b = e.target.closest('#rvPausa'); b.disabled = true;
+      try { const r = await api('POST', `/revision/${this.L?.pausado ? 'reanudar' : 'pausar'}`); aviso(r.pausado ? 'En pausa' : 'Reanudado'); } catch (er) { aviso(er.message, true); }
+      b.disabled = false; this.firma = null; return this.cargar();
     }
     if (e.target.closest('#rvMedal')) return this.abrirMedal();
     const mb = e.target.closest('[data-m]'); if (mb) return this.clicMedal(mb);
