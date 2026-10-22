@@ -2,11 +2,25 @@
 // una zona por equipo (la Pi central, el PC u otros nodos). Pensado para 300+ agentes: dibujo a ~12 fps y datos cada 5 s.
 // Datos: GET /v1/trading/mapa (proxy a la central, core/trading.js). Los personajes son los de mision-mundo-arte.js (mmPJ).
 
-const TR_CW = 104, TR_CH = 96, TR_COLS = 10, TR_M = 16, TR_CAB = 74, TR_TICK = 58;
+const TR_W = 1100, TR_H = 740;
 const TR_ROPA = { ema_cruce: '#3b6fb6', rsi_rev: '#8a4fb5', ruptura: '#c08a2e', bollinger: '#2f8f8f', impulso: '#b5452f' };
 const TR_PANT = { '1m': '#30344a', '5m': '#3a4520', '15m': '#4a2a2a' };
 const TR_SOMB = ['', '', 'gorra', 'casco', 'capucha'];
 const trHash = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); };
+
+// caché propia de sprites ya escalados (20×38): con cientos de traders andando, la del Mundo (1.500) se vaciaría cada fotograma
+const TR_SPR = new Map();
+function trSprite(L, dir, f, anda) {
+  const k = `${L.k}|${dir}|${f}|${anda ? 1 : 0}`;
+  let cv = TR_SPR.get(k);
+  if (!cv) {
+    if (TR_SPR.size > 7000) TR_SPR.clear();
+    cv = mmLienzo(20, 38); const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+    c.drawImage(mmPJ(L, dir, f, anda ? 'anda' : 'quieto', false), 0, 0, 20, 38);
+    TR_SPR.set(k, cv);
+  }
+  return cv;
+}
 
 function trLook(a) {
   const base = String(a.nombre || '').split('-')[0], h = trHash(base);
@@ -21,8 +35,8 @@ function trLook(a) {
 
 VISTAS.trading = {
   async pintar(v) {
-    this.v = v; this.datos = null; this.burbujas = new Map(); this.antes = new Map(); this.sel = null; this.cajas = [];
-    v.innerHTML = `<div class="pagina mision ancha">${cabecera('Mission Control', 'El enjambre de agentes de trading: cada trader opera solo con microoperaciones simuladas, aprende de cada pérdida y evoluciona. Una zona por equipo.')}
+    this.v = v; this.datos = null; this.burbujas = new Map(); this.antes = new Map(); this.sel = null; this.cajas = []; this.pj = new Map(); this.labHasta = new Map();
+    v.innerHTML = `<div class="pagina mision ancha">${cabecera('Mission Control', 'El edificio del enjambre: cada trader va por libre a la sala que toca — opera sentado en el parqué, busca en el atrio frente a la pizarra, estudia sus pérdidas en el laboratorio. Punto turquesa = Pi, morado = PC.')}
       ${typeof CJ_pestanas === 'function' ? CJ_pestanas('trading') : ''}
       <div class="rejilla k" id="trKpis"></div>
       <div class="tr-cuerpo">
@@ -65,10 +79,12 @@ VISTAS.trading = {
       if (prev !== undefined && prev !== a.ultimo && a.ultimo) {
         const em = (a.ultimo.match(/^(✅|❌|🟢|🔴)/) || [])[1] || (a.estado === 'quebrado' ? '💀' : /meta/.test(a.ultimo) ? '🏆' : null);
         if (em) this.burbujas.set(k, { em, hasta: ahora + 4 });
+        if (em === '❌' || em === '💀') this.labHasta.set(k, ahora + 90);   // tras perder, al laboratorio un rato
       }
       this.antes.set(k, a.ultimo);
     }
     this.datos = d;
+    this.actualizarPJ(d, ahora);
     const loc = d.nodos.find(n => n.local) || d.nodos[0] || { kpis: {} }, k = loc.kpis || {};
     $('#trKpis', this.v).innerHTML = [
       ['robot', 'Agentes', d.total.agentes, d.nodos.map(n => `${n.nodo} ${(n.agentes || []).length}`).join(' · ')],
@@ -87,101 +103,150 @@ VISTAS.trading = {
     if (this.sel) { const a = todos.find(x => x.nodo === this.sel.nodo && x.id === this.sel.id); if (a) this.ficha(a, true); }
   },
 
-  // ---------- dibujo: una planta de oficinas por equipo, un despacho por trader ----------
+  // ---------- el edificio: un mapa libre como el Mundo; cada trader camina a la sala que toca según lo que hace ----------
+  // Parqué (opera sentado) · Atrio frente a la pizarra (busca) · Laboratorio (acaba de perder / quebró) · Trofeos (metas) ·
+  // Cafetería (parado o sin conexión) · Servidores (un rack por equipo con sus datos reales)
+  salas(W, H) {
+    if (this._salas && this._salas.W === W) return this._salas;
+    const d = { W, H,
+      pizarra: [16, 10, W - 32, 54],
+      parque: [16, 76, 690, 420], atrio: [16, 508, 690, H - 520],
+      lab: [722, 76, W - 738, 200], trofeos: [722, 288, W - 738, 150], cafe: [722, 450, W - 738, 150], servidores: [722, 612, W - 738, H - 624] };
+    d.mesas = [];
+    const [px, py, pw] = d.parque, cols = 14, rows = 8, mw = (pw - 20) / cols;
+    for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) d.mesas.push({ x: px + 10 + k * mw + mw / 2, y: py + 34 + r * 48, ocupa: null });
+    this._salas = d; this._fondo = null;
+    return d;
+  },
+  fondo(W, H) {                                          // lo que no se mueve, pintado una vez
+    if (this._fondo) return this._fondo;
+    const S = this.salas(W, H), cv = mmLienzo(W, H), c = cv.getContext('2d');
+    c.fillStyle = '#0b0f15'; c.fillRect(0, 0, W, H);
+    const suelo = ([x, y, w, h], a, b, t = 8) => { for (let yy = y; yy < y + h; yy += t) for (let xx = x; xx < x + w; xx += t) { c.fillStyle = ((xx + yy) / t) % 2 ? a : b; c.fillRect(xx, yy, Math.min(t, x + w - xx), Math.min(t, y + h - yy)); } };
+    const sala = (r, a, b, nombre, borde) => {
+      suelo(r, a, b); c.strokeStyle = '#2b3646'; c.lineWidth = 4; c.strokeRect(r[0] + 2, r[1] + 2, r[2] - 4, r[3] - 4);
+      c.fillStyle = a; c.fillRect(r[0] + r[2] / 2 - 18, r[1] + r[3] - 4, 36, 4);    // puerta
+      if (nombre) mmCartel(c, r[0] + r[2] / 2, r[1] + 6, nombre, { borde, max: r[2] - 10 });
+    };
+    sala(S.parque, '#1a2230', '#1c2533', 'PARQUÉ DE OPERACIONES', '#2fd1b0');
+    sala(S.atrio, '#22262e', '#252a33', 'ATRIO · BUSCANDO OPORTUNIDADES', '#3f8fff');
+    sala(S.lab, '#1d1a2a', '#201c2e', 'LABORATORIO DE AUTOPSIAS', '#a46bf5');
+    sala(S.trofeos, '#2a2414', '#2e2816', 'SALA DE TROFEOS', '#ffcf4d');
+    sala(S.cafe, '#2a1f18', '#2e221a', 'CAFETERÍA', '#c08a2e');
+    sala(S.servidores, '#12161c', '#14191f', 'SERVIDORES', '#2fd1b0');
+    // mesas del laboratorio, vitrinas de trofeos, mesas de la cafetería
+    const [lx, ly, lw] = S.lab; for (let k = 0; k < 3; k++) { c.fillStyle = '#3d3552'; c.fillRect(lx + 30 + k * (lw - 60) / 2.4, ly + 90, 70, 24); c.fillStyle = '#a46bf5'; c.fillRect(lx + 40 + k * (lw - 60) / 2.4, ly + 94, 14, 8); }
+    const [tx, ty, tw] = S.trofeos; for (let k = 0; k < 5; k++) { const x = tx + 24 + k * (tw - 48) / 4.5; c.fillStyle = '#4a3a1a'; c.fillRect(x, ty + 40, 40, 20); c.fillStyle = '#ffcf4d'; c.fillRect(x + 14, ty + 30, 12, 12); c.fillRect(x + 17, ty + 42, 6, 4); }
+    const [cx, cy, cw] = S.cafe; for (let k = 0; k < 3; k++) { c.fillStyle = '#5a3d28'; c.beginPath(); c.arc(cx + 50 + k * (cw - 80) / 2.2, cy + 80, 16, 0, 7); c.fill(); }
+    c.fillStyle = '#3a2a1e'; c.fillRect(cx + cw - 70, cy + 34, 50, 14); c.fillStyle = '#c0c0c0'; c.fillRect(cx + cw - 60, cy + 26, 10, 10);   // cafetera
+    // mesas del parqué (el monitor se pinta en vivo)
+    for (const m of S.mesas) { c.fillStyle = '#4a3a2c'; c.fillRect(m.x - 18, m.y + 4, 36, 8); c.fillStyle = '#2c2118'; c.fillRect(m.x - 16, m.y + 12, 3, 6); c.fillRect(m.x + 13, m.y + 12, 3, 6); }
+    this._fondo = cv;
+    return cv;
+  },
+  zonaDe(a, n, ahora) {
+    const on = n.local || n.en_linea, parado = !on || ['parado', 'retirado'].includes(a.estado) || (n.kpis && n.kpis.activo === false);
+    const k = n.nodo + ':' + a.id;
+    if (parado) return 'cafe';
+    if (a.estado === 'quebrado' || (this.labHasta.get(k) || 0) > ahora) return 'lab';
+    if (a.estado === 'en posición') return 'parque';
+    if ((a.metas || 0) > 0 && (trHash(k) % 3 === 0)) return 'trofeos';
+    return 'atrio';
+  },
+  puntoEn(r, semilla) {
+    const [x, y, w, h] = r, s = semilla * 9301 + 49297;
+    return [x + 20 + (s % 233280) / 233280 * (w - 40), y + 40 + ((s * 7) % 233280) / 233280 * (h - 54)];
+  },
+  actualizarPJ(d, ahora) {
+    const S = this.salas(TR_W, TR_H), vivos = new Set();
+    for (const m of S.mesas) if (m.ocupa && !this.pj.get(m.ocupa)) m.ocupa = null;
+    for (const n of d.nodos) for (const a of n.agentes || []) {
+      const k = n.nodo + ':' + a.id; vivos.add(k);
+      let p = this.pj.get(k);
+      if (!p) { const [x, y] = this.puntoEn(S.atrio, trHash(k)); p = { x, y, tx: x, ty: y, f: 0, izq: false, zona: null }; this.pj.set(k, p); }
+      p.a = a; p.n = n; p.k = k;
+      const z = this.zonaDe(a, n, ahora);
+      if (z !== p.zona || (z === 'atrio' && Math.random() < .08) || (z === 'cafe' && Math.random() < .03)) {
+        if (p.mesa && z !== 'parque') { p.mesa.ocupa = null; p.mesa = null; }
+        if (z === 'parque' && !p.mesa) { p.mesa = S.mesas.find(m => !m.ocupa) || null; if (p.mesa) p.mesa.ocupa = k; }
+        const [tx, ty] = z === 'parque' && p.mesa ? [p.mesa.x, p.mesa.y - 10] : this.puntoEn(S[z], trHash(k) + Math.floor(ahora / 7) * (z === 'atrio' ? 13 : 1));
+        p.tx = tx; p.ty = ty; p.zona = z;
+      }
+    }
+    for (const k of [...this.pj.keys()]) if (!vivos.has(k)) { const p = this.pj.get(k); if (p.mesa) p.mesa.ocupa = null; this.pj.delete(k); }
+  },
   dibujar(t) {
     const d = this.datos; if (!d) return;
-    const nodos = d.nodos.filter(n => (n.agentes || []).length);
-    const W = TR_COLS * TR_CW + TR_M * 2;
-    let H = TR_M + TR_TICK; for (const n of nodos) H += TR_CAB + Math.ceil(n.agentes.length / TR_COLS) * TR_CH + TR_M;
-    H = Math.max(H, 260);
+    const W = TR_W, H = TR_H, c = this.c;
     if (this.cv.width !== W || this.cv.height !== H) { this.cv.width = W; this.cv.height = H; }
-    const c = this.c; c.imageSmoothingEnabled = false;
-    c.fillStyle = '#0e1218'; c.fillRect(0, 0, W, H);
-    this.cajas = [];
-    this.pizarra(c, W, d.precios || []);
-    let y0 = TR_M + TR_TICK;
-    const ahora = performance.now() / 1000;
-    for (const n of nodos) {
-      const filas = Math.ceil(n.agentes.length / TR_COLS), alto = TR_CAB + filas * TR_CH;
-      const on = n.local || n.en_linea, k = n.kpis || {};
-      for (let y = y0; y < y0 + alto; y += 8) for (let x = TR_M / 2; x < W - TR_M / 2; x += 8) { c.fillStyle = ((x + y) / 8) % 2 ? '#1a2230' : '#1c2533'; c.fillRect(x, y, 8, 8); }
-      c.strokeStyle = on ? '#2fd1b0' : '#7a3030'; c.globalAlpha = .55; c.lineWidth = 2; c.strokeRect(TR_M / 2 + 1, y0 + 1, W - TR_M - 2, alto - 2); c.globalAlpha = 1;
-      mmCartel(c, W / 2, y0 + 6, `${String(n.nodo).toUpperCase()} · ${n.agentes.length} TRADERS${k.activo === false ? ' · PARADO' : ''}${!on ? ' · SIN CONEXIÓN' : ''}`, { borde: on ? '#2fd1b0' : '#c0392b', max: W - 40 });
-      // panel de la planta: resultados reales del equipo
-      const tot = n.agentes.reduce((x, a) => x + (a.equity || 0), 0), cap = (k.capital || 1) * n.agentes.length;
-      const ops = n.agentes.reduce((x, a) => x + (a.trades || 0), 0), gan = n.agentes.reduce((x, a) => x + (a.ganados || 0), 0);
-      const qui = n.agentes.reduce((x, a) => x + (a.quiebras || 0), 0), met = n.agentes.reduce((x, a) => x + (a.metas || 0), 0), mejor = Math.max(0, ...n.agentes.map(a => a.max_equity || 0));
-      const verde = tot >= cap ? '#5dff9b' : '#ff7b7b';
-      const items = [['CAPITAL', `${tot.toFixed(2)} $`, verde], ['P&L', `${tot - cap >= 0 ? '+' : ''}${(tot - cap).toFixed(3)} $`, verde],
-        ['OPERACIONES', `${ops}`, '#d6e6e2'], ['ACIERTO', ops ? `${Math.round(gan / ops * 100)}%` : '—', '#d6e6e2'], ['QUIEBRAS', `${qui}`, qui ? '#ff9b6b' : '#d6e6e2'],
-        ['METAS', `${met}`, met ? '#ffcf4d' : '#d6e6e2'], ['MEJOR', `${mejor.toFixed(2)} $`, '#d6e6e2'], ['GENERACIÓN', `${k.generacion ?? 0}`, '#d6e6e2']];
-      const pw = (W - TR_M * 2 - 20) / items.length;
-      items.forEach(([et, v, col], i) => { const x = TR_M + 10 + i * pw; c.fillStyle = '#0b0f14'; c.fillRect(x, y0 + 38, pw - 6, 28); c.fillStyle = '#5f6b7a'; c.font = '7px monospace'; c.textAlign = 'left'; c.fillText(et, x + 5, y0 + 47); c.fillStyle = col; c.font = '700 11px monospace'; c.fillText(v, x + 5, y0 + 61); });
-      n.agentes.forEach((a, i) => {
-        const x = TR_M + (i % TR_COLS) * TR_CW, y = y0 + TR_CAB + Math.floor(i / TR_COLS) * TR_CH;
-        this.oficina(c, a, n, x, y, t, ahora, k.capital || 1, on);
-        this.cajas.push({ x, y, w: TR_CW, h: TR_CH, a: { ...a, nodo: n.nodo } });
-      });
-      y0 += alto + TR_M;
+    c.imageSmoothingEnabled = false;
+    const S = this.salas(W, H), ahora = performance.now() / 1000, dt = Math.min(.2, ahora - (this.tAnt || ahora)); this.tAnt = ahora;
+    c.drawImage(this.fondo(W, H), 0, 0);
+    this.pizarra(c, S.pizarra, d.precios || []);
+    this.racks(c, S.servidores, d.nodos, t);
+    // monitores del parqué: verde/rojo según la posición de quien está sentado
+    for (const m of S.mesas) {
+      const p = m.ocupa && this.pj.get(m.ocupa), corto = p && /corto/.test(p.a.ultimo || '');
+      c.fillStyle = '#0a0d12'; c.fillRect(m.x - 10, m.y - 6, 20, 11);
+      c.fillStyle = p ? (corto ? '#3a0d12' : '#0d3a1c') : '#0c1420'; c.fillRect(m.x - 9, m.y - 5, 18, 9);
+      if (p) { c.strokeStyle = corto ? '#ff6b6b' : '#5dff9b'; c.lineWidth = 1; c.beginPath(); for (let i = 0; i <= 16; i += 2) { const yy = m.y - 1 + Math.sin(i * .6 + t * 4 + m.x) * 2 + (corto ? i / 8 : -i / 8); i ? c.lineTo(m.x - 8 + i, yy) : c.moveTo(m.x - 8 + i, yy); } c.stroke(); }
     }
+    // personajes: andan hacia su destino; de detrás hacia delante
+    const lista = [...this.pj.values()];
+    for (const p of lista) {
+      const dx = p.tx - p.x, dy = p.ty - p.y, dist = Math.hypot(dx, dy), v = 55 * dt;
+      if (dist > 1.5) { p.x += dx / dist * Math.min(v, dist); p.y += dy / dist * Math.min(v, dist); p.anda = true; if (Math.abs(dx) > .5) p.izq = dx < 0; p.dir = Math.abs(dx) > Math.abs(dy) ? 'lado' : dy < 0 ? 'arriba' : 'abajo'; }
+      else { p.anda = false; p.dir = p.zona === 'parque' ? 'arriba' : 'abajo'; }
+    }
+    lista.sort((a, b) => a.y - b.y);
+    this.cajas = [];
+    for (const p of lista) {
+      const a = p.a, L = trLook(a), parado = p.zona === 'cafe', quebrado = a.estado === 'quebrado', sel = this.sel && this.sel.id === a.id && this.sel.nodo === p.n.nodo;
+      const f = p.anda ? Math.floor(t * 8 + trHash(p.k)) % 4 : 0;
+      const sp = trSprite(L, p.dir, f, p.anda);
+      const ew = 20, eh = 38, x = Math.round(p.x - ew / 2), y = Math.round(p.y - eh + 6);
+      c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(x + 3, y + eh - 3, ew - 6, 3);
+      c.globalAlpha = quebrado ? .65 : parado ? .8 : 1;
+      if (p.dir === 'lado' && p.izq) { c.save(); c.translate(x + ew, y); c.scale(-1, 1); c.drawImage(sp, 0, 0); c.restore(); } else c.drawImage(sp, x, y);
+      c.globalAlpha = 1;
+      c.fillStyle = p.n.nodo === 'pi' ? '#2fd1b0' : '#c77dff'; c.fillRect(x + ew - 4, y + 2, 3, 3);       // de qué equipo es
+      if ((a.metas || 0) > 0) { c.fillStyle = '#ffcf4d'; c.fillRect(x + 6, y - 2, 9, 2); c.fillRect(x + 6, y - 4, 2, 2); c.fillRect(x + 10, y - 4, 2, 2); c.fillRect(x + 13, y - 4, 2, 2); }
+      if (sel) { c.strokeStyle = '#ffcf4d'; c.lineWidth = 1; c.strokeRect(x - 2, y - 4, ew + 4, eh + 6); c.font = '700 8px monospace'; c.textAlign = 'center'; c.fillStyle = '#ffffff'; c.fillText(a.nombre, p.x, y - 7); }
+      const b = this.burbujas.get(p.k) || (p.zona === 'lab' && Math.floor(t + trHash(p.k)) % 5 === 0 ? { em: '🧠', hasta: ahora + 1 } : null);
+      if (b && b.hasta > ahora) { c.fillStyle = 'rgba(255,255,255,.92)'; c.fillRect(x + 12, y - 12, 14, 12); c.font = '9px sans-serif'; c.textAlign = 'center'; c.fillText(b.em, x + 19, y - 3); }
+      this.cajas.push({ x: x - 2, y: y - 2, w: ew + 4, h: eh + 4, a: { ...a, nodo: p.n.nodo } });
+    }
+    this.cajas.reverse();                                  // el de delante gana al pasar el ratón
+    // rótulo de ocupación de cada sala
+    c.font = '8px monospace'; c.textAlign = 'right'; c.fillStyle = '#7f8ea3';
+    const cuenta = z => lista.filter(p => p.zona === z).length;
+    for (const [z, r] of [['parque', S.parque], ['atrio', S.atrio], ['lab', S.lab], ['trofeos', S.trofeos], ['cafe', S.cafe]]) c.fillText(`${cuenta(z)}`, r[0] + r[2] - 10, r[1] + r[3] - 8);
   },
-  pizarra(c, W, pr) {                                     // pantalla de pared con cotizaciones reales
-    const y = TR_M / 2, h = TR_TICK - 10;
-    c.fillStyle = '#05070a'; c.fillRect(TR_M / 2, y, W - TR_M, h); c.strokeStyle = '#2b3442'; c.lineWidth = 1; c.strokeRect(TR_M / 2 + .5, y + .5, W - TR_M - 1, h - 1);
+  pizarra(c, [x, y, w, h], pr) {                         // la pizarra de pared con las cotizaciones reales
+    c.fillStyle = '#05070a'; c.fillRect(x, y, w, h); c.strokeStyle = '#2b3442'; c.lineWidth = 2; c.strokeRect(x + 1, y + 1, w - 2, h - 2);
     if (!pr.length) return;
-    const cols = Math.ceil(pr.length / 2), cw = (W - TR_M - 8) / cols;
+    const cols = Math.ceil(pr.length / 2), cw = (w - 12) / cols;
     pr.forEach((p, i) => {
-      const x = TR_M / 2 + 6 + (i % cols) * cw, yy = y + 4 + (i >= cols ? 22 : 0), up = (p.cambio_pct || 0) >= 0;
-      c.font = '700 8px monospace'; c.textAlign = 'left'; c.fillStyle = p.abierto ? '#9fb3c8' : '#4c5664'; c.fillText(p.simbolo.replace('-USD', ''), x, yy + 8);
-      c.fillStyle = p.abierto ? (up ? '#5dff9b' : '#ff6b6b') : '#5a6470'; c.font = '8px monospace';
+      const xx = x + 8 + (i % cols) * cw, yy = y + 6 + (i >= cols ? 24 : 0), up = (p.cambio_pct || 0) >= 0;
+      c.font = '700 9px monospace'; c.textAlign = 'left'; c.fillStyle = p.abierto ? '#9fb3c8' : '#4c5664'; c.fillText(p.simbolo.replace('-USD', ''), xx, yy + 9);
+      c.fillStyle = p.abierto ? (up ? '#5dff9b' : '#ff6b6b') : '#5a6470'; c.font = '9px monospace';
       const pv = p.precio >= 1000 ? p.precio.toFixed(0) : p.precio >= 1 ? p.precio.toFixed(2) : p.precio.toFixed(4);
-      c.fillText(`${pv} ${up ? '▲' : '▼'}${Math.abs(p.cambio_pct || 0).toFixed(1)}%`, x, yy + 18);
+      c.fillText(`${pv} ${up ? '▲' : '▼'}${Math.abs(p.cambio_pct || 0).toFixed(1)}%`, xx, yy + 20);
     });
   },
-  oficina(c, a, n, x, y, t, ahora, cap, on) {
-    const quebrado = a.estado === 'quebrado', parado = !on || ['parado', 'retirado'].includes(a.estado) || (n.kpis && n.kpis.activo === false);
-    const pos = a.estado === 'en posición', corto = /corto/.test(a.ultimo || ''), sel = this.sel && this.sel.id === a.id && this.sel.nodo === n.nodo;
-    const fase = (trHash(a.nombre) % 7) * .3;
-    // despacho: suelo, mampara de cristal y puerta
-    c.fillStyle = '#202a38'; c.fillRect(x + 3, y + 3, TR_CW - 6, TR_CH - 6);
-    c.fillStyle = 'rgba(120,170,220,.22)'; c.fillRect(x + 3, y + 3, TR_CW - 6, 3); c.fillRect(x + 3, y + 3, 3, TR_CH - 6); c.fillRect(x + TR_CW - 6, y + 3, 3, TR_CH - 6);
-    c.fillStyle = '#3a4a5e'; c.fillRect(x + 3, y + TR_CH - 6, TR_CW - 6, 3); c.fillStyle = '#202a38'; c.fillRect(x + TR_CW / 2 - 9, y + TR_CH - 6, 18, 3);
-    if (sel) { c.strokeStyle = '#ffcf4d'; c.lineWidth = 2; c.strokeRect(x + 2, y + 2, TR_CW - 4, TR_CH - 4); }
-    // trader sentado mirando su monitor
-    const L = trLook(a), f = parado ? 0 : Math.floor((t * 2 + fase) % 4);
-    c.globalAlpha = parado ? .45 : quebrado ? .6 : 1;
-    c.drawImage(mmPJ(L, 'lado', f, 'quieto', Math.sin(t * .7 + fase) > .97), x + 8, y + 18);
-    c.globalAlpha = 1;
-    if ((a.metas || 0) > 0) { c.fillStyle = '#ffcf4d'; c.fillRect(x + 14, y + 28, 14, 3); for (const k of [0, 5, 10]) c.fillRect(x + 14 + k, y + 25, 4, 3); }
-    // mesa y monitor con la gráfica REAL de su capital (últimas horas)
-    c.fillStyle = '#4a3a2c'; c.fillRect(x + 32, y + 58, 66, 5); c.fillStyle = '#2c2118'; c.fillRect(x + 34, y + 63, 3, 12); c.fillRect(x + 93, y + 63, 3, 12);
-    const mx = x + 36, my = y + 14, mw = 60, mh = 38;
-    c.fillStyle = '#0a0d12'; c.fillRect(mx - 2, my - 2, mw + 4, mh + 4); c.fillStyle = '#2a2f37'; c.fillRect(mx + mw / 2 - 2, my + mh + 2, 4, 4);
-    const eq = a.equity ?? cap, gana = eq >= cap, colG = gana ? '#5dff9b' : '#ff7b7b';
-    c.fillStyle = quebrado ? (Math.floor(t * 3) % 2 ? '#3a0a0a' : '#1a0505') : parado ? '#0b0d10' : '#07121e'; c.fillRect(mx, my, mw, mh);
-    const cv = a.curva || [];
-    if (cv.length > 1 && !parado) {
-      const lo = Math.min(cap * .98, ...cv), hi = Math.max(cap * 1.02, ...cv), py = v => my + mh - 4 - (v - lo) / (hi - lo || 1) * (mh - 14);
-      c.strokeStyle = 'rgba(255,255,255,.15)'; c.lineWidth = 1; c.setLineDash([2, 2]); c.beginPath(); c.moveTo(mx, py(cap)); c.lineTo(mx + mw, py(cap)); c.stroke(); c.setLineDash([]);
-      c.strokeStyle = colG; c.beginPath();
-      cv.forEach((v, i) => { const xx = mx + 2 + i / (cv.length - 1) * (mw - 4); if (i) c.lineTo(xx, py(v)); else c.moveTo(xx, py(v)); }); c.stroke();
-    } else if (!parado && !quebrado) { c.fillStyle = 'rgba(120,180,255,.35)'; c.fillRect(mx + ((t * 12 + fase * 9) % mw), my, 1, mh); }
-    c.font = '700 8px monospace'; c.textAlign = 'left'; c.fillStyle = colG; c.fillText(`${eq.toFixed(eq < 10 ? 3 : 2)}$`, mx + 3, my + 9);
-    c.textAlign = 'right'; c.fillText(`${(a.pnl_pct ?? 0) >= 0 ? '+' : ''}${(a.pnl_pct ?? 0).toFixed(1)}%`, mx + mw - 3, my + 9);
-    if (pos) { const sym = ((a.ultimo || '').match(/([A-Z]{2,5})(-USD)?/) || [])[1] || ''; c.textAlign = 'left'; c.fillStyle = corto ? '#ff6b6b' : '#5dff9b'; c.font = '7px monospace'; c.fillText(`${sym} ${corto ? '▼' : '▲'}`, mx + 3, my + mh - 3); }
-    if (quebrado) { c.textAlign = 'center'; c.fillStyle = '#ff5252'; c.font = '700 9px monospace'; c.fillText('QUIEBRA', mx + mw / 2, my + mh / 2 + 6); }
-    // LED de estado sobre la mesa
-    c.fillStyle = parado ? '#333' : quebrado ? '#ff3b3b' : pos ? (corto ? '#ff6b6b' : '#5dff9b') : (Math.floor(t * 2 + fase) % 2 ? '#3f8fff' : '#1d3a66'); c.fillRect(x + 86, y + 55, 4, 3);
-    // placa: nombre y números reales
-    c.textAlign = 'left'; c.font = '700 8px monospace'; c.fillStyle = sel ? '#ffffff' : '#c6d2e0'; c.fillText(String(a.nombre || '').slice(0, 13), x + 8, y + 80);
-    c.font = '7px monospace'; c.fillStyle = '#7f8ea3';
-    c.fillText(`${a.trades}op ${a.ganados}ok ${a.quiebras || 0}q${a.metas ? ' ' + a.metas + 'meta' : ''}`, x + 8, y + 89);
-    if (a.r_medio != null && a.trades >= 3) { c.textAlign = 'right'; c.fillStyle = a.r_medio > 0 ? '#5dff9b' : '#ff7b7b'; c.fillText(`${a.r_medio > 0 ? '+' : ''}${a.r_medio.toFixed(2)}R`, x + TR_CW - 8, y + 89); }
-    const b = this.burbujas.get(n.nodo + ':' + a.id);
-    if (b && b.hasta > ahora) {
-      c.fillStyle = 'rgba(255,255,255,.92)'; c.fillRect(x + 20, y + 4, 16, 14); c.fillRect(x + 23, y + 18, 3, 3);
-      c.font = '10px sans-serif'; c.textAlign = 'center'; c.fillText(b.em, x + 28, y + 15);
-    }
+  racks(c, [x, y, w, h], nodos, t) {                     // un rack por equipo con sus números reales
+    const n = Math.max(1, nodos.length), rw = Math.min(170, (w - 20) / n - 8);
+    nodos.forEach((nd, i) => {
+      const rx = x + 12 + i * (rw + 8), ry = y + 30, rh = h - 38, k = nd.kpis || {}, ag = nd.agentes || [], on = nd.local || nd.en_linea;
+      c.fillStyle = '#20262e'; c.fillRect(rx, ry, rw, rh); c.strokeStyle = on ? '#2fd1b0' : '#7a3030'; c.lineWidth = 1; c.strokeRect(rx + .5, ry + .5, rw - 1, rh - 1);
+      for (let l = 0; l < 6; l++) { c.fillStyle = on && (Math.floor(t * 3 + l * 1.7 + i) % 3) ? '#5dff9b' : '#1d3a26'; c.fillRect(rx + 6 + l * 6, ry + 6, 3, 3); }
+      const ops = ag.reduce((s, a) => s + (a.trades || 0), 0), gan = ag.reduce((s, a) => s + (a.ganados || 0), 0), qui = ag.reduce((s, a) => s + (a.quiebras || 0), 0);
+      const cap = ag.reduce((s, a) => s + (a.equity || 0), 0), ini = (k.capital || 1) * ag.length;
+      c.font = '700 9px monospace'; c.textAlign = 'left'; c.fillStyle = '#d6e6e2'; c.fillText(`${String(nd.nodo).toUpperCase()} · ${ag.length}`, rx + 48, ry + 11);
+      c.font = '8px monospace'; c.fillStyle = cap >= ini ? '#5dff9b' : '#ff7b7b'; c.fillText(`${cap.toFixed(2)}$ (${cap - ini >= 0 ? '+' : ''}${(cap - ini).toFixed(3)})`, rx + 6, ry + 26);
+      c.fillStyle = '#9fb3c8'; c.fillText(`${ops} op · ${ops ? Math.round(gan / ops * 100) : 0}% ✔`, rx + 6, ry + 38); c.fillText(`${qui} quiebras · gen ${k.generacion ?? 0}`, rx + 6, ry + 50);
+      if (rh > 64) { c.fillStyle = on ? '#5f6b7a' : '#ff7b7b'; c.fillText(on ? `ciclo ${k.tick_s ?? '—'}s` : 'SIN CONEXIÓN', rx + 6, ry + 62); }
+    });
   },
 
   // ---------- ratón y ficha ----------
