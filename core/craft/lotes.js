@@ -157,7 +157,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     // el plan del director se guarda: pedir un cambio no rehace toda la edición (salvo si cambia el montaje: avance/recorte)
     const clave = claveMontaje(c);
     const plan = c.plan && c.planClave === clave ? c.plan : undefined;
-    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...ajustes, ...(plan ? { plan } : {}) }, ctx);
+    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...(conf.ajustesDefecto || {}), ...ajustes, ...(plan ? { plan } : {}) }, ctx);
     const d = r.datos || {};
     if (c.estado === 'descartado') {                    // lo descartaron mientras se editaba: fuera lo recién hecho
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) try { if (d[k]) fs.rmSync(d[k], { force: true }); } catch { }
@@ -183,6 +183,17 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null, retocado: false, plan: d.plan || null, planClave: clave, disenos: d.plan?.disenos || [], sonidos: d.sonidos || 0,
       calidad: d.calidad || null, audioPro: d.audioPro || null, rotulos: d.rotulos || 0, noCorregidas: d.noCorregidas || [],
       portadas, portada: Math.min(c.portada || 0, Math.max(0, portadas.length - 1)), fuenteVideo: d.fuente || null, diccionario: d.diccionario || 0 });
+    // 4K directo (conf.directo4k): se exporta en 4K nada más editar, sin esperar a aprobar. NO publica nada: subir a Drive,
+    // Discord o YouTube sigue siendo solo al aprobar en Revisión
+    if (conf.directo4k && d.proyecto && d.mp4) {
+      ctx.progreso('exportando en 4K', 99);
+      const destino = d.mp4.replace(/\.mp4$/i, ' 4K.mp4');
+      try {
+        await subtitulador.reexportar({ proyecto: d.proyecto, mp4: destino, ancho: ANCHO4K, alto: ALTO4K, srt: false }, ctx);
+        const m = await medir(destino, { ffmpeg: cfg?.craft?.ffmpeg, ligero: true });
+        c.k4 = { estado: 'listo', mp4: destino, hecho: Date.now(), directo: true, medidas: { ancho: m.ancho, alto: m.alto, duracion: m.duracion, bytes: m.bytes } };
+      } catch (e) { c.k4 = { estado: 'error', error: (parar?.signal.aborted ? 'pausado' : e.message).slice(0, 300) }; log('[lotes] 4K directo', id, e.message); }
+    }
     // las correcciones que sí se aplicaron pasan al diccionario del canal (los clips siguientes ya salen bien)
     const corr = (c.ajustes?.correcciones || []).filter(x => !(d.noCorregidas || []).some(n => n.mal === x.mal && n.bien === x.bien));
     if (corr.length && f.perfil) try { diccionario.aprender(f.perfil, corr, c.id); } catch (e) { log('[lotes] diccionario', e.message); }

@@ -571,7 +571,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
     let fallosSrt = 0;
     for (const [i, tr] of trozos.entries()) {
       if (i % 4 === 0) avisar('subtítulos', 25 + 30 * i / trozos.length);
-      await trozo(tr);
+      if (!a.sinSubtitulos) await trozo(tr);           // sinSubtitulos: nada quemado en el vídeo (el .srt aparte sí)
       try {                                            // pista para el .srt: un fotograma menos para que dos seguidas no se toquen
         await fc('captions.add', { track: 'C1', text: srtCaso(tr.texto, nombres), seconds: fot(tr.s) / fps, durationSeconds: Math.max(1, fot(tr.e) - fot(tr.s) - 1) / fps });
       } catch (e) { fallosSrt++; }
@@ -859,6 +859,7 @@ function crearSubtitulador({ mcpLocales, generarJSON, modelo, cfg, kits = kitMod
       marca: { type: 'string', description: 'texto fijo arriba, p. ej. el nombre del canal' },
       letrero: { description: 'letrero animado arriba (EffectCraft): { nombre1, nombre2 } (blanco + cian, con iconos de redes) o false para el texto simple' },
       banner: { type: 'boolean', description: 'false = nada arriba (ni letrero ni marca)' },
+      sinSubtitulos: { type: 'boolean', description: 'true = sin subtítulos quemados en el vídeo (el .srt aparte se sigue generando)' },
       plataforma: { type: 'string', enum: PLATAFORMAS, description: 'red para la que es el clip: el letrero lleva solo su icono (sin logos de otras redes)' },
       colorSubs: { type: 'object', description: 'colores propios de los subtítulos sobre el estilo: { texto, contorno, destacado, caja } en #rrggbb' },
       cta: { type: 'string', description: 'llamada a seguir en los últimos segundos, p. ej. "Sígueme para más"' },
