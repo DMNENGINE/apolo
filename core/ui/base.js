@@ -538,7 +538,7 @@ async function ruta() {
   const modo = seccion === 'ajustes' ? 'ajustes' : 'app';
   if (modo !== modoLado) { modoLado = modo; pintarLado(modo); }
   if (modo === 'ajustes') pintarNavAjustes($('#buscaAjustes')?.value || '');
-  else { $$('.lado-nav a[data-r]').forEach(a => a.classList.toggle('on', a.dataset.r === seccion)); pintarSesionesLado(); }
+  else { $$('.lado-nav a[data-r]').forEach(a => a.classList.toggle('on', a.dataset.r === (['consejo', 'hizo', 'trading'].includes(seccion) ? 'agentes' : seccion))); pintarSesionesLado(); }
   const clave = modo === 'ajustes' ? `ajustes/${sub || 'apariencia'}` : seccion;
   const vista = VISTAS[clave] || VISTAS.inicio;
   E.vista?.salir?.(); E.oyentes.clear();

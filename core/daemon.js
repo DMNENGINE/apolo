@@ -202,6 +202,10 @@ function iniciar(opciones = {}) {
           return json(res, 200, r);
         } catch (e) { return json(res, e.status || 400, { error: e.message }); }
       }
+      if (p[1] === 'trading') {                                 // Mission Control → Trading: enjambre de DMN Trader (core/trading.js)
+        try { return json(res, 200, await require('./trading').pedir(n.cfg.dir, M, p.slice(2), M === 'POST' ? await leer(req) : null, Object.fromEntries(u.searchParams))); }
+        catch (e) { return json(res, e.status || 502, { error: e.message }); }
+      }
       if (p[1] === 'consejo') {                                 // consejo de modelos (core/consejo.js)
         if (!p[2] && M === 'GET') return json(res, 200, { candidatos: n.consejo.candidatos(), enCurso: n.consejo.enCurso(), historial: n.consejo.historial(30) });
         if (!p[2] && M === 'POST') {                            // → SSE con el progreso; el último evento es fase 'fin'

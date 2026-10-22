@@ -278,35 +278,36 @@ def main(a):
         if r['fin']:
             print('FIN de la práctica: mira stats y examen.')
         mostrar_estado(api(f'/cuentas/{cid()}'))
-    elif orden == 'agente':
+    elif orden in ('agente', 'enjambre'):
         sub = pos[0].lower() if pos else 'estado'
-        if sub == 'iniciar':
-            cuerpo = {'capital': num(pos[1]) if len(pos) > 1 else 1, 'meta': num(pos[2]) if len(pos) > 2 else 100,
-                      'mercados': op.get('mercados', 'cripto,acciones').split(','), 'hasta': op.get('hasta')}
-            api('/agente/iniciar', 'POST', cuerpo)
+        if sub == 'iniciar':  # enjambre iniciar [agentes] [capital] [meta] mercados=… hasta=…
+            api('/enjambre/iniciar', 'POST', {'agentes': int(pos[1]) if len(pos) > 1 else 50, 'capital': num(pos[2]) if len(pos) > 2 else 1,
+                                              'meta': num(pos[3]) if len(pos) > 3 else 100, 'mercados': op.get('mercados', 'cripto,acciones').split(','), 'hasta': op.get('hasta')})
         elif sub == 'parar':
-            api('/agente/parar', 'POST')
+            api('/enjambre/parar', 'POST')
         elif sub == 'informe':
-            print(api('/agente/informe')['texto'])
+            print(api('/enjambre/informe')['texto'])
             return
         elif sub == 'lecciones':
-            for l in api(f"/agente/lecciones?n={pos[1] if len(pos) > 1 else 15}"):
+            for l in api(f"/enjambre/lecciones?n={pos[1] if len(pos) > 1 else 15}"):
                 print(f"{f(l['ts'])} [{l['tipo']}] {l['texto']}")
             return
-        elif sub == 'intentos':
-            for i in api('/agente/intentos?n=20'):
-                print(f"#{i['id']} {f(i['inicio'])}→{f(i['fin'])} máx {n(i['max_equity'], 4)} final {n(i['final'], 4)} · {i['trades']} trades ({i['ganados']} ✔) · {i['resultado'] or 'en curso'} · {i['causa'] or ''}")
+        elif sub == 'agente':
+            d = api(f'/enjambre/agente/{int(pos[1])}')
+            g = d['genoma']
+            print(f"{d['nombre']} (gen {d['generacion']}) · {d['estado']} · {d['ultimo']} · aptitud {d['aptitud']} en {d['trades_genoma']} trades · {d['intentos']} intentos · {d['metas']} metas")
+            print(f"Sistema: velas {g['marco']} · {g['estrategia']} {g['p']} · stop {g['stop_atr']} ATR · objetivo {g['rr']}R · riesgo {g['riesgo_pct']}%")
+            for l in d['lecciones'][:6]:
+                print('  ' + l['texto'])
             return
-        a = api('/agente')
-        it = a.get('intento') or {}
-        print(f"Agente {'OPERANDO' if a['activo'] else 'parado'} · capital {n(a['equity'], 4)} $ / meta {n(a['meta'], 0)} $ · intento #{it.get('id')} (máx {n(it.get('max_equity'), 4)} $) · "
-              f"{a['intentos']} intentos · {a['metas_logradas']} metas logradas · {a['trades']} operaciones ({a['ganados']} ganadas) · R medio {a['r_medio']}")
-        g = a.get('genoma') or {}
-        print(f"Opera ahora: velas {g.get('marco')} · {g.get('estrategia')} {g.get('p')} · stop {g.get('stop_atr')} ATR · objetivo {g.get('rr')}R · riesgo {g.get('riesgo_pct')}%"
-              + (' · solo a favor de tendencia' if g.get('filtro_tendencia') else ''))
-        for p in a.get('posiciones', []):
-            print(f"  {p['lado']} {p['simbolo']} {n(p['valor'], 4)} $ · P&L {s(p['pnl'], 4)}")
-        print('Últimos movimientos: ' + ' | '.join(a['log'][-6:]))
+        m = api('/enjambre/mapa')
+        for nd in m['nodos']:
+            k = nd.get('kpis') or {}
+            print(f"Nodo {nd['nodo']}: {len(nd.get('agentes') or [])} agentes · {'operando' if k.get('activo') else 'parado'}"
+                  + ('' if nd.get('local') else (' · en línea' if nd.get('en_linea') else ' · DESCONECTADO')) + f" · generación {k.get('generacion')} · {k.get('trades')} operaciones · R medio {k.get('r_medio')} · quiebras {k.get('quiebras')} · metas {k.get('metas')}")
+        todos = sorted((dict(a, nodo=nd['nodo']) for nd in m['nodos'] for a in (nd.get('agentes') or []) if a.get('r_medio') is not None and a.get('trades', 0) >= 3), key=lambda a: -a['r_medio'])
+        print('Mejores: ' + (', '.join(f"{a['nombre']} ({a['nodo']}) {a['r_medio']:+.2f}R {a['estrategia']} {a['marco']}" for a in todos[:5]) or '—'))
+        print('Últimas lecciones: ' + ' | '.join(l['texto'] for l in m['lecciones'][:4]))
     elif orden == 'reglas':
         c = cid()
         if op:
