@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const PERMITIDAS = [['GET', /^mapa$/], ['GET', /^informe$/], ['GET', /^lecciones$/], ['GET', /^agente\/\d+$/], ['POST', /^iniciar$/], ['POST', /^parar$/]];
+const PERMITIDAS = [['GET', /^mapa$/], ['GET', /^noticias$/], ['GET', /^informe$/], ['GET', /^lecciones$/], ['GET', /^agente\/\d+$/], ['POST', /^iniciar$/], ['POST', /^parar$/]];
 
 function destino(dir) {
   try {

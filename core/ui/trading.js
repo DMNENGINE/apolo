@@ -189,8 +189,10 @@ VISTAS.trading = {
       </div>
       ${typeof CJ_pestanas === 'function' ? CJ_pestanas('trading') : ''}
       <div class="tr-kpis" id="trKpis"></div>
+      <div class="tr-ticker" id="trTicker" hidden><b>📰 ${tr('EN VIVO')}</b><div><span id="trTickerTxt"></span></div></div>
       <div class="tr-sala"><canvas id="trCanvas" width="${this.W}" height="${this.H}"></canvas><div id="trTip" class="tr-tip" hidden></div></div>
       <div class="tr-abajo">
+        <div class="tr-card tr-news"><div class="tr-tit">📰 ${tr('ANALISTA DE NOTICIAS · EN VIVO')}<span class="tr-sub" id="trNewsEst"></span></div><div id="trMacro" class="tr-macro"></div><div id="trNews" class="tr-newslist"></div></div>
         <div class="tr-card" id="trFicha"></div>
         <div class="tr-card"><div class="tr-tit">${tr('CONTROL')}</div>
           <div class="tr-ctl"><label>${tr('Agentes')} <input id="trN" type="number" min="1" max="2000" value="50"></label>
@@ -290,9 +292,30 @@ VISTAS.trading = {
     $('#trTop', this.v).onclick = e => { const r = e.target.closest('[data-ag]'); if (!r) return; const [nd, id] = r.dataset.ag.split(':'); const a = todos.find(x => x.nodo === nd && x.id === +id); if (a) { this.sel = a; this.salaSel = null; this.ficha(a); } };
     $('#trLec', this.v).innerHTML = (d.lecciones || []).slice(0, 14).map(l => `<div class="tr-l"><span class="sutil">${new Date(l.ts * 1000).toLocaleTimeString()} · ${esc(l.tipo)}</span><br>${esc(l.texto)}</div>`).join('') || `<p class="sutil">${tr('Aún sin lecciones.')}</p>`;
     $('#trCentral', this.v).innerHTML = `<b>${tr('Central')}:</b> ${esc(d._central || '—')} · ${d.nodos.map(n => `${n.nodo} <span style="color:${n.local || n.en_linea ? '#5dff9b' : '#ff6b6b'}">●</span>`).join(' ')}`;
+    this.noticias(d.analista);
     if (k.n) $('#trN', this.v).value = k.n;
     if (this.sel) { const a = todos.find(x => x.nodo === this.sel.nodo && x.id === this.sel.id); if (a) this.ficha(a, true); }
     else this.fichaSala(this.salaSel);
+  },
+
+  // ---------- el analista de noticias ----------
+  noticias(an) {
+    const lista = $('#trNews', this.v); if (!lista) return;
+    this.analista = an;
+    if (!an || !an.activo) { lista.innerHTML = `<p class="sutil">${tr('El analista corre en el equipo con modelo de lenguaje (el PC). Aún sin datos.')}</p>`; $('#trTicker', this.v).hidden = true; return; }
+    const hace = s => { const m = Math.max(0, Math.round((Date.now() / 1000 - s) / 60)); return m < 60 ? `${m} min` : `${Math.round(m / 60)} h`; };
+    const col = v => v >= .3 ? 'ok' : v <= -.3 ? 'mal' : 'neutro';
+    const m = an.macro || {}, ev = (an.eventos || [])[0];
+    $('#trNewsEst', this.v).textContent = `${tr('actualizado hace')} ${hace(an.ts || 0)}`;
+    $('#trMacro', this.v).innerHTML = [['Mercado', m.MERCADO], ['Cripto', m.CRIPTO], ['Acciones', m.ACCIONES]].map(([n, v]) => `<div><small>${tr(n)}</small><i><b class="${col(v || 0)}" style="width:${Math.abs(v || 0) * 50}%;${(v || 0) < 0 ? 'right:50%' : 'left:50%'}"></b></i><em class="${col(v || 0)}">${(v || 0) > 0 ? '+' : ''}${(v || 0).toFixed(2)}</em></div>`).join('') +
+      (an.fng ? `<div><small>Fear & Greed</small><em>${an.fng.valor} · ${esc(an.fng.clase)}</em></div>` : '') +
+      (ev ? `<div class="tr-ev"><small>${tr('Próximo evento')}</small><em class="${ev.impacto === 'High' ? 'mal' : ''}">${esc(ev.titulo)} · ${new Date(ev.ts * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</em></div>` : '');
+    lista.innerHTML = (an.noticias || []).map(x => `<a class="tr-n" href="${esc(x.link || '#')}" target="_blank" rel="noopener"><span class="tr-imp ${col(x.impacto)}">${x.impacto > 0 ? '+' : ''}${x.impacto.toFixed(1)}</span>
+      <div><b>${esc(x.resumen || x.titulo)}</b><span>${esc(x.fuente)} · ${tr('hace')} ${hace(x.ts)} · ${esc(x.categoria || '')} · ${tr('importancia')} ${(x.importancia * 10).toFixed(0)}/10${(x.simbolos || []).length ? ' · ' + x.simbolos.map(esc).join(' ') : ''}</span></div></a>`).join('') || `<p class="sutil">${tr('Sin noticias relevantes ahora mismo.')}</p>`;
+    const tk = (an.noticias || []).filter(x => x.importancia >= .5).slice(0, 10);
+    $('#trTicker', this.v).hidden = !tk.length;
+    $('#trTickerTxt', this.v).innerHTML = tk.map(x => `<span class="${col(x.impacto)}">${x.impacto > 0 ? '▲' : x.impacto < 0 ? '▼' : '•'} ${esc(x.resumen || x.titulo)}${(x.simbolos || []).length ? ` <small>${x.simbolos.map(esc).join(' ')}</small>` : ''}</span>`).join('');
+    const fuerte = tk[0]; if (fuerte && fuerte.ts !== this._ultFuerte) { this._ultFuerte = fuerte.ts; this.dichoAnalista = { txt: (fuerte.resumen || fuerte.titulo).slice(0, 60), hasta: performance.now() / 1000 + 12 }; }
   },
 
   // ---------- a qué sala va cada uno ----------
@@ -355,12 +378,22 @@ VISTAS.trading = {
     const luces = [], cosas = [];
     for (const o of TR_MAPA.objetos) { const dO = MM_OBJ[o.tipo]; if (!dO) continue; const X = o.x * R, Y = o.y * R - dO.alto; cosas.push({ o, d: dO, X, Y, base: dO.bloq ? (o.y + dO.h) * R - 2 : -1 }); if (dO.luz) luces.push(...dO.luz(o, X, Y, t, e)); }
     for (const p of this.pj.values()) cosas.push({ p, base: p.y });
-    cosas.push({ jefe: true, base: 12 * R + 20 });
+    cosas.push({ jefe: true, base: 12 * R + 20 }, { analista: true, base: 4 * R + 20 });
     cosas.sort((a, b) => a.base - b.base);
     this.cajas = [];
     const ew = Math.round(28 * TR_E), eh = Math.round(54 * TR_E);
     for (const k of cosas) {
       if (k.o) { const sp = mmSpriteObjeto(k.o); if (sp) c.drawImage(sp, k.X, k.Y); k.d.vivo?.(c, k.X, k.Y, t, e, k.o); continue; }
+      if (k.analista) {                                    // el analista de noticias, junto a la pizarra
+        const L = this._anaL || (this._anaL = (() => { const L = { piel: MM_PIEL[2], pelo: MM_PELO[3], estilo: 'largo', ropa: '#2f4f8f', ropa2: '#e8e2d2', pantalon: '#1d2433', gafas: '#9fd0ff' }; L.k = 'analista-noticias'; return L; })());
+        const sp = trSprite(L, 'lado', Math.floor(t / 500) % 2, 'trabaja'), ax = 13 * R + 16, ay = 4 * R + 20;
+        if (sp) { c.save(); c.translate(ax + 16, ay - 50 * TR_E); c.scale(-1, 1); c.drawImage(sp, 0, 0); c.restore(); }
+        mmCartel(c, ax, ay - 92, this.analista?.activo ? 'ANALISTA ●' : 'ANALISTA', { borde: this.analista?.activo ? '#3dff8a' : '#59626e', max: 120 });
+        luces.push({ x: ax, y: ay - 30, r: 80, col: [120, 180, 255], a: .4 });
+        const dA = this.dichoAnalista;
+        if (dA && dA.hasta > ahora) { c.font = '700 10px monospace'; const w = Math.min(300, c.measureText(dA.txt).width + 14); c.fillStyle = 'rgba(255,255,255,.95)'; c.fillRect(ax - w + 10, ay - 120, w, 18); c.fillStyle = '#10141b'; c.textAlign = 'left'; c.fillText(dA.txt, ax - w + 17, ay - 107); }
+        continue;
+      }
       if (k.jefe) {                                        // el jefe de mesa preside la reunión
         const L = this._jefeL || (this._jefeL = (() => { const L = { piel: MM_PIEL[1], pelo: MM_PELO[5], estilo: 'corto', ropa: '#1d2433', ropa2: '#c9a24a', pantalon: '#1d2433', gafas: '#ffcf4d', barba: '#d9d9d9' }; L.k = 'jefe-mesa'; return L; })());
         const sp = trSprite(L, 'lado', 0, 'trabaja'); if (sp) { c.drawImage(sp, 43 * R - 10, 12 * R + 20 - 50 * TR_E); }
@@ -489,6 +522,18 @@ VISTAS.trading = {
   .tr-top{display:grid;grid-template-columns:14px 1fr auto 22px;align-items:center;gap:10px;padding:7px 2px;border-bottom:1px solid var(--tr-borde);cursor:pointer}
   .tr-top i{width:12px;height:12px;border-radius:50%}.tr-top b{display:block;font-size:13px}.tr-top span{font-size:11px;opacity:.65}.tr-top em{font-style:normal;font-weight:700}.tr-top small{opacity:.6;text-align:right}
   .tr-top:hover{background:rgba(47,209,176,.06)}
+  .tr-ticker{display:flex;align-items:center;gap:10px;background:#0a1120;border:1px solid var(--tr-borde);border-radius:8px;padding:6px 10px;margin-bottom:10px;overflow:hidden;font-size:12px}
+  .tr-ticker>b{color:#ff5470;white-space:nowrap;font-size:11px;letter-spacing:.08em}.tr-ticker>div{overflow:hidden;flex:1}
+  .tr-ticker #trTickerTxt{display:inline-flex;gap:38px;white-space:nowrap;animation:trDesliza 90s linear infinite;padding-left:100%}
+  .tr-ticker small{opacity:.6;margin-left:4px}@keyframes trDesliza{to{transform:translateX(-100%)}}
+  .tr-news{grid-column:span 2;grid-row:span 2}.tr-sub{margin-left:auto;font-weight:400;font-size:11px;opacity:.6;letter-spacing:0}
+  .tr-macro{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;margin-bottom:10px;font-size:12px}.tr-macro>div{display:flex;align-items:center;gap:8px}
+  .tr-macro small{width:78px;opacity:.7}.tr-macro i{position:relative;flex:1;height:6px;background:#1a2436;border-radius:3px}.tr-macro i b{position:absolute;top:0;height:6px;border-radius:3px;background:currentColor}
+  .tr-macro em{font-style:normal;font-weight:700;min-width:42px;text-align:right}.tr-macro .tr-ev{grid-column:span 2}.tr-macro .tr-ev em{text-align:left}
+  .tr-newslist{max-height:520px;overflow:auto}.tr-n{display:grid;grid-template-columns:44px 1fr;gap:10px;padding:7px 2px;border-bottom:1px solid var(--tr-borde);color:inherit;text-decoration:none}
+  .tr-n:hover{background:rgba(47,209,176,.06)}.tr-n b{display:block;font-size:13px;font-weight:600}.tr-n span{font-size:11px;opacity:.6}
+  .tr-imp{display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border-radius:6px;height:26px;background:#1a2436}
+  .tr-mc .ok{color:#3dff8a}.tr-mc .mal{color:#ff5470}.tr-mc .neutro{color:#9fb3c8}
   @media (max-width:1300px){.tr-abajo{grid-template-columns:1fr 1fr}.tr-kpis{grid-template-columns:repeat(3,1fr)}.tr-cab{flex-wrap:wrap}}`;
   document.head.appendChild(st);
 })();

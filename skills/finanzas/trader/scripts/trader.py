@@ -288,6 +288,14 @@ def main(a):
         elif sub == 'informe':
             print(api('/enjambre/informe')['texto'])
             return
+        elif sub == 'noticias':  # enjambre noticias [n]: lo que ve el analista de noticias en tiempo real
+            d = api(f"/enjambre/noticias?n={pos[1] if len(pos) > 1 else 12}")
+            print(d['resumen'])
+            for x in d['noticias']:
+                print(f"{f(x['ts'])} {x['impacto']:+.1f} (importancia {x['importancia']:.1f}) [{', '.join(x['simbolos']) or '—'}] {x['resumen'] or x['titulo']} · {x['fuente']}")
+            for e in d['eventos'][:5]:
+                print(f"Evento {f(e['ts'])}: {e['titulo']} ({e['impacto']})")
+            return
         elif sub == 'lecciones':
             for l in api(f"/enjambre/lecciones?n={pos[1] if len(pos) > 1 else 15}"):
                 print(f"{f(l['ts'])} [{l['tipo']}] {l['texto']}")
