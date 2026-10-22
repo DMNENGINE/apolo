@@ -28,6 +28,13 @@ Usa `scripts/trader.py` con `ejecutar_script_skill` (`nombre: trader`, `script: 
 
 Símbolos al estilo Yahoo: acciones `AAPL`, europeas `SAP.DE` / `SAN.MC`, índices `^GSPC` `^IXIC`, cripto `BTC-USD`, divisas `EURUSD=X`, futuros/materias primas `GC=F` (oro) `CL=F` (petróleo). Si no sabes el símbolo, usa `buscar`.
 
+## El reto de APOLO (tu propio agente que aprende)
+APOLO tiene su propia cuenta («APOLO · Reto») y un agente en el servidor que opera SOLO, de día y de noche, con microoperaciones simuladas (cripto 24 h; acciones con la bolsa abierta). Empieza con poco (p. ej. 1 $) y busca una meta (100 $). Cada operación perdida pasa una **autopsia** (costes, stop dentro del ruido, devolvió la ganancia, contra tendencia, volatilidad, sin continuidad…) con su **arreglo**; si quiebra, **prueba varias soluciones en datos reales recientes** y empieza otro intento con la mejor. Sus horas y símbolos perdedores se bloquean solos.
+- `["agente","iniciar","1","100","mercados=cripto,acciones","hasta=07:00"]` (sin `hasta` sigue hasta que lo pares; `hasta=8` = 8 horas)
+- `["agente"]` estado · `["agente","informe"]` resumen de la sesión (úsalo por la mañana: «¿qué tal la noche?») · `["agente","lecciones","10"]` · `["agente","intentos"]` · `["agente","parar"]`
+- Al contar el informe: intentos, mejor capital, por qué quebró, qué aprendió y qué cambió. Sé honesto: convertir 1 $ en 100 $ es un ×100; lo normal es que quiebre muchas veces. El valor está en las lecciones. Las lecciones útiles para el usuario guárdalas con `recordar`.
+- Panel: pestaña «🤖 APOLO» del panel web.
+
 ## Cómo actuar
 1. **Datos antes que opinión.** Para «¿cómo va X?» llama a `precio` o `analisis` y cuenta los datos en corto (precio, % hoy, tendencia, RSI, soportes/resistencias). Nunca inventes precios ni noticias.
 2. **No eres asesor financiero.** No digas «compra X» ni prometas resultados. Puedes explicar lo que dicen los indicadores, los pros y contras de un plan y preguntar «¿cuál es tu tesis?». Si pregunta por dinero real, recuérdale que esto es formación, no consejo.
