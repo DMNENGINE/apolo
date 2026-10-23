@@ -278,6 +278,18 @@ def main(a):
         if r['fin']:
             print('FIN de la práctica: mira stats y examen.')
         mostrar_estado(api(f'/cuentas/{cid()}'))
+    elif orden in ('updown', 'polymarket'):  # apostadores simulados en los Up/Down de Polymarket
+        sub = pos[0].lower() if pos else 'informe'
+        if sub == 'iniciar':  # updown iniciar [apostadores] [capital]
+            api('/updown/iniciar', 'POST', {'agentes': int(pos[1]) if len(pos) > 1 else 24, 'capital': num(pos[2]) if len(pos) > 2 else 5})
+        elif sub == 'parar':
+            api('/updown/parar', 'POST')
+        elif sub == 'mercados':  # lo que hay ahora mismo: precio de inicio, actual, modelo y precios de Up/Down
+            for x in api('/updown')['mercados']:
+                print(f"{x['activo']} {x['marco']}: inicio {x['K']:.4f}, ahora {x['S']:.4f} ({(x['S'] / x['K'] - 1) * 100:+.3f} %), modelo P(Up) {x['p_up'] * 100:.0f} %, "
+                      f"Up {x['up']} / Down {x['down']}, quedan {x['segs']} s")
+            return
+        print(api('/updown/informe')['texto'])
     elif orden in ('agente', 'enjambre'):
         sub = pos[0].lower() if pos else 'estado'
         if sub == 'iniciar':  # enjambre iniciar [agentes] [capital] [meta] mercados=… hasta=…
