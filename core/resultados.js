@@ -6,7 +6,7 @@ function normalizar(out) {
   const exitCode = objeto && out.exitCode !== undefined ? out.exitCode : salida ? +salida[1] : undefined;
   let estado = objeto ? out.estado : undefined;
   if (!['exito', 'error', 'denegado', 'incierto', 'desconocido'].includes(estado)) estado = objeto && out.ok === false ? 'error' : 'desconocido';
-  if (estado !== 'incierto' && /^(error|DENEGADO|⚠)/i.test(texto)) estado = /^DENEGADO/i.test(texto) ? 'denegado' : 'error';
+  if (estado !== 'incierto' && /^(error\s*:|DENEGADO\b|⚠)/i.test(texto)) estado = /^DENEGADO/i.test(texto) ? 'denegado' : 'error';
   if (Number.isInteger(exitCode) && estado !== 'incierto') estado = exitCode === 0 ? 'exito' : 'error';
   return { estado, codigo: objeto ? String(out.codigo || '') : '', texto, exitCode,
     verificado: estado === 'exito' && objeto && out.verificado === true,

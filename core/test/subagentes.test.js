@@ -66,7 +66,7 @@ test('delegar: dos subagentes en paralelo, informes en orden y el padre responde
   const l = n.subagentes.lista();
   assert.strictEqual(l.length, 3);
   assert.ok(l.filter(r => r.padre === s.id).every(r => r.estado === 'listo'));
-  assert.strictEqual(l.find(r => r.id === s.id).estado, 'incompleto', 'los informes de texto no verifican los efectos del padre');
+  assert.strictEqual(l.find(r => r.id === s.id).estado, 'listo', 'hijos terminados bien → el padre también');
   assert.deepStrictEqual(l.filter(r => r.padre === s.id).map(r => r.nombre).sort(), ['discos', 'logs']);
 });
 

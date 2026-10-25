@@ -105,7 +105,9 @@ function crearMemoria({ cfg, embedder = null }) {
     });
   }
   const bonus = m => ((Date.now() - m.actualizada) / 86400_000 < 30 ? 1.1 : 1);
-  const visible = (m, o = {}) => !m.procedencia || ((!m.procedencia.vigenteHasta || m.procedencia.vigenteHasta > Date.now()) && !['externa', 'sistema'].includes(m.procedencia.clase) && (!m.procedencia.proyecto || (o.proyecto && path.resolve(o.proyecto) === m.procedencia.proyecto)) && (!m.procedencia.usuario || o.usuario === m.procedencia.usuario));
+  // la memoria es de APOLO entero (cualquier canal o carpeta); solo los recuerdos de tipo 'proyecto' se quedan en su carpeta.
+  // 'externa' (guardado tras leer contenido de fuera) no se inyecta: evita que una web siembre recuerdos.
+  const visible = (m, o = {}) => !m.procedencia || ((!m.procedencia.vigenteHasta || m.procedencia.vigenteHasta > Date.now()) && m.procedencia.clase !== 'externa' && (m.tipo !== 'proyecto' || !m.procedencia.proyecto || !o.proyecto || path.resolve(o.proyecto) === m.procedencia.proyecto) && (!m.procedencia.usuario || o.usuario === m.procedencia.usuario));
   const candidatos = (excluirPerfil, o) => lista.filter(m => !(excluirPerfil && m.tipo === 'perfil') && visible(m, o));
 
   // solo léxica, síncrona

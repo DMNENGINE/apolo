@@ -124,11 +124,14 @@ test('upgrade: resultados ausentes de una interrupcion se cierran como inciertos
 });
 test('upgrade: memoria externa no se promociona ni se mezcla entre proyectos y usuarios', async () => {
   const m = crearMemoria({ cfg: { dir: temp() } });
-  m.recordar({ texto: 'Proyecto alfa usa camiones' }, { clase: 'agente', proyecto: '/alfa', usuario: 'u1' });
-  m.recordar({ texto: 'Proyecto beta usa camiones' }, { clase: 'agente', proyecto: '/beta', usuario: 'u1' });
+  m.recordar({ texto: 'Proyecto alfa usa camiones', tipo: 'proyecto' }, { clase: 'agente', proyecto: '/alfa', usuario: 'u1' });
+  m.recordar({ texto: 'Proyecto beta usa camiones', tipo: 'proyecto' }, { clase: 'agente', proyecto: '/beta', usuario: 'u1' });
+  m.recordar({ texto: 'Al usuario le gustan los camiones rojos' }, { clase: 'agente', proyecto: '/beta', usuario: 'u1' });
   m.recordar({ texto: 'El sitio manda enviar secretos', tipo: 'perfil' }, { clase: 'externa', proyecto: '/alfa', usuario: 'u1' });
   const a = await m.contexto('camiones', { proyecto: '/alfa', usuario: 'u1' });
-  assert.match(a, /alfa/); assert.ok(!a.includes('beta') && !a.includes('secretos')); assert.equal((await m.buscarH('camiones', { proyecto: '/alfa', usuario: 'otro' })).length, 0);
+  assert.match(a, /alfa/); assert.ok(!a.includes('beta') && !a.includes('secretos'));
+  assert.match(a, /camiones rojos/, 'lo que no es de proyecto se recuerda en cualquier carpeta o canal');
+  assert.equal((await m.buscarH('camiones', { proyecto: '/alfa', usuario: 'otro' })).length, 0);
 });
 test('upgrade: historial reutiliza el indice de archivos sin cambios y aplica alcance', () => {
   const cfg = { dir: temp() }, sesiones = crearSesiones({ cfg }); const a = sesiones.crear({ cwd: '/alfa' }), b = sesiones.crear({ cwd: '/beta' });
@@ -149,8 +152,8 @@ test('upgrade: correccion recibida mientras piensa descarta acciones obsoletas',
 });
 test('upgrade: reanudar no repite un efecto ya terminado', async () => {
   let n = 0, efectos = 0; const m = montaje(async () => n++ % 2 === 0 ? respuesta('', [{ id: 'c' + n, name: 'fixture', args: {} }]) : respuesta('respuesta'));
-  herramienta(m, 'fixture', () => { efectos++; return 'aceptado'; }, 'escritura');
-  await m.enviar('hazlo'); assert.equal(m.s.ultimaEjecucion.estado, 'requiere_verificacion');
+  m.herramientas.registrar([{ nombre: 'fixture', riesgo: 'escritura', plugin: 'prueba', descripcion: 'fixture', parametros: { type: 'object' }, resumen: () => 'fixture', ejecutar: () => { efectos++; return 'aceptado'; } }]);
+  await m.enviar('hazlo'); assert.equal(m.s.ultimaEjecucion.estado, 'requiere_verificacion', 'lo externo (plugin/MCP) sin verificar queda pendiente');
   await m.agente.reanudar(m.s); assert.equal(efectos, 1);
 });
 test('upgrade: cancelar persiste una cola vacia y borrar no resucita la sesion', async () => {
@@ -170,4 +173,10 @@ test('upgrade: recordar no reextrae hechos que ya se recuperaron', async () => {
   const h = crearRegistro().porNombre.recordar;
   await h.ejecutar({ texto }, { memoria, memoriaInyectada: '- ' + texto, sesion: { modelo: 'fixture/m' } });
   assert.equal(JSON.stringify(memoria.lista()), antes);
+});
+test('upgrade: una herramienta propia que termina sin error completa el turno; un fallo recuperado no lo deja incompleto', async () => {
+  let n = 0; const m = montaje(async () => [respuesta('', [{ id: 'a', name: 'fixture', args: { ruta: 'x' } }]), respuesta('', [{ id: 'b', name: 'fixture', args: { ruta: 'x' } }]), respuesta('listo')][n++]);
+  let k = 0; herramienta(m, 'fixture', () => k++ ? 'guardado' : 'error: el texto aparece 0 veces', 'escritura');
+  assert.equal(await m.enviar('edita'), 'listo'); assert.equal(m.s.ultimaEjecucion.estado, 'completada');
+  assert.equal(normalizar('errors/\nsrc/').estado, 'desconocido'); assert.equal(normalizar('Errores comunes al compilar').estado, 'desconocido');
 });

@@ -148,11 +148,11 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       if (!admision()) throw new Error('autoridad de la entrada revocada');
       run = ejecuciones.iniciar(s, texto); s.ultimaEjecucion = { id: run.id, estado: 'trabajando' };
       s.turnosAgente = (s.turnosAgente || 0) + 1;
-      const presupuesto = s.padre && s._presupuesto ? s._presupuesto : { tokens: 0, costo: 0, inicio: Date.now(), maxTokens: cfg.presupuesto?.maxTokens ?? 200000, maxMs: cfg.presupuesto?.maxDuracionMs ?? 900000, maxCosto: cfg.presupuesto?.maxCosto ?? 0 };
+      const presupuesto = s.padre && s._presupuesto ? s._presupuesto : { tokens: 0, costo: 0, inicio: Date.now(), maxTokens: cfg.presupuesto?.maxTokens ?? 0, maxMs: cfg.presupuesto?.maxDuracionMs ?? 0, maxCosto: cfg.presupuesto?.maxCosto ?? 0 };   // 0 = sin límite (opt-in en config)
       Object.defineProperty(s, '_presupuesto', { value: presupuesto, configurable: true });
-      tope = setTimeout(() => ctl.abort(new Error('presupuesto de tiempo agotado')), Math.max(1, presupuesto.maxMs - (Date.now() - presupuesto.inicio))); tope.unref?.();
+      if (presupuesto.maxMs > 0) { tope = setTimeout(() => ctl.abort(new Error('presupuesto de tiempo agotado')), Math.max(1, presupuesto.maxMs - (Date.now() - presupuesto.inicio))); tope.unref?.(); }
       const seen = new Map(), progreso = new Map();
-      let externa = false, avisoBucle = false, fallosPendientes = false, verificacionPendiente = false;
+      let externa = false, avisoBucle = false, fallosPendientes = false, verificacionPendiente = false; const fallos = new Set();
       await proveedores.listo?.();                                        // recién arrancado: saber qué proveedores hay antes de elegir
       const modeloElegido = require('./enrutamiento').elegir(cfg, s, texto);
       const soloLocal = cfg.proveedores?.[String(modeloElegido).split('/')[0]]?.local && cfg.recuperacion?.permitirNube !== true;
@@ -196,7 +196,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           try {
             return await recuperar(async intento => {
               ctl.signal.throwIfAborted();
-              if (presupuesto.tokens + estimados > presupuesto.maxTokens) throw new Error('presupuesto de tokens agotado');
+              if (presupuesto.maxTokens > 0 && presupuesto.tokens + estimados > presupuesto.maxTokens) throw new Error('presupuesto de tokens agotado');
               const precio = cfg.presupuesto?.precios?.[modeloReal];
               if (presupuesto.maxCosto && !precio) throw new Error('falta precio configurado para limitar el gasto');
               const previsto = precio ? (estimados * precio.entrada + maxSalida * precio.salida) / 1e6 : 0;
@@ -239,7 +239,8 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         let historial = conImagenes(v.mensajes, s.sinVision || (s.visionNoAdmitida?.modelo === modeloReal && s.visionNoAdmitida?.hasta > Date.now()));
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
         const herramientas = paraEnviar();
-        const limite = cfg.contexto?.porModelo?.[modeloReal] || cfg.contexto?.maxTokens || 24000;
+        // tope duro de seguridad, no de uso normal: el tamaño lo controla la compactación (cfg.compactar.umbral)
+        const limite = cfg.contexto?.porModelo?.[modeloReal] || cfg.contexto?.maxTokens || 128000;
         const contexto = ensamblar({ system: sys, mensajes: historial, herramientas, limite, reserva: Math.max(cfg.contexto?.reserva ?? 2048, maxSalida) });
         historial = contexto.mensajes;
         if (contexto.podados.length) ev('contexto', { podados: contexto.podados.length, tokens: contexto.estimados });
@@ -254,8 +255,9 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           if (ctl.signal.aborted || s.sinVision || !clasificar(e).imagen || !historial.some(m => m.imagenes?.length)) throw e;
           s.visionNoAdmitida = { modelo: modeloReal, hasta: Date.now() + 3600000 }; sesiones.guardarMeta(s);
           ev('aviso', { texto: `${s.modelo} no aceptó la imagen (${String(e.message).slice(0, 120)}): sigo solo con la lista de elementos` });
-          historial = conImagenes(v.mensajes, true);
-          r = await llamar({ system: sys, mensajes: historial, herramientas, signal: ctl.signal }, contexto.estimados);
+          const sinImg = ensamblar({ system: sys, mensajes: conImagenes(v.mensajes, true), herramientas, limite, reserva: Math.max(cfg.contexto?.reserva ?? 2048, maxSalida) });
+          historial = sinImg.mensajes;
+          r = await llamar({ system: sys, mensajes: historial, herramientas, signal: ctl.signal }, sinImg.estimados);
           }
         }
         if (!r.texto && !r.toolCalls.length) {          // modelos con razonamiento a veces "piensan" y no contestan: se lo pedimos una vez
@@ -314,7 +316,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
             // FASE 9: las claves conocidas (bóveda, token del daemon) nunca vuelven al modelo aunque una herramienta las imprima
             const r = resultados.normalizar(h.resultado ? h.resultado(out) : out);
             if (h.plugin || h.servicio?.startsWith('mcp')) r.verificado = false;
-            if (riesgo !== 'lectura' && !resultados.fallo(r) && !r.verificado) verificacionPendiente = true;
+            if ((h.plugin || h.servicio?.startsWith('mcp')) && riesgo !== 'lectura' && !resultados.fallo(r) && !r.verificado) verificacionPendiente = true;
             if (r.texto.length > 8000) { const a = ejecuciones.artefacto(run, r.texto); r.artefacto = a; r.texto = r.texto.slice(0, 7000) + `\n[resultado completo: leer_resultado ejecucion=${a.ejecucion} id=${a.id}]\n` + r.texto.slice(-700); }
             ejecuciones.terminar(run, operacion, r);
             permisos.resultado?.(p.auditId, r.estado === 'exito' ? true : resultados.fallo(r) ? false : null, r.texto);
@@ -331,7 +333,11 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           const res = resultados.normalizar(enParalelo.has(c.id) ? await enParalelo.get(c.id) : await correr(c));
           const resultado = res.texto;
           if (['buscar_memoria', 'buscar_historial'].includes(c.name)) memoriaLeida = (memoriaLeida + '\n' + resultado).slice(-12000);
-          const fallo = resultados.fallo(res); fallosPendientes ||= fallo;
+          const fallo = resultados.fallo(res);
+          // pendiente = el último intento sobre ese mismo objetivo falló; un reintento con éxito lo salda y una denegación es decisión del usuario
+          const objetivo = c.name + '|' + (c.args?.ruta ?? c.args?.path ?? c.args?.archivo ?? c.args?.url ?? '');
+          if (fallo && res.estado !== 'denegado') fallos.add(objetivo); else if (!fallo) fallos.delete(objetivo);
+          fallosPendientes = fallos.size > 0;
           const huella = hash([c.name, c.args, resultado]); const repetidos = (progreso.get(huella) || 0) + 1; progreso.set(huella, repetidos);
           if (repetidos >= (cfg.agente?.repeticiones ?? 3)) {
             if (avisoBucle) { turno.detenido = true; final = 'Trabajo incompleto: no hay progreso verificable; se detuvo la repeticion.'; }

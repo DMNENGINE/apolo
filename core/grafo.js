@@ -34,7 +34,7 @@ const esRuido = nombre => {
 };
 
 function crearGrafo({ cfg, memoria }) {
-  const recuerdosGlobales = () => memoria.lista().filter(m => !m.procedencia);
+  const recuerdosGlobales = () => memoria.lista().filter(m => m.procedencia?.clase !== 'externa');
   const f = path.join(cfg.dir, 'grafo.json');
   let g = vacio(), mtime = 0;
   function vacio() { return { version: 1, entidades: {}, relaciones: [], heur: {}, llm: {} }; }

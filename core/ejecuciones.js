@@ -34,7 +34,18 @@ function crearEjecuciones({ cfg }) {
     const huella = hash([c.name, c.args]);
     if (r.operaciones.some(o => o.callId === c.id)) throw new Error('toolCall duplicada: ' + c.id);
     const o = { id: crypto.randomUUID(), callId: c.id, herramienta: c.name, huella, riesgo, estado: 'trabajando', inicio: Date.now() };
-    if (riesgo !== 'lectura') try { fs.writeFileSync(bloqueo(r.ambito, huella), JSON.stringify({ ejecucion: r.id, operacion: o.id }), { flag: 'wx', mode: 0o600 }); } catch (e) { if (e.code === 'EEXIST') throw new Error('operacion en curso o incierta: no se repite el efecto'); throw e; }
+    if (riesgo !== 'lectura') {
+      const f = bloqueo(r.ambito, huella), dato = JSON.stringify({ ejecucion: r.id, operacion: o.id });
+      try { fs.writeFileSync(f, dato, { flag: 'wx', mode: 0o600 }); }
+      catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+        // un incierto antiguo de una ejecución que ya no corre no bloquea para siempre (p. ej. una tarea diaria que agotó el tiempo una noche)
+        let previo = null, edad = 0; try { previo = JSON.parse(fs.readFileSync(f, 'utf8')); edad = Date.now() - fs.statSync(f).mtimeMs; } catch { }
+        const prev = previo && leer(previo.ejecucion), corriendo = prev && ['trabajando', 'esperando'].includes(prev.estado) && vivo(prev.dueno);
+        if (corriendo || edad < (cfg.ejecuciones?.bloqueoHoras ?? 6) * 3600000) throw new Error('operacion en curso o incierta: no se repite el efecto');
+        fs.writeFileSync(f, dato, { mode: 0o600 }); o.retomaIncierta = previo?.operacion || true;
+      }
+    }
     r.operaciones.push(o);
     try { guardar(r); } catch (e) { r.operaciones.pop(); liberar(r, o); throw e; }
     return o;

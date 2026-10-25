@@ -192,7 +192,7 @@ const HERRAMIENTAS = [
     descripcion: 'Busca en las conversaciones pasadas (últimos 30 días) lo que se habló sobre algo.',
     parametros: { type: 'object', properties: { consulta: { type: 'string' }, dias: { type: 'number' } }, required: ['consulta'] },
     resumen: a => a.consulta,
-    ejecutar: async (a, ctx) => require('./memoria').buscarHistorial({ cfg: ctx.cfg, consulta: a.consulta, dias: a.dias || 30, proyecto: ctx.cwd, usuario: ctx.sesion.usuario })
+    ejecutar: async (a, ctx) => require('./memoria').buscarHistorial({ cfg: ctx.cfg, consulta: a.consulta, dias: a.dias || 30, usuario: ctx.sesion.usuario })
       .filter(r => r.sesion !== ctx.sesion.id)
       .map(r => `[${new Date(r.t).toLocaleString('es')} · ${r.rol === 'user' ? 'usuario' : 'asistente'}] ${r.texto}`).join('\n') || '(no encontré nada)',
   },
