@@ -151,6 +151,15 @@ function iniciar(opciones = {}) {
         res.writeHead(r.codigo, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" });
         return res.end(r.html);
       }
+      // pestañas aportadas por plugins: solo el archivo declarado de un plugin activo, sin token (como el resto del panel).
+      // Las nativas (firmadas por un autor oficial o de la app) se cargan como <script>; el resto es una página .html aislada.
+      if (M === 'GET' && p[0] === 'plugin-ui' && p[1] && p[2] && !p[3] && !lanMovil) {
+        const a = n.plugins?.archivoVista(decodeURIComponent(p[1]), decodeURIComponent(p[2]));
+        if (!a || (a.tipo === 'js' && !a.nativa)) { res.writeHead(404); return res.end(); }
+        res.writeHead(200, { 'content-type': TIPOS['.' + a.tipo], 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff',
+          ...(a.tipo === 'html' ? { 'content-security-policy': "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:", 'x-frame-options': 'SAMEORIGIN' } : {}) });
+        return fs.createReadStream(a.ruta).pipe(res);
+      }
       if (M === 'GET' && p[0] !== 'v1') {
         const nombre = p.length ? p.join('/') + (u.pathname.endsWith('/') ? '/index.html' : '') : 'index.html';
         if (lanMovil && !MV.estaticoMovil(nombre)) { res.writeHead(403); return res.end(); }
@@ -422,6 +431,11 @@ function iniciar(opciones = {}) {
       if (p[1] === 'plugins') {                                   // plugins (core/plugins): cada uno en su proceso
         const pl = n.plugins, err = (e, c = 400) => json(res, e.status || c, { error: e.message });
         if (!p[2] && M === 'GET') return json(res, 200, { plugins: pl.lista(), comandos: pl.comandos(), sdk: pl.version });
+        if (p[2] === 'vistas' && !p[3] && M === 'GET') return json(res, 200, { vistas: pl.vistas() });   // pestañas del menú del panel
+        if (p[2] && p[3] === 'vistas' && p[4] && p[5] && !p[6] && M === 'POST') {                          // acción de una pestaña de plugin
+          if (!/^[a-z][\w-]{0,40}$/i.test(p[5])) return json(res, 400, { error: 'accion' });
+          try { return json(res, 200, { resultado: await pl.accionVista(decodeURIComponent(p[2]), decodeURIComponent(p[4]), p[5], (await leer(req)).datos || {}) }); } catch (e) { return err(e); }
+        }
         if (p[2] === 'instalar' && !p[3] && M === 'POST') {
           const b = await leer(req);
           if (!b.fuente) return json(res, 400, { error: 'fuente' });

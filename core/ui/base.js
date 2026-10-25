@@ -381,6 +381,7 @@ function conectarEventos() {
     if (e.tipo === 'permiso') { E.pendientes.set(e.id, e); pintarPermisos(); robotsLog(`? ${tr('permiso')}: ${NOMBRE_HERR[e.herramienta] || e.herramienta}`); }
     else if (e.tipo === 'permiso-resuelto') { E.pendientes.delete(e.id); pintarPermisos(); }
     else if (e.tipo === 'avatar' && typeof AV_cargarGlobal === 'function') { AV_cargarGlobal().catch(() => { }); }   // AV_aplicarGlobal re-monta el compañero
+    else if (e.tipo === 'plugins') { cargarVistasPlugin().then(cambio => { if (cambio && modoLado === 'app') { modoLado = ''; ruta(); } }).catch(() => { }); }   // un plugin se activó o paró: su pestaña aparece o se va
     else if (e.tipo === 'tarea') { robotsLog(`⏰ ${e.tarea.nombre}`); robotsFlash(tr('⏰ TAREA'), 'listo'); }
     if (e.tipo === 'tarea') aviso(`${e.tarea.nombre}: ${String(e.texto).slice(0, 140)}`, e.subtipo === 'error');
     else if (e.sesion && e.tipo) {
@@ -414,6 +415,49 @@ document.addEventListener('visibilitychange', () => avisarFoco());
 
 // ---------- barra lateral ----------
 const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['turno', 'Turno de noche', 'luna'], ['auto', 'Automatizaciones', 'reloj'], ['skills', 'Skills', 'pieza'], ['memoria', 'Memoria', 'cerebro'], ['wrapped', 'Wrapped', 'chispa'], ['uso', 'Uso', 'grafica']];
+// pestañas que aportan los plugins activos (aporta.vistas), justo después de Mission Control
+let NAV_PLUGINS = [];
+const navApp = () => { const i = NAV_APP.findIndex(x => x[0] === 'agentes') + 1; return [...NAV_APP.slice(0, i), ...NAV_PLUGINS, ...NAV_APP.slice(i)]; };
+async function cargarVistasPlugin() {
+  let l = []; try { l = (await api('GET', '/plugins/vistas')).vistas || []; } catch { }
+  const nuevo = l.map(v => [`p/${v.plugin}/${v.nombre}`, v.titulo, P[v.icono] ? v.icono : 'pieza']), antes = JSON.stringify(NAV_PLUGINS);
+  E.vistasPlugin = l; NAV_PLUGINS = nuevo;
+  return antes !== JSON.stringify(nuevo);
+}
+// lo que usan las vistas nativas de los plugins (su script se carga con <script src>)
+function registrarVistaPlugin(plugin, nombre, vista) { VISTAS[`p/${plugin}/${nombre}`] = vista; }
+const accionPlugin = (plugin, vista, accion, datos = {}, signal) =>
+  api('POST', `/plugins/${encodeURIComponent(plugin)}/vistas/${encodeURIComponent(vista)}/${accion}`, { datos }, signal).then(r => r.resultado);
+const scriptsPlugin = new Map();
+async function prepararVistaPlugin(clave) {
+  const [, plugin, nombre] = clave.split('/'), v = (E.vistasPlugin || []).find(x => x.plugin === plugin && x.nombre === nombre);
+  if (!v) return false;
+  if (v.nativa && v.tipo === 'js') {
+    if (!scriptsPlugin.has(clave)) scriptsPlugin.set(clave, new Promise((ok, mal) => {
+      const s = document.createElement('script'); s.src = v.url; s.onload = ok; s.onerror = () => { scriptsPlugin.delete(clave); mal(new Error(tr('No se pudo cargar la pestaña del plugin'))); };
+      document.head.append(s);
+    }));
+    await scriptsPlugin.get(clave);
+    return !!VISTAS[clave];
+  }
+  if (v.tipo !== 'html') return false;
+  // plugin de terceros: página aislada (sin token ni acceso al panel); solo puede pedir SUS acciones por postMessage
+  VISTAS[clave] = {
+    pintar(el) {
+      el.innerHTML = `<div class="pagina" style="height:100%;padding:0"><iframe sandbox="allow-scripts" src="${esc(v.url)}" title="${esc(v.titulo)}" style="border:0;width:100%;height:calc(100vh - 20px)"></iframe></div>`;
+      const marco = $('iframe', el);
+      this.oyente = async ev => {
+        if (ev.source !== marco.contentWindow || !ev.data || typeof ev.data !== 'object' || typeof ev.data.accion !== 'string') return;
+        const { id, accion, datos } = ev.data;
+        try { marco.contentWindow.postMessage({ id, ok: true, resultado: await accionPlugin(plugin, nombre, accion, datos) }, '*'); }
+        catch (e) { marco.contentWindow.postMessage({ id, ok: false, error: e.message }, '*'); }
+      };
+      window.addEventListener('message', this.oyente);
+    },
+    salir() { if (this.oyente) window.removeEventListener('message', this.oyente); this.oyente = null; },
+  };
+  return true;
+}
 function grupoFecha(t) {
   const d = new Date(t), hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const dias = (hoy - new Date(d).setHours(0, 0, 0, 0)) / 86400000;
@@ -453,7 +497,7 @@ function pintarLado(modo) {
   }
   lado.innerHTML = `<div class="lado-cab"><a class="marca" href="#/inicio" style="color:var(--txt);text-decoration:none"><span class="robot-marca" id="robotMarca">${casco()}</span><span>${esc(E.estado?.nombre && E.estado.nombre !== 'Robot' ? E.estado.nombre : 'Robot Companion')}</span></a>
       <button class="btn fantasma icono" id="btnPaleta" title="${tr('Buscar (Ctrl+K)')}">${ic('buscar')}</button><a class="btn fantasma icono" href="#/chat" title="${tr('Nueva conversación')}">${ic('editar')}</a></div>
-    <nav class="lado-nav">${NAV_APP.map(([r, t, i]) => `<a href="#/${r}" data-r="${r}">${ic(i)}<span>${tr(t)}</span>${r === 'inicio' ? '<span class="cuenta" data-cuenta-perm hidden></span>' : ''}</a>`).join('')}</nav>
+    <nav class="lado-nav">${navApp().map(([r, t, i]) => `<a href="#/${r}" data-r="${r}">${ic(i)}<span>${tr(t)}</span>${r === 'inicio' ? '<span class="cuenta" data-cuenta-perm hidden></span>' : ''}</a>`).join('')}</nav>
     <div class="lado-sec">${tr('Conversaciones')}<button class="btn fantasma icono mini" id="btnBuscaSes" title="${tr('Filtrar')}">${ic('buscar')}</button></div>
     <div class="buscador-lado" id="cajaBuscaSes" hidden>${ic('buscar')}<input id="buscaSes" placeholder="${tr('Filtrar conversaciones…')}"></div>
     <div class="lado-scroll" id="ladoSesiones"></div>
@@ -471,7 +515,7 @@ function pintarLado(modo) {
 function abrirPaleta() {
   if ($('.paleta')) return;
   const acciones = [
-    ...NAV_APP.map(([r, t, i]) => ({ t: tr(t), i, sub: tr('Ir a'), go: `#/${r}` })),
+    ...navApp().map(([r, t, i]) => ({ t: tr(t), i, sub: tr('Ir a'), go: `#/${r}` })),
     { t: tr('Nueva conversación'), i: 'editar', sub: tr('Acción'), go: '#/chat' },
     { t: tr('Asistente de bienvenida'), i: 'chispa', sub: tr('Acción'), go: '#/bienvenida' },
     ...(typeof SK_paleta === 'function' ? SK_paleta() : []),
@@ -542,20 +586,27 @@ async function ruta() {
   document.body.classList.toggle('modo-bienvenida', seccion === 'bienvenida');   // el asistente ocupa toda la pantalla
   const modo = seccion === 'ajustes' ? 'ajustes' : 'app';
   if (modo !== modoLado) { modoLado = modo; pintarLado(modo); }
+  // pestaña de un plugin: #/p/<plugin>/<vista>[/<sub>]
+  const dePlugin = seccion === 'p' ? h.split('/').slice(0, 3).join('/') : '';
   if (modo === 'ajustes') pintarNavAjustes($('#buscaAjustes')?.value || '');
-  else { $$('.lado-nav a[data-r]').forEach(a => a.classList.toggle('on', a.dataset.r === (['consejo', 'hizo', 'trading'].includes(seccion) ? 'agentes' : seccion))); pintarSesionesLado(); }
-  const clave = modo === 'ajustes' ? `ajustes/${sub || 'apariencia'}` : seccion;
+  else { $$('.lado-nav a[data-r]').forEach(a => a.classList.toggle('on', a.dataset.r === (dePlugin || (['consejo', 'hizo', 'trading'].includes(seccion) ? 'agentes' : seccion)))); pintarSesionesLado(); }
+  const clave = modo === 'ajustes' ? `ajustes/${sub || 'apariencia'}` : dePlugin || seccion;
+  if (dePlugin && !VISTAS[clave]) {
+    try { if (!E.vistasPlugin) await cargarVistasPlugin(); await prepararVistaPlugin(clave); }
+    catch (e) { aviso(e.message, true); }
+  }
   const vista = VISTAS[clave] || VISTAS.inicio;
+  const subVista = dePlugin ? h.split('/')[3] : sub;
   E.vista?.salir?.(); E.oyentes.clear();
   E.vista = vista;
   const v = $('#vista'); v.scrollTop = 0;
-  try { await vista.pintar(v, sub); if (vista.alEvento) E.oyentes.add(vista.alEvento.bind(vista)); }
+  try { await vista.pintar(v, subVista); if (vista.alEvento) E.oyentes.add(vista.alEvento.bind(vista)); }
   catch (e) { if (TOKEN) v.innerHTML = `<div class="pagina">${vacio('info', esc(e.message))}</div>`; }
 }
 async function arrancar() {
   if (!TOKEN) return pantallaLogin();
   try {
-    [E.estado, E.config, E.sesiones] = await Promise.all([api('GET', '/estado'), api('GET', '/config'), api('GET', '/sesiones')]);
+    [E.estado, E.config, E.sesiones] = await Promise.all([api('GET', '/estado'), api('GET', '/config'), api('GET', '/sesiones'), cargarVistasPlugin()]);
     if (E.config.idioma) { I18N.poner(E.config.idioma); guardarLocal('idioma', E.config.idioma); }   // el idioma elegido en el núcleo manda
     else { const l = leerLocal('idioma', ''); I18N.poner(l || I18N.delSistema()); }
     $('#app').hidden = false;

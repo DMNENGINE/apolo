@@ -87,7 +87,7 @@ function vigilarRed(permisos) {
 }
 
 // ---------- API que recibe el plugin ----------
-const reg = { herramientas: new Map(), comandos: new Map(), proveedores: new Map(), canales: new Map(), tareas: new Map(), bus: new Map() };
+const reg = { herramientas: new Map(), comandos: new Map(), proveedores: new Map(), canales: new Map(), vistas: new Map(), tareas: new Map(), bus: new Map() };
 let def = null, pendientes = [];
 const congelar = o => { if (o && typeof o === 'object') { Object.values(o).forEach(congelar); Object.freeze(o); } return o; };
 const exigir = (c, t) => { if (!c) throw new Error(t); };
@@ -115,6 +115,13 @@ function crearApi(a) {
       exigir(p && p.nombre && typeof p.chat === 'function', 'registrarProveedor: nombre y chat(peticion) obligatorios');
       reg.proveedores.set(p.nombre, p);
       return registrar('proveedor', { nombre: p.nombre, modelos: Array.isArray(p.modelos) ? p.modelos.map(String) : [] });
+    },
+    // pestaña del panel declarada en aporta.vistas; el panel solo puede llamar a estas acciones (como canal.acciones)
+    registrarVista(v) {
+      exigir(v && /^[a-z][a-z0-9_-]{0,50}$/i.test(v.nombre || ''), 'registrarVista: nombre no válido');
+      const acciones = v.acciones && typeof v.acciones === 'object' ? v.acciones : {};
+      reg.vistas.set(v.nombre, { ...v, acciones });
+      return registrar('vista', { nombre: v.nombre, titulo: v.titulo, icono: v.icono, acciones: Object.keys(acciones).filter(k => typeof acciones[k] === 'function') });
     },
     registrarCanal(c) {
       const id = c && (c.id || c.nombre);
@@ -219,6 +226,11 @@ const MANEJADORES = {
   async 'canal.accion'({ id, accion, datos }) {
     const c = reg.canales.get(id), f = c?.acciones?.[accion];
     if (typeof f !== 'function' || !Object.prototype.hasOwnProperty.call(c.acciones, accion)) throw new Error(`el canal "${id}" no tiene la acción "${accion}"`);
+    return resultadoCrudo(await f(datos || {}));
+  },
+  async 'vista.accion'({ id, accion, datos }) {
+    const v = reg.vistas.get(id), f = v?.acciones?.[accion];
+    if (typeof f !== 'function' || !Object.prototype.hasOwnProperty.call(v.acciones, accion)) throw new Error(`la vista "${id}" no tiene la acción "${accion}"`);
     return resultadoCrudo(await f(datos || {}));
   },
   async tarea({ clave }) { const f = reg.tareas.get(clave); if (!f) throw new Error(`tarea "${clave}" sin función`); return resultado(await f()); },

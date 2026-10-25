@@ -129,13 +129,13 @@ const lista = v => (Array.isArray(v) ? v : v == null || v === '' ? [] : String(v
 
 // datos propios de APOLO dentro de la carpeta (estado, fallos registrados, versiones del taller): no son parte de la skill
 const PRIVADOS = new Set(['instalado.json', 'aprendizaje.jsonl', '_versiones', '_datos']);   // _datos: lo que la skill aprende con el uso
-// archivos de la skill (rutas relativas con /), sin entrar en .git ni node_modules
+// archivos de la skill (rutas relativas con /), sin entrar en .git, node_modules ni __pycache__ (bytecode que Python genera al usarse)
 function listarArchivos(dir, max = 500) {
   const out = [];
   const rec = (d, rel) => {
     let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const e of es.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (out.length >= max || e.name === '.git' || e.name === 'node_modules' || (!rel && PRIVADOS.has(e.name)) || e.isSymbolicLink()) continue;
+      if (out.length >= max || e.name === '.git' || e.name === 'node_modules' || e.name === '__pycache__' || (!rel && PRIVADOS.has(e.name)) || e.isSymbolicLink()) continue;
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) rec(path.join(d, e.name), r); else out.push(r);
     }
