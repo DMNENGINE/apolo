@@ -1,10 +1,13 @@
 # Trading y autopiloto simulado
 
-APOLO controla el enjambre simulado de DMN Trader mediante la API de la central. El enjambre toma sus decisiones en DMN Trader; este módulo no añade estrategias ni envía órdenes a un exchange. El controlador solo admite `modo: "simulado"`; no habilita dinero real ni conecta wallets. El repositorio de DMN Trader contiene también pilotos reales de GMGN y NinjaTrader: son sistemas separados y no deben confundirse con este enjambre.
+DMN Trader se instala como **paquete** (`DMNENGINE/dmn-trader`, Skills → Explorar). El paquete arranca y vigila el motor
+en este equipo y aporta la pestaña **Trading** del panel. El núcleo de APOLO (este documento) supervisa el autopiloto
+**simulado** y es el único que puede autorizar el **piloto con dinero real** (sección al final). El enjambre toma sus
+decisiones en DMN Trader; este módulo no añade estrategias.
 
 ## Uso
 
-1. Reiniciar APOLO para cargar el controlador nuevo y abrir Mission Control → Trading.
+1. Instalar el paquete DMN Trader (necesita Python 3.10+) y abrir **Trading** en el menú del panel (también en Mission Control).
 2. Revisar el estado de la central. Si ya tiene un enjambre activo sin supervisión de APOLO, el arranque está bloqueado. Pararlo desde su botón solo si se quiere sustituir esa ejecución por un plan supervisado.
 3. Definir agentes, mercados, capital simulado por agente, meta, duración máxima y pérdida acumulada máxima. El capital total asignado es agentes multiplicado por capital por agente. Los valores iniciales del formulario son editables; no son recomendaciones para dinero real.
 4. Pulsar «Activar autopiloto simulado» y aprobar la solicitud de permiso de APOLO, que muestra la central y el plan exacto. El modo automático general no elimina esta aprobación.
@@ -24,7 +27,7 @@ El estado se conserva en `trading-autopiloto.json`. Después de reiniciar, se re
 
 ## Configuración y credenciales
 
-El destino se lee de `skills/trader/_datos/trader.json`. Se admiten HTTPS o HTTP en direcciones privadas, sin usuario/contraseña, consulta ni fragmento en la URL. No se siguen redirecciones. Las respuestas tienen límite de 4 MiB y validación de JSON y esquema.
+El destino es el motor que arranca el paquete: `<datos>/plugins-datos/dmn-trader/destino.json` (solo `http://127.0.0.1:<puerto>`) con el token en la bóveda (`plugin:dmn-trader:token`). Sin paquete, se usa la configuración antigua `skills/trader/_datos/trader.json` (central externa). Se admiten HTTPS o HTTP en direcciones privadas, sin usuario/contraseña, consulta ni fragmento en la URL. No se siguen redirecciones. Las respuestas tienen límite de 4 MiB y validación de JSON y esquema.
 
 El archivo de configuración y el estado del autopiloto se clasifican como sensibles para las herramientas. La credencial se registra para redacción y se copia a la bóveda, verificando su lectura. Puede usarse `tokenRef: "boveda:trading:central"` cuando todos los clientes estén migrados. El token original no se elimina automáticamente: el cliente Python instalado todavía lo necesita. No se alteró ese cliente externo ni su archivo de datos en esta reparación.
 
@@ -34,6 +37,15 @@ El archivo de configuración y el estado del autopiloto se clasifican como sensi
 - `GET /v1/trading/autopiloto`: estado del supervisor, sin credenciales.
 - `POST /v1/trading/iniciar`: solo simulado, permiso obligatorio, rechazo si ya hay una ejecución activa o incierta.
 - `POST /v1/trading/parar`: parada y comprobación del estado remoto.
+- `GET /v1/trading/real`: estado del piloto con dinero real (activo, límites, saldo, operaciones, aviso del bucle).
+- `POST /v1/trading/real {"activo": false}`: pausa las entradas reales, sin pedir permiso. La gestión de lo abierto sigue.
+- `POST /v1/trading/real {"activo": true, "limites": {"por_op_sol", "perdida_max_sol", "max_ops_dia", "reserva_sol"}, "confirmacion": "ACTIVO DINERO REAL"}`:
+  límites en rango (0,005–0,1 SOL por operación; pérdida 0,001–10 SOL; 1–50 operaciones/día; reserva 0–1 SOL), sin pánico y con
+  **aprobación explícita** del usuario (isla, móvil o Discord; nunca automática). Después se comprueba que el motor aplicó
+  exactamente esos límites (si no, se pausa) y se audita. El pánico pausa el real si el motor del paquete corre en este equipo.
+
+El agente tiene `trading_autopiloto` (estado/iniciar/parar, siempre simulado y con esta guardia) y las herramientas del paquete
+`trader_consultar` / `trader_operar` (mesa simulada). **El dinero real no tiene herramienta**: solo la pestaña del panel.
 
 Ejemplo de cuerpo de inicio (requiere aprobación; no se ejecuta con este documento):
 

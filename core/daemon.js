@@ -32,6 +32,8 @@
 //   GET  /v1/plugins · GET /v1/plugins/:nombre (con logs) · POST /v1/plugins/instalar {fuente, reemplazar?, dev?} → {plugin} | {opciones}
 //   PATCH /v1/plugins/:nombre {activo, forzar?} · POST /v1/plugins/:nombre/recargar|escanear · DEL /v1/plugins/:nombre
 //   POST /v1/plugins/comandos/:cmd {texto} → {texto}   (comandos /x que aportan los plugins)
+//   GET /v1/plugins/vistas (pestañas del panel) · POST /v1/plugins/:nombre/vistas/:vista/:accion {datos} · GET /plugin-ui/:plugin/:vista (sin token)
+//   GET|POST /v1/trading/real (piloto con dinero real: pausar libre; activar con frase + aprobación explícita)
 //   POST /v1/plugins/oficial/:slack|matrix|signal|whatsapp|discord (instala el canal del repo) · POST /v1/plugins/:nombre/canales/:id/:accion {datos} → acciones del canal
 //   GET  /v1/consejo · POST /v1/consejo {pregunta, miembros?, rondas?} → SSE (fase inicio|miembro|respuesta|ronda|votando|veredicto|fin)
 //   GET  /v1/consejo/:id · POST /v1/consejo/:id/cancelar
