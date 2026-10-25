@@ -195,6 +195,8 @@ function crearNucleo(opciones = {}) {
   const panico = require('./panico').crearPanico({ nucleo });
   nucleo.panico = panico; nucleo.extensiones.panico = { http: (...a) => panico.http(...a) };
   nucleo.trading = require('./trading-autopiloto').crearTrading({ nucleo, fetch: opciones.fetchTrading });
+  // el cerebro de APOLO decide las entradas y salidas del piloto real de DMN Trader (POST /v1/trading/decidir)
+  nucleo.tradingDecidir = require('./trading-decidir').crearDecidir({ generarJSON: (...a) => nucleo.generarJSON(...a), memoria, personalidad, modelo: modeloCerebro, registro });
   // el agente maneja el autopiloto SIMULADO con su guardia (duración + pérdida máxima); el dinero real, solo desde el panel
   herramientas.registrar([{
     nombre: 'trading_autopiloto',

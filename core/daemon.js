@@ -230,6 +230,7 @@ function iniciar(opciones = {}) {
       }
       if (p[1] === 'trading') {                                 // Mission Control → Trading: enjambre de DMN Trader (core/trading.js)
         if (!maestro) return json(res, 403, { error: 'Trading requiere el escritorio' });
+        if (p[2] === 'decidir' && M === 'POST') { try { return json(res, 200, await n.tradingDecidir(await leer(req))); } catch (e) { return json(res, e.status || 502, { error: e.message }); } }
         try { return json(res, 200, await n.trading.http(M, p, M === 'POST' ? await leer(req) : null, Object.fromEntries(u.searchParams))); }
         catch (e) { return json(res, e.status || 502, { error: e.message }); }
       }
