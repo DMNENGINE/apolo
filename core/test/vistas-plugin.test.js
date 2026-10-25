@@ -1,6 +1,6 @@
 // Pestañas del panel aportadas por plugins (aporta.vistas): registro, acciones, servir solo lo declarado y
 // nativa solo con firma de un autor oficial (o plugin de la app). Sin red.
-const test = require('node:test');
+const test = require('./requiere-plugins');   // se salta sin modelo de permisos de Node (plugins de terceros)
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
