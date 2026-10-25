@@ -10,21 +10,28 @@
 //   nodo → PC  hola {id, nombre, version, modelo, capacidades[], token?} · boton {pulsacion: corta|larga|doble}
 //              audio-inicio {frecuencia:16000, bits:16, canales:1} · <binario PCM s16le> · audio-fin
 //              foto-inicio {bytes} · <binario JPEG> · foto-fin · foto-error {motivo}
-//   PC → nodo  emparejar {codigo} · emparejado {token, nombre} · bienvenido {nombre, epoch, tz} · rechazado {motivo}
+//              foto-subir {bytes, nombre} · <binario JPEG> · foto-subir-fin   (modo cámara de la R1: fotos del usuario → carpetaFotos)
+//   PC → nodo  emparejar {codigo} · emparejado {token, nombre} · bienvenido {nombre, epoch, tz, zona} · rechazado {motivo}
 //              estado {estado, msg} · flash {estado, msg, segundos} · gesto {gesto, segundos, msg?} · mirar {x, y, segundos}
 //              permiso {id, resumen, peligro} · audio-inicio {frecuencia} · <binario> · audio-fin · foto · oido {texto}
+//              foto-guardada {nombre, ruta} | foto-subir-error {motivo}
+//              dictado {texto} (modo 'dictado': lo que dijo vuelve a su pantalla en vez de ir al chat)
+//              tarjeta {titulo, texto, segundos} (herramienta r1_pantalla) · skill-borrador {skill} | skill-error {motivo} (skill dictada)
 //
 // Bus (entrada): 'evento' (sesiones), 'permiso', 'permiso-resuelto', 'aviso-externo', 'control',
 //   'nodo-estado' {estado, msg, segundos?} (p. ej. main.js con las sesiones de Claude Code), 'nodo-gesto' {gesto, segundos, msg?},
 //   'nodo-reproducir' {pcm: Buffer | ruta, nodo?}
 // Bus (salida): 'nodo' {tipo: conectado|desconectado|emparejando|emparejado|borrado, id, nombre}, 'nodo-audio' {nodo, nombre, ruta, ms},
 //   'nodo-texto' {nodo, texto} (si hay transcriptor), 'panico' {origen}
+// Skills de la R1: las que llevan canales ['r1'] solo entran en el índice con la R1 conectada (canalesActivos). Con modo 'crear-skill'
+//   (POST /v1/nodos/:id/modo) lo siguiente que se dicte no va al chat: el taller redacta un borrador y la R1 lo enseña para aprobarlo.
 // main.js (conectarOjo): nucleo.nodos.transcriptor = ruta → texto, enruta 'nodo-texto'
 //   como si fuera voz de la isla; y tras generar el TTS: nucleo.nodos.reproducirArchivo(mp3).
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
 const { spawn } = require('child_process');
 const ws = require('./ws');
 
@@ -36,9 +43,17 @@ const POR_DEFECTO = {
   permitirPeligrosos: false,   // un permiso PELIGROSO no se aprueba con el botón del ojo: solo en el PC/panel/Stream Deck
   maxAudioSeg: 30,
   ffmpeg: 'ffmpeg',
+  carpetaFotos: '',            // fotos del modo cámara de la R1; vacío = Imágenes\Rabbit R1 del usuario
+  maxFotoMB: 20,
 };
 const ESTADOS = ['reposo', 'trabajando', 'permiso', 'listo', 'error', 'dormido'];
 const GESTOS = ['feliz', 'triste', 'duda', 'sorpresa', 'guino', 'corazon', 'remolino', 'bostezo', 'reloj'];
+// lo que el redactor de skills debe saber de la R1 (core/skills/taller.js → contextoCanal)
+const CONTEXTO_R1 = 'Esta skill es para la Rabbit R1: un aparatito de bolsillo con pantalla pequeña (480x640, se lee de lejos: títulos cortos y pocas líneas), ' +
+  'altavoz y micrófono (el usuario habla con APOLO manteniendo el botón y las respuestas suenan en la R1), una rueda, un botón y una cámara que gira. ' +
+  'Herramientas que la skill puede usar: r1_pantalla {titulo, texto, segundos, gesto?} para enseñar algo en su pantalla (listas, pasos, temporizadores, avisos) ' +
+  'y ver_camara {camara: trasera|frontal} para mirar lo que hay delante. Las respuestas deben ser CORTAS y habladas (se escuchan por el altavoz). ' +
+  'No puede instalar apps ni tocar Android: todo pasa por APOLO en el PC.';
 const sha = t => crypto.createHash('sha256').update(String(t)).digest('hex');
 const igualesHex = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
@@ -227,10 +242,28 @@ function crearNodos({ nucleo }) {
       try {
         const texto = String(await api.transcriptor(ruta) || '').trim();
         c.ws.enviarJSON({ tipo: 'oido', texto: textoPantalla(texto, 60) });
-        if (texto) bus.emit('nodo-texto', { nodo: c.nodo.id, nombre: c.nodo.nombre, texto });
+        const modo = c.modo && c.modo.hasta > Date.now() ? c.modo.tipo : null; c.modo = null;
+        if (texto && modo === 'crear-skill') skillDictada(c, texto);
+        else if (modo === 'dictado') c.ws.enviarJSON({ tipo: 'dictado', texto });   // vuelve a la pantalla del nodo (buscar en Memoria…), no al chat
+        else if (texto) bus.emit('nodo-texto', { nodo: c.nodo.id, nombre: c.nodo.nombre, texto });
       } catch (e) { c.ws.enviarJSON({ tipo: 'oido', texto: '' }); reg('aviso', 'nodo-audio', e.message); }
     }
     return ruta;
+  }
+
+  // skill dictada en la R1: el taller la redacta (borrador DESACTIVADO, pasa por el escáner) y la R1 la enseña para activarla o descartarla
+  async function skillDictada(c, idea) {
+    const taller = nucleo.skills?.taller;
+    if (!taller?.redactar) return c.ws.enviarJSON({ tipo: 'skill-error', motivo: 'el taller de skills no está disponible' });
+    c.ws.enviarJSON({ tipo: 'flash', estado: 'trabajando', msg: 'REDACTANDO SKILL', segundos: 10 });
+    try {
+      const s = await taller.redactar({ idea, canales: ['r1'] });
+      reg('info', 'skill dictada en la R1', s.slug);
+      c.ws.enviarJSON({ tipo: 'skill-borrador', skill: nucleo.skills.publica(s) });
+    } catch (e) {
+      reg('aviso', 'skill dictada en la R1', e.message);
+      c.ws.enviarJSON({ tipo: 'skill-error', motivo: String(e.message || e).slice(0, 200) });
+    }
   }
 
   // ---------- audio saliente (TTS): PCM s16le mono 16 kHz, a ritmo de tiempo real (el ESP32 tiene un búfer pequeño) ----------
@@ -256,23 +289,47 @@ function crearNodos({ nucleo }) {
     });
   }
 
-  // ---------- cámara: siempre con permiso (pantalla del ojo con aro rojo + LED mientras dispara) ----------
-  async function foto(id) {
+  // ---------- cámara: con permiso salvo cfg.nodos.fotoSinPermiso (la pantalla del nodo avisa siempre mientras dispara) ----------
+  async function foto(id, { camara } = {}) {
     const c = conexiones.get(id);
     if (!c) throw Object.assign(new Error('ese nodo no está conectado'), { status: 404 });
     if (!c.nodo.capacidades?.includes('camara')) throw Object.assign(new Error('ese nodo no tiene cámara'), { status: 400 });
-    const r = await permisos.pedirExterno({ resumen: `Hacer una foto con la cámara de ${c.nodo.nombre}`, origen: c.nodo.nombre, esperaMs: 120_000 });
-    if (!r.ok) throw Object.assign(new Error('permiso denegado'), { status: 403 });
+    if (!opc().fotoSinPermiso) {
+      const r = await permisos.pedirExterno({ resumen: `Hacer una foto con la cámara de ${c.nodo.nombre}`, origen: c.nodo.nombre, esperaMs: 120_000 });
+      if (!r.ok) throw Object.assign(new Error('permiso denegado'), { status: 403 });
+    }
     return new Promise((ok, mal) => {
       const t = setTimeout(() => { c.esperaFoto = null; mal(new Error('el nodo no mandó la foto a tiempo')); }, 15_000);
       c.esperaFoto = { ok: b => { clearTimeout(t); ok(b); }, mal: e => { clearTimeout(t); mal(e); } };
-      c.ws.enviarJSON({ tipo: 'foto' });
+      c.ws.enviarJSON({ tipo: 'foto', ...(camara ? { camara } : {}) });
     }).then(jpg => {
       const dir = path.join(cfg.dir, 'capturas'); fs.mkdirSync(dir, { recursive: true });
       const ruta = path.join(dir, `ojo-${c.nodo.id}-${Date.now()}.jpg`); fs.writeFileSync(ruta, jpg);
       reg('info', `foto de ${c.nodo.nombre}`, ruta);
       return { ruta, bytes: jpg.length };
     });
+  }
+
+  // ---------- fotos del modo cámara de la R1: se guardan tal cual (resolución completa) en la carpeta de fotos ----------
+  function guardarSubida(c) {
+    const s = c.subida; c.subida = null;
+    if (!s || !s.bytes) return;
+    if (s.rota || s.bytes !== s.esperados) return c.ws.enviarJSON({ tipo: 'foto-subir-error', motivo: 'la foto llegó incompleta' });
+    try {
+      const dir = opc().carpetaFotos || path.join(os.homedir(), 'Pictures', 'Rabbit R1');
+      fs.mkdirSync(dir, { recursive: true });
+      let nombre = String(s.nombre || '').replace(/[^\w.-]/g, '_').replace(/^\.+/, '').slice(0, 80);
+      if (!/\.jpe?g$/i.test(nombre)) nombre = `R1_${Date.now()}.jpg`;
+      let ruta = path.join(dir, nombre);
+      for (let i = 2; fs.existsSync(ruta); i++) ruta = path.join(dir, nombre.replace(/(\.jpe?g)$/i, `_${i}$1`));
+      fs.writeFileSync(ruta, Buffer.concat(s.partes));
+      reg('info', `foto de ${c.nodo.nombre}`, ruta);
+      bus.emit('nodo-foto', { nodo: c.nodo.id, nombre: c.nodo.nombre, ruta, bytes: s.bytes });
+      c.ws.enviarJSON({ tipo: 'foto-guardada', nombre: path.basename(ruta), ruta });
+    } catch (e) {
+      reg('aviso', 'foto del nodo', e.message);
+      c.ws.enviarJSON({ tipo: 'foto-subir-error', motivo: String(e.message).slice(0, 200) });
+    }
   }
 
   // ---------- conexiones ----------
@@ -288,7 +345,7 @@ function crearNodos({ nucleo }) {
     conexiones.set(c.nodo.id, c);
     c.nodo.ultimaIp = c.ip; c.nodo.ultimoVisto = Date.now(); guardar();
     const d = new Date();
-    c.ws.enviarJSON({ tipo: 'bienvenido', nombre: c.nodo.nombre, asistente: textoPantalla(nucleo.personalidad?.nombre?.() || 'APOLO'), epoch: Math.floor(d.getTime() / 1000), tz: -d.getTimezoneOffset() });
+    c.ws.enviarJSON({ tipo: 'bienvenido', nombre: c.nodo.nombre, asistente: textoPantalla(nucleo.personalidad?.nombre?.() || 'APOLO'), epoch: Math.floor(d.getTime() / 1000), tz: -d.getTimezoneOffset(), zona: Intl.DateTimeFormat().resolvedOptions().timeZone || '' });   // zona IANA del PC: la R1 pone su reloj con ella
     c.ultimo = null; refrescar();
     const p = primerPermiso();
     if (p) c.ws.enviarJSON({ tipo: 'permiso', id: p.id, resumen: textoPantalla(p.resumen, 60), peligro: !!p.peligro });
@@ -297,7 +354,7 @@ function crearNodos({ nucleo }) {
   }
 
   function alConectar(sock, ip) {
-    const c = { ws: sock, ip, nodo: null, codigo: null, audio: null, foto: null, esperaFoto: null };
+    const c = { ws: sock, ip, nodo: null, codigo: null, audio: null, foto: null, esperaFoto: null, modo: null, subida: null };
     const limite = setTimeout(() => { if (!c.nodo) sock.cerrar(4001, 'sin hola'); }, 10_000); limite.unref?.();
     sock.on('texto', t => {
       let m; try { m = JSON.parse(t); } catch { return sock.cerrar(1003, 'JSON inválido'); }
@@ -334,11 +391,19 @@ function crearNodos({ nucleo }) {
       if (m.tipo === 'audio-fin') return void audioFin(c).catch(e => reg('aviso', 'nodo-audio', e.message));
       if (m.tipo === 'foto-inicio') { c.foto = { partes: [], bytes: 0, max: Math.min(+m.bytes || 0, 2e6) }; c.audio = null; return; }
       if (m.tipo === 'foto-fin') { const f = c.foto; c.foto = null; if (f && c.esperaFoto) { c.esperaFoto.ok(Buffer.concat(f.partes)); c.esperaFoto = null; } return; }
+      if (m.tipo === 'foto-subir') {
+        const max = opc().maxFotoMB * 1024 * 1024, b = +m.bytes || 0;
+        if (b <= 0 || b > max) { c.subida = null; return c.ws.enviarJSON({ tipo: 'foto-subir-error', motivo: `foto demasiado grande (máx. ${opc().maxFotoMB} MB)` }); }
+        c.subida = { partes: [], bytes: 0, esperados: b, nombre: m.nombre }; return;
+      }
+      if (m.tipo === 'foto-subir-fin') return guardarSubida(c);
       if (m.tipo === 'foto-error') { if (c.esperaFoto) { c.esperaFoto.mal(new Error(String(m.motivo || 'error de cámara'))); c.esperaFoto = null; } return; }
     });
     sock.on('binario', b => {
       if (!c.nodo) return sock.cerrar(1008, 'sin emparejar');
-      if (c.audio) {
+      if (c.subida) {                                          // la R1 manda la subida entera de un tirón (nunca intercalada con audio)
+        if (c.subida.bytes + b.length <= c.subida.esperados) { c.subida.partes.push(b); c.subida.bytes += b.length; } else c.subida.rota = true;
+      } else if (c.audio) {
         const max = opc().maxAudioSeg * c.audio.frecuencia * 2;
         if (c.audio.bytes + b.length <= max) { c.audio.partes.push(b); c.audio.bytes += b.length; }
       } else if (c.foto && c.foto.bytes + b.length <= 2e6) { c.foto.partes.push(b); c.foto.bytes += b.length; }
@@ -438,19 +503,71 @@ function crearNodos({ nucleo }) {
       else throw Object.assign(new Error('gesto o estado desconocido'), { status: 400 });
       return { ok: true };
     }
-    if (M === 'POST' && n && p[3] === 'foto') return foto(n.id);
+    if (M === 'POST' && n && p[3] === 'foto') return foto(n.id, { camara: body.camara });
+    if (M === 'POST' && n && p[3] === 'modo') {                // lo siguiente que se dicte en este nodo: 'crear-skill' | 'dictado' | null (2 min)
+      const c = conexiones.get(n.id); if (!c) throw Object.assign(new Error('no está conectado'), { status: 409 });
+      c.modo = ['crear-skill', 'dictado'].includes(body.modo) ? { tipo: body.modo, hasta: Date.now() + 120_000 } : null;
+      return { ok: true, modo: c.modo?.tipo || null };
+    }
+    if (M === 'POST' && n && p[3] === 'texto') {               // como si lo hubieras dicho en ese nodo (p. ej. "usar" una skill desde el menú de la R1)
+      const texto = String(body.texto || '').trim().slice(0, 2000);
+      if (!texto) throw Object.assign(new Error('falta texto'), { status: 400 });
+      actividad(); bus.emit('nodo-texto', { nodo: n.id, nombre: n.nombre, texto });
+      return { ok: true };
+    }
     throw Object.assign(new Error('ruta'), { status: 404 });
   }
 
   const api = {
     iniciar, cerrar, apagarOyentes, activo, http: httpApi, emparejar, borrar, panico, foto, reproducir, reproducirArchivo, estadoActual,
     lista: () => datos.nodos.map(publico), conectados: () => [...conexiones.keys()],
+    canalesActivos: () => (conR1().length ? ['r1'] : []),     // core/skills/indice: las skills canales:['r1'] solo con la R1 conectada
     enviar: (id, msg) => { const c = conexiones.get(id); return c ? c.ws.enviarJSON(msg) : false; },
     puerto: () => puertoReal,
     transcriptor: null,          // main.js: ruta → texto (whisper_srv vía transcribirArchivo)
     permisosExternos: null,      // main.js: { pendientes: () => [{id, resumen, peligro, creado}], resolver: (id, decision, via) => bool } (hooks de Claude Code)
   };
+
+  // herramienta del agente: ver lo que tiene delante un nodo con cámara (la Rabbit R1). El permiso lo decide foto()
+  const conCamara = () => [...conexiones.values()].filter(c => c.nodo.capacidades?.includes('camara'));
+  function conR1() { return [...conexiones.values()].filter(c => c.nodo.modelo === 'rabbit-r1'); }
+  nucleo.skills?.taller?.contextoCanal?.('r1', CONTEXTO_R1);
+  nucleo.registrarHerramientas?.([{
+    nombre: 'r1_pantalla', riesgo: 'lectura',
+    descripcion: 'Enseña una tarjeta en la pantalla de la Rabbit R1 (título + texto corto, se ve de lejos): una lista, los pasos de una receta, '
+      + 'un temporizador, un aviso o un dato que el usuario quiera tener delante. Úsala cuando lo pida una skill de la R1 o el usuario ("ponlo en la R1"). '
+      + 'texto: pocas líneas (máx. ~300 caracteres, con saltos de línea). segundos: cuánto se queda (por defecto 20; 0 = hasta que la cierre con el botón).',
+    parametros: { type: 'object', properties: {
+      titulo: { type: 'string' }, texto: { type: 'string' },
+      segundos: { type: 'number', description: '0-600, por defecto 20; 0 = fija hasta pulsar el botón' },
+      gesto: { type: 'string', enum: GESTOS, description: 'opcional: gesto del robot a la vez' },
+    }, required: ['texto'] },
+    resumen: a => `R1: ${String(a.titulo || a.texto || '').slice(0, 60)}`,
+    disponible: () => conR1().length > 0,
+    ejecutar: async a => {
+      const L = conR1(); if (!L.length) return 'La Rabbit R1 no está conectada ahora mismo.';
+      const seg = a.segundos === 0 ? 0 : Math.max(3, Math.min(600, +a.segundos || 20));
+      const m = { tipo: 'tarjeta', titulo: String(a.titulo || '').slice(0, 60), texto: String(a.texto || '').slice(0, 600), segundos: seg };
+      for (const c of L) { c.ws.enviarJSON(m); if (GESTOS.includes(a.gesto)) c.ws.enviarJSON({ tipo: 'gesto', gesto: a.gesto, segundos: 3 }); }
+      actividad();
+      return `Tarjeta en la pantalla de la R1${seg ? ` (${seg} s)` : ' (fija hasta que pulse el botón)'}.`;
+    },
+  }, {
+    nombre: 'ver_camara', riesgo: 'lectura',
+    descripcion: 'Hace una foto con la cámara de un dispositivo conectado (la Rabbit R1) y te la enseña para que veas lo que hay delante: '
+      + 'úsala cuando te pregunten qué ves, qué es algo, que leas un texto o una etiqueta, o cuando quieras mirar. '
+      + 'camara: "trasera" (por defecto, mira hacia fuera) o "frontal" (hacia la persona).',
+    parametros: { type: 'object', properties: { camara: { type: 'string', enum: ['trasera', 'frontal'] }, nodo: { type: 'string', description: 'id del nodo (opcional)' } } },
+    resumen: a => `mirar por la cámara ${a.camara || 'trasera'}`,
+    disponible: () => conCamara().length > 0,
+    ejecutar: async a => {
+      const c = a.nodo ? conexiones.get(a.nodo) : conCamara()[0];
+      if (!c) return 'No hay ninguna cámara conectada ahora mismo (¿está encendida la R1?).';
+      const r = await foto(c.nodo.id, { camara: a.camara });
+      return { texto: `Foto de ${c.nodo.nombre} (cámara ${a.camara || 'trasera'}), ${Math.round(r.bytes / 1024)} KB: ${r.ruta}`, imagenes: [{ mime: 'image/jpeg', ruta: r.ruta }] };
+    },
+  }]);
   return api;
 }
 
-module.exports = { crearNodos, ipPermitida, enCidr, textoPantalla, wav, ESTADOS, GESTOS };
+module.exports = { crearNodos, ipPermitida, enCidr, textoPantalla, wav, ESTADOS, GESTOS, CONTEXTO_R1 };

@@ -34,6 +34,7 @@ const esRuido = nombre => {
 };
 
 function crearGrafo({ cfg, memoria }) {
+  const recuerdosGlobales = () => memoria.lista().filter(m => !m.procedencia);
   const f = path.join(cfg.dir, 'grafo.json');
   let g = vacio(), mtime = 0;
   function vacio() { return { version: 1, entidades: {}, relaciones: [], heur: {}, llm: {} }; }
@@ -153,7 +154,7 @@ function crearGrafo({ cfg, memoria }) {
   // pasa la heurística por los recuerdos nuevos o cambiados (barato: se llama al pedir el grafo)
   function actualizar() {
     sync();
-    const lista = memoria.lista(), vivos = new Set(lista.map(m => m.id));
+    const lista = recuerdosGlobales(), vivos = new Set(lista.map(m => m.id));
     let n = 0;
     const cambiados = lista.filter(m => g.heur[m.id] !== hash(m.texto));
     if (cambiados.length) {             // un recuerdo editado: se quita de todo y se vuelve a procesar
@@ -169,11 +170,11 @@ function crearGrafo({ cfg, memoria }) {
 
   // ---------- extracción con modelo (la llama el sueño REM) ----------
   // recuerdos que el modelo aún no ha visto (o cambiaron)
-  function pendientesLLM(limite = 40) { sync(); return memoria.lista().filter(m => g.llm[m.id] !== hash(m.texto)).slice(-limite); }
+  function pendientesLLM(limite = 40) { sync(); return recuerdosGlobales().filter(m => g.llm[m.id] !== hash(m.texto)).slice(-limite); }
   // datos = { entidades: [{nombre, tipo, recuerdos:[id]}], relaciones: [{de, a, tipo, recuerdos?:[id]}] }; vistos = ids procesados
   function incorporar(datos = {}, vistos = []) {
     actualizar();                                   // primero la heurística: así las relaciones encuentran lo ya conocido
-    const lista = memoria.lista(), vivos = new Set(lista.map(m => m.id));
+    const lista = recuerdosGlobales(), vivos = new Set(lista.map(m => m.id));
     let nuevas = 0, rel = 0;
     const antes = new Set(Object.keys(g.entidades));
     for (const x of (datos.entidades || []).slice(0, 80)) {
@@ -220,7 +221,7 @@ function crearGrafo({ cfg, memoria }) {
       e = Object.values(g.entidades).filter(x => normal(x.nombre).includes(q) || x.alias?.some(a => normal(a).includes(q))).sort((a, b) => b.recuerdos.length - a.recuerdos.length)[0];
     }
     if (!e) return null;
-    const lista = memoria.lista();
+    const lista = recuerdosGlobales();
     const vecinos = g.relaciones.filter(r => r.de === e.id || r.a === e.id).map(r => {
       const o = g.entidades[r.de === e.id ? r.a : r.de];
       return { id: o.id, nombre: o.nombre, tipo: o.tipo, relacion: r.tipo, peso: r.peso };

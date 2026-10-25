@@ -198,7 +198,7 @@ function crearMcpRemotos({ cfg, registrar, quitar, abrir = abrirNavegador, fetch
       descripcion: `[${s.nombre}] ${t.description}`, parametros: t.inputSchema,
       resumen: a => String(a.query || a.q || a.search || Object.values(a || {})[0] || '').slice(0, 120),
       disponible: () => !!obtener(s.id)?.activo && !!boveda.leer(secreto(s.id)),
-      ejecutar: async a => { await iniciarSesion(s.id); return convertir(s.id, await rpc(s.id, 'tools/call', { name: t.name, arguments: a || {} })); },
+      ejecutar: async (a, ctx = {}) => { await iniciarSesion(s.id); const respuesta = await rpc(s.id, 'tools/call', { name: t.name, arguments: a || {} }), salida = convertir(s.id, respuesta); return ctx.resultadosEstructurados ? { ...(typeof salida === 'string' ? { texto: salida } : salida), estado: respuesta.isError ? 'error' : 'exito', codigo: respuesta.isError ? 'MCP_ERROR' : 'MCP_COMPLETADO', verificado: false } : salida; },
     }));
     registrar(hs); registradas.set(s.id, hs.map(h => h.nombre));
   }

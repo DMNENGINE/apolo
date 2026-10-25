@@ -62,7 +62,7 @@ test('agente: solo las 2 últimas capturas van al modelo; si no acepta imágenes
   });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nucleo-'));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
-    modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: url + '/v1', local: true } }, memoria: { embeddings: null },
+    respaldoAuto: false, modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: url + '/v1', local: true } }, memoria: { embeddings: null },
   }));
   const { crearNucleo } = require('../index');
   const n = crearNucleo({ dir });
@@ -87,7 +87,9 @@ test('agente: solo las 2 últimas capturas van al modelo; si no acepta imágenes
   const r = await n.enviar(s, 'otra vez', e => eventos.push(e));
   assert.strictEqual(r, 'listo');
   assert.ok(eventos.some(e => e.tipo === 'aviso' && /no aceptó la imagen/.test(e.texto)));
-  assert.strictEqual(s.sinVision, true);
+  assert.strictEqual(s.sinVision, undefined);
+  assert.strictEqual(s.visionNoAdmitida.modelo, 'falso/m1');
+  assert.ok(s.visionNoAdmitida.hasta > Date.now());
   const ultimo = cuerpos.at(-1).j.messages;
   assert.ok(!JSON.stringify(ultimo).includes('image_url'));
   assert.match(ultimo.find(m => m.tool_call_id === 't3').content, /este modelo no ve imágenes/);

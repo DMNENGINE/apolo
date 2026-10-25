@@ -63,15 +63,18 @@ function crearBoveda({ dir, cifrador } = {}) {
   let cif = cifrador || null;
   const c = () => cif || (cif = cifradorPorDefecto(dir));
   let cache = null;                                             // nombre → valor en claro (solo en memoria)
-  const guardarDisco = () => { const tmp = f + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(datos, null, 2), { mode: 0o600 }); fs.renameSync(tmp, f); };
+  const guardarDisco = siguientes => require('./persistencia').escribirAtomico(f, JSON.stringify(siguientes, null, 2));
 
   function cargar() {
     if (cache) return cache;
-    cache = new Map();
-    const nombres = Object.keys(datos.entradas); if (!nombres.length) return cache;
+    const nueva = new Map();
+    const nombres = Object.keys(datos.entradas); if (!nombres.length) { cache = nueva; error = ''; return cache; }
     if (datos.metodo && datos.metodo !== c().nombre) throw new Error(`la bóveda se cifró con ${datos.metodo} y aquí solo hay ${c().nombre}`);
     const claros = c().descifrar(nombres.map(n => Buffer.from(datos.entradas[n], 'base64')));
-    nombres.forEach((n, i) => { const v = claros[i].toString('utf8'); cache.set(n, v); registrarSecreto(v); });
+    if (!Array.isArray(claros) || claros.length !== nombres.length || claros.some(v => !Buffer.isBuffer(v))) throw new Error('descifrado incompleto de la boveda');
+    nombres.forEach((n, i) => nueva.set(n, claros[i].toString('utf8')));
+    cache = nueva; error = '';
+    for (const v of cache.values()) registrarSecreto(v);
     return cache;
   }
   function leer(nombre) { try { return cargar().get(String(nombre)) ?? null; } catch (e) { error = e.message; return null; } }
@@ -81,14 +84,18 @@ function crearBoveda({ dir, cifrador } = {}) {
     if (!valor) return borrar(nombre);
     cargar();
     const [x] = c().cifrar([Buffer.from(valor, 'utf8')]);
-    datos.metodo = c().nombre; datos.entradas[nombre] = x.toString('base64');
-    guardarDisco(); const viejo = cache.get(nombre); if (viejo && viejo !== valor) olvidarSecreto(viejo);
+    if (!Buffer.isBuffer(x)) throw new Error('cifrado incompleto de la boveda');
+    const siguientes = { ...datos, metodo: c().nombre, entradas: { ...datos.entradas, [nombre]: x.toString('base64') } };
+    guardarDisco(siguientes); datos = siguientes;
+    const viejo = cache.get(nombre); if (viejo && viejo !== valor) olvidarSecreto(viejo);
     cache.set(nombre, valor); registrarSecreto(valor);
     return true;
   }
   function borrar(nombre) {
     if (!(nombre in datos.entradas)) return false;
-    delete datos.entradas[nombre]; guardarDisco();
+    cargar();
+    const siguientes = { ...datos, entradas: { ...datos.entradas } };
+    delete siguientes.entradas[nombre]; guardarDisco(siguientes); datos = siguientes;
     if (cache) { olvidarSecreto(cache.get(nombre)); cache.delete(nombre); }
     return true;
   }

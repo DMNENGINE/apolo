@@ -59,7 +59,7 @@ function estado() {
 function transcribir(mensajes) {
   return mensajes.map(m => {
     if (m.role === 'user') return `### USUARIO\n${m.content}`;
-    if (m.role === 'tool') return `### RESULTADO de ${m.name} (${m.toolCallId})\n${m.content}${m.imagenes?.length ? '\n(Venía una captura que por esta vía no puedes ver: guíate por la lista de elementos.)' : ''}`;
+    if (m.role === 'tool') return `### RESULTADO de ${m.name} (${m.toolCallId})\n${m.content}${m.imagenes?.length ? '\n(Captura adjunta a esta peticion, en orden de aparicion en el historial.)' : ''}`;
     const calls = (m.toolCalls || []).map(c => `→ llamaste ${c.name}(${JSON.stringify(c.args)}) [${c.id}]`).join('\n');
     return `### TÚ\n${m.content || ''}${calls ? '\n' + calls : ''}`;
   }).join('\n\n');
@@ -67,6 +67,7 @@ function transcribir(mensajes) {
 
 module.exports = (cfg) => ({
   chat({ model, system, mensajes, herramientas, signal }) {
+    if (signal?.aborted) return Promise.reject(signal.reason || new Error('cancelado'));
     const l = lanzador();
     if (!l) return Promise.reject(new Error('Codex CLI no está instalado. Panel → Modelos → ChatGPT → Conectar.'));
     const lista = (herramientas || []).map(h => `- ${h.nombre}: ${h.descripcion}\n  parámetros: ${JSON.stringify(h.parametros)}`).join('\n');
@@ -78,20 +79,31 @@ module.exports = (cfg) => ({
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'robot-codex-'));
     const fEsq = path.join(tmp, 'esquema.json'), fOut = path.join(tmp, 'salida.json');
     fs.writeFileSync(fEsq, JSON.stringify(ESQUEMA));
+    const imagenes = [];
+    for (const m of mensajes) for (const img of m.imagenes || []) {
+      const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[img.mime];
+      if (!ext || typeof img.datos !== 'string') continue;
+      const f = path.join(tmp, 'imagen-' + imagenes.length + '.' + ext);
+      fs.writeFileSync(f, Buffer.from(img.datos, 'base64')); imagenes.push(f);
+    }
     const args = [...l.pre, 'exec', '--skip-git-repo-check', '--ephemeral', '--ignore-rules', '--sandbox', 'read-only', '--color', 'never',
       '--json', '--output-schema', fEsq, '-o', fOut, '-C', tmp, ...SIN.flatMap(f => ['--disable', f])];
     if (model && model !== 'default') args.push('-m', model);
+    for (const f of imagenes) args.push('--image', f);
     args.push('-');                                              // el prompt va por stdin (sin límite de longitud de la línea de comandos)
 
     return new Promise((ok, mal) => {
       const hijo = spawn(l.cmd, args, { cwd: tmp, windowsHide: true, env: { ...process.env, ROBOT_INTERNAL: '1' } });
       let out = '', err = '';
-      const fin = (f) => { clearTimeout(t); try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { } f(); };
+      let terminado = false;
+      const abortar = () => hijo.kill();
+      const fin = (f) => { if (terminado) return; terminado = true; signal?.removeEventListener('abort', abortar); clearTimeout(t); try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { } f(); };
       const t = setTimeout(() => { hijo.kill(); }, cfg.timeoutMs || 300_000);
       hijo.stdout.on('data', d => { out += d; });
       hijo.stderr.on('data', d => { err += d; });
       hijo.on('error', e => fin(() => mal(new Error(`codex: ${e.message}`))));
       hijo.on('close', code => {
+        if (signal?.aborted) return fin(() => mal(signal.reason || new Error('cancelado')));
         const eventos = out.split('\n').map(x => { try { return JSON.parse(x); } catch { return null; } }).filter(Boolean);
         const uso = eventos.filter(e => e.type === 'turn.completed').map(e => e.usage || {}).pop() || {};
         const fallo = eventos.find(e => e.type === 'turn.failed' || e.type === 'error');
@@ -104,18 +116,16 @@ module.exports = (cfg) => ({
           const msg = fallo?.error?.message || fallo?.message || err.trim().split('\n').pop() || `salió con código ${code}`;
           return fin(() => mal(new Error(/log ?in|auth|401/i.test(msg) ? `ChatGPT: no hay sesión iniciada en Codex (Panel → Modelos → ChatGPT → Conectar). ${msg}` : `codex: ${msg}`)));
         }
-        let r; try { r = JSON.parse(texto); } catch { r = { texto, herramientas: [] }; }
+        let r; try { r = decodificar(texto); } catch (e) { return fin(() => mal(e)); }
         fin(() => ok({
           texto: r.texto || '',
-          toolCalls: (r.herramientas || []).map((h, i) => {
-            let a; try { a = JSON.parse(h.argsJson || '{}'); } catch { a = {}; }
-            return { id: `cx_${Date.now()}_${i}`, name: h.nombre, args: a };
-          }),
+          toolCalls: r.toolCalls,
           uso: { entrada: uso.input_tokens || 0, salida: uso.output_tokens || 0 },
         }));
       });
       hijo.stdin.end(prompt);
-      signal?.addEventListener('abort', () => hijo.kill(), { once: true });
+      signal?.addEventListener('abort', abortar, { once: true });
+      if (signal?.aborted) abortar();
     });
   },
   async modelos() { return ['default']; },   // 'default' = el modelo que Codex elige para su plan; se puede escribir otro (chatgpt/<modelo>)
@@ -150,3 +160,16 @@ module.exports.conectar = () => new Promise((ok, mal) => {
     abrirLogin();
   });
 });
+
+// Una llamada rota debe fallar antes de llegar a permisos o herramientas.
+function decodificar(texto) {
+  const r = JSON.parse(texto);
+  const error = require('../estructurado').validar(r, ESQUEMA);
+  if (error) throw new Error('codex: salida invalida: ' + error);
+  return { ...r, toolCalls: r.herramientas.map((h, i) => {
+    const args = JSON.parse(h.argsJson);
+    if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('codex: argumentos deben ser un objeto');
+    return { id: 'cx_' + Date.now() + '_' + i, name: h.nombre, args };
+  }) };
+}
+module.exports.decodificar = decodificar;

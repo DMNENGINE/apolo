@@ -110,6 +110,7 @@ function crearNavegador({ cfg, bus, permisos, cancelarTurno }) {
 
   // tras actuar (clic, enviar, subir) espera un poco, vuelve a leer y dice QUÉ cambió: el modelo no puede dar por hecho
   // algo que no ha visto (antes decía "ya aprobé los créditos" sin mirar y el botón seguía ahí)
+  const comprobaciones = new Map();
   async function comprobar(s, t, { urlAntes, quien }) {
     const clave = `${s.id}:${t.id}`, antes = textos.get(clave), elsAntes = elementos.get(clave) || [];
     await new Promise(r => setTimeout(r, Number(cfg.navegador?.comprobarMs) || 1800));
@@ -122,6 +123,7 @@ function crearNavegador({ cfg, bus, permisos, cancelarTurno }) {
     const sigue = quien && r.elementos.some(e => (e.texto || '') === quien) && elsAntes.some(e => (e.texto || '') === quien);
     const cambioUrl = urlAntes && r.url !== urlAntes;
     const nada = antes != null && !cambioUrl && !nuevas.length && !fuera.length;
+    comprobaciones.set(s.id, { estado: nada ? 'error' : 'exito', codigo: nada ? 'SIN_CAMBIOS' : 'CAMBIO_OBSERVADO', verificado: false, evidencias: [String(r.url || t.url)] });
     const cab = nada
       ? `⚠ COMPROBACIÓN: la página NO cambió nada${sigue ? ` y "${quien}" sigue ahí` : ''}. Lo más probable es que NO haya funcionado. NO le digas al usuario que está hecho: reintenta, mira con navegador_captura o pregúntale.`
       : `COMPROBACIÓN (${((Number(cfg.navegador?.comprobarMs) || 1800) / 1000).toFixed(1)} s después):${cambioUrl ? ` la dirección cambió a ${r.url}.` : ''}` +
@@ -236,6 +238,10 @@ function crearNavegador({ cfg, bus, permisos, cancelarTurno }) {
     esperar, resultado, detener,
     estado: () => ({ conectado: conectado(), ...info, pendientes: enVuelo.size }),
     accion: (s, op, a) => acciones[op](s, a || {}),
+    accionConEstado: async (s, op, a) => {
+      comprobaciones.delete(s.id); const out = await acciones[op](s, a || {});
+      return { ...(out && typeof out === 'object' ? out : { texto: out }), estado: 'desconocido', ...comprobaciones.get(s.id) };
+    },
     orden, conectado,                                            // reuniones (core/reuniones.js): subtítulos en vivo vía la extensión
     dominioDe, protegido,
   };

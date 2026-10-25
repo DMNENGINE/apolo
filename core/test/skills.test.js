@@ -207,7 +207,7 @@ function modeloFalso(guion) {
 
 test('agente: el prompt lleva SKILLS DISPONIBLES y el modelo carga la skill con usar_skill', async t => {
   const g = await modeloFalso([{ role: 'assistant', content: 'hola' }]); t.after(() => g.srv.close());
-  const { n } = nucleo({ modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: g.url, local: true } } });
+  const { n } = nucleo({ respaldoAuto: false, modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: g.url, local: true } } });
   const src = tmp('src-'); skillEn(src, 'saludo', { desc: 'Saluda como un pirata', cuerpo: 'Di siempre "Ahoy".' });
   // sin skills activas: ni sección ni herramientas de skills
   await n.enviar(n.sesiones.crear({}), 'hola');

@@ -11,6 +11,8 @@
 // no guardarían transcripción (el uso de hoy saldría a 0) y recibirían el token de otra sesión. Se borran al arrancar.
 for (const k of Object.keys(process.env)) if (/^(CLAUDE_CODE_|CLAUDECODE$|CLAUDE_PID$|CLAUDE_EFFORT$)/.test(k)) delete process.env[k];
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, shell, globalShortcut, clipboard, safeStorage } = require('electron');
+require('./main/ipc-seguro').instalar(ipcMain, pathParaIPC());
+function pathParaIPC() { return require('path').join(__dirname, 'app', 'index.html'); }
 const { crearConectores } = require('./conectores');
 const http = require('http');
 const fs = require('fs');
@@ -978,4 +980,10 @@ app.whenReady().then(() => {
   }, 5 * 60_000);
 });
 app.on('window-all-closed', () => app.quit());
+let cerrandoTrading = false;
+app.on('before-quit', e => {
+  if (cerrandoTrading || !nucleo?.trading || !['activo', 'iniciando', 'incierto', 'parando', 'parada_no_confirmada'].includes(nucleo.trading.estado().estado)) return;
+  e.preventDefault(); cerrandoTrading = true;
+  nucleo.trading.parar('cierre de APOLO').catch(() => console.error('[trading] cierre: parada no confirmada en la central')).finally(() => { nucleo.trading.cerrar(); app.quit(); });
+});
 app.on('will-quit', () => { voz.cerrar(); try { nucleo?.control.cerrar(); } catch { } });

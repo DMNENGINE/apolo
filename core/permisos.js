@@ -5,11 +5,11 @@ const path = require('path');
 const esPeligroso = require('../shared/peligro');
 const seg = require('./seguridad');
 const { crearExfil } = require('./exfil');
+const rutas = require('./rutas-seguras');
 
 const ALIAS = { shell: 'Bash', escribir_archivo: 'Write', editar_archivo: 'Edit' };   // para reutilizar peligro.js
 const RUTAS = new Set(['leer_archivo', 'listar', 'escribir_archivo', 'editar_archivo']);
 const nivel = r => ({ lectura: 0, pantalla: 1, escritura: 2, control: 2, ejecucion: 3 }[r] ?? 2);
-const dentro = (f, d) => { const a = path.resolve(f).toLowerCase(), b = path.resolve(d).toLowerCase(); return a === b || a.startsWith(b + path.sep); };
 const normPrefijo = p => String(p || '').toLowerCase().replace(/^.*[\\/]/, '').replace(/\.(exe|cmd|bat|com)$/, '');
 
 function crearPermisos({ cfg, bus }) {
@@ -25,21 +25,43 @@ function crearPermisos({ cfg, bus }) {
     if (h.clavePermiso) return { herramienta: h.nombre, prefijo: h.clavePermiso(args) };   // p. ej. scripts de skills: por skill/script
     if (h.nombre === 'shell') return { herramienta: 'shell', prefijo: esPeligroso.analizar(args.comando).primera };   // normalizada: sin ruta, sin .exe, minúsculas
     if (args.dominio !== undefined) return { herramienta: h.nombre, prefijo: String(args.dominio) };   // navegador: regla por sitio
-    if (args.ruta === undefined) return { herramienta: h.nombre, prefijo: '*' };
-    return { herramienta: h.nombre, prefijo: path.dirname(path.resolve(cwd, String(args.ruta))) };
+    if (args.ruta === undefined && h.nombre !== 'listar') return { herramienta: h.nombre, prefijo: '*' };
+    return { herramienta: h.nombre, prefijo: path.dirname(rutas.prepararRuta(cwd, args.ruta ?? '.').real) };
   }
   const coincide = (r, k) => r.herramienta === k.herramienta &&
     (k.herramienta === 'shell' ? normPrefijo(r.prefijo) === k.prefijo : k.prefijo === '*' ? r.prefijo === k.prefijo : (k.prefijo + path.sep).startsWith(r.prefijo + path.sep));
 
-  async function pedir({ h, args, sesion, ctx }) {
+  async function pedir(opciones) {
+    const { h, args, sesion } = opciones;
+    let destino;
+    try {
+      if (RUTAS.has(h.nombre) && args && typeof args === 'object' && !Array.isArray(args)) destino = rutas.prepararRuta(sesion.cwd, args.ruta ?? '.');
+      const r = await pedirInterno(opciones);
+      if (r.ok && destino) {
+        const actual = rutas.prepararRuta(sesion.cwd, args.ruta ?? '.');
+        if (actual.absoluta !== destino.absoluta || actual.real !== destino.real) return { ok: false, motivo: 'la ruta cambio durante el permiso' };
+        rutas.autorizarRuta(args, destino);
+      }
+      return r;
+    } catch (e) { return { ok: false, motivo: `ruta no autorizada: ${e.message}` }; }
+  }
+  async function pedirInterno({ h, args, sesion, ctx, signal }) {
+    if (signal?.aborted) return { ok: false, motivo: 'cancelado' };
+    if (!args || typeof args !== 'object' || Array.isArray(args)) return { ok: false, motivo: 'argumentos deben ser un objeto' };
+    const errorArgs = require('./estructurado').validar(args, h.parametros);
+    if (errorArgs) return { ok: false, motivo: `argumentos invalidos: ${errorArgs}` };
     const modo = cfg.permisos.modo;
     let riesgo = typeof h.riesgo === 'function' ? h.riesgo(args, sesion) : h.riesgo;
     // FASE 9: rutas sensibles (token, claves, .env, ssh…), escribir en los datos de APOLO y la red local (SSRF) nunca pasan solas
-    const rutaAbs = RUTAS.has(h.nombre) && args.ruta !== undefined ? path.resolve(sesion.cwd || '.', String(args.ruta)) : '';
-    const sensible = (rutaAbs && (seg.rutaSensible(rutaAbs, { dirNucleo: cfg.dir }) || (/^(escribir|editar)_/.test(h.nombre) && dentro(rutaAbs, cfg.dir) && !dentro(rutaAbs, path.join(cfg.dir, 'turno', 'worktrees')) && 'datos internos de APOLO')))
+    const rutaAbs = RUTAS.has(h.nombre) ? rutas.prepararRuta(sesion.cwd, args.ruta ?? '.').real : '';
+    const dirReal = rutaAbs ? rutas.rutaReal(cfg.dir) : cfg.dir;
+    const sensible = (rutaAbs && (seg.rutaSensible(path.resolve(sesion.cwd || '.', String(args.ruta ?? '.')), { dirNucleo: cfg.dir }) || (/^(escribir|editar)_/.test(h.nombre) && rutas.dentro(rutaAbs, dirReal) && !rutas.dentro(rutaAbs, path.join(dirReal, 'turno', 'worktrees')) && 'datos internos de APOLO')))
       || (h.nombre === 'web' && seg.urlPrivada(args.url) && 'red local / este equipo') || '';
     if (sensible && riesgo === 'lectura') riesgo = 'escritura';
     // anti-exfiltración (core/exfil.js): enviar datos a un dominio nuevo se pregunta aunque sea "lectura" y aunque el modo sea auto
+    const declarado = h.siemprePreguntar?.(args, ctx);
+    if (declarado && riesgo === 'lectura') riesgo = 'escritura';
+    if ((modo === 'solo-lectura' || sesion.soloLectura || sesion.canal === 'eval') && riesgo !== 'lectura') return { ok: false, motivo: 'modo solo-lectura' };
     const ex = exfil.evaluar({ h, args, sesion });
     if (ex && !reglas.some(r => coincide(r, { herramienta: 'exfil', prefijo: ex.dominio }))) {
       const mb = bloqueo(); if (mb) return { ok: false, motivo: mb };
@@ -53,7 +75,7 @@ function crearPermisos({ cfg, bus }) {
         bus.emit('turno-permiso', { sesion: sesion.id, herramienta: h.nombre, resumen, clave: k, peligro: 'anti-exfiltración' });
         return { ok: false, motivo: 'TURNO DE NOCHE: enviar datos a un dominio nuevo necesita permiso del usuario; queda pendiente para la mañana. No lo intentes por otra vía.' };
       }
-      const r = await esperar({ sesion: sesion.id, herramienta: h.nombre, resumen, args, peligro: '', exfil: true }, k, 'exfil', ex);
+      const r = await esperar({ sesion: sesion.id, herramienta: h.nombre, resumen, args, peligro: '', exfil: true }, k, 'exfil', ex, signal);
       if (!r.ok || riesgo === 'lectura') return r;
     }
     if (riesgo === 'lectura') return { ok: true };
@@ -61,6 +83,7 @@ function crearPermisos({ cfg, bus }) {
     if (motivoBloqueo) { auditoria?.registrar({ tipo: 'accion', sesion: sesion.id, herramienta: h.nombre, resumen: h.resumen(args), riesgo, decision: 'deny', quien: 'pánico', resultado: 'bloqueado' }); return { ok: false, motivo: motivoBloqueo }; }
     if (modo === 'solo-lectura') return { ok: false, motivo: 'modo solo-lectura' };
     // siemprePreguntar: herramientas que se aprueban una a una (control del PC, acciones delicadas): sin reglas "siempre" ni modo auto
+    if (h.permisoInterno && !sensible && !declarado) return { ok: true };
     const an = h.nombre === 'shell' ? esPeligroso.analizar(args.comando) : null;
     const peligro = (sensible ? `acceso sensible: ${sensible}` : '') || h.siemprePreguntar?.(args, ctx) || esPeligroso(ALIAS[h.nombre] || h.nombre, { command: args.comando, file_path: args.ruta && path.resolve(sesion.cwd, args.ruta) });
     const k = clave(h, args, sesion.cwd);
@@ -79,15 +102,18 @@ function crearPermisos({ cfg, bus }) {
       return { ok: false, motivo: 'TURNO DE NOCHE: esto necesita un permiso nuevo del usuario y queda pendiente para la mañana. No lo intentes por otra vía: sigue con lo que puedas hacer sin ello y apúntalo en tu informe.' };
     }
 
-    return esperar({ sesion: sesion.id, herramienta: h.nombre, resumen: h.resumen(args), args, peligro }, k, riesgo);
+    return esperar({ sesion: sesion.id, herramienta: h.nombre, resumen: h.resumen(args), args, peligro }, k, riesgo, null, signal);
   }
   // crea la petición pendiente y espera la respuesta del usuario (10 min → deny)
-  function esperar(datos, k, riesgo, exf = null) {
+  function esperar(datos, k, riesgo, exf = null, signal) {
     const id = `p${Date.now().toString(36)}${(++n).toString(36)}`;
     const req = { id, ...datos, creado: Date.now() };
     return new Promise(ok => {
       const t = setTimeout(() => resolver(id, 'deny', 'sin respuesta en 10 min'), 600_000);
-      pendientes.set(id, { req, ok, t, k, riesgo, exf });
+      const ab = () => resolver(id, 'deny', 'cancelado', 'cancelacion');
+      pendientes.set(id, { req, ok, t, k, riesgo, exf, signal, ab });
+      signal?.addEventListener('abort', ab, { once: true });
+      if (signal?.aborted) { ab(); return; }
       bus.emit('permiso', req);
     });
   }
@@ -96,9 +122,10 @@ function crearPermisos({ cfg, bus }) {
   // quien = canal/dispositivo que decidió (panel, isla, discord, movil:<nombre>, nodo:<id>, streamdeck…) → registro de auditoría
   function resolver(id, decision, motivo, quien = 'desconocido') {
     const p = pendientes.get(id); if (!p) return false;
-    pendientes.delete(id); clearTimeout(p.t);
+    pendientes.delete(id); clearTimeout(p.t); p.signal?.removeEventListener('abort', p.ab);
     if (decision === 'always' && p.k && !p.req.peligro && !reglas.some(r => coincide(r, p.k))) {
-      reglas.push(p.k); fs.writeFileSync(f, JSON.stringify(reglas, null, 2));
+      try { require('./persistencia').escribirAtomico(f, JSON.stringify([...reglas, p.k], null, 2)); reglas.push(p.k); }
+      catch { decision = 'deny'; motivo = 'no pude guardar la regla de permiso'; }
     }
     const ok = decision === 'allow' || decision === 'always';
     if (ok && p.exf) exfil.marcarVisitado(p.exf.dominio, p.exf.turno);   // aprobado una vez: conocido desde el turno siguiente
@@ -123,7 +150,7 @@ function crearPermisos({ cfg, bus }) {
   function borrarRegla(i) { if (!reglas[i]) return false; reglas.splice(i, 1); fs.writeFileSync(f, JSON.stringify(reglas, null, 2)); return true; }
   // pánico: deniega todo lo pendiente
   function denegarTodo(motivo = 'pánico', quien = 'pánico') { let c = 0; for (const id of [...pendientes.keys()]) if (resolver(id, 'deny', motivo, quien)) c++; return c; }
-  return { pedir, pedirExterno, resolver, exfil, borrarRegla, denegarTodo, ponerBloqueo: fn => { bloqueo = typeof fn === 'function' ? fn : () => ''; }, ponerAuditoria: a => { auditoria = a; },
+  return { cancelarSesion: id => { for (const [k, p] of pendientes) if (p.req.sesion === id) resolver(k, 'deny', 'cancelado', 'cancelacion'); }, pedir, pedirExterno, resolver, exfil, borrarRegla, denegarTodo, ponerBloqueo: fn => { bloqueo = typeof fn === 'function' ? fn : () => ''; }, ponerAuditoria: a => { auditoria = a; },
     resultado: (aid, ok, texto) => { if (aid && auditoria) auditoria.resultado(aid, ok, texto); }, pendientes: () => [...pendientes.values()].map(p => p.req), reglas: () => reglas };
 }
 

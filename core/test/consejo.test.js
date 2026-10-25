@@ -33,7 +33,7 @@ async function servidor(t, { espera = 250 } = {}) {
   t.after(() => { srv.closeAllConnections?.(); srv.close(); });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nucleo-consejo-'));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
-    modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } },
+    respaldoAuto: false, modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } },
     memoria: { embeddings: null }, consejo: { miembros: ['falso/m1', 'falso/m2'], rondas: 1, moderador: 'falso/mod' },
   }));
   const { crearNucleo } = require('../index');
@@ -89,7 +89,7 @@ test('consejo: sin debate (rondas 0), herramienta consultar_consejo y cancelaciÃ
   assert.strictEqual(r.rondas.length, 1);
   assert.deepStrictEqual(r.miembros.map(m => m.modelo), ['falso/m1', 'falso/m2']);   // los de cfg.consejo.miembros
   // herramienta
-  const h = require('../herramientas').porNombre.consultar_consejo;
+  const h = n.herramientas.porNombre.consultar_consejo;
   assert.ok(h);
   const txt = await h.ejecutar({ pregunta: 'otra', rondas: 0 }, { consejo: n.consejo, signal: new AbortController().signal });
   assert.match(txt, /Consejo de 2 modelos/);

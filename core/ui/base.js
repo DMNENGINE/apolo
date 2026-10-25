@@ -123,8 +123,8 @@ if (!TOKEN) { try { TOKEN = localStorage.getItem('robot-token') || ''; if (TOKEN
 const mHash = location.hash.match(/token=([a-f0-9]{16,})/i);
 if (mHash) { TOKEN = mHash[1]; guardarLocal('token', TOKEN); history.replaceState(null, '', location.pathname + '#' + ((location.hash.match(/^#(\/[\w/-]+)/) || [])[1] || '/inicio')); }   // "#/agentes&token=…" abre esa página
 
-async function api(metodo, ruta, cuerpo) {
-  const r = await fetch('/v1' + ruta, { method: metodo, headers: { 'x-robot-token': TOKEN, 'content-type': 'application/json' }, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+async function api(metodo, ruta, cuerpo, signal) {
+  const r = await fetch('/v1' + ruta, { method: metodo, signal, headers: { 'x-robot-token': TOKEN, 'content-type': 'application/json' }, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
   if (r.status === 401) { pantallaLogin(); throw new Error(tr('token no válido')); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
@@ -372,11 +372,12 @@ function actualizarEstadoRobot() {
 // ---------- eventos en vivo ----------
 let flujoGlobal = null;
 function conectarEventos() {
-  flujoGlobal?.abort(); flujoGlobal = new AbortController();
+  flujoGlobal?.abort(); const controlador = new AbortController(); flujoGlobal = controlador;
   const marcar = ok => { const p = $('#puntoConexion'); if (p) p.className = 'punto ' + (ok ? 'ok' : 'mal'); };
   marcar(true);
   // panel=1 + pid: APOLO sabe que esta pestaña existe y, con avisarFoco(), si la estás mirando (la isla pasa detrás mientras tanto)
   flujo('GET', `/eventos?panel=1&pid=${PANEL_ID}`, undefined, e => {
+    if (controlador.signal.aborted || flujoGlobal !== controlador) return;
     if (e.tipo === 'permiso') { E.pendientes.set(e.id, e); pintarPermisos(); robotsLog(`? ${tr('permiso')}: ${NOMBRE_HERR[e.herramienta] || e.herramienta}`); }
     else if (e.tipo === 'permiso-resuelto') { E.pendientes.delete(e.id); pintarPermisos(); }
     else if (e.tipo === 'avatar' && typeof AV_cargarGlobal === 'function') { AV_cargarGlobal().catch(() => { }); }   // AV_aplicarGlobal re-monta el compañero
@@ -386,12 +387,16 @@ function conectarEventos() {
       if (e.tipo === 'inicio') { E.trabajando.add(e.sesion); robotsLog(`> ${tr('{m} pensando…', { m: nombreModelo(e.modelo) })}`); }
       if (e.tipo === 'herramienta') robotsLog(`> ${NOMBRE_HERR[e.nombre] || e.nombre} ${String(e.resumen || '').slice(0, 30)}`);
       if (e.tipo === 'fin' || e.tipo === 'error') E.trabajando.delete(e.sesion);
-      if (e.tipo === 'fin') { robotsLog(tr('✓ respuesta lista')); if (!E.trabajando.size && !E.pendientes.size) robotsFlash(tr('✓ LISTO'), 'listo'); }
+      if (e.tipo === 'fin') {
+        const pendiente = ['incompleta', 'requiere_verificacion'].includes(e.estado);
+        robotsLog(tr(pendiente ? 'Falta verificar o completar el trabajo' : '✓ respuesta lista'));
+        if (!E.trabajando.size && !E.pendientes.size) robotsFlash(tr(pendiente ? 'REVISAR RESULTADO' : '✓ LISTO'), pendiente ? 'error' : 'listo');
+      }
       if (e.tipo === 'error') { robotsLog(`✗ ${String(e.error).slice(0, 34)}`); robotsFlash(tr('✗ ERROR'), 'error'); }
       if (e.tipo === 'inicio' || e.tipo === 'fin' || e.tipo === 'error') { cargarSesiones(); actualizarEstadoRobot(); }
     }
     for (const o of E.oyentes) { try { o(e); } catch { } }
-  }, flujoGlobal.signal).catch(() => { }).finally(() => { if (!flujoGlobal.signal.aborted) { marcar(false); setTimeout(conectarEventos, 3000); } });
+  }, controlador.signal).catch(() => { }).finally(() => { if (!controlador.signal.aborted && flujoGlobal === controlador) { marcar(false); setTimeout(() => { if (flujoGlobal === controlador && !controlador.signal.aborted) conectarEventos(); }, 3000); } });
   setTimeout(() => avisarFoco(true), 500);              // tras (re)conectar, el daemon vuelve a saber si se está mirando
 }
 // ¿estás usando el panel? (pestaña visible y ventana del navegador delante). La isla no se esconde: solo deja de estar

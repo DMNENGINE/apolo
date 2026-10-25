@@ -82,7 +82,7 @@ test('agente: al pasar el umbral resume antes de llamar al modelo y el resumen v
   t.after(() => srv.close());
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nucleo-'));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
-    modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } },
+    respaldoAuto: false, modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } },
     memoria: { embeddings: null }, compactar: { umbral: 1500, conservar: 200 },
   }));
   const { crearNucleo } = require('../index');

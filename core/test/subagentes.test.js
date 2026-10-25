@@ -32,8 +32,8 @@ async function servidor(t, { espera = 300, hijoTrabajaPara = null } = {}) {
   t.after(() => { srv.closeAllConnections?.(); srv.close(); });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nucleo-'));
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
-    modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } },
-    memoria: { embeddings: null },
+    respaldoAuto: false, modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } },
+    memoria: { embeddings: null }, permisos: { modo: 'auto' },
   }));
   const { crearNucleo } = require('../index');
   return { n: crearNucleo({ dir }), recibidos };
@@ -65,7 +65,8 @@ test('delegar: dos subagentes en paralelo, informes en orden y el padre responde
   await new Promise(ok => setTimeout(ok, 300));
   const l = n.subagentes.lista();
   assert.strictEqual(l.length, 3);
-  assert.ok(l.every(r => r.estado === 'listo'));
+  assert.ok(l.filter(r => r.padre === s.id).every(r => r.estado === 'listo'));
+  assert.strictEqual(l.find(r => r.id === s.id).estado, 'incompleto', 'los informes de texto no verifican los efectos del padre');
   assert.deepStrictEqual(l.filter(r => r.padre === s.id).map(r => r.nombre).sort(), ['discos', 'logs']);
 });
 

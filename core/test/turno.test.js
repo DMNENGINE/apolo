@@ -120,7 +120,7 @@ test('turno: worktree en rama aparte, permiso para la mañana, informe, vídeo H
 
 test('turno: herramientas, borrar y validación', async t => {
   const { n, suelta } = await entorno(t);
-  const H = require('../herramientas').porNombre;
+  const H = n.herramientas.porNombre;
   const txt = await H.turno_agregar.ejecutar({ texto: 'revisa los logs' }, { turno: n.turno, cwd: suelta });
   assert.match(txt, /Encargo añadido/);
   assert.match(await H.turno_ver.ejecutar({}, { turno: n.turno }), /\[pendiente\] revisa los logs/);

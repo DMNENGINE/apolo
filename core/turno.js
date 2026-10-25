@@ -189,7 +189,7 @@ function crearTurno({ cfg, bus, sesiones, enviar, cancelar, generarJSON, modeloI
     const tope = setTimeout(() => { porTiempo = true; cancelar(s.id); }, Math.max(1, c.maxMin) * 60_000); tope.unref?.();
     try {
       e.resultado = String(await enviar(s, PROMPT(e, wt, e.cwd)) || '').slice(0, 6000);
-      e.estado = e.permisos.length ? 'espera' : 'hecho';
+      e.estado = e.permisos.length || ['incompleta', 'requiere_verificacion'].includes(s.ultimaEjecucion?.estado) ? 'espera' : 'hecho';
     } catch (er) {
       if (t.parado && !e.permisos.length) { e.estado = 'pendiente'; e.nota = 'el turno se paró: vuelve a la cola'; }
       else if (e.permisos.length) e.estado = 'espera';

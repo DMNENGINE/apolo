@@ -45,7 +45,15 @@ function jaula(dirCache) {
 function etiquetar(exe, modo, rutas) {
   if (!rutas.length) return true;
   const r = spawnSync(exe, [`etiquetar=${modo}`, ...rutas], { windowsHide: true, encoding: 'utf8' });
-  return r.status === 0;
+  if (r.error || r.status !== 0) {
+    const motivo = r.error ? [r.error.code, r.error.message].filter(Boolean).join(': ')
+      : r.signal ? 'senal ' + r.signal : 'codigo ' + r.status + (r.stderr ? ': ' + String(r.stderr).trim().slice(0, 300) : '');
+    const error = new Error('no pude aplicar la etiqueta ' + modo + ': ' + motivo);
+    error.code = r.error?.code || 'APOLO_SANDBOX_ETIQUETA';
+    error.status = r.status; error.signal = r.signal || null;
+    throw error;
+  }
+  return true;
 }
 // archivos de una ruta (o la ruta misma), hasta 3 niveles y 2000 entradas
 function archivosDe(r, prof = 0, acc = []) {
@@ -62,11 +70,16 @@ async function prepararRestringido({ dirOrigen, dirCache, dirDatos, protegerLect
     ...protegerLectura.map(x => String(x).replace(/^~(?=[\\/]|$)/, os.homedir())).flatMap(x => archivosDe(path.resolve(x)))].filter(f => fs.existsSync(f));
   etiquetar(exe, 'nolectura', proteger);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'apolo-sb-'));
-  if (!etiquetar(exe, 'baja', [root])) { fs.rmSync(root, { recursive: true, force: true }); throw new Error('no pude etiquetar la carpeta de trabajo con integridad baja'); }
-  const cwd = path.join(root, dirOrigen ? path.basename(dirOrigen) : 'trabajo'), tmp = path.join(root, 'tmp');
-  if (dirOrigen) fs.cpSync(dirOrigen, cwd, { recursive: true, filter: s => !/[\\/]\.git([\\/]|$)/.test(s) }); else fs.mkdirSync(cwd);
-  fs.mkdirSync(tmp);
-  return { jaula: exe, root, cwd, tmp, limpiar: () => { try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); } catch { } } };
+  try {
+    etiquetar(exe, 'baja', [root]);
+    const cwd = path.join(root, dirOrigen ? path.basename(dirOrigen) : 'trabajo'), tmp = path.join(root, 'tmp');
+    if (dirOrigen) fs.cpSync(dirOrigen, cwd, { recursive: true, filter: s => !/[\\/]\.git([\\/]|$)/.test(s) }); else fs.mkdirSync(cwd);
+    fs.mkdirSync(tmp);
+    return { jaula: exe, root, cwd, tmp, limpiar: () => { try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); } catch { } } };
+  } catch (e) {
+    try { fs.rmSync(root, { recursive: true, force: true }); } catch { }
+    throw e;
+  }
 }
 function lanzarRestringido({ jaula: exe, bin, args, cwd, env, limites }) {
   const l = limites || {};

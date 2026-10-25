@@ -23,7 +23,7 @@ const llamada = (id, name, args) => ({ role: 'assistant', content: null, tool_ca
 
 function entorno(url, extra = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nucleo-'));
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: url, local: true } }, ...extra }));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ memoria: { embeddings: null }, respaldoAuto: false, modeloPorDefecto: 'falso/m1', proveedores: { falso: { tipo: 'openai', baseUrl: url, local: true } }, ...extra }));
   return dir;
 }
 
@@ -37,7 +37,8 @@ test('bucle: herramienta de lectura + respuesta final', async () => {
   const ev = [];
   const r = await n.enviar(s, 'qué hay aquí', e => ev.push(e.tipo));
   assert.strictEqual(r, 'Hay un archivo hola.txt');
-  assert.deepStrictEqual(ev, ['inicio', 'herramienta', 'resultado', 'texto', 'fin']);
+  assert.deepStrictEqual(ev.filter(t => !['progreso', 'modelo'].includes(t)), ['inicio', 'herramienta', 'resultado', 'texto', 'fin']);
+  assert.ok(ev.includes('progreso') && ev.includes('modelo'));
   const seg = f.recibidos[1].messages;                       // el 2º request lleva el resultado de la herramienta
   assert.strictEqual(seg.at(-1).role, 'tool');
   assert.match(seg.at(-1).content, /hola\.txt/);
@@ -94,8 +95,8 @@ test('daemon: token, crear sesión y turno por SSE', async () => {
   const s = await (await fetch(`${base}/sesiones`, { method: 'POST', headers: h, body: JSON.stringify({ cwd: os.tmpdir() }) })).json();
   const txt = await (await fetch(`${base}/sesiones/${s.id}/mensajes`, { method: 'POST', headers: h, body: JSON.stringify({ texto: 'hola' }) })).text();
   const eventos = txt.split('\n\n').filter(Boolean).map(l => JSON.parse(l.slice(6)));
-  assert.deepStrictEqual(eventos.map(e => e.tipo), ['inicio', 'texto', 'fin']);
-  assert.strictEqual(eventos[1].texto, 'hola desde el daemon');
+  assert.deepStrictEqual(eventos.map(e => e.tipo).filter(t => !['progreso', 'modelo'].includes(t)), ['inicio', 'texto', 'fin']);
+  assert.strictEqual(eventos.find(e => e.tipo === 'texto').texto, 'hola desde el daemon');
   d.servidor.close(); f.srv.close();
 });
 
@@ -144,7 +145,8 @@ test('respuesta vacía: el agente pide la respuesta final una vez', async () => 
 test('panel: estáticos sin token, config sin claves, PATCH de config', async (t) => {
   const dir = entorno('http://127.0.0.1:9/v1');
   const { iniciar } = require('../daemon');
-  const d = await iniciar({ dir, puerto: 0, sinTareas: true });
+  const { crearBoveda, cifradorArchivo } = require('../boveda');
+  const d = await iniciar({ dir, puerto: 0, sinTareas: true, boveda: crearBoveda({ dir, cifrador: cifradorArchivo(dir) }) });
   t.after(() => d.servidor.close());
   const base = `http://127.0.0.1:${d.puerto}`, h = { 'x-robot-token': d.token, 'content-type': 'application/json' };
   const html = await fetch(base + '/');

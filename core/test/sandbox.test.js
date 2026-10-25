@@ -54,10 +54,10 @@ test('caídas: aislado sin Windows Sandbox → restringido; sin sandbox en el SO
 
 test('ejecutar: auditoría de la elección y del resultado, bloqueado, aislado y nivel persistido en config.json', async () => {
   const dir = tmp(), aud = auditoriaFalsa();
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ modeloPorDefecto: 'x/y' }));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ respaldoAuto: false, modeloPorDefecto: 'x/y' }));
   const cfg = { dir }, sb = crearSandbox({ cfg, auditoria: aud, impl: implFalsa() });
   const r = await sb.ejecutar({ clave: 'util', meta: VERDE, bin: process.execPath, args: ['-e', 'console.log("hola")'], env: process.env });
-  assert.strictEqual(r.nivel, 'restringido'); assert.strictEqual(r.codigo, 0); assert.match(r.salida, /hola/); assert.match(r.nota, /^\[sandbox: restringido\] no confiable/);
+  assert.strictEqual(r.nivel, 'restringido'); assert.strictEqual(r.codigo, 0, r.salida); assert.match(r.salida, /hola/); assert.match(r.nota, /^\[sandbox: restringido\] no confiable/);
   assert.deepStrictEqual([aud.l[0].tipo, aud.l[0].decision, aud.l[0].origen, aud.l[0].herramienta], ['sandbox', 'restringido', 'util', 'ejecutar_script_skill']);
   assert.strictEqual(aud.l[1].tipo, 'resultado'); assert.strictEqual(aud.l[1].ok, true); assert.match(aud.l[1].texto, /restringido · código 0/);
   // nivel por skill: se guarda en cfg y en disco, y la siguiente ejecución lo usa
@@ -79,12 +79,13 @@ test('ejecutar: auditoría de la elección y del resultado, bloqueado, aislado y
 test('pánico: matarTodo() mata lo que corre en sandbox (también desde el kill switch del núcleo)', async () => {
   const sb = crearSandbox({ cfg: {}, impl: implFalsa() });
   const t0 = Date.now();
-  const pr = sb.ejecutar({ clave: 'lenta', meta: {}, bin: process.execPath, args: ['-e', 'setTimeout(() => {}, 60000)'], env: process.env, timeoutSeg: 60 });
+  let terminado;
+  const pr = sb.ejecutar({ clave: 'lenta', meta: {}, bin: process.execPath, args: ['-e', 'setTimeout(() => {}, 60000)'], env: process.env, timeoutSeg: 60 }).then(r => { terminado = r; return r; });
   await new Promise(r => setTimeout(r, 300));
-  assert.strictEqual(matarTodo(), 1);
+  assert.strictEqual(matarTodo(), 1, terminado?.salida);
   const r = await pr; assert.notStrictEqual(r.codigo, 0); assert.ok(Date.now() - t0 < 10_000);
   // el pánico del núcleo llama a matarTodo
-  const dir = tmp(); fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ modeloPorDefecto: 'f/m', proveedores: { f: { tipo: 'openai', baseUrl: 'http://127.0.0.1:9/v1', local: true } } }));
+  const dir = tmp(); fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ respaldoAuto: false, modeloPorDefecto: 'f/m', proveedores: { f: { tipo: 'openai', baseUrl: 'http://127.0.0.1:9/v1', local: true } } }));
   const { crearBoveda, cifradorArchivo } = require('../boveda');
   const n = require('../index').crearNucleo({ dir, embedder: null, sinPlugins: true, boveda: crearBoveda({ dir, cifrador: cifradorArchivo(dir) }) });
   const sb2 = crearSandbox({ cfg: n.cfg, impl: implFalsa() });
@@ -140,7 +141,7 @@ test('jaula real: no escribe en el perfil, no crea procesos, la memoria de más 
 });
 
 test('jaula real: ejecutar_script_skill de una skill sin firmar corre restringida y la auditoría del núcleo lo apunta', enWindows, async () => {
-  const dir = tmp(); fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ modeloPorDefecto: 'f/m', proveedores: { f: { tipo: 'openai', baseUrl: 'http://127.0.0.1:9/v1', local: true } } }));
+  const dir = tmp(); fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ respaldoAuto: false, modeloPorDefecto: 'f/m', proveedores: { f: { tipo: 'openai', baseUrl: 'http://127.0.0.1:9/v1', local: true } } }));
   const { crearBoveda, cifradorArchivo } = require('../boveda');
   const n = require('../index').crearNucleo({ dir, embedder: null, sinPlugins: true, boveda: crearBoveda({ dir, cifrador: cifradorArchivo(dir) }) });
   const src = path.join(tmp(), 'eco'); fs.mkdirSync(path.join(src, 'scripts'), { recursive: true });

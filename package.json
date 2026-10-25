@@ -65,6 +65,11 @@
     },
     "files": [
       "**/*",
+      "!repair-backups{,/**/*}",
+      "!instalado.json",
+      "!{.agents,.codex,.aws,.claude}{,/**/*}",
+      "!**/.env{,.*}",
+      "!**/*.{token,log,key,pem,pfx,p12,kdbx}",
       "!casco_robot.blend",
       "!*.md",
       "!install.ps1",

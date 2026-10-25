@@ -11,6 +11,7 @@ function configPublica(cfg) {
     proveedores[k] = { ...resto, tieneKey: !!apiKey && apiKey !== 'ollama', keyDeEntorno: !!(p.env && process.env[p.env]), enBoveda: !!apiKeyRef };
   }
   return { herramientasOff: cfg.herramientasOff || [], modeloPorDefecto: cfg.modeloPorDefecto, alias: cfg.alias, permisos: cfg.permisos, maxPasos: cfg.maxPasos, puerto: cfg.puerto, carpeta: cfg.carpeta || '', proveedores, dir: cfg.dir,
+    ...Object.fromEntries(require('./config-motor').campos.map(k => [k, cfg[k] || {}])),
     idioma: cfg.idioma || '', bienvenida: cfg.bienvenida === true, isla: cfg.isla || { estilo: 'glass', fondo: '', borde: '', bordeAncho: 1 },
     // canales como plugins (flags de la app) y por qué el de Discord no puede arrancar (modo Pi / bot local), si es el caso
     plugins: { ...Object.fromEntries(FLAGS_PLUGINS.map(k => [k, !!(cfg.plugins && cfg.plugins[k])])), discordBloqueado: (cfg.plugins && cfg.plugins.discord && cfg.plugins.discord.bloqueado) || '' } };      // idioma '' = automático (el del sistema); bienvenida = asistente de primer arranque hecho
@@ -18,8 +19,14 @@ function configPublica(cfg) {
 
 // aplica cambios del panel a la config en memoria y en config.json
 function guardarConfig(cfg, cambios) {
+  // Los fallos de cifrado o de escritura no deben publicar cambios parciales en memoria.
+  const actual = cfg;
+  cfg = { ...cfg, permisos: { ...cfg.permisos }, proveedores: Object.fromEntries(Object.entries(cfg.proveedores || {}).map(([k, p]) => [k, { ...p }])),
+    ...(cfg.plugins ? { plugins: { ...cfg.plugins } } : {}) };
+  for (const k of ['boveda', 'registroHerramientas']) if (actual[k]) Object.defineProperty(cfg, k, { value: actual[k] });
   const f = path.join(cfg.dir, 'config.json');
   let disco = {}; try { disco = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { }
+  for (const k of require('./config-motor').campos) if (cambios[k] !== undefined) cfg[k] = disco[k] = { ...cfg[k], ...require('./config-motor').validarCampo(k, cambios[k]) };
   if (typeof cambios.modeloPorDefecto === 'string' && cambios.modeloPorDefecto.includes('/')) cfg.modeloPorDefecto = disco.modeloPorDefecto = cambios.modeloPorDefecto.trim();
   if (Number.isInteger(cambios.maxPasos) && cambios.maxPasos >= 1 && cambios.maxPasos <= 200) cfg.maxPasos = disco.maxPasos = cambios.maxPasos;
   if (typeof cambios.carpeta === 'string') cfg.carpeta = disco.carpeta = cambios.carpeta.trim();
@@ -38,7 +45,7 @@ function guardarConfig(cfg, cambios) {
     cfg.permisos.modo = cambios.permisos.modo; disco.permisos = { ...disco.permisos, modo: cambios.permisos.modo };
   }
   if (Array.isArray(cambios.herramientasOff)) {
-    const validas = new Set(require('./herramientas').HERRAMIENTAS.map(h => h.nombre));
+    const validas = new Set((cfg.registroHerramientas || require('./herramientas')).HERRAMIENTAS.map(h => h.nombre));
     cfg.herramientasOff = disco.herramientasOff = cambios.herramientasOff.filter(x => validas.has(x));
   }
   if (cambios.alias && typeof cambios.alias === 'object') {
@@ -57,9 +64,9 @@ function guardarConfig(cfg, cambios) {
       if (typeof v.baseUrl === 'string' && /^https?:\/\//.test(v.baseUrl)) p.baseUrl = d.baseUrl = v.baseUrl.trim().replace(/\/+$/, '');
       if (typeof v.apiKey === 'string') {                     // FASE 9: a la bóveda (DPAPI); en config.json solo la referencia
         const clave = v.apiKey.trim(); p.apiKey = clave;
-        if (cfg.boveda && clave && !p.local && !['ollama', 'lm-studio'].includes(clave)) {
+        if (clave && !p.local && !['ollama', 'lm-studio'].includes(clave)) {
           try { cfg.boveda.guardar(`proveedor:${k}`, clave); d.apiKey = ''; d.apiKeyRef = p.apiKeyRef = `boveda:proveedor:${k}`; }
-          catch { d.apiKey = clave; }                              // sin bóveda: como antes
+          catch { throw Object.assign(new Error('No se pudo guardar la clave en la boveda; configuracion sin cambios'), { status: 503 }); }
         } else {
           d.apiKey = clave;
           if (!clave) { try { cfg.boveda?.borrar(`proveedor:${k}`); } catch { } delete d.apiKeyRef; delete p.apiKeyRef; }   // '' = quitar la clave
@@ -74,8 +81,9 @@ function guardarConfig(cfg, cambios) {
       disco.plugins = { ...(disco.plugins || {}), [k]: cambios.plugins[k] };
     }
   }
-  fs.writeFileSync(f, JSON.stringify(disco, null, 2));
-  return configPublica(cfg);
+  require('./persistencia').escribirAtomico(f, JSON.stringify(disco, null, 2));
+  Object.assign(actual, cfg);
+  return configPublica(actual);
 }
 
 // uso por modelo y por día a partir de las sesiones guardadas (las de Claude Code entran por el espejo, core/espejo-cc.js)
@@ -88,8 +96,8 @@ function uso(sesiones, dias = 30) {
     if ((s.actualizada || 0) < desde) continue;
     sesionesN++;
     const e = s.uso?.entrada || 0, o = s.uso?.salida || 0, c = s.uso?.cacheLeida || 0;
-    const m = porModelo[s.modelo] || (porModelo[s.modelo] = { entrada: 0, salida: 0, sesiones: 0, cacheLeida: 0 });
-    m.entrada += e; m.salida += o; m.cacheLeida += c; m.sesiones++;
+    const desglose = s.usoPorModelo && Object.keys(s.usoPorModelo).length ? s.usoPorModelo : { [s.modelo]: { entrada: e, salida: o, cacheLeida: c } };
+    for (const [id, u] of Object.entries(desglose)) { const m = porModelo[id] || (porModelo[id] = { entrada: 0, salida: 0, sesiones: 0, cacheLeida: 0 }); m.entrada += u.entrada || 0; m.salida += u.salida || 0; m.cacheLeida += u.cacheLeida || 0; m.sesiones++; }
     const dia = new Date(s.actualizada).toISOString().slice(0, 10);
     const d = porDia[dia] || (porDia[dia] = { entrada: 0, salida: 0 });
     d.entrada += e; d.salida += o;

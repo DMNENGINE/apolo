@@ -61,7 +61,7 @@ test('agente: la memoria entra en el system prompt de cualquier modelo', async (
   const srv = http.createServer((q, s) => { let b = ''; q.on('data', d => { b += d; }); q.on('end', () => { cuerpos.push(JSON.parse(b)); s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] })); }); });
   await new Promise(r => srv.listen(0, '127.0.0.1', r));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-'));
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ modeloPorDefecto: 'f/m', proveedores: { f: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } } }));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ memoria: { embeddings: null }, respaldoAuto: false, modeloPorDefecto: 'f/m', proveedores: { f: { tipo: 'openai', baseUrl: `http://127.0.0.1:${srv.address().port}/v1`, local: true } } }));
   const n = require('../index').crearNucleo({ dir });
   n.memoria.recordar({ texto: 'Tiene un Kenworth azul', tipo: 'perfil' });
   await n.enviar(n.sesiones.crear({ cwd: os.tmpdir() }), 'hola');

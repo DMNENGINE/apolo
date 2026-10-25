@@ -232,7 +232,9 @@ function crearDashboards({ cfg, bus, permisos, nucleo = () => null, generarJSON,
   const enVuelo = new Map();
   try { for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(fCache, 'utf8')))) cache.set(k, v); } catch { }
   const guardarCache = () => { try { const o = {}; for (const [k, v] of cache) if (v.agente) o[k] = v; fs.writeFileSync(fCache, JSON.stringify(o)); } catch { } };
-  const fetchR = (...a) => (fetchFn || globalThis.fetch)(...a);
+  const fetchR = (url, init) => fetchFn ? fetchFn(url, init) : require('./red-segura').fetchSeguro(url, init, {
+    autorizar: async (destino, info) => !info.privada || (seg.urlPrivada(url) && new URL(destino).origin === new URL(url).origin),
+  });
   const conf = () => cfg.dashboards || {};
   const modeloAgente = () => conf().modeloAgente || modelo() || 'ollama/gemma4:31b-cloud';
 
@@ -313,6 +315,8 @@ function crearDashboards({ cfg, bus, permisos, nucleo = () => null, generarJSON,
     const h = herramientas().porNombre[nombre];
     if (!h) return `la herramienta "${nombre}" no existe o no está activa`;
     if (!(h.servicio || h.plugin || nombre === 'ver_tareas')) return `"${nombre}" no se puede usar como fuente (solo herramientas de conectores y plugins)`;
+    const errorArgs = require('./estructurado').validar(args, h.parametros);
+    if (errorArgs) return `argumentos invalidos: ${errorArgs}`;
     const r = typeof h.riesgo === 'function' ? h.riesgo(args || {}, null) : h.riesgo;
     if (r !== 'lectura' || h.siemprePreguntar?.(args || {})) return `"${nombre}" no es de solo lectura (o es de un plugin sin verificar)`;
     return '';

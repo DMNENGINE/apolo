@@ -51,17 +51,20 @@ module.exports = (cfg) => {
     return autoCache;
   }
   const api = {
-  async chat({ model, system, mensajes, herramientas, signal, formatoJSON }) {
+  async chat({ model, system, mensajes, herramientas, signal, formatoJSON, onDelta, maxTokens }) {
     if (!model || model === 'auto') model = await elegirAuto(api);
     const body = { model, messages: aMensajes(system, mensajes) };
+    if (onDelta && cfg.streaming !== false) { body.stream = true; body.stream_options = { include_usage: true }; }
+    if (maxTokens) body[/api\.openai\.com/i.test(cfg.baseUrl) ? 'max_completion_tokens' : 'max_tokens'] = maxTokens;
     if (formatoJSON && !herramientas?.length) body.response_format = { type: 'json_object' };
     if (herramientas?.length) body.tools = herramientas.map(h => ({ type: 'function', function: { name: h.nombre, description: h.descripcion, parameters: h.parametros } }));
     const j = await pedir(`${cfg.baseUrl}/chat/completions`, {
-      headers: cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}, body, signal,
+      headers: cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}, body, signal, tipoStream: 'openai', onDelta,
     });
     const msg = j.choices?.[0]?.message || {};
     return {
       texto: msg.content || '',
+      modeloReal: j.model ? `${cfg.nombre || 'openai'}/${j.model}` : model, motivoFin: j.choices?.[0]?.finish_reason,
       toolCalls: (msg.tool_calls || []).map((c, i) => ({ id: c.id || `call_${Date.now()}_${i}`, name: c.function?.name, args: parseArgs(c.function?.arguments) })),
       uso: { entrada: j.usage?.prompt_tokens || 0, salida: j.usage?.completion_tokens || 0 },
     };

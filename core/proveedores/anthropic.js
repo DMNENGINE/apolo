@@ -20,16 +20,18 @@ function aMensajes(mensajes) {
 }
 
 module.exports = (cfg) => ({
-  async chat({ model, system, mensajes, herramientas, signal }) {
-    const body = { model, max_tokens: cfg.maxTokens || 8192, messages: aMensajes(mensajes) };
+  async chat({ model, system, mensajes, herramientas, signal, onDelta, maxTokens }) {
+    const body = { model, max_tokens: maxTokens || cfg.maxTokens || 8192, messages: aMensajes(mensajes) };
+    if (onDelta && cfg.streaming !== false) body.stream = true;
     if (system) body.system = system;
     if (herramientas?.length) body.tools = herramientas.map(h => ({ name: h.nombre, description: h.descripcion, input_schema: h.parametros }));
     const j = await pedir(`${cfg.baseUrl}/messages`, {
-      headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' }, body, signal,
+      headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' }, body, signal, tipoStream: 'anthropic', onDelta,
     });
     const bloques = j.content || [];
     return {
       texto: bloques.filter(b => b.type === 'text').map(b => b.text).join(''),
+      modeloReal: j.model || model, motivoFin: j.stop_reason,
       toolCalls: bloques.filter(b => b.type === 'tool_use').map(b => ({ id: b.id, name: b.name, args: b.input || {} })),
       uso: { entrada: j.usage?.input_tokens || 0, salida: j.usage?.output_tokens || 0 },
     };

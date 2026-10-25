@@ -27,7 +27,7 @@ function disparado(disparadores, mensaje) {
   return null;
 }
 
-function crearIndice({ cfg, almacen, embedder = null }) {
+function crearIndice({ cfg, almacen, embedder = null, canalesActivos = () => [] }) {
   const sk = () => cfg.skills || {};
   const fv = path.join(almacen.dir, '_vec.json');
   let vecs = { modelo: embedder?.id, v: {} };
@@ -52,8 +52,10 @@ function crearIndice({ cfg, almacen, embedder = null }) {
   }
   const presupuesto = modelo => sk().presupuesto?.[modelo] ?? (pequeno(modelo) ? sk().presupuestoLocal ?? 1500 : sk().presupuestoNube ?? 5000);
 
+  // canales de hardware que están ahí ahora mismo (p. ej. 'r1' con la Rabbit R1 conectada): sus skills valen desde cualquier canal
+  const activosAhora = () => { try { return canalesActivos() || []; } catch { return []; } };
   const visibles = ({ modelo, canal } = {}) => almacen.lista().filter(s => s.activa &&
-    (!s.canales?.length || !canal || s.canales.includes(canal)) &&
+    (!s.canales?.length || !canal || s.canales.includes(canal) || s.canales.some(c => activosAhora().includes(c))) &&
     (!s.modelos?.length || !modelo || !sk().respetarModelos || s.modelos.some(m => modelo.includes(m))));
 
   // texto del índice dentro del presupuesto

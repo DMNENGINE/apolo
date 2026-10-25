@@ -51,8 +51,29 @@ function vigilarRed(permisos) {
   const f = globalThis.fetch;
   if (f) globalThis.fetch = async function (entrada, init) {
     const u = new URL(typeof entrada === 'string' || entrada instanceof URL ? String(entrada) : entrada.url);
-    await asegurar(u.hostname);
-    return f.call(this, entrada, init);
+    let actual = u;
+    let opciones = { ...init, redirect: 'manual' };
+    if (typeof entrada !== 'string' && !(entrada instanceof URL)) {
+      const req = new Request(entrada, init);
+      opciones = { ...opciones, method: req.method, headers: req.headers, signal: req.signal, body: /^(GET|HEAD)$/.test(req.method) ? undefined : await req.arrayBuffer() };
+    }
+    for (let salto = 0; salto <= 5; salto++) {
+      if (!['http:', 'https:'].includes(actual.protocol) || actual.username || actual.password) throw new Error('URL de red no permitida');
+      await asegurar(actual.hostname);
+      const r = await f.call(this, actual.href, opciones);
+      if (![301, 302, 303, 307, 308].includes(r.status) || !r.headers.get('location')) return r;
+      await r.body?.cancel();
+      if (salto === 5) throw new Error('demasiadas redirecciones');
+      const siguiente = new URL(r.headers.get('location'), actual);
+      if (actual.protocol === 'https:' && siguiente.protocol !== 'https:') throw new Error('redireccion insegura');
+      if (r.status === 303 || ([301, 302].includes(r.status) && String(opciones.method || 'GET').toUpperCase() === 'POST')) opciones = { ...opciones, method: 'GET', body: undefined };
+      if (siguiente.origin !== actual.origin) {
+        const headers = new Headers(opciones.headers);
+        for (const k of ['authorization', 'cookie', 'proxy-authorization', 'host']) headers.delete(k);
+        opciones = { ...opciones, headers };
+      }
+      actual = siguiente;
+    }
   };
   const hostHttp = a => { const x = a[0]; if (typeof x === 'string' || x instanceof URL) return new URL(String(x)).hostname; return x?.hostname || String(x?.host || 'localhost').replace(/:\d+$/, ''); };
   for (const nom of ['http', 'https']) {

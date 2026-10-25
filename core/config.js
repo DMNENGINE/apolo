@@ -58,6 +58,11 @@ const POR_DEFECTO = {
   // modelo null = resume el mismo modelo de la sesión; porModelo: { 'ollama/qwen3.6': 8000 } para modelos de contexto corto
   compactar: { umbral: 24000, conservar: 6000, modelo: null, porModelo: {} },
   maxPasos: 25,
+  recuperacion: { reintentos: 2, esperaMs: 300, maxEsperaMs: 60000, reservas: [], permitirNube: false },
+  presupuesto: { maxTokens: 200000, maxDuracionMs: 900000, maxCosto: 0, precios: {} },
+  contexto: { maxTokens: 24000, maxSalida: 8192, reserva: 2048, herramientasTokens: 6000, porModelo: {} },
+  cola: { max: 20 }, agente: { repeticiones: 3, lecturasParalelas: 3, streaming: true },
+  enrutamiento: { habilitado: false, reglas: [] },
   puerto: 47900,
   // red: por defecto solo este equipo. permitidos = IPs de la LAN que pueden entrar (con token), ej. la Pi
   red: { permitidos: [] },
@@ -88,13 +93,13 @@ function cargarConfig(dir = carpetaDatos(), opciones = {}) {
     try { boveda.guardar(`proveedor:${k}`, v.apiKey); v.apiKey = ''; v.apiKeyRef = `boveda:proveedor:${k}`; migradas++; }
     catch (e) { bovedaError = e.message; break; }                 // sin bóveda (p. ej. PowerShell bloqueado) → se queda como estaba
   }
-  if (migradas) { try { fs.writeFileSync(f, JSON.stringify(guardada, null, 2)); } catch { } }
+  if (migradas) { try { require('./persistencia').escribirAtomico(f, JSON.stringify(guardada, null, 2)); } catch { } }
   const cfg = { ...POR_DEFECTO, ...guardada, permisos: { ...POR_DEFECTO.permisos, ...guardada.permisos }, alias: { ...POR_DEFECTO.alias, ...guardada.alias }, memoria: { ...POR_DEFECTO.memoria, ...guardada.memoria }, compactar: { ...POR_DEFECTO.compactar, ...guardada.compactar }, skills: { ...POR_DEFECTO.skills, ...guardada.skills }, isla: { ...POR_DEFECTO.isla, ...guardada.isla }, proveedores: { ...POR_DEFECTO.proveedores } };
   for (const [k, v] of Object.entries(guardada.proveedores || {})) cfg.proveedores[k] = { ...POR_DEFECTO.proveedores[k], ...v };
   // migraciones de proveedores que cambiaron de API (se conserva la clave)
   const pp = cfg.proveedores.perplexity;
   if (pp && pp.tipo === 'openai' && /api\.perplexity\.ai\/?$/.test(pp.baseUrl || '')) cfg.proveedores.perplexity = { ...POR_DEFECTO.proveedores.perplexity, apiKey: pp.apiKey };
-  if (!fs.existsSync(f)) fs.writeFileSync(f, JSON.stringify(POR_DEFECTO, null, 2));
+  if (!fs.existsSync(f)) require('./persistencia').escribirAtomico(f, JSON.stringify(POR_DEFECTO, null, 2));
   for (const p of Object.values(cfg.proveedores)) {
     const m = typeof p.apiKeyRef === 'string' && p.apiKeyRef.match(REF);
     if (m && !p.apiKey) p.apiKey = boveda.leer(m[1]) || '';

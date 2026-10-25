@@ -9,6 +9,7 @@ const TR_ROPA = { ema_cruce: '#3b6fb6', rsi_rev: '#8a4fb5', ruptura: '#c08a2e', 
 const TR_PANT = { '1m': '#30344a', '5m': '#3a4520', '15m': '#4a2a2a' };
 const TR_SOMB = ['', '', 'gorra', 'casco', 'capucha'];
 const trHash = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); };
+const trEnlace = s => { try { const u = new URL(String(s)); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password ? u.href : '#'; } catch { return '#'; } };
 Object.assign(P, {
   edificio: '<path d="M4 21V5l8-3v19M12 8h8v13M2 21h20"/><path d="M7 8h2M7 12h2M7 16h2M15 12h2M15 16h2"/>',
   trofeo: '<path d="M8 4h8v6a4 4 0 0 1-8 0zM8 6H4a3 3 0 0 0 4 4M16 6h4a3 3 0 0 1-4 4M12 14v4M8 21h8M9 18h6"/>',
@@ -179,6 +180,8 @@ function trSprite(L, dir, f, acc) {
 
 VISTAS.trading = {
   async pintar(v) {
+    this.salir(); this.ciclo = (this.ciclo || 0) + 1; const ciclo = this.ciclo;
+    this.abort = new AbortController(); this.carga = null; this.detalles = new Map();
     this.v = v; this.datos = null; this.burbujas = new Map(); this.antes = new Map(); this.sel = null; this.salaSel = null; this.cajas = []; this.pj = new Map(); this.labHasta = new Map();
     this.mundo(); this.est = { borde: '#2fd1b0', luz: 'neon', bahia: 1, precios: [] };
     v.innerHTML = `<div class="pagina mision ancha tr-mc">
@@ -198,7 +201,10 @@ VISTAS.trading = {
           <div class="tr-ctl"><label>${tr('Agentes')} <input id="trN" type="number" min="1" max="2000" value="50"></label>
           <label>${tr('Mercados')} <select id="trMerc"><option value="cripto,acciones">Cripto + Acc</option><option value="cripto">Cripto</option><option value="acciones">Acciones</option></select></label>
           <label>${tr('Hasta')} <input id="trHasta" placeholder="07:00"></label></div>
-          <div class="tr-bot"><button class="btn" id="trIniciar">${ic('rayo')}${tr('Empezar / cambiar')}</button><button class="btn" id="trParar">■ ${tr('Parar')}</button></div>
+          <div class="tr-ctl"><label>Capital simulado por agente <input id="trCapital" type="number" min="0.01" max="1000000" step="0.01" value="1"></label><label>Meta simulada <input id="trMeta" type="number" min="0.01" max="100000000" value="100"></label></div>
+          <div class="tr-ctl"><label>Duración máxima (min) <input id="trDuracion" type="number" min="1" max="1440" value="60"></label><label>Pérdida máxima (%) <input id="trPerdida" type="number" min="0.1" max="100" step="0.1" value="10"></label></div>
+          <p class="sutil">AUTOPILOTO SIMULADO · Sin dinero real. Controla el nodo local de la central. Requiere APOLO abierto para supervisar estos límites.</p><p id="trAuto" role="status"></p>
+          <div class="tr-bot"><button class="btn" id="trIniciar" disabled>${ic('rayo')}Activar autopiloto simulado</button><button class="btn" id="trParar">■ ${tr('Parar')}</button></div>
           <p class="tr-central" id="trCentral"></p></div>
         <div class="tr-card"><div class="tr-tit">${ic('trofeo')}${tr('MEJORES AGENTES')}</div><div id="trTop"></div></div>
         <div class="tr-card"><div class="tr-tit">${tr('LECCIONES')}</div><div id="trLec" class="tr-lec"></div></div>
@@ -211,16 +217,18 @@ VISTAS.trading = {
       this.sel = null; this.salaSel = this.salaEn(e); this.fichaSala(this.salaSel);
     };
     $('#trIniciar', v).onclick = async () => {
-      try { await api('POST', '/trading/iniciar', { agentes: +$('#trN', v).value, mercados: $('#trMerc', v).value.split(','), hasta: $('#trHasta', v).value || null, capital: 1, meta: 100 }); aviso(tr('Enjambre en marcha')); this.cargar(); }
-      catch (er) { aviso(er.message, true); } };
-    $('#trParar', v).onclick = async () => { try { await api('POST', '/trading/parar', {}); aviso(tr('Enjambre parado')); this.cargar(); } catch (er) { aviso(er.message, true); } };
+      const b = $('#trIniciar', v); if (b.disabled) return; b.disabled = true; this.controlPendiente = true;
+      try { await api('POST', '/trading/iniciar', { modo: 'simulado', agentes: +$('#trN', v).value, mercados: $('#trMerc', v).value.split(','), hasta: $('#trHasta', v).value || null, capital: +$('#trCapital', v).value, meta: +$('#trMeta', v).value, duracionMin: +$('#trDuracion', v).value, perdidaMaxPct: +$('#trPerdida', v).value }, this.abort.signal); aviso('Autopiloto simulado: arranque confirmado'); if (this.v === v && this.ciclo === ciclo) await this.cargar(); }
+      catch (er) { if (this.v === v && this.ciclo === ciclo) aviso(er.message, true); } finally { this.controlPendiente = false; if (this.v === v && this.ciclo === ciclo) await this.cargar(); } };
+    $('#trParar', v).onclick = async () => { const b = $('#trParar', v); if (b.disabled) return; b.disabled = true; try { const r = await api('POST', '/trading/parar', {}); if (r.estado !== 'parado' || !r.confirmada) throw new Error('Parada no confirmada. Reinicia APOLO si el núcleo no está actualizado.'); aviso('Parada confirmada por la central'); if (this.v === v && this.ciclo === ciclo) await this.cargar(); } catch (er) { aviso(er.message, true); } finally { b.disabled = false; } };
     this.fichaSala(null);
     await this.cargar();
+    if (this.v !== v || this.ciclo !== ciclo) return;
     clearInterval(this.t); this.t = setInterval(() => !document.hidden && this.cargar(), 5000);
-    let ult = 0; const bucle = ts => { if (!this.v) return; if (ts - ult > 66) { ult = ts; this.dibujar(ts); } this.raf = requestAnimationFrame(bucle); };
+    let ult = 0; const bucle = ts => { if (this.v !== v || this.ciclo !== ciclo) return; if (ts - ult > 66) { ult = ts; this.dibujar(ts); } this.raf = requestAnimationFrame(bucle); };
     this.raf = requestAnimationFrame(bucle);
   },
-  salir() { clearInterval(this.t); cancelAnimationFrame(this.raf); this.v = null; },
+  salir() { clearInterval(this.t); cancelAnimationFrame(this.raf); this.abort?.abort(); this.v = null; },
 
   // ---------- el mundo: estructura, fondo, luz y rejilla para andar ----------
   mundo() {
@@ -259,10 +267,14 @@ VISTAS.trading = {
   },
 
   async cargar() {
-    let d;
-    try { d = await api('GET', '/trading/mapa'); }
-    catch (er) { $('#trKpis', this.v).innerHTML = `<div class="tr-kpi"><small>${ic('info')}DMN Trader</small><b>—</b><span>${esc(er.message)}</span></div>`; return; }
-    if (!this.v) return;
+    if (!this.v || this.carga) return;
+    const v = this.v, ciclo = this.ciclo, carga = {}; this.carga = carga;
+    try {
+    const d = await api('GET', '/trading/mapa', undefined, this.abort?.signal), auto = d._autopiloto || { estado: 'no disponible' };
+    if (this.v !== v || this.ciclo !== ciclo) return;
+    $('#trAuto', v).textContent = auto.centralActiva && auto.estado === 'parado' ? 'Enjambre activo sin supervisión de APOLO. Deténlo antes de configurar el autopiloto.' : `Autopiloto simulado: ${auto.estado}${auto.motivo ? ' · ' + auto.motivo : ''}`;
+    if (auto.contrato === 'apolo-trading/1' && !auto.capacidadCentral) $('#trAuto', v).textContent += ' · Actualiza DMN Trader para habilitar la guardia persistente.';
+    $('#trIniciar', v).disabled = !!this.controlPendiente || auto.contrato !== 'apolo-trading/1' || !auto.capacidadCentral || auto.centralActiva || ['activo', 'iniciando', 'incierto', 'parando', 'parada_no_confirmada'].includes(auto.estado);
     const ahora = performance.now() / 1000;
     for (const n of d.nodos) for (const a of n.agentes || []) {                   // burbuja cuando cambia lo último que hizo
       const k = n.nodo + ':' + a.id, prev = this.antes.get(k);
@@ -287,15 +299,17 @@ VISTAS.trading = {
       ['escudo', 'QUIEBRAS', d.total.quiebras, k.activo ? `${tr('ciclo')} ${k.tick_s}s` : tr('parado')],
     ].map(([i, t, n, s]) => `<div class="tr-kpi"><small>${ic(i)}${tr(t)}</small><b>${n}</b><span>${esc(s)}</span></div>`).join('');
     $('#trTop', this.v).innerHTML = this.top.length ? this.top.map(a => `<div class="tr-top" data-ag="${esc(a.nodo)}:${a.id}"><i style="background:${TR_ROPA[a.estrategia] || '#888'};box-shadow:0 0 0 2px ${a.nodo === 'pi' ? '#2fd1b0' : '#c77dff'}"></i>
-      <div><b>${esc(a.nombre)}</b><span>${a.estrategia} · ${a.marco} · ${a.nodo}</span></div><em class="${a.r_medio > 0 ? 'ok' : 'mal'}">${a.r_medio > 0 ? '+' : ''}${a.r_medio.toFixed(2)}R</em><small>${a.trades}</small></div>`).join('')
+      <div><b>${esc(a.nombre)}</b><span>${esc(a.estrategia)} · ${esc(a.marco)} · ${esc(a.nodo)}</span></div><em class="${a.r_medio > 0 ? 'ok' : 'mal'}">${a.r_medio > 0 ? '+' : ''}${a.r_medio.toFixed(2)}R</em><small>${esc(a.trades)}</small></div>`).join('')
       : `<p class="sutil">${tr('Aún sin operaciones suficientes.')}</p>`;
     $('#trTop', this.v).onclick = e => { const r = e.target.closest('[data-ag]'); if (!r) return; const [nd, id] = r.dataset.ag.split(':'); const a = todos.find(x => x.nodo === nd && x.id === +id); if (a) { this.sel = a; this.salaSel = null; this.ficha(a); } };
     $('#trLec', this.v).innerHTML = (d.lecciones || []).slice(0, 14).map(l => `<div class="tr-l"><span class="sutil">${new Date(l.ts * 1000).toLocaleTimeString()} · ${esc(l.tipo)}</span><br>${esc(l.texto)}</div>`).join('') || `<p class="sutil">${tr('Aún sin lecciones.')}</p>`;
-    $('#trCentral', this.v).innerHTML = `<b>${tr('Central')}:</b> ${esc(d._central || '—')} · ${d.nodos.map(n => `${n.nodo} <span style="color:${n.local || n.en_linea ? '#5dff9b' : '#ff6b6b'}">●</span>`).join(' ')}`;
+    $('#trCentral', this.v).innerHTML = `<b>${tr('Central')}:</b> ${esc(d._central || '—')} · ${d.nodos.map(n => `${esc(n.nodo)} <span style="color:${n.local || n.en_linea ? '#5dff9b' : '#ff6b6b'}">●</span>`).join(' ')}`;
     this.noticias(d.analista);
-    if (k.n) $('#trN', this.v).value = k.n;
+    // No sobrescribir el formulario mientras el usuario prepara una configuracion.
     if (this.sel) { const a = todos.find(x => x.nodo === this.sel.nodo && x.id === this.sel.id); if (a) this.ficha(a, true); }
     else this.fichaSala(this.salaSel);
+    } catch (er) { if (this.v === v && this.ciclo === ciclo && $('#trKpis', v)) $('#trKpis', v).innerHTML = `<div class="tr-kpi"><small>DMN Trader</small><b>—</b><span>${esc(er.message)}</span></div>`; }
+    finally { if (this.carga === carga) this.carga = null; }
   },
 
   // ---------- el analista de noticias ----------
@@ -310,7 +324,7 @@ VISTAS.trading = {
     $('#trMacro', this.v).innerHTML = [['Mercado', m.MERCADO], ['Cripto', m.CRIPTO], ['Acciones', m.ACCIONES]].map(([n, v]) => `<div><small>${tr(n)}</small><i><b class="${col(v || 0)}" style="width:${Math.abs(v || 0) * 50}%;${(v || 0) < 0 ? 'right:50%' : 'left:50%'}"></b></i><em class="${col(v || 0)}">${(v || 0) > 0 ? '+' : ''}${(v || 0).toFixed(2)}</em></div>`).join('') +
       (an.fng ? `<div><small>Fear & Greed</small><em>${an.fng.valor} · ${esc(an.fng.clase)}</em></div>` : '') +
       (ev ? `<div class="tr-ev"><small>${tr('Próximo evento')}</small><em class="${ev.impacto === 'High' ? 'mal' : ''}">${esc(ev.titulo)} · ${new Date(ev.ts * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</em></div>` : '');
-    lista.innerHTML = (an.noticias || []).map(x => `<a class="tr-n" href="${esc(x.link || '#')}" target="_blank" rel="noopener"><span class="tr-imp ${col(x.impacto)}">${x.impacto > 0 ? '+' : ''}${x.impacto.toFixed(1)}</span>
+    lista.innerHTML = (an.noticias || []).map(x => `<a class="tr-n" href="${esc(trEnlace(x.link))}" target="_blank" rel="noopener noreferrer"><span class="tr-imp ${col(x.impacto)}">${x.impacto > 0 ? '+' : ''}${x.impacto.toFixed(1)}</span>
       <div><b>${esc(x.resumen || x.titulo)}</b><span>${esc(x.fuente)} · ${tr('hace')} ${hace(x.ts)} · ${esc(x.categoria || '')} · ${tr('importancia')} ${(x.importancia * 10).toFixed(0)}/10${(x.simbolos || []).length ? ' · ' + x.simbolos.map(esc).join(' ') : ''}</span></div></a>`).join('') || `<p class="sutil">${tr('Sin noticias relevantes ahora mismo.')}</p>`;
     const tk = (an.noticias || []).filter(x => x.importancia >= .5).slice(0, 10);
     $('#trTicker', this.v).hidden = !tk.length;
@@ -455,7 +469,7 @@ VISTAS.trading = {
     const a = this.agenteEn(e), tip = $('#trTip', this.v);
     if (!a) { tip.hidden = true; this.cv.style.cursor = this.salaEn(e) ? 'pointer' : ''; return; }
     this.cv.style.cursor = 'pointer';
-    tip.innerHTML = `<b>${esc(a.nombre)}</b> · ${esc(a.nodo)}<br>${a.estrategia} · ${a.marco} · ${tr('gen')} ${a.generacion}<br>${tr('capital')} ${(a.equity ?? 0).toFixed(4)} $ (${(a.pnl_pct ?? 0).toFixed(1)}%) · ${tr('máx')} ${(a.max_equity ?? 0).toFixed(3)} $<br>${a.trades} ${tr('operaciones')} · ${a.ganados} ${tr('ganadas')} · ${a.quiebras || 0} ${tr('quiebras')}${a.r_medio != null ? ` · ${a.r_medio > 0 ? '+' : ''}${a.r_medio.toFixed(2)}R` : ''}<br><span class="sutil">${esc(a.estado)} · ${esc(a.ultimo || '')}</span>`;
+    tip.innerHTML = `<b>${esc(a.nombre)}</b> · ${esc(a.nodo)}<br>${esc(a.estrategia)} · ${esc(a.marco)} · ${tr('gen')} ${esc(a.generacion)}<br>${tr('capital')} ${(a.equity ?? 0).toFixed(4)} $ (${(a.pnl_pct ?? 0).toFixed(1)}%) · ${tr('máx')} ${(a.max_equity ?? 0).toFixed(3)} $<br>${esc(a.trades)} ${tr('operaciones')} · ${esc(a.ganados)} ${tr('ganadas')} · ${esc(a.quiebras || 0)} ${tr('quiebras')}${a.r_medio != null ? ` · ${a.r_medio > 0 ? '+' : ''}${a.r_medio.toFixed(2)}R` : ''}<br><span class="sutil">${esc(a.estado)} · ${esc(a.ultimo || '')}</span>`;
     const r = this.cv.parentElement.getBoundingClientRect();
     tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 250) + 'px'; tip.style.top = (e.clientY - r.top + 14) + 'px'; tip.hidden = false;
   },
@@ -474,23 +488,26 @@ VISTAS.trading = {
   },
   async ficha(a, refresco) {
     const el = $('#trFicha', this.v); if (!el) return;
-    const pie = `<p class="tr-desc">${a.estrategia} · ${tr('velas de')} ${a.marco} · ${tr('riesgo')} ${a.riesgo_pct}%${a.tendencia ? ' · ' + tr('solo a favor de tendencia') : ''}</p>`;
+    const v = this.v, ciclo = this.ciclo, clave = JSON.stringify([a.nodo, a.id]);
+    this.detalles ||= new Map();
+    const vigente = () => this.v === v && this.ciclo === ciclo && this.sel?.id === a.id && this.sel?.nodo === a.nodo;
+    const pie = `<p class="tr-desc">${esc(a.estrategia)} · ${tr('velas de')} ${esc(a.marco)} · ${tr('riesgo')} ${esc(a.riesgo_pct)}%${a.tendencia ? ' · ' + tr('solo a favor de tendencia') : ''}</p>`;
     let extra = '';
     const local = (this.datos?.nodos || []).find(n => n.nodo === a.nodo)?.local;
     if (local && !refresco) {
       try {
-        const d = await api('GET', `/trading/agente/${a.id}`);
-        if (!this.v || !this.sel || this.sel.id !== a.id) return;
+        const d = await api('GET', `/trading/agente/${a.id}`, undefined, this.abort?.signal);
+        if (!vigente()) return;
         const g = d.genoma;
-        extra = `<p class="sutil">stop ${g.stop_atr} ATR · ${tr('objetivo')} ${g.rr}R · ${tr('máx')} ${g.max_barras} ${tr('velas')} · BE ${g.be_en_r || 'no'} · ${tr('entrada')} ${g.entrada || 'mercado'} · ${tr('tramos')} ${g.tramos || 1}${g.trail_r ? ' · trailing ' + g.trail_r + 'R' : ''}${g.filtro_ia ? ' · IA ≥ ' + g.filtro_ia : ''}</p>` +
-          `<div class="tr-tit">${tr('Intentos')}</div>` + d.intentos_lista.slice(0, 5).map(i => `<div class="sutil">#${i.id} · máx ${(+i.max_equity).toFixed(3)} $ · ${i.trades} trades · ${esc(i.resultado || tr('en curso'))}${i.causa ? ' · ' + esc(i.causa) : ''}</div>`).join('') +
+        extra = `<p class="sutil">stop ${esc(g.stop_atr)} ATR · ${tr('objetivo')} ${esc(g.rr)}R · ${tr('máx')} ${esc(g.max_barras)} ${tr('velas')} · BE ${esc(g.be_en_r || 'no')} · ${tr('entrada')} ${esc(g.entrada || 'mercado')} · ${tr('tramos')} ${esc(g.tramos || 1)}${g.trail_r ? ' · trailing ' + esc(g.trail_r) + 'R' : ''}${g.filtro_ia ? ' · IA ≥ ' + esc(g.filtro_ia) : ''}</p>` +
+          `<div class="tr-tit">${tr('Intentos')}</div>` + d.intentos_lista.slice(0, 5).map(i => `<div class="sutil">#${esc(i.id)} · máx ${(+i.max_equity).toFixed(3)} $ · ${esc(i.trades)} trades · ${esc(i.resultado || tr('en curso'))}${i.causa ? ' · ' + esc(i.causa) : ''}</div>`).join('') +
           `<div class="tr-tit">${tr('Lo que aprendió')}</div>` + (d.lecciones.slice(0, 5).map(l => `<div class="tr-l">${esc(l.texto)}</div>`).join('') || `<p class="sutil">—</p>`);
-        this.extra = extra;
-      } catch { extra = ''; }
-    } else if (refresco) extra = this.extra || '';
-    el.innerHTML = `<div class="tr-tit tr-ed">${ic('persona')}<div>${esc(a.nombre)}<span>${esc(a.nodo)} · ${tr('gen')} ${a.generacion}</span></div></div>
+        this.detalles.set(clave, extra);
+      } catch { if (!vigente()) return; extra = ''; }
+    } else if (refresco) extra = this.detalles.get(clave) || '';
+    el.innerHTML = `<div class="tr-tit tr-ed">${ic('persona')}<div>${esc(a.nombre)}<span>${esc(a.nodo)} · ${tr('gen')} ${esc(a.generacion)}</span></div></div>
       <div class="tr-fk"><div><small>${tr('Capital')}</small><b>${(a.equity ?? 0).toFixed(4)} $</b></div><div><small>${tr('Máximo')}</small><b>${(a.max_equity ?? 0).toFixed(3)} $</b></div>
-      <div><small>Trades</small><b>${a.trades} <span class="sutil">(${a.ganados}✔)</span></b></div><div><small>R</small><b class="${(a.r_medio || 0) > 0 ? 'ok' : 'mal'}">${a.r_medio != null ? a.r_medio.toFixed(2) : '—'}</b></div></div>
+      <div><small>Trades</small><b>${esc(a.trades)} <span class="sutil">(${esc(a.ganados)}✔)</span></b></div><div><small>R</small><b class="${(a.r_medio || 0) > 0 ? 'ok' : 'mal'}">${a.r_medio != null ? a.r_medio.toFixed(2) : '—'}</b></div></div>
       ${pie}<p class="tr-desc">${esc(a.estado)} · ${esc(a.ultimo || '')}</p>${extra}`;
   },
 };

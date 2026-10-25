@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ApoloOS</title>
+<link rel="stylesheet" href="r1.css">
+</head>
+<body data-vista="apolo">
+  <canvas id="robot"></canvas>
+
+  <header id="barra">
+    <span id="hora">--:--</span>
+    <span id="titulo"></span>
+    <span id="pc" class="chip apagado" title="Conexión con el núcleo">APOLO</span>
+    <span id="bat" class="chip">--%</span>
+  </header>
+
+  <!-- tarjetas de los módulos (rueda mueve, toque abre) -->
+  <section id="lanzador"></section>
+
+  <!-- el módulo abierto (modulos/<id>.js) -->
+  <main id="modulo"></main>
+
+  <!-- lo que te oyó y lo que respondió -->
+  <section id="charla">
+    <p id="oido" class="oculto"></p>
+    <p id="dijo" class="oculto"></p>
+  </section>
+  <p id="toast" class="oculto"></p>
+
+  <!-- hablando: anillo que late con tu voz -->
+  <div id="escucha" class="oculto"><div id="anillo"></div><span>Te escucho…</span></div>
+
+  <!-- permiso pendiente: la rueda elige, el botón confirma -->
+  <section id="permiso" class="tarjeta oculto">
+    <h2>¿Permiso?</h2>
+    <p id="pResumen"></p>
+    <p id="pPeligro" class="oculto">Peligroso: apruébalo en la PC</p>
+    <div class="opciones">
+      <button id="pSi" class="opcion activa" data-p="corta">Permitir</button>
+      <button id="pNo" class="opcion" data-p="larga">Denegar</button>
+    </div>
+  </section>
+
+  <!-- emparejar la R1 con APOLO -->
+  <section id="emparejar" class="tarjeta oculto">
+    <h2>Emparejar</h2>
+    <p>Escribe este código en el panel de APOLO</p>
+    <strong id="codigo">------</strong>
+  </section>
+
+  <!-- carta: detalles y confirmaciones de los módulos, tarjetas de APOLO (r1_pantalla); la rueda elige, el botón confirma -->
+  <section id="carta" class="tarjeta oculto">
+    <h2 id="cTitulo"></h2>
+    <p id="cTexto"></p>
+    <small id="cNota" class="oculto"></small>
+    <ul id="cOpciones"></ul>
+  </section>
+
+  <!-- APOLO está usando la cámara: aviso, no pregunta -->
+  <div id="camaraAro" class="oculto"><span>● CÁMARA</span></div>
+
+  <footer id="ayuda"><span class="a-apolo">Mantén el botón para hablar · rueda: módulos</span><span class="a-lanz">rueda: elegir · toque: abrir · 2 toques: casco</span><span class="a-mod">toque: elegir · 2 toques: atrás · mantén: hablar</span></footer>
+
+  <script type="module" src="r1.js"></script>
+</body>
+</html>

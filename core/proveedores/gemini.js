@@ -37,6 +37,7 @@ function aContenidos(mensajes) {
 }
 
 async function pedirGemini(url, opts, reintentos = 2) {
+  if (opts.gestionada) return pedir(url, opts);
   for (let i = 0; i <= reintentos; i++) {
     try {
       return await pedir(url, opts);
@@ -51,20 +52,22 @@ async function pedirGemini(url, opts, reintentos = 2) {
 }
 
 module.exports = (cfg) => ({
-  async chat({ model, system, mensajes, herramientas, signal, formatoJSON }) {
+  async chat({ model, system, mensajes, herramientas, signal, formatoJSON, onDelta, maxTokens, gestionada }) {
     const body = { contents: aContenidos(mensajes) };
     if (formatoJSON && !herramientas?.length) body.generationConfig = { responseMimeType: 'application/json' };
+    if (maxTokens) body.generationConfig = { ...body.generationConfig, maxOutputTokens: maxTokens };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
     if (herramientas?.length) body.tools = [{ functionDeclarations: herramientas.map(h => ({ name: h.nombre, description: h.descripcion, parameters: limpiarEsquema(h.parametros) })) }];
     
     let j;
     try {
-      j = await pedirGemini(`${cfg.baseUrl}/models/${encodeURIComponent(model)}:generateContent`, {
-        headers: { 'x-goog-api-key': cfg.apiKey }, body, signal,
+      const stream = onDelta && cfg.streaming !== false;
+      j = await pedirGemini(`${cfg.baseUrl}/models/${encodeURIComponent(model)}:${stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`, {
+        headers: { 'x-goog-api-key': cfg.apiKey }, body, signal, gestionada: !!gestionada, tipoStream: 'gemini', onDelta,
       });
     } catch (e) {
       // Si el modelo principal está saturado (503), recurrir a un modelo lite de reserva
-      if (/503|high demand/i.test(e.message) && !model.includes('lite')) {
+      if (!gestionada && /503|high demand/i.test(e.message) && !model.includes('lite')) {
         const fallback = 'gemini-3.5-flash-lite';
         j = await pedirGemini(`${cfg.baseUrl}/models/${fallback}:generateContent`, {
           headers: { 'x-goog-api-key': cfg.apiKey }, body, signal,

@@ -51,6 +51,7 @@ const SK_tipoFuente = f => {
   return ['info', tr('No reconozco el formato')];
 };
 let SK_cache = null, SK_pidiendo = false;
+const SK_r1 = s => (s.canales || []).includes('r1');
 function SK_paleta() {
   if (!SK_cache && !SK_pidiendo && TOKEN) { SK_pidiendo = true; api('GET', '/skills').then(r => { SK_cache = r.skills || []; }).catch(() => { }).finally(() => { SK_pidiendo = false; }); }
   return [{ t: tr('Instalar skill'), i: 'pieza', sub: tr('Acción'), go: '#/skills' },
@@ -64,7 +65,7 @@ VISTAS.skills = {
     if (sub === 'explorar') { this.modo = 'exp'; sub = null; }
     const r = await api('GET', '/skills');
     this.lista = SK_cache = r.skills || [];
-    v.innerHTML = `<div class="pagina sk-pag">${cabecera('Skills', 'Oficios que APOLO sabe hacer. Instala desde GitHub, una carpeta o un .zip; cada skill pasa por el escáner antes de poder usarse.', `<button class="btn" id="skRecargar">${ic('recargar')}${tr('Recargar')}</button>`)}
+    v.innerHTML = `<div class="pagina sk-pag">${cabecera('Skills', 'Oficios que APOLO sabe hacer. Instala desde GitHub, una carpeta o un .zip; cada skill pasa por el escáner antes de poder usarse.', `<button class="btn" id="skNuevaR1" title="${tr('Una skill para la Rabbit R1: APOLO la redacta a partir de tu idea')}">${ic('mas')}${tr('Nueva skill R1')}</button><button class="btn" id="skRecargar">${ic('recargar')}${tr('Recargar')}</button>`)}
       <div class="pestanas sk-modo">${[['inst', 'Instaladas', 'pieza'], ['exp', 'Explorar', 'mundo']].map(([k, t, i]) => `<button data-modo="${k}" class="${this.modo === k ? 'on' : ''}">${ic(i)}${tr(t)}</button>`).join('')}</div>
       <div id="mkExplorar" hidden></div>
       <div class="sk-inst">
@@ -80,7 +81,7 @@ VISTAS.skills = {
             <a class="chip-btn" href="https://skillry.dev" target="_blank" rel="noopener noreferrer">${ic('mundo')}<span>skillry.dev</span></a>
             <button class="chip-btn" data-rellenar="anthropics/skills">${ic('mas')}<span>${tr('Ver las de anthropics')}</span></button></span></div>
       </div>
-      <div class="sk-barra">${seg('skFiltro', [['todas', 'Todas'], ['activas', 'Activas'], ['cuarentena', 'Cuarentena'], ['externas', 'Externas']], this.filtro)}
+      <div class="sk-barra">${seg('skFiltro', [['todas', 'Todas'], ['activas', 'Activas'], ['r1', 'Rabbit R1'], ['cuarentena', 'Cuarentena'], ['externas', 'Externas']], this.filtro)}
         <div class="sk-busca">${ic('buscar')}<input id="skQ" placeholder="${tr('Buscar skills…')}" value="${esc(this.q)}"></div></div>
       <div id="skLista"></div></div></div>`;
     this.enlazar(v);
@@ -118,6 +119,7 @@ VISTAS.skills = {
     inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); this.instalar(inp.value); } };
     $('#skBtnIns', v).onclick = () => this.instalar(inp.value);
     $('#skRecargar', v).onclick = () => this.recargar().then(() => aviso(tr('Lista actualizada')));
+    $('#skNuevaR1', v).onclick = () => this.nuevaR1();
     $('#skQ', v).oninput = e => { this.q = e.target.value.trim().toLowerCase(); this.repintar(); };
     $('[data-seg="skFiltro"]', v).onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
@@ -164,6 +166,7 @@ VISTAS.skills = {
       if (this.filtro === 'activas' && !s.activa) return false;
       if (this.filtro === 'cuarentena' && SK_nivel(s) !== 'rojo') return false;
       if (this.filtro === 'externas' && !s.externa) return false;
+      if (this.filtro === 'r1' && !SK_r1(s)) return false;
       return !this.q || `${s.nombre} ${s.slug} ${s.descripcion} ${SK_ORIGEN(s.origen)[0]}`.toLowerCase().includes(this.q);
     }).sort((a, b) => (b.activa - a.activa) || (SK_usos(b).total - SK_usos(a).total) || String(a.nombre || a.slug).localeCompare(b.nombre || b.slug));
   },
@@ -179,7 +182,7 @@ VISTAS.skills = {
       ['candado', 'En cuarentena', rojas, tr(rojas ? 'bloqueadas por el escáner' : 'ninguna'), rojas ? ' mal' : ''],
       ['grafica', conSemana ? 'Usos esta semana' : 'Usos', fmtK(usos), tr(conSemana ? 'últimos 7 días' : 'en total')],
     ].map(([i, t, n, s, c = '']) => `<div class="kpi${c}"><small>${ic(i)}${tr(t)}</small><b>${n}</b><span>${s}</span></div>`).join('');
-    const cuenta = { todas: L.length, activas: act, cuarentena: rojas, externas: ext };
+    const cuenta = { todas: L.length, activas: act, r1: L.filter(SK_r1).length, cuarentena: rojas, externas: ext };
     $$('[data-seg="skFiltro"] button').forEach(b => { b.innerHTML = `${esc(b.textContent.replace(/\s*\d+$/, ''))} <span class="sk-n">${cuenta[b.dataset.v]}</span>`; });
     const f = this.filtradas();
     if (!L.length) {
@@ -199,10 +202,27 @@ VISTAS.skills = {
         <div class="sk-nom"><b>${esc(s.nombre || s.slug)}</b><small>${esc(s.slug)}${s.version ? ` · v${esc(String(s.version).replace(/^v/, ''))}` : ''}</small></div>
         ${sw(s.slug, s.activa, `title="${tr(s.activa ? 'Desactivar' : 'Activar')}"`)}</div>
       <p class="sk-desc">${esc(s.descripcion || tr('Sin descripción.'))}</p>
-      <div class="sk-pie"><span class="chip sk-org ${oc}">${ic(oi)}${esc(org)}</span>
+      <div class="sk-pie"><span class="chip sk-org ${oc}">${ic(oi)}${esc(org)}</span>${SK_r1(s) ? `<span class="chip acento" title="${tr('Skill de la Rabbit R1: solo con la R1 conectada')}">R1</span>` : ''}
         <span class="sk-sem ${cls}"><span class="punto ${cls}"></span>${txt}${hall && n !== 'verde' ? ` · ${hall}` : ''}</span>${typeof MK_firma === 'function' ? MK_firma(s.firma, true) : ''}${SK_sb(s)}
         <span class="sk-usos" title="${tr('{n} usos', { n: u.total })}${s.ultimoUso ? ' · ' + tr('último {x}', { x: esc(fecha(s.ultimoUso)) }) : ''}">${ic('latido')}${fmtK(u.semana ?? u.total)}${s.ultimoUso ? ` · ${hace(+new Date(s.ultimoUso))}` : ''}</span></div>
     </article>`;
+  },
+
+  // skill para la Rabbit R1: el taller la redacta (POST /skills/redactar, canales ['r1']) como borrador desactivado
+  async nuevaR1() {
+    const idea = await modal({ titulo: 'Nueva skill para la Rabbit R1', ancho: 540,
+      cuerpo: `<p class="suave" style="margin:0 0 10px">${tr('Describe qué debe hacer y cuándo. APOLO la redacta (puede usar la pantalla, la cámara y el altavoz de la R1), la pasa por el escáner y la deja como borrador para que la actives aquí o desde la R1 (Menú → Skills).')}</p>
+        <textarea id="skIdeaR1" rows="5" style="width:100%" placeholder="${tr('Ej.: modo cocina: cuando diga la receta, enséñame los ingredientes y los pasos en la pantalla de la R1 y avísame de cada temporizador')}"></textarea>`,
+      botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Redactar con APOLO', cls: 'pri', valor: m => $('#skIdeaR1', m).value.trim() || false }] });
+    if (!idea) return;
+    const b = $('#skNuevaR1'), txt = b?.innerHTML;
+    if (b) { b.disabled = true; b.innerHTML = `<span class="punto ok vivo"></span>${tr('Redactando…')}`; }
+    try {
+      const r = await api('POST', '/skills/redactar', { idea, canales: ['r1'] });
+      aviso(tr('Skill "{s}" creada como borrador', { s: r.skill.nombre || r.skill.slug }));
+      await this.recargar(); this.abrir(r.skill.slug);
+    } catch (er) { aviso(er.message, true); }
+    finally { if (b && b.isConnected) { b.disabled = false; b.innerHTML = txt; } }
   },
 
   async alternar(slug, activar, boton) {

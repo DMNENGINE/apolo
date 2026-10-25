@@ -74,7 +74,7 @@ function crearSueno({ cfg, bus, memoria, grafo, generarJSON, modelo, registro, h
   async function faseLigera(inf) {
     const c = conf();
     if (memoria.indexar) await memoria.indexar().catch(() => { });
-    const lista = memoria.lista().slice();
+    const lista = memoria.lista().filter(m => !m.procedencia);
     const borrados = new Set();
     for (let i = 0; i < lista.length; i++) {
       const a = lista[i]; if (borrados.has(a.id)) continue;
@@ -118,7 +118,7 @@ function crearSueno({ cfg, bus, memoria, grafo, generarJSON, modelo, registro, h
   };
   async function faseREM(inf, signal) {
     const c = conf();
-    const todos = memoria.lista();
+    const todos = memoria.lista().filter(m => !m.procedencia);
     if (todos.length < 2) { inf.fases.rem = 'pocos recuerdos'; return; }
     // los que el grafo aún no ha procesado con el modelo + contexto reciente y patrones previos (para no repetirlos)
     const pend = grafo ? grafo.pendientesLLM(c.maxREM) : [];
@@ -154,7 +154,7 @@ function crearSueno({ cfg, bus, memoria, grafo, generarJSON, modelo, registro, h
   // ---------- fase profunda ----------
   const ESQ_PERFIL = { type: 'object', required: ['perfil'], properties: { perfil: { type: 'array', items: { type: 'string' } }, notas: { type: 'string' } } };
   async function faseProfunda(inf, signal) {
-    const perfil = memoria.lista().filter(m => m.tipo === 'perfil');
+    const perfil = memoria.lista().filter(m => m.tipo === 'perfil' && !m.procedencia);
     inf.perfilAntes = perfil.map(m => m.texto);
     inf.perfilDespues = inf.perfilAntes;
     if (perfil.length < 2) { inf.fases.profunda = 'nada que condensar'; return; }

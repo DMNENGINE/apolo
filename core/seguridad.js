@@ -28,6 +28,15 @@ function redactar(texto, { patrones = true } = {}) {
   if (patrones) for (const re of PATRONES) t = t.replace(re, (m, g1) => (typeof g1 === 'string' && /[:=]\s*$/.test(g1) ? g1 + '[REDACTADO]' : '[REDACTADO]'));
   return t;
 }
+function redactarParcial(texto) {
+  let t = String(texto ?? '');
+  for (const secreto of conocidos) {
+    const max = Math.min(secreto.length - 1, t.length);
+    for (let n = max; n >= 4; n--) if (t.endsWith(secreto.slice(0, n))) { t = t.slice(0, -n) + '[REDACTADO]'; break; }
+  }
+  t = t.replace(/(?:sk-[\w-]*|AIza[\w-]*|(?:password|token|secret|api_key)\s*[:=]\s*\S*)$/gi, '[REDACTADO]');
+  return redactar(t);
+}
 const pareceSecreto = texto => PATRONES.some(re => { re.lastIndex = 0; const r = re.test(String(texto || '')); re.lastIndex = 0; return r; });
 
 // ---------- entorno para procesos de terceros (scripts de skills, shell de plugins) ----------
@@ -44,7 +53,7 @@ function envLimpio(env = process.env, extra = {}) {
 
 // ---------- rutas sensibles ----------
 // leerlas pide permiso (y nunca vale "permitir siempre"): token del daemon, config con claves, bóveda, ssh, .env, credenciales
-function rutaSensible(f, { dirNucleo } = {}) {
+function clasificarRutaSensible(f, { dirNucleo } = {}) {
   const n = path.resolve(String(f || '')).replace(/\\/g, '/').toLowerCase();
   const home = os.homedir().replace(/\\/g, '/').toLowerCase();
   if (dirNucleo) {
@@ -55,12 +64,23 @@ function rutaSensible(f, { dirNucleo } = {}) {
     }
   }
   if (/(^|\/)\.env(\.[\w-]+)?$/.test(n)) return 'archivo .env';
-  if (/(^|\/)\.ssh\/|(^|\/)id_(rsa|ed25519|ecdsa|dsa)(\.pub)?$|\.(pem|pfx|p12|kdbx|key)$/.test(n)) return 'clave privada';
-  if (/(^|\/)\.(aws|azure|kube|docker|gnupg)\/|(^|\/)\.(npmrc|pypirc|netrc|git-credentials)$|(^|\/)\.gemini\/\.env$/.test(n)) return 'credenciales';
+  if (/(^|\/)\.ssh(\/|$)|(^|\/)id_(rsa|ed25519|ecdsa|dsa)(\.pub)?$|\.(pem|pfx|p12|kdbx|key)$/.test(n)) return 'clave privada';
+  if (/(^|\/)\.(aws|azure|kube|docker|gnupg)(\/|$)|(^|\/)\.(npmrc|pypirc|netrc|git-credentials)$|(^|\/)\.gemini\/\.env$/.test(n)) return 'credenciales';
   if (n.startsWith(home + '/.claude/') && /(robot-companion\.token|\.credentials\.json)$/.test(n)) return 'credenciales de Claude/robot';
   if (/\/robot-companion\/(discord|voz|conectores|whatsapp|telegram)\.json$|\/robot-companion\/whatsapp-auth\//.test(n)) return 'credenciales de la app';
   if (/\/(google\/chrome|microsoft\/edge|bravesoftware\/brave-browser)\/user data\/.*(login data|cookies|local state)/.test(n)) return 'contraseñas/cookies del navegador';
   return '';
+}
+
+function rutaSensible(f, { dirNucleo } = {}) {
+  const rutas = require('./rutas-seguras');
+  try {
+    rutas.validarRuta(f);
+    if (dirNucleo && [f, rutas.rutaReal(f)].some(x => /(?:^|\/)skills\/trader\/_datos\/trader\.json$|(?:^|\/)trading-autopiloto\.json$/i.test(String(x).replace(/\\/g, '/')))) return 'credenciales y control de trading';
+    if (dirNucleo && rutas.dentro(rutas.rutaReal(f), rutas.rutaReal(path.join(dirNucleo, 'ejecuciones')))) return 'historial privado de ejecuciones';
+    const directa = clasificarRutaSensible(f, { dirNucleo });
+    return directa || clasificarRutaSensible(rutas.rutaReal(f), { dirNucleo: dirNucleo && rutas.rutaReal(dirNucleo) });
+  } catch { return 'ruta especial o destino no verificable'; }
 }
 
 // ---------- red ----------
@@ -90,7 +110,8 @@ function urlPrivada(url) {
   const m = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (m) { const [a, b] = [+m[1], +m[2]]; return a === 127 || a === 10 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127); }
   if (/^\d+$/.test(h) || /^0x/i.test(h)) return true;           // IPs en decimal/hex (http://2130706433/)
-  return h === '::1' || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || /^::ffff:/.test(h);
+  if (require('net').isIP(h) !== 6) return false;
+  return h === '::' || h === '::1' || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || /^::ffff:/.test(h);
 }
 
-module.exports = { redactar, registrarSecreto, olvidarSecreto, pareceSecreto, envLimpio, rutaSensible, hostPermitido, hostDeUrl, origenPermitido, urlPrivada, PATRONES };
+module.exports = { redactar, redactarParcial, registrarSecreto, olvidarSecreto, pareceSecreto, envLimpio, rutaSensible, hostPermitido, hostDeUrl, origenPermitido, urlPrivada, PATRONES };

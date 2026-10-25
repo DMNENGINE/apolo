@@ -49,8 +49,13 @@ function crearIsla({ alPantallaCompleta }) {
       frame: false, transparent: true, resizable: false, movable: false, minimizable: false,
       alwaysOnTop: true, skipTaskbar: true, hasShadow: false, focusable: true,
       backgroundColor: '#00000000',
-      webPreferences: { preload: path.join(RAIZ, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+      webPreferences: { preload: path.join(RAIZ, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true,
+        additionalArguments: ['--apolo-usuario=' + encodeURIComponent(require('os').userInfo().username)] },
     });
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.on('will-navigate', e => e.preventDefault());
+    win.webContents.on('will-redirect', e => e.preventDefault());
+    win.webContents.on('will-attach-webview', e => e.preventDefault());
     win.setAlwaysOnTop(true, 'screen-saver');
     win.setVisibleOnAllWorkspaces(true);
     // sin botón en la barra de tareas: si Windows la minimiza (Win+M, "Mostrar escritorio", Win+↓…) no habría forma de traerla → vuelve sola

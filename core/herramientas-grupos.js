@@ -8,7 +8,7 @@
 // núcleo: lo que cualquier charla o encargo puede necesitar
 const NUCLEO = new Set(['shell', 'leer_archivo', 'listar', 'escribir_archivo', 'editar_archivo', 'web', 'programar_tarea', 'ver_tareas', 'borrar_tarea',
   'cambiar_nombre', 'recordar', 'buscar_memoria', 'olvidar', 'buscar_historial', 'usar_skill', 'leer_recurso_skill', 'anotar_skill', 'ejecutar_script_skill',
-  'delegar', 'nacer', 'cargar_herramientas', 'encargar_a_claude']);
+  'delegar', 'nacer', 'cargar_herramientas', 'buscar_herramientas', 'leer_resultado', 'encargar_a_claude']);
 
 const CRAFT = ['filmcraft', 'effectcraft', 'photocraft', 'lightcraft', 'vectorcraft', 'cadcraft', 'figcraft', 'designcraft', 'deckcraft', 'wordcraft', 'gridcraft', 'pdfcraft', 'soundcraft'];
 const GRUPOS = {
@@ -56,10 +56,11 @@ const gruposDeTexto = texto => Object.entries(GRUPOS).filter(([, x]) => x.palabr
 
 // grupos activos de una sesión: lo pedido por el texto del usuario (este mensaje y los 2 anteriores), lo ya usado, lo cargado
 function gruposActivos(s, texto) {
-  const g = new Set(s.gruposCargados || []);
+  const turno = s.turnosAgente || 0;
+  const g = new Set((s.gruposCargados || []).filter(x => !turno || turno - (s.gruposActividad?.[x] || 0) <= 1));
   const usuario = (s.mensajes || []).filter(m => m.role === 'user').slice(-3).map(m => m.content).join('\n');
   for (const x of gruposDeTexto(`${texto || ''}\n${usuario}\n${s.titulo || ''}`)) g.add(x);
-  for (const m of s.mensajes || []) for (const c of m.toolCalls || []) { const x = grupoDe(c.name); if (x && x !== 'nucleo') g.add(x); }
+  for (const m of (s.mensajes || []).slice(-12)) for (const c of m.toolCalls || []) { const x = grupoDe(c.name); if (x && x !== 'nucleo') g.add(x); }
   return g;
 }
 
@@ -79,10 +80,31 @@ function crearCargar() {
     ejecutar: async (a, ctx = {}) => {
       const s = ctx.sesion; const pedidos = (a.grupos || []).filter(g => GRUPOS[g]);
       if (!pedidos.length) return `No conozco esos grupos. Hay: ${Object.keys(GRUPOS).join(', ')}`;
-      if (s) s.gruposCargados = [...new Set([...(s.gruposCargados || []), ...pedidos])];
+      if (s) { s.gruposCargados = [...new Set([...(s.gruposCargados || []), ...pedidos])]; s.gruposActividad ||= {}; for (const g of pedidos) s.gruposActividad[g] = s.turnosAgente || 0; }
       return `Cargado: ${pedidos.join(', ')}. Ya puedes usar sus herramientas.`;
     },
   };
 }
 
-module.exports = { NUCLEO, GRUPOS, grupoDe, gruposDeTexto, gruposActivos, filtrar, crearCargar };
+function seleccionar(herramientas, s, texto, presupuesto = 6000) {
+  const g = gruposActivos(s, texto), turno = s.turnosAgente || 0;
+  const candidatos = herramientas.filter(h => { const x = grupoDe(h.nombre); return x === null || x === 'nucleo' || (x && g.has(x)) || turno - (s.herramientasActividad?.[h.nombre] ?? -10) <= 1; });
+  candidatos.sort((a, b) => Number(NUCLEO.has(b.nombre)) - Number(NUCLEO.has(a.nombre)));
+  const out = []; let tokens = 0;
+  for (const h of candidatos) {
+    const coste = Math.ceil(JSON.stringify({ name: h.nombre, description: h.descripcion, parameters: h.parametros }).length / 3.5);
+    if (tokens + coste <= presupuesto || ['cargar_herramientas', 'buscar_herramientas'].includes(h.nombre)) { out.push(h); tokens += coste; }
+  }
+  return out;
+}
+function crearBuscar(herramientas) {
+  return { nombre: 'buscar_herramientas', riesgo: 'lectura', descripcion: 'Busca herramientas por nombre o descripcion y carga las mas relevantes para los siguientes pasos.',
+    parametros: { type: 'object', properties: { consulta: { type: 'string' } }, required: ['consulta'] }, resumen: a => a.consulta,
+    ejecutar: (a, ctx) => {
+      const palabras = a.consulta.toLowerCase().split(/\W+/).filter(x => x.length > 2), s = ctx.sesion;
+      const encontrados = herramientas().filter(h => !s.herramientasPermitidas || s.herramientasPermitidas.includes(h.nombre)).map(h => ({ h, score: palabras.filter(p => (h.nombre + ' ' + h.descripcion).toLowerCase().includes(p)).length })).filter(x => x.score).sort((a, b) => b.score - a.score).slice(0, 8);
+      s.herramientasActividad ||= {}; for (const { h } of encontrados) s.herramientasActividad[h.nombre] = s.turnosAgente || 0;
+      return encontrados.map(({ h }) => `${h.nombre}: ${h.descripcion}`).join('\n') || 'No se encontraron herramientas.';
+    } };
+}
+module.exports = { NUCLEO, GRUPOS, grupoDe, gruposDeTexto, gruposActivos, filtrar, crearCargar, seleccionar, crearBuscar };

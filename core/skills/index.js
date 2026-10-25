@@ -12,8 +12,9 @@ const { crearIndice } = require('./indice');
 const { crearTaller } = require('./taller');
 const { crearMarketplace } = require('./marketplace');
 const { slugDe } = require('./formato');
+const rutas = require('../rutas-seguras');
 
-function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, tokenGithub, ejecutarEval, fetchMarketplace }) {
+function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, tokenGithub, ejecutarEval, fetchMarketplace, canalesActivos }) {
   const almacen = crearAlmacen({ cfg, bus });
   const elEscaner = () => {
     if (escaner) return escaner;
@@ -21,7 +22,7 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
     return crearEscaner({ generarJSON, modelo: typeof modelo === 'function' ? modelo() : modelo || cfg.modeloPorDefecto });
   };
   const instalador = crearInstalador({ almacen, cfg, escaner: elEscaner, tokenGithub });
-  const indice = crearIndice({ cfg, almacen, embedder });
+  const indice = crearIndice({ cfg, almacen, embedder, canalesActivos });
   const taller = crearTaller({ cfg, bus, almacen, instalador, generarJSON, modelo, ejecutar: ejecutarEval });
   const marketplace = crearMarketplace({ cfg, fetch: fetchMarketplace || ((...a) => globalThis.fetch(...a)), tokenGithub });
   // catálogo con "instalada": misma fuente de origen (GitHub owner/repo/ruta) o mismo slug
@@ -53,16 +54,21 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
     if (!r || path.isAbsolute(r) || /^[a-z]:/i.test(r) || r.split('/').includes('..')) throw new Error('ruta no válida: debe ser relativa a la carpeta de la skill y sin ".."');
     const f = path.resolve(s.dir, r);
     if (!f.startsWith(path.resolve(s.dir) + path.sep)) throw new Error('ruta fuera de la skill');
-    return f;
+    const real = rutas.rutaReal(f), base = rutas.rutaReal(s.dir);
+    if (!rutas.dentro(real, base) || real === base) throw new Error('ruta fuera de la skill (enlace)');
+    return real;
   }
   // datos propios de la skill en <skill>/_datos/ (lo que aprende con el uso: sobrevive a las actualizaciones,
   // el escáner y la exportación no lo tocan). modo 'añadir' (al final) | 'reemplazar'
   function anotar(nombre, archivo, texto, modo = 'añadir') {
     const s = activa(nombre), a = String(archivo || '').trim();
+    if (s.externa) throw new Error('la skill externa es de solo lectura; no se modifica desde APOLO');
     if (!/^[\w.-]{1,60}\.(md|txt|json|jsonl)$/i.test(a) || a.startsWith('.')) throw new Error('archivo no válido: un nombre simple .md, .txt, .json o .jsonl (sin carpetas)');
     const t = String(texto ?? ''); if (!t.trim()) throw new Error('texto vacío');
-    const dir = path.join(s.dir, '_datos'), f = path.join(dir, a);
+    const dir = rutaDentro(s, '_datos'), f = rutaDentro(s, `_datos/${a}`);
+    if (!rutas.dentro(f, dir)) throw new Error('ruta fuera de los datos de la skill');
     fs.mkdirSync(dir, { recursive: true });
+    if (rutaDentro(s, `_datos/${a}`) !== f) throw new Error('la ruta de la skill cambio antes de escribir');
     const antes = fs.existsSync(f) ? fs.statSync(f).size : 0;
     const anadir = modo !== 'reemplazar';
     if ((anadir ? antes : 0) + Buffer.byteLength(t) > 2 * 1024 * 1024) throw new Error('el archivo pasaría de 2 MB');

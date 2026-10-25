@@ -10,7 +10,7 @@ const tmp = p => fs.mkdtempSync(path.join(os.tmpdir(), p));
 const escanerFalso = { async escanear() { return { nivel: 'verde', hallazgos: [], resumen: 'limpia', explicacion: '' }; } };
 function nucleo(extra = {}) {
   const dir = tmp('taller-');
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ memoria: { embeddings: null }, ...extra, skills: { rutas: [], ...extra.skills } }));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ respaldoAuto: false, memoria: { embeddings: null }, ...extra, skills: { rutas: [], ...extra.skills } }));
   const { crearNucleo } = require('../index');
   return { dir, n: crearNucleo({ dir, escaner: escanerFalso, embedder: null }) };
 }
@@ -44,13 +44,13 @@ test('crear_skill: borrador desactivado, origen taller, escaneado, scripts y pru
 
 test('sugerir skill tras un turno largo: evento + nota, 1 vez por sesión; desactivable', async () => {
   const { n } = nucleo({ permisos: { modo: 'auto' } });
-  const seis = Array.from({ length: 6 }, (_, i) => tc('ver_skills', {}, 'c' + i));
+  const seis = Array.from({ length: 6 }, (_, i) => tc('buscar_memoria', { consulta: 'tema fotografico ' + i }, 'c' + i));
   modeloFalso(n, [{ toolCalls: seis }, { texto: 'Hecho todo.' }, { toolCalls: seis }, { texto: 'Otra vez.' }]);
   const evs = []; n.bus.on('evento', e => { if (e.tipo === 'skill-sugerida') evs.push(e); });
   const s = n.sesiones.crear({ modelo: 'falso/m' });
   const r1 = await n.enviar(s, 'ordena mis fotos');
   assert.match(r1, /crea una skill con esto/);
-  assert.strictEqual(evs.length, 1); assert.strictEqual(evs[0].sesion, s.id); assert.match(evs[0].resumen, /ordena mis fotos — 6 herramientas \(ver_skills\)/);
+  assert.strictEqual(evs.length, 1); assert.strictEqual(evs[0].sesion, s.id); assert.match(evs[0].resumen, /ordena mis fotos — 6 herramientas \(buscar_memoria\)/);
   const r2 = await n.enviar(s, 'otra vez');
   assert.doesNotMatch(r2, /skill/); assert.strictEqual(evs.length, 1);
   // corto o con sugerir:false → nada
@@ -188,7 +188,7 @@ test('tareas internas + mejora semanal opcional + API del daemon', async () => {
     r = await api('POST', '/skills/api-skill/versiones/restaurar', { version: r.j.versiones[0].version }); assert.strictEqual(r.status, 200); assert.ok(r.j.restaurada);
     modeloFalso(n, [{ texto: 'hola, qué tal' }]);
     r = await api('POST', '/skills/api-skill/evaluar', { modelos: ['falso/m'] }); assert.strictEqual(r.j.resultados[0].aciertos, 1);
-    if (process.platform === 'win32') { r = await api('POST', '/skills/api-skill/exportar', { destino: path.join(dir, 'zips') }); assert.strictEqual(r.status, 200); assert.ok(fs.existsSync(r.j.ruta)); }
+    if (process.platform === 'win32') { r = await api('POST', '/skills/api-skill/exportar', { destino: path.join(dir, 'zips') }); assert.strictEqual(r.status, 200, JSON.stringify(r.j)); assert.ok(fs.existsSync(r.j.ruta)); }
     assert.strictEqual((await api('GET', '/skills/no-existe/versiones')).status, 404);
   } finally { servidor.close(); }
 });

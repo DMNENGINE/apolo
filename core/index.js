@@ -23,7 +23,10 @@ const turnoMod = require('./turno');
 const grafoMod = require('./grafo');
 
 function crearNucleo(opciones = {}) {
+  const herramientas = require('./herramientas').crearRegistro();
+  herramientas.registrar([require('./herramientas-grupos').crearCargar()]);
   const cfg = cargarConfig(opciones.dir, { boveda: opciones.boveda });
+  Object.defineProperty(cfg, 'registroHerramientas', { value: herramientas });
   const bus = new EventEmitter(); bus.setMaxListeners(100);
   const proveedores = crearProveedores(cfg);
   const permisos = crearPermisos({ cfg, bus });
@@ -40,13 +43,14 @@ function crearNucleo(opciones = {}) {
   const modeloCerebro = () => { const m = nucleo?.cerebro?.leer?.()?.modelo; return m && m.includes('/') ? m : cfg.modeloPorDefecto; };
   const skills = crearSkills({ cfg, bus, generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), embedder, modelo: modeloCerebro, escaner: opciones.escaner,
     tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github'), fetchMarketplace: opciones.fetchMarketplace,
+    canalesActivos: () => nucleo?.nodos?.canalesActivos?.() || [],     // 'r1' mientras la Rabbit R1 está conectada (core/nodos)
     ejecutarEval: async ({ modelo, texto }) => {                 // evals del taller: sesión efímera (canal 'eval', solo lectura) que se borra al acabar
       const s = sesiones.crear({ modelo, canal: 'eval', titulo: 'eval de skill' });
       try { return await agente.enviar(s, texto); } finally { sesiones.borrar(s.id); }
     } });
-  const agente = crearAgente({ cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, sandbox: () => nucleo?.sandbox, conciencia: () => nucleo?.conciencia, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
+  const agente = crearAgente({ herramientas, cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, sandbox: () => nucleo?.sandbox, conciencia: () => nucleo?.conciencia, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
   // atajo: enviar y emitir los eventos también al bus global
-  const enviar = (s, texto, emitir) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); });
+  const enviar = (s, texto, emitir, admision) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); }, admision);
   subagentes = crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar: id => agente.cancelar(id) });
   // FASE 3 (manos de verdad): registro de capturas por sesión + comprobar tras cada acción + macros por demostración
   const registroCapturas = require('./escritorio/registro').crearRegistroCapturas({ cfg, sesiones, video: opciones.videoCapturas });
@@ -67,7 +71,7 @@ function crearNucleo(opciones = {}) {
   consejo = consejoMod.crearConsejo({ cfg, bus, sesiones, proveedores, generarJSON: generarJSONvivo });
   turno = turnoMod.crearTurno({ cfg, bus, sesiones, enviar, cancelar: id => agente.cancelar(id), generarJSON: generarJSONvivo, registro, video: opciones.video,
     modeloInforme: modeloCerebro, horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
-  require('./herramientas').registrar([consejoMod.HERRAMIENTA, ...turnoMod.HERRAMIENTAS]);
+  herramientas.registrar([consejoMod.HERRAMIENTA, ...turnoMod.HERRAMIENTAS]);
   const cancelarAgente = agente.cancelar;                         // "Detener" en Mission Control también para un consejo
   agente.cancelar = id => cancelarAgente(id) || consejo.cancelar(id);
   // mejora semanal de skills (cfg.skills.mejoraSemanal): propone diffs, nunca aplica
@@ -78,13 +82,13 @@ function crearNucleo(opciones = {}) {
     else if (!cfg.skills?.mejoraSemanal && ya) tareas.borrar(ya.id);
   } catch { }
   // plugins (core/plugins + core/sdk): cada uno en su proceso; el escáner es el mismo antivirus de las skills
-  const plugins = crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, sesiones, enviar, herramientas: require('./herramientas'), sandbox: () => nucleo?.sandbox,
+  const plugins = crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canales, sesiones, enviar, herramientas, sandbox: () => nucleo?.sandbox,
     escaner: () => opciones.escaner || require('./skills/escaner').crearEscaner({ generarJSON: (...a) => (nucleo?.generarJSON || generarJSON)(...a), modelo: modeloCerebro() }),
     tokenGithub: () => nucleo?.extensiones?.conectores?.almacen?.secreto?.('srv:github'),
     // secretos de los plugins (slack:bot, matrix:token…): por defecto en la bóveda (DPAPI); la app puede poner el suyo con ponerSecretos
     secretos: cfg.boveda ? { leer: s => cfg.boveda.leer('plugin:' + s) || '', guardar: (s, v) => (v ? cfg.boveda.guardar('plugin:' + s, v) : cfg.boveda.borrar('plugin:' + s)) } : null });
   if (!opciones.sinPlugins) plugins.iniciar().catch(e => console.log(`[plugins] ${e.message}`));
-  nucleo = { registrarHerramientas: require('./herramientas').registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills, plugins, consejo, turno };
+  nucleo = { herramientas, registrarHerramientas: herramientas.registrar, extensiones: {}, cfg, bus, proveedores, permisos, sesiones, agente, tareas, memoria, personalidad, registro, historialPermisos, canales, enviar, generarJSON, compactador, subagentes, control, navegador, skills, plugins, consejo, turno };
   nucleo.extensiones.turno = { http: (...a) => turno.http(...a) };   // API /v1/turno (daemon → extensiones)
   Object.assign(nucleo, { demo, capturas: registroCapturas });
   nucleo.extensiones.capturas = { http: (...a) => registroCapturas.http(...a) };   // /v1/capturas ("Lo que hizo" + time-lapse)
@@ -110,8 +114,8 @@ function crearNucleo(opciones = {}) {
   const sueno = require('./sueno').crearSueno({ cfg, bus, memoria, grafo, generarJSON: generarJSONvivo, modelo: modeloCerebro, registro, tareas,
     horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
   tareas.registrarInterna('sueno', async () => { await sueno.dormir({ motivo: 'noche' }); return ''; });   // el aviso llega a la hora del briefing
-  require('./herramientas').registrar([grafoMod.HERRAMIENTA]);
-  require('./herramientas').registrar(require('./archive').HERRAMIENTAS);    // Internet Archive: buscar, ver, leer libros, Wayback, guardar
+  herramientas.registrar([grafoMod.HERRAMIENTA]);
+  herramientas.registrar(require('./archive').HERRAMIENTAS);    // Internet Archive: buscar, ver, leer libros, Wayback, guardar
   // lo que el usuario hace en Claude Code → memoria + línea de tiempo + diario (tarea nocturna, core/aprender-cc.js)
   const aprenderCC = require('./aprender-cc').crearAprenderCC({ cfg, memoria, generarJSON: generarJSONvivo, modelo: modeloCerebro, tareas, registro });
   nucleo.extensiones['aprender-claude'] = { http: (...a) => aprenderCC.http(...a) };
@@ -142,15 +146,15 @@ function crearNucleo(opciones = {}) {
   nucleo.extensiones.wrapped = { http: (...a) => wrapped.http(...a) };
   nucleo.avatar = avatar; nucleo.extensiones.avatar = { http: (...a) => avatar.http(...a) };
   // servidores MCP remotos con OAuth (Mobbin…) → herramientas <id>_<herramienta>; API /v1/mcp-remotos
-  const mcpRemotos = require('./mcp-remoto').crearMcpRemotos({ cfg, registrar: require('./herramientas').registrar, quitar: require('./herramientas').quitar, log: (...a) => console.log(...a) });
+  const mcpRemotos = require('./mcp-remoto').crearMcpRemotos({ cfg, registrar: herramientas.registrar, quitar: herramientas.quitar, log: (...a) => console.log(...a) });
   nucleo.mcpRemotos = mcpRemotos; nucleo.extensiones['mcp-remotos'] = { http: (...a) => mcpRemotos.http(...a) };
   // servidores MCP locales por stdio (suite ArtCraft: FilmCraft, CadCraft…) → una herramienta por app; API /v1/mcp-locales
-  const mcpLocales = require('./mcp-local').crearMcpLocales({ cfg, bus, registrar: require('./herramientas').registrar, quitar: require('./herramientas').quitar,
+  const mcpLocales = require('./mcp-local').crearMcpLocales({ cfg, bus, registrar: herramientas.registrar, quitar: herramientas.quitar,
     detectar: opciones.detectarMcpLocales, log: (...a) => console.log(...a) });
   nucleo.mcpLocales = mcpLocales; nucleo.extensiones['mcp-locales'] = { http: (...a) => mcpLocales.http(...a) };
   // encargos a Claude Code: APOLO le pasa el trabajo pesado (programar, proyectos) a la CLI del usuario, en segundo plano
   const encargos = require('./encargos-claude').crearEncargosClaude({ cfg, sesiones, bus, log: (...a) => console.log(...a) });
-  require('./herramientas').registrar([encargos.HERRAMIENTA]);
+  herramientas.registrar([encargos.HERRAMIENTA]);
   nucleo.encargos = encargos;
   // espejo de Claude Code: cada sesión de Claude Code es también una conversación de APOLO (Wrapped, Uso, historial, memoria).
   // En vivo con los hooks; el repaso completo lo arranca la app (espejoCC.iniciar() en main.js), no los tests
@@ -168,18 +172,18 @@ function crearNucleo(opciones = {}) {
   nucleo.espejoCC = { ...espejoCC, iniciar() { espejoCC.actualizar({ forzar: true }).catch(() => { }); setInterval(() => espejoCC.actualizar().catch(() => { }), 10 * 60_000).unref(); } };
   // recetas fijas de la suite (kit de marca, control de calidad, portadas, audio de estudio, rótulo/título animados)
   const craft = require('./craft/herramientas').crearHerramientasCraft({ mcpLocales, cfg });
-  require('./herramientas').registrar(craft.HERRAMIENTAS);
+  herramientas.registrar(craft.HERRAMIENTAS);
   const diccionarioCraft = require('./craft/diccionario').crearDiccionario({ cfg });   // lo corregido en Revisión, por canal
   const subtitulador = require('./craft/subtitular').crearSubtitulador({ mcpLocales, generarJSON: generarJSONvivo, modelo: modeloCerebro, cfg, kits: craft.kits, audio: craft.audio, diccionario: diccionarioCraft });
-  require('./herramientas').registrar([subtitulador.HERRAMIENTA]);              // subtitular_video: clip → TikTok con subtítulos (FilmCraft)
+  herramientas.registrar([subtitulador.HERRAMIENTA]);              // subtitular_video: clip → TikTok con subtítulos (FilmCraft)
   // editor automático por lotes: trae clips de otra máquina, los edita y los deja en revisión (#/revision) → /v1/revision
   const lotes = require('./craft/lotes').crearLotes({ cfg, bus, tareas, subtitulador, generarJSON: generarJSONvivo, modelo: modeloCerebro, log: (...a) => console.log(...a),
     miniaturas: craft.miniaturas, kits: craft.kits, diccionario: diccionarioCraft, abrirUrl: require('./mcp-remoto').abrirNavegador, medal: craft.medal });
-  require('./herramientas').registrar([lotes.HERRAMIENTA]);                    // editor_clips: estado / pausar / reanudar la edición automática
+  herramientas.registrar([lotes.HERRAMIENTA]);                    // editor_clips: estado / pausar / reanudar la edición automática
   nucleo.lotes = lotes; nucleo.extensiones.revision = { http: (...a) => lotes.http(...a) };
   // biblioteca de diseño: patrones aprendidos de apps reales en Mobbin; API /v1/diseno
   const diseno = require('./diseno').crearDiseno({ cfg, mcpRemotos, generarJSON: generarJSONvivo, memoria, tareas, bus });
-  require('./herramientas').registrar(diseno.HERRAMIENTAS);
+  herramientas.registrar(diseno.HERRAMIENTAS);
   nucleo.diseno = diseno; nucleo.extensiones.diseno = { http: (...a) => diseno.http(...a) };
   // FASE 9: registro de auditoría encadenado + kill switch global
   const auditoria = require('./auditoria').crearAuditoria({ cfg, bus, boveda: cfg.boveda });
@@ -190,30 +194,31 @@ function crearNucleo(opciones = {}) {
   nucleo.sandbox = sandbox; nucleo.extensiones.sandbox = { http: (...a) => sandbox.http(...a) };
   const panico = require('./panico').crearPanico({ nucleo });
   nucleo.panico = panico; nucleo.extensiones.panico = { http: (...a) => panico.http(...a) };
+  nucleo.trading = require('./trading-autopiloto').crearTrading({ nucleo, fetch: opciones.fetchTrading });
   tareas.ponerPausa(() => panico.activo());
   bus.on('config-seguridad', e => auditoria.registrar({ tipo: 'seguridad', resumen: e.resumen, quien: e.quien || 'panel' }));
   // FASE 6: dashboards generados por el agente (core/dashboards.js) → /v1/dashboards
   const dashMod = require('./dashboards');
-  const dashboards = dashMod.crearDashboards({ cfg, bus, permisos, nucleo: () => nucleo, generarJSON: generarJSONvivo,
+  const dashboards = dashMod.crearDashboards({ herramientas: () => herramientas, cfg, bus, permisos, nucleo: () => nucleo, generarJSON: generarJSONvivo,
     modelo: () => cfg.dashboards?.modeloAgente || modeloCerebro(), fetch: opciones.fetchDashboards, ejecutarComando: opciones.comandoDashboards });
-  require('./herramientas').registrar(dashMod.HERRAMIENTAS);
+  herramientas.registrar(dashMod.HERRAMIENTAS);
   nucleo.dashboards = dashboards; nucleo.extensiones.dashboards = { http: (...a) => dashboards.http(...a) };
   // FASE 6: reuniones (subtítulos de Meet/Teams/Zoom vía la extensión o audio local mic+sistema → whisper → resumen) → /v1/reuniones
   const reunMod = require('./reuniones');
   const reuniones = reunMod.crearReuniones({ cfg, bus, navegador, generarJSON: generarJSONvivo, modelo: modeloCerebro, tareas, memoria,
     lanzarGrabadora: opciones.lanzarGrabadora, transcribir: opciones.transcribirReunion });
-  require('./herramientas').registrar(reunMod.HERRAMIENTAS);
+  herramientas.registrar(reunMod.HERRAMIENTAS);
   nucleo.reuniones = reuniones; nucleo.extensiones.reuniones = { http: (...a) => reuniones.http(...a) };
   // ETAPA J: Modo Gamer (core/gamer) → /v1/gamer; al arrancar deshace una sesión que quedara abierta (cierre a medias)
   const gamer = require('./gamer').crearGamer({ cfg, bus, permisos, so: opciones.soGamer });
   nucleo.gamer = gamer; nucleo.extensiones.gamer = { http: (...a) => gamer.http(...a) };
   gamer.restaurarPendiente().catch(e => console.log(`[gamer] no se pudo restaurar: ${e.message}`));
   // Alma (SOUL.md/IDENTITY.md/USER.md con versiones; APOLO la evoluciona y avisa) + conciencia (estado interno, monólogo, reflexión, diario, metas)
-  require('./herramientas').registrar(personalidad.HERRAMIENTAS);
+  herramientas.registrar(personalidad.HERRAMIENTAS);
   nucleo.extensiones.alma = { http: (...a) => personalidad.http(...a) };
   const conciencia = require('./conciencia').crearConciencia({ cfg, bus, generarJSON: generarJSONvivo, modelo: modeloCerebro, alma: personalidad, memoria, tareas, sesiones, linea,
     enviar: (s, t) => enviar(s, t), panico: () => panico.activo() });
-  require('./herramientas').registrar(conciencia.HERRAMIENTAS);
+  herramientas.registrar(conciencia.HERRAMIENTAS);
   nucleo.conciencia = conciencia; nucleo.extensiones.conciencia = { http: (...a) => conciencia.http(...a) };
   nucleo.importador = crearImportador({ cfg, memoria, generarJSON, personalidad, tareas, proveedores, skills, modelo: modeloCerebro });
   nucleo.importadorChatGPT = crearImportadorChatGPT({ cfg, memoria, bus, generarJSON: generarJSONvivo, modelo: modeloCerebro });

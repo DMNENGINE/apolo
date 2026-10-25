@@ -48,6 +48,7 @@ function entornoHijo({ lectura, escritura, shell, node }) {
   // modelo de permisos de Node SOLO en 22.13+ (estable). En 20–22.12 es experimental y el propio require() del plugin
   // choca con él ("Access to this API has been restricted"): ahí el plugin va en su proceso, sin claves, pero sin límite de archivos
   const sandbox = nuevo && !electron;
+  if (!sandbox) throw new Error('Plugins requieren Node 22.13+ con modelo de permisos; inicio bloqueado');
   if (sandbox) {
     execArgv.push('--permission');
     lectura.forEach(d => execArgv.push('--allow-fs-read=' + d)); escritura.forEach(d => execArgv.push('--allow-fs-write=' + d));
@@ -73,7 +74,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   const op = () => ({ timeoutMs: 60_000, activarMs: 20_000, proveedorMs: 300_000, maxReinicios: 3, backoffMs: 1000, dev: false, ...(cfg.gestorPlugins || {}) });
   fs.mkdirSync(base, { recursive: true });
   let estado = {}; try { estado = JSON.parse(fs.readFileSync(fEstado, 'utf8')); } catch { }
-  const guardar = () => fs.writeFileSync(fEstado, JSON.stringify(estado, null, 2));
+  const guardar = () => require('../persistencia').escribirAtomico(fEstado, JSON.stringify(estado, null, 2));
   const avisar = (accion, nombre, extra = {}) => bus.emit('evento', { tipo: 'plugins', accion, nombre, ...extra });
   const dirDe = nombre => estado[nombre]?.ruta || path.join(base, nombre);
   const nombres = () => Object.keys(estado).filter(n => fs.existsSync(path.join(dirDe(n), M.ARCHIVO)));
@@ -122,8 +123,8 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
 
   // ---------- permisos del plugin ----------
   async function exigir(nombre, permiso, motivo = '') {
-    if (M.declarado(rt(nombre).man?.permisos, permiso)) return true;
     if (cfg.permisos?.modo === 'solo-lectura') return false;
+    if (M.declarado(rt(nombre).man?.permisos, permiso)) return true;
     const r = await permisos.pedirExterno({ resumen: `El plugin "${nombre}" pide ${permiso}, que NO declaró en su manifest${motivo ? ': ' + motivo : ''}`, peligro: 'permiso no declarado por el plugin', origen: `plugin ${nombre}` });
     return !!r?.ok;
   }
@@ -406,7 +407,12 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
     proc.stdout?.on('data', d => anotar(nombre, 'info', d)); proc.stderr?.on('data', d => { anotar(nombre, 'error', d); if (process.env.APOLO_DEBUG_PLUGINS) process.stderr.write(`[plugin ${nombre}] ${d}`); });
     proc.on('message', m => alMensaje(nombre, proc, m));
     proc.on('exit', (code, sig) => alSalir(nombre, proc, code, sig));
-    proc.on('error', e => anotar(nombre, 'error', e.message));
+    proc.on('error', e => {
+      anotar(nombre, 'error', e.message);
+      if (r.proc !== proc) return;
+      // Un fallo de arranque puede no emitir exit: no dejar las llamadas esperando al timeout.
+      for (const p of [...r.pend.values()]) p.mal(e);
+    });
     proc.unref(); proc.channel?.unref?.(); proc.stdout?.unref?.(); proc.stderr?.unref?.();   // no mantienen vivo al núcleo (CLI, tests)
     await llamar(nombre, 'iniciar', { nombre, version: man.version, dir, entrada: man.entrada, config: sinFunciones(cfg.plugins?.[nombre] || {}), almacen: alm, permisos: man.permisos }, op().activarMs);
     r.estado = 'activo'; r.desde = Date.now();
@@ -455,7 +461,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
     clearTimeout(r.temporizador); clearTimeout(r.estable); r.parando = true;
     if (proc && suave && r.estado === 'activo') { try { await llamar(nombre, 'desactivar', {}, 5000); } catch { } }
     if (proc) await new Promise(ok => {
-      if (proc.exitCode !== null || proc.signalCode) return ok();
+      if (!proc.pid || proc.exitCode !== null || proc.signalCode) return ok();
       const t = setTimeout(ok, 3000); proc.once('exit', () => { clearTimeout(t); ok(); });
       try { proc.kill(); } catch { ok(); }
     });

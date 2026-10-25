@@ -72,7 +72,7 @@ function crearTareas({ cfg, bus, ejecutarAgente }) {
   let lista = [], mtime = 0;
   // si otro proceso (CLI, otra app) cambió tareas.json, lo releemos antes de tocar nada
   const sync = () => { try { const m = fs.statSync(f).mtimeMs; if (m !== mtime) { lista = JSON.parse(fs.readFileSync(f, 'utf8')); mtime = m; } } catch { } };
-  const guardar = () => { fs.writeFileSync(f, JSON.stringify(lista, null, 2)); try { mtime = fs.statSync(f).mtimeMs; } catch { } };
+  const guardar = () => { require('./persistencia').escribirAtomico(f, JSON.stringify(lista, null, 2)); try { mtime = fs.statSync(f).mtimeMs; } catch { } };
   sync();
   const corriendo = new Set();
   const internas = new Map();                 // nombre → async () => texto | ''

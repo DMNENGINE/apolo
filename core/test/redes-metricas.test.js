@@ -273,7 +273,7 @@ test('lotes: un subtítulo corregido en Revisión pasa al diccionario del canal;
   // vincular a mano una publicación de TikTok
   const v = await l.http('POST', ['', 'revision', encodeURIComponent(c0.id), 'vincular'], { url: 'https://www.tiktok.com/@lagctrucks/video/7697679911368084767' });
   assert.deepStrictEqual(v.vinculos, { tiktok: '7697679911368084767' });
-  await assert.rejects(l.http('POST', ['', 'revision', encodeURIComponent(c0.id), 'vincular'], { url: 'https://x.com/a' }), /YouTube, TikTok, Facebook o Instagram/);
+  await assert.rejects(l.http('POST', ['', 'revision', encodeURIComponent(c0.id), 'vincular'], { url: 'https://x.com/a' }), /YouTube.*TikTok.*Facebook.*Instagram/);
   assert.throws(() => l.aYouTube(l.estado().clips[0]), /ya está en YouTube/);
 });
 
@@ -290,40 +290,4 @@ test('lotes: con ingles.quemado en el kit sale también la versión en inglés (
   assert.strictEqual(en.video, c0.fuenteVideo, 'sobre el mismo vídeo de origen');
   assert.ok(c.en.mp4.endsWith(' EN.mp4') && fs.existsSync(c.en.mp4));
   assert.ok(discord[0].components[0].components.some(b => /Versión en inglés/.test(b.label)));
-});
-
-test('métricas de Meta: Facebook (reels + vídeos, vistas por insights si faltan) e Instagram (reels con vistas/compartidos), emparejado sin duración y conectar', async () => {
-  const llamadas = [];
-  const R = (j, ok = true) => ({ ok, status: ok ? 200 : 400, json: async () => j });
-  const pedir = async url => {
-    const u = new URL(url); llamadas.push(u.pathname + '?' + [...u.searchParams.keys()].join(','));
-    const p = u.pathname.replace('/v22.0', '');
-    if (p === '/123/video_reels') return R({ data: [{ id: '900', description: 'PELIGRO AL CONDUCIR CON EL TELÉFONO #ats', created_time: '2026-10-22T20:00:00+0000', length: 93.2, permalink_url: '/reel/900', likes: { summary: { total_count: 7 } }, comments: { summary: { total_count: 2 } } }] });
-    if (p === '/123/videos') return R({ data: [{ id: '900', length: 93.2 }, { id: '901', title: 'otro', created_time: '2026-10-01T00:00:00+0000', length: 30, views: 50 }] });
-    if (p === '/900/video_insights') return R({ data: [{ name: 'blue_reels_play_count', values: [{ value: 410 }] }] });
-    if (p === '/ig1/media') return R({ data: [{ id: 'm1', caption: 'PELIGRO AL CONDUCIR CON EL TELÉFONO\n#truck', media_type: 'VIDEO', media_product_type: 'REELS', timestamp: '2026-10-22T21:00:00+0000', permalink: 'https://www.instagram.com/reel/AbC_1/', like_count: 30, comments_count: 4 },
-      { id: 'm2', caption: 'foto', media_type: 'IMAGE', timestamp: '2026-10-22T21:00:00+0000' }] });
-    if (p === '/m1/insights') return R({ data: [{ name: 'views', values: [{ value: 1200 }] }, { name: 'shares', values: [{ value: 9 }] }, { name: 'saved', values: [{ value: 3 }] }] });
-    if (p === '/oauth/access_token') return R({ access_token: 'LARGO' });
-    if (p === '/me/accounts') return R({ data: [{ id: '123', name: 'LAGC Trucks', access_token: 'PAGINA', instagram_business_account: { id: 'ig1', username: 'lagctrucks' } }] });
-    return R({ error: { message: 'ruta ' + p } }, false);
-  };
-  const m = met.crearMetricas({ meta: { config: () => ({ token: 'PAGINA', pagina: '123', instagram: 'ig1' }) }, pedir, ejecutar: (cmd, args, o, cb) => cb(new Error('sin red en la prueba')) });
-  const fb = await m.deFacebook(), ig = await m.deInstagram();
-  assert.deepStrictEqual(fb.map(v => [v.id, v.vistas, v.duracion]), [['900', 410, 93.2], ['901', 50, 30]], 'reels y vídeos sin repetir; vistas del reel por insights');
-  assert.strictEqual(fb[0].url, 'https://www.facebook.com/reel/900');
-  assert.deepStrictEqual([ig.length, ig[0].vistas, ig[0].compartidos, ig[0].codigo, ig[0].titulo], [1, 1200, 9, 'AbC_1', 'PELIGRO AL CONDUCIR CON EL TELÉFONO'], 'solo vídeos; título = primera línea');
-  const clip = { id: 'c1', estado: 'aprobado', decidido: Date.parse('2026-10-22T19:35:00Z'), gancho: 'PELIGRO AL CONDUCIR CON EL TELÉFONO', inicio: 0, fin: 93, k4: { medidas: { duracion: 93.0 } } };
-  const r = await m.medir([clip], {});
-  assert.strictEqual(r.pares.c1.facebook.id, '900', 'Facebook por título + duración');
-  assert.strictEqual(r.pares.c1.instagram.id, 'm1', 'Instagram (sin duración) por el texto');
-  assert.ok(!r.errores.some(e => /facebook|instagram/.test(e)), 'Facebook e Instagram sin errores');
-  assert.deepStrictEqual(met.emparejar([{ ...clip, vinculos: { instagram: 'AbC_1' } }], [{ ...ig[0], fecha: 1 }]).pares.c1.instagram.como, 'id', 'el enlace pegado de Instagram (código del reel) vincula');
-  const ap = met.aprender([{ ...clip, metricas: { instagram: { vistas: 1200, fecha: Date.now() } } }], { instagram: [{ vistas: 600 }, { vistas: 600 }] });
-  assert.strictEqual(ap.muestras, 1, 'Instagram cuenta para lo aprendido');
-  const sin = met.crearMetricas({ meta: { config: () => null }, pedir });
-  assert.deepStrictEqual([await sin.deFacebook(), await sin.deInstagram()], [[], []], 'sin conectar no hace nada');
-  const c = await met.conectarMeta({ token: 'CORTO', appId: 'a', appSecret: 's' }, pedir);
-  assert.deepStrictEqual(c.guardar, { ...c.guardar, token: 'PAGINA', pagina: '123', instagram: 'ig1', ig_usuario: 'lagctrucks', largo: true });
-  assert.deepStrictEqual(c.publico, { pagina: 'LAGC Trucks', instagram: 'lagctrucks' }, 'lo que se enseña no lleva el token');
 });

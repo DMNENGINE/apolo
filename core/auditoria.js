@@ -47,7 +47,7 @@ function crearAuditoria({ cfg, bus, ahora = Date.now, boveda = null } = {}) {
   function resultado(id, ok, texto = '') {
     const ref = pendientesRes.get(id); if (!ref) return;
     pendientesRes.delete(id);
-    escribir({ tipo: 'resultado', ref, resultado: ok ? 'ok' : 'error', detalle: redactar(String(texto || '')).split('\n')[0].slice(0, 200) });
+    escribir({ tipo: 'resultado', ref, resultado: ok === null ? 'desconocido' : ok ? 'ok' : 'error', detalle: redactar(String(texto || '')).split('\n')[0].slice(0, 200) });
   }
   function leerTodo() {
     let txt = ''; try { txt = fs.readFileSync(f, 'utf8'); } catch { return []; }
