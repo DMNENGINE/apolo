@@ -1,7 +1,7 @@
 {
   "formato": "apolo-marketplace/1",
   "nombre": "Marketplace de APOLO",
-  "actualizado": "2026-10-05",
+  "actualizado": "2026-10-25",
   "entradas": [
     {
       "nombre": "clima",
@@ -296,6 +296,20 @@
       "etiquetas": [
         "creativo",
         "vídeo",
+        "oficial"
+      ],
+      "version": "1.0.0",
+      "licencia": "MIT"
+    },
+    {
+      "nombre": "dmn-trader",
+      "tipo": "plugin",
+      "descripcion": "DMN Trader: APOLO arranca el motor de trading y añade la pestaña Trading (autopiloto simulado con guardia, enjambre, noticias, mesa, backtest, práctica). Piloto con dinero real (GMGN) apagado por defecto, con límites y aprobación explícita. Necesita Python 3.10+. No es asesoramiento financiero.",
+      "fuente": "DMNENGINE/dmn-trader",
+      "autor": "DMNENGINE",
+      "etiquetas": [
+        "finanzas",
+        "trading",
         "oficial"
       ],
       "version": "1.0.0",

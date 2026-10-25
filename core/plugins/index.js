@@ -21,7 +21,10 @@ const esOficial = origen => origen?.tipo === 'local' && typeof origen.fuente ===
   PLUGINS_APP.some(b => { const r = path.relative(minus(b), minus(path.resolve(origen.fuente))); return r && !r.startsWith('..') && !path.isAbsolute(r); });
 const ORDEN = { lectura: 0, escritura: 1, ejecucion: 2 };
 const maxRiesgo = (...r) => r.filter(x => x in ORDEN).reduce((a, b) => (ORDEN[b] > ORDEN[a] ? b : a), 'lectura');
-const CLAVE_PLURAL = { herramienta: 'herramientas', comando: 'comandos', proveedor: 'proveedores', canal: 'canales' };
+// autores de confianza que vienen con APOLO (además de cfg.skills.autoresConfianza): sus paquetes firmados cargan sus
+// pestañas del panel como vistas nativas; los demás, aisladas en un iframe. La clave privada nunca está en ningún repo.
+const AUTORES_OFICIALES = Object.freeze([{ nombre: 'DMNENGINE', clavePublica: 'fwdqHj9gcc4wD68fHBkRnGm0VwQyYFrJcYryj+8lSCI=' }]);
+const CLAVE_PLURAL = { herramienta: 'herramientas', comando: 'comandos', proveedor: 'proveedores', canal: 'canales', vista: 'vistas' };
 const BUS_LIBRES = ['plugins', 'skills', 'tarea'];          // eventos sin contenido de conversaciones
 const BUS_PRIVADOS = ['turno', 'aviso'];                    // requieren "conversaciones"
 
@@ -62,7 +65,9 @@ function entornoHijo({ lectura, escritura, shell, node, oficial = false }) {
   }
   execArgv.push('--max-old-space-size=512');
   const env = { APOLO_PLUGIN: '1' };
-  for (const k of ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'windir', 'ComSpec', 'TEMP', 'TMP', 'LANG', 'TZ']) if (process.env[k]) env[k] = process.env[k];
+  // rutas del perfil (no secretos): los programas que lanza un plugin con "shell" las necesitan para encontrar su configuración
+  for (const k of ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'windir', 'ComSpec', 'TEMP', 'TMP', 'LANG', 'TZ',
+    'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA']) if (process.env[k]) env[k] = process.env[k];
   if (electron) env.ELECTRON_RUN_AS_NODE = '1';
   return { execPath, execArgv, env, sandbox };
 }
@@ -87,7 +92,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   const dirDe = nombre => estado[nombre]?.ruta || path.join(base, nombre);
   const nombres = () => Object.keys(estado).filter(n => fs.existsSync(path.join(dirDe(n), M.ARCHIVO)));
   const manifestDe = nombre => M.leer(dirDe(nombre), VERSION);
-  const vacio = () => ({ herramientas: new Map(), comandos: new Map(), proveedores: new Map(), canales: new Map(), bus: new Set(), permisosVistos: new Map(), tarjetasVistas: new Map() });
+  const vacio = () => ({ herramientas: new Map(), comandos: new Map(), proveedores: new Map(), canales: new Map(), vistas: new Map(), bus: new Set(), permisosVistos: new Map(), tarjetasVistas: new Map() });
   let anfitrion = {}, proveedorSecretos = secretos;
   const vivos = new Map();
   const rt = nombre => { let r = vivos.get(nombre); if (!r) vivos.set(nombre, r = { estado: 'parado', pend: new Map(), reg: vacio(), reinicios: 0, logs: [], n: 0, sesiones: new Map() }); return r; };
@@ -318,6 +323,9 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
     } else if (tipo === 'comando') {
       for (const [otro, x] of vivos) if (otro !== nombre && x.reg.comandos.has(id)) throw new Error(`el comando /${id} ya lo registró el plugin "${otro}"`);
       r.reg.comandos.set(id, { nombre: id, descripcion: String(decl.descripcion || d.descripcion || '').slice(0, 300) });
+    } else if (tipo === 'vista') {                                // pestaña del panel: el archivo lo fija el manifest, no el proceso
+      r.reg.vistas.set(id, { nombre: id, titulo: String(decl.titulo || d.titulo || id).slice(0, 40), icono: String(decl.icono || d.icono || 'pieza').slice(0, 30),
+        archivo: String(decl.archivo).replace(/\\/g, '/'), acciones: (Array.isArray(d.acciones) ? d.acciones : []).map(String).filter(a => /^[a-z][\w-]{0,40}$/i.test(a)) });
     } else if (tipo === 'proveedor') {
       proveedores.registrarExterno(id, { chat: req => llamar(nombre, 'proveedor', { nombre: id, peticion: peticionLimpia(req) }, op().proveedorMs, req?.signal) }, { plugin: nombre, modelos: d.modelos || [] });
       r.reg.proveedores.set(id, { nombre: id, modelos: d.modelos || [] });
@@ -522,7 +530,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
     } catch (x) { r = { nivel: 'amarillo', hallazgos: [], resumen: `no se pudo escanear: ${x.message}`, explicacion: '', error: true }; }
     r.fecha = Date.now();
     // firma ed25519 (core/skills/firmar.js): inválida = cuarentena roja
-    let firma; try { firma = require('../skills/firmar').verificar(dirDe(nombre), cfg.skills?.autoresConfianza); } catch (x) { firma = { estado: 'invalida', motivo: x.message }; }
+    let firma; try { firma = require('../skills/firmar').verificar(dirDe(nombre), [...AUTORES_OFICIALES, ...(cfg.skills?.autoresConfianza || [])]); } catch (x) { firma = { estado: 'invalida', motivo: x.message }; }
     firma.fecha = Date.now();
     if (firma.estado === 'invalida') {
       r.nivel = 'rojo'; r.hallazgos.unshift({ archivo: 'FIRMA.json', linea: 0, regla: 'firma inválida', gravedad: 'crítica', texto: firma.motivo });
@@ -627,7 +635,35 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   }
   async function cerrar() { await Promise.all([...vivos.keys()].map(n => { vigilar(n, false); return detener(n); })); }
 
+  // ---------- pestañas del panel (aporta.vistas) ----------
+  // nativa = código de confianza que corre dentro del panel: los de la app o los firmados por un autor oficial, verificado
+  // contra los archivos actuales (si alguien los cambia, la firma deja de valer y la vista pasa al iframe aislado)
+  const cacheNativa = new Map();
+  function nativa(nombre) {
+    const e = estado[nombre]; if (!e || e.dev) return false;
+    if (esOficial(e.origen)) return true;
+    const c = cacheNativa.get(nombre); if (c && Date.now() - c.t < 30_000) return c.v;
+    let v = false; try { v = require('../skills/firmar').verificar(dirDe(nombre), AUTORES_OFICIALES).estado === 'verificada'; } catch { }
+    cacheNativa.set(nombre, { v, t: Date.now() }); return v;
+  }
+  const vistas = () => [...vivos.entries()].filter(([, r]) => r.estado === 'activo').flatMap(([nombre, r]) =>
+    [...r.reg.vistas.values()].map(v => ({ plugin: nombre, nombre: v.nombre, titulo: v.titulo, icono: v.icono, acciones: v.acciones, nativa: nativa(nombre),
+      tipo: v.archivo.endsWith('.html') ? 'html' : 'js', url: `/plugin-ui/${encodeURIComponent(nombre)}/${encodeURIComponent(v.nombre)}` })));
+  function archivoVista(nombre, id) {
+    const r = vivos.get(nombre), v = r?.estado === 'activo' && r.reg.vistas.get(id);
+    if (!v) return null;
+    const base = path.resolve(dirDe(nombre)), f = path.resolve(base, v.archivo);
+    if (!f.startsWith(base + path.sep)) return null;
+    return { ruta: f, tipo: v.archivo.endsWith('.html') ? 'html' : 'js', nativa: nativa(nombre) };
+  }
+  function accionVista(nombre, id, accion, datosA = {}) {
+    const v = vivos.get(nombre)?.reg.vistas.get(id);
+    if (!v || !v.acciones.includes(accion)) return Promise.reject(Object.assign(new Error(`la vista "${id}" no tiene la acción "${accion}"`), { status: 404 }));
+    return llamar(nombre, 'vista.accion', { id: String(id), accion: String(accion), datos: sinFunciones(datosA) });
+  }
+
   return {
+    vistas, archivoVista, accionVista,
     lista: () => nombres().map(publica), obtener: nombre => (estado[nombre] ? { ...publica(nombre), logs: rt(nombre).logs.slice(-50) } : null),
     instalar, activar, recargar, borrar, escanear, iniciar, cerrar, comandos, comando, enviarCanal, difundir, llamar,
     mediar, ponerSecretos, mostrarPermiso, permisoResuelto, mostrarTarjeta, accionCanal,

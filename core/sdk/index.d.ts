@@ -130,6 +130,8 @@ export interface Apolo {
   registrarComando(c: Comando): Promise<boolean>;
   registrarProveedor(p: Proveedor): Promise<boolean>;
   registrarCanal(c: Canal): CanalRegistrado;
+  /** pestaña del panel declarada en aporta.vistas ({nombre, archivo .js|.html, titulo, icono}); el panel solo llama a `acciones` */
+  registrarVista(v: { nombre: string; titulo?: string; icono?: string; acciones?: Record<string, (datos: any) => any> }): Promise<boolean>;
 
   /** eventos filtrados: 'turno' y 'aviso' requieren el permiso "conversaciones" */
   bus: {

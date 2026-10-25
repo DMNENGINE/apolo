@@ -2,7 +2,7 @@
 //   { nombre, version, descripcion, autor, licencia, entrada, apoloSdk: "^1.0.0",
 //     permisos: ["red:api.ejemplo.com", "archivos:C:/ruta", "shell", "pantalla", "memoria", "tareas", "conversaciones"],
 //     secretos: ["tg:token"],   // secretos del almacén cifrado de la app que el plugin puede pedir (apolo.secretos.leer)
-//     aporta: { herramientas: ["x" | {nombre, riesgo, descripcion}], canales, proveedores, comandos, vistas: [{nombre, archivo}], gestos, voces } }
+//     aporta: { herramientas: ["x" | {nombre, riesgo, descripcion}], canales, proveedores, comandos, vistas: [{nombre, archivo .js|.html, titulo, icono}], gestos, voces } }
 const fs = require('fs');
 const path = require('path');
 
@@ -80,6 +80,8 @@ function validar(m, dir, versionSdk) {
   for (const v of aporta.vistas) {
     const a = String(v.archivo || '').replace(/\\/g, '/');
     if (!a || path.isAbsolute(a) || a.split('/').includes('..')) err(`aporta.vistas ${v.nombre}: "archivo" relativo obligatorio`);
+    if (!/\.(js|html)$/i.test(a)) err(`aporta.vistas ${v.nombre}: el archivo debe ser .js (vista del panel) o .html (página aislada)`);
+    for (const k of ['titulo', 'icono']) if (v[k] !== undefined && (typeof v[k] !== 'string' || v[k].length > 40)) err(`aporta.vistas ${v.nombre}: "${k}" debe ser texto corto`);
     if (dir && !fs.existsSync(path.join(dir, a))) err(`aporta.vistas ${v.nombre}: no existe ${a}`);
   }
   return {

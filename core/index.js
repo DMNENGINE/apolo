@@ -195,6 +195,23 @@ function crearNucleo(opciones = {}) {
   const panico = require('./panico').crearPanico({ nucleo });
   nucleo.panico = panico; nucleo.extensiones.panico = { http: (...a) => panico.http(...a) };
   nucleo.trading = require('./trading-autopiloto').crearTrading({ nucleo, fetch: opciones.fetchTrading });
+  // el agente maneja el autopiloto SIMULADO con su guardia (duración + pérdida máxima); el dinero real, solo desde el panel
+  herramientas.registrar([{
+    nombre: 'trading_autopiloto',
+    descripcion: 'Autopiloto SIMULADO del enjambre de DMN Trader con guardia: accion "estado", "parar" o "iniciar" (agentes, capital por agente, meta, mercados cripto/acciones, hasta HH:mm opcional, duracionMin y perdidaMaxPct obligatorios). Nunca dinero real.',
+    parametros: { type: 'object', properties: { accion: { type: 'string', enum: ['estado', 'iniciar', 'parar'] }, agentes: { type: 'integer' }, capital: { type: 'number' }, meta: { type: 'number' },
+      mercados: { type: 'array', items: { type: 'string', enum: ['cripto', 'acciones'] } }, hasta: { type: 'string' }, duracionMin: { type: 'integer' }, perdidaMaxPct: { type: 'number' } }, required: ['accion'] },
+    // iniciar no se clasifica como escritura porque la guardia ya pide SIEMPRE la aprobación explícita (pedirExterno) con el plan exacto
+    riesgo: a => (a?.accion === 'parar' ? 'escritura' : 'lectura'),
+    resumen: a => a?.accion || '',
+    disponible: () => !!nucleo.plugins?.activo?.('dmn-trader'),
+    ejecutar: async a => {
+      if (a.accion === 'estado') return JSON.stringify(nucleo.trading.estado());
+      if (a.accion === 'parar') return JSON.stringify(await nucleo.trading.parar());
+      const { accion, ...plan } = a;
+      return JSON.stringify(await nucleo.trading.iniciar({ agentes: 50, capital: 1, meta: 100, mercados: ['cripto', 'acciones'], ...plan, modo: 'simulado' }));
+    },
+  }]);
   tareas.ponerPausa(() => panico.activo());
   bus.on('config-seguridad', e => auditoria.registrar({ tipo: 'seguridad', resumen: e.resumen, quien: e.quien || 'panel' }));
   // FASE 6: dashboards generados por el agente (core/dashboards.js) → /v1/dashboards

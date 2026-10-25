@@ -56,6 +56,22 @@ module.exports = definirPlugin({
 
 Los tipos completos están en `core/sdk/index.d.ts`.
 
+### Pestañas del panel (`aporta.vistas`)
+
+Declara la pestaña en el manifest: `"vistas": [{ "nombre": "trading", "archivo": "ui/trading.js", "titulo": "Trading", "icono": "grafica" }]`
+y regístrala al activar con `apolo.registrarVista({ nombre, acciones: { estado: async datos => …, … } })`. Aparece en el menú
+del panel (tras Mission Control) y en Ctrl+K, con la ruta `#/p/<plugin>/<vista>`. El panel solo puede llamar a esas acciones:
+`POST /v1/plugins/:plugin/vistas/:vista/:accion {datos}`.
+
+- **Nativa** (`.js` que se carga dentro del panel y usa `api`, `tr`, `ic`, `accionPlugin`…; registra con
+  `registrarVistaPlugin(plugin, nombre, { pintar(el, sub), salir() })`): solo si el plugin viene con la app o está **firmado**
+  (`FIRMA.json`, ed25519) por un autor oficial que APOLO trae incorporado (DMNENGINE). La firma se comprueba contra los archivos
+  actuales: si alguien los cambia, la pestaña deja de cargarse como nativa.
+- **Aislada** (cualquier otro plugin): solo `.html`, en un `iframe sandbox="allow-scripts"` sin token ni acceso al panel. Pide
+  sus acciones con `parent.postMessage({ id, accion, datos }, '*')` y recibe `{ id, ok, resultado | error }`.
+
+Ejemplo real: el paquete DMN Trader (`github.com/DMNENGINE/dmn-trader`, `apolo/`).
+
 ### Canales remotos (Telegram, WhatsApp…)
 
 `registrarCanal({ id, nombre, enviar, permiso, permisoResuelto, tarjeta, acciones })` devuelve `{ recibir, estado, decidir, tarjeta, transcribir }`.
