@@ -1,4 +1,4 @@
-﻿const test = require('node:test');
+﻿const test = require('./requiere-plugins');   // se salta sin modelo de permisos de Node (plugins de terceros)
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');

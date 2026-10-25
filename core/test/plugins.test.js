@@ -1,6 +1,6 @@
 // SDK de plugins (core/sdk + core/plugins): manifest, plantilla, instalar desde carpeta, herramienta visible al agente,
 // aislamiento (proceso propio sin cfg/token/claves), caída + reinicio + ROTO, permisos no declarados y API del daemon. Sin red.
-const test = require('node:test');
+const test = require('./requiere-plugins');   // se salta sin modelo de permisos de Node (plugins de terceros)
 const assert = require('node:assert');
 const http = require('http');
 const fs = require('fs');

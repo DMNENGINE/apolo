@@ -1,7 +1,7 @@
 // WhatsApp y Discord como plugins del SDK. Todo OFFLINE: un Baileys falso (objetos con la forma de sus mensajes), un servidor
 // WebSocket local que hace de Gateway de Discord (core/nodos/ws.js) y un fetch falso para su REST. Además: el gestor (canal.ajeno
 // solo a la app, exclusión de canales con adaptador), y la regla de exclusión del plugin de Discord con el modo Pi / bot local.
-const test = require('node:test');
+const test = require('./requiere-plugins');   // se salta sin modelo de permisos de Node (plugins de terceros)
 const assert = require('node:assert');
 const http = require('http');
 const fs = require('fs');

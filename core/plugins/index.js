@@ -66,6 +66,8 @@ function entornoHijo({ lectura, escritura, shell, node, oficial = false }) {
   if (electron) env.ELECTRON_RUN_AS_NODE = '1';
   return { execPath, execArgv, env, sandbox };
 }
+// '' si los plugins de terceros pueden arrancar aquí; si no, el motivo (Node sin modelo de permisos)
+function motivoSinSandbox(node) { try { entornoHijo({ lectura: [], escritura: [], shell: false, node }); return ''; } catch (e) { return e.message; } }
 const resumenArgs = a => { const v = Object.values(a || {}).find(x => typeof x === 'string' || typeof x === 'number'); return v === undefined ? '' : String(v).slice(0, 120); };
 const sinFunciones = o => JSON.parse(JSON.stringify(o ?? null));
 
@@ -634,4 +636,4 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   };
 }
 
-module.exports = { crearPlugins, entornoHijo, esOficial };
+module.exports = { crearPlugins, entornoHijo, esOficial, motivoSinSandbox };

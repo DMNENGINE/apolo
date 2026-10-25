@@ -1,6 +1,6 @@
 // Plugin de Telegram (plugins/telegram) con un fetch FALSO: nunca se llama a api.telegram.org.
 // Enlace con código, solo el chat enlazado, permisos con botones (peligrosos con confirmación), tarjetas, voz, avisos, migración.
-const test = require('node:test');
+const test = require('./requiere-plugins');   // se salta sin modelo de permisos de Node (plugins de terceros)
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');

@@ -140,12 +140,14 @@ test('Codex adjunta las imagenes del historial al proceso y limpia sus temporale
   assert.equal(r.texto, 'visto'); assert.deepEqual(capturadas, ['imagen-real-del-test']); assert.equal(fs.existsSync(carpeta), false);
 });
 test('plugins rechazan Node sin aislamiento en lugar de degradarlo', () => {
-  const { entornoHijo } = require('../plugins');
+  const { entornoHijo, motivoSinSandbox } = require('../plugins');
   const descriptor = Object.getOwnPropertyDescriptor(process.versions, 'node');
-  try {
+  // bajo Electron se usa el Node del sistema (buscarNode), así que fingir la versión propia no aplica
+  if (!process.versions.electron) try {
     Object.defineProperty(process.versions, 'node', { ...descriptor, value: '20.0.0' });
     assert.throws(() => entornoHijo({ lectura: [], escritura: [], shell: false }), /inicio bloqueado/);
   } finally { Object.defineProperty(process.versions, 'node', descriptor); }
+  if (motivoSinSandbox()) return;                              // este Node no tiene modelo de permisos: no hay entorno que comprobar
   const opciones = entornoHijo({ lectura: ['lectura'], escritura: ['escritura'], shell: false });
   assert.equal(opciones.sandbox, true); assert.ok(opciones.execArgv.includes('--permission')); assert.ok(!opciones.execArgv.includes('--allow-child-process'));
 });

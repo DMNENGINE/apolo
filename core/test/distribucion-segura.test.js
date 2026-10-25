@@ -3,11 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { FileMatcher } = require('../../node_modules/app-builder-lib/out/fileMatcher');
+// electron-builder es dependencia de desarrollo de la app (raíz), no de core: la CI de core no lo instala
+let FileMatcher = null; try { ({ FileMatcher } = require('../../node_modules/app-builder-lib/out/fileMatcher')); } catch { }
 const { cargarBot } = require('../../pi/cargar-bot');
 const raiz = path.resolve(__dirname, '../..');
 
-test('empaquetado excluye copias, fixtures, registros, credenciales y configuracion local', () => {
+test('empaquetado excluye copias, fixtures, registros, credenciales y configuracion local', { skip: !FileMatcher && 'falta electron-builder (npm install en la raíz)' }, () => {
   const config = require('../../package.json');
   const filtrar = new FileMatcher(raiz, path.join(os.tmpdir(), 'apolo-destino-prueba'), s => s, config.build.files).createFilter();
   for (const rel of ['repair-backups/REVISION-26.md', 'repair-backups/fixture/datos/config.json', 'instalado.json', '.env', '.env.local', 'plugins/ejemplo/.env', '.aws/credentials', '.codex/config.toml', 'privado.token', 'datos/error.log', 'privado.key', 'privado.pem', 'core/test/seguridad.test.js']) {

@@ -1,7 +1,7 @@
 // Canales como plugins del SDK: Slack (Socket Mode), Matrix (Client-Server API) y Signal (signal-cli JSON-RPC).
 // Todo OFFLINE: fetch y WebSocket falsos (nunca se llama a slack.com, a un homeserver ni a signal-cli). Además: el cliente
 // WebSocket del SDK contra el servidor de core/nodos/ws.js, los tres plugins cargados en el gestor (su proceso) y secretos.
-const test = require('node:test');
+const test = require('./requiere-plugins');   // se salta sin modelo de permisos de Node (plugins de terceros)
 const assert = require('node:assert');
 const http = require('http');
 const fs = require('fs');
