@@ -65,7 +65,9 @@ function entornoHijo({ lectura, escritura, shell, node, oficial = false }) {
   }
   execArgv.push('--max-old-space-size=512');
   const env = { APOLO_PLUGIN: '1' };
-  for (const k of ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'windir', 'ComSpec', 'TEMP', 'TMP', 'LANG', 'TZ']) if (process.env[k]) env[k] = process.env[k];
+  // rutas del perfil (no secretos): los programas que lanza un plugin con "shell" las necesitan para encontrar su configuración
+  for (const k of ['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'windir', 'ComSpec', 'TEMP', 'TMP', 'LANG', 'TZ',
+    'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA']) if (process.env[k]) env[k] = process.env[k];
   if (electron) env.ELECTRON_RUN_AS_NODE = '1';
   return { execPath, execArgv, env, sandbox };
 }

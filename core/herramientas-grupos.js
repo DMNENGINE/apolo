@@ -12,6 +12,9 @@ const NUCLEO = new Set(['shell', 'leer_archivo', 'listar', 'escribir_archivo', '
 
 const CRAFT = ['filmcraft', 'effectcraft', 'photocraft', 'lightcraft', 'vectorcraft', 'cadcraft', 'figcraft', 'designcraft', 'deckcraft', 'wordcraft', 'gridcraft', 'pdfcraft', 'soundcraft'];
 const GRUPOS = {
+  trading: { d: 'DMN Trader: mercado, operar en simulado, backtest, enjambre y su autopiloto (paquete dmn-trader)',
+    nombres: ['trading_autopiloto'], prefijos: ['trader_'],
+    palabras: /trad(er|ing|ear)|bolsa|acci[oó]n(es)? de|cripto|bitcoin|btc|eth\b|forex|cotizaci[oó]n|precio de|mi cartera|posici[oó]n|stop.?loss|take.?profit|backtest|enjambre|autopiloto|memecoin|polymarket/i },
   pantalla: { d: 'ver la pantalla del PC y usar ratón/teclado en cualquier app (clic, escribir, teclas, arrastrar, grabar una demostración)',
     nombres: ['ver_pantalla', 'tomar_control', 'soltar_control', 'clic', 'escribir', 'tecla', 'scroll', 'arrastrar', 'grabar_demostracion'],
     palabras: /pantalla|clic|click|rat[oó]n|teclado|ventana|escritorio|controla|haz.*en (la|el|mi) (app|programa)|abre (el|la) (app|programa)|mira (esto|lo que|mi)|demostraci/i },
