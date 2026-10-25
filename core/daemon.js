@@ -85,7 +85,7 @@ function estatico(res, nombre) {
   let es = false; try { es = f.startsWith(UI + path.sep) && fs.statSync(f).isFile(); } catch { }
   if (!es) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { 'content-type': TIPOS[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-cache',
-    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob: data:", 'x-frame-options': nombre === 'wrapped.html' ? 'SAMEORIGIN' : 'DENY' });
+    'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob: data:; frame-src 'self' http://127.0.0.1:* http://localhost:*", 'x-frame-options': nombre === 'wrapped.html' ? 'SAMEORIGIN' : 'DENY' });
   fs.createReadStream(f).pipe(res);
 }
 
