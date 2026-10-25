@@ -19,7 +19,8 @@ test('empaquetado excluye copias, fixtures, registros, credenciales y configurac
   }
 });
 
-test('bot Pi carga el modulo compartido real sin credenciales ni conexion', () => {
+let hayDiscord = true; try { require.resolve('discord.js', { paths: [raiz] }); } catch { hayDiscord = false; }   // dependencia de la raíz, no de core
+test('bot Pi carga el modulo compartido real sin credenciales ni conexion', { skip: !hayDiscord && 'falta discord.js (npm install en la raíz)' }, () => {
   const bot = cargarBot(); assert.equal(typeof bot.createDiscord, 'function');
   const desactivado = bot.createDiscord(path.join(os.tmpdir(), 'apolo-config-inexistente-' + Date.now()), {});
   assert.equal(desactivado.enabled, false); assert.equal(typeof desactivado.stop, 'function');
