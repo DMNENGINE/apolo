@@ -14,6 +14,11 @@ const I = require('./instalar');
 const { VERSION } = require('../sdk');
 
 const SDK_DIR = require('../rutas').fuera(path.join(__dirname, '..', 'sdk'));   // el node del sistema no lee app.asar
+// plugins oficiales = los que vienen con la propia app (plugins/ junto a core/): pueden arrancar sin el modelo de permisos de Node
+const PLUGINS_APP = [path.resolve(__dirname, '..', '..', 'plugins'), path.resolve(require('../rutas').fuera(path.join(__dirname, '..', '..', 'plugins')))];
+const minus = p => process.platform === 'win32' ? p.toLowerCase() : p;
+const esOficial = origen => origen?.tipo === 'local' && typeof origen.fuente === 'string' &&
+  PLUGINS_APP.some(b => { const r = path.relative(minus(b), minus(path.resolve(origen.fuente))); return r && !r.startsWith('..') && !path.isAbsolute(r); });
 const ORDEN = { lectura: 0, escritura: 1, ejecucion: 2 };
 const maxRiesgo = (...r) => r.filter(x => x in ORDEN).reduce((a, b) => (ORDEN[b] > ORDEN[a] ? b : a), 'lectura');
 const CLAVE_PLURAL = { herramienta: 'herramientas', comando: 'comandos', proveedor: 'proveedores', canal: 'canales' };
@@ -39,7 +44,7 @@ function buscarNode(ruta) {
   if (!ruta) nodeSistema = r;
   return r;
 }
-function entornoHijo({ lectura, escritura, shell, node }) {
+function entornoHijo({ lectura, escritura, shell, node, oficial = false }) {
   let execPath = process.execPath, version = process.versions.node, electron = false;
   if (process.versions.electron) { const s = buscarNode(node); if (s) { execPath = s.ruta; version = s.version; } else electron = true; }
   const [ma, mi] = version.split('.').map(Number);
@@ -48,7 +53,8 @@ function entornoHijo({ lectura, escritura, shell, node }) {
   // modelo de permisos de Node SOLO en 22.13+ (estable). En 20–22.12 es experimental y el propio require() del plugin
   // choca con él ("Access to this API has been restricted"): ahí el plugin va en su proceso, sin claves, pero sin límite de archivos
   const sandbox = nuevo && !electron;
-  if (!sandbox) throw new Error('Plugins requieren Node 22.13+ con modelo de permisos; inicio bloqueado');
+  // sin él, solo los oficiales (código de la propia app) arrancan, en su proceso y sin claves; los de terceros se bloquean
+  if (!sandbox && !oficial) throw new Error('Plugins de terceros requieren Node 22.13+ con modelo de permisos; inicio bloqueado');
   if (sandbox) {
     execArgv.push('--permission');
     lectura.forEach(d => execArgv.push('--allow-fs-read=' + d)); escritura.forEach(d => execArgv.push('--allow-fs-write=' + d));
@@ -400,7 +406,7 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
     r.man = man; r.estado = 'arrancando'; r.parando = false; r.reg = vacio();
     const lectura = [SDK_DIR, dir, alm], escritura = [alm];
     for (const p of man.permisos) if (p.startsWith('archivos:')) { const ru = path.resolve(p.slice(9)); lectura.push(ru); escritura.push(ru); }
-    const { execPath, execArgv, env, sandbox } = entornoHijo({ lectura, escritura, shell: man.permisos.includes('shell'), node: op().node });
+    const { execPath, execArgv, env, sandbox } = entornoHijo({ lectura, escritura, shell: man.permisos.includes('shell'), node: op().node, oficial: esOficial(estado[nombre]?.origen) && !estado[nombre]?.dev });
     if (!sandbox) anotar(nombre, 'aviso', 'sin modelo de permisos de Node (instala Node 22.13+ o pon cfg.gestorPlugins.node): el plugin corre sin límite de archivos');
     const proc = fork(path.join(SDK_DIR, 'ejecutor.js'), [], { cwd: alm, env, execPath, execArgv, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true });
     r.proc = proc;
@@ -628,4 +634,4 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
   };
 }
 
-module.exports = { crearPlugins, entornoHijo };
+module.exports = { crearPlugins, entornoHijo, esOficial };

@@ -17,6 +17,16 @@ function crearEjecuciones({ cfg }) {
   function lista(sesion) {
     return fs.readdirSync(base).filter(f => f.endsWith('.json')).map(f => leer(f.slice(0, -5))).filter(r => r && (!sesion || r.sesion === sesion)).sort((a, b) => b.inicio - a.inicio);
   }
+  // retención: las terminadas hace más de cfg.ejecuciones.retencionDias (30) se borran con sus artefactos;
+  // nunca las que siguen en marcha ni las que tienen una operación incierta sin conciliar
+  const limite = Date.now() - (cfg.ejecuciones?.retencionDias ?? 30) * 86400000;
+  for (const f of fs.readdirSync(base)) {
+    if (!f.endsWith('.json')) continue;
+    try { if (fs.statSync(path.join(base, f)).mtimeMs >= limite) continue; } catch { continue; }
+    const r = leer(f.slice(0, -5));
+    if (!r || ['trabajando', 'esperando'].includes(r.estado) || r.operaciones?.some(o => o.estado === 'incierto')) continue;
+    try { fs.rmSync(path.join(base, r.id), { recursive: true, force: true }); fs.unlinkSync(path.join(base, f)); } catch { }
+  }
   // Una operacion interrumpida nunca se repite por suposicion.
   for (const r of lista()) if (['trabajando', 'esperando'].includes(r.estado) && !vivo(r.dueno)) {
     r.estado = 'interrumpida';

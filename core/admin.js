@@ -55,6 +55,7 @@ function guardarConfig(cfg, cambios) {
   }
   if (cambios.proveedores && typeof cambios.proveedores === 'object') {
     disco.proveedores = disco.proveedores || {};
+    const guardadas = [];
     for (const [k, v] of Object.entries(cambios.proveedores)) {
       if (!/^[\w-]{1,30}$/.test(k) || !v || typeof v !== 'object') continue;
       if (v === null || v.borrar) { delete cfg.proveedores[k]; delete disco.proveedores[k]; continue; }
@@ -65,8 +66,13 @@ function guardarConfig(cfg, cambios) {
       if (typeof v.apiKey === 'string') {                     // FASE 9: a la bóveda (DPAPI); en config.json solo la referencia
         const clave = v.apiKey.trim(); p.apiKey = clave;
         if (clave && !p.local && !['ollama', 'lm-studio'].includes(clave)) {
-          try { cfg.boveda.guardar(`proveedor:${k}`, clave); d.apiKey = ''; d.apiKeyRef = p.apiKeyRef = `boveda:proveedor:${k}`; }
-          catch { throw Object.assign(new Error('No se pudo guardar la clave en la boveda; configuracion sin cambios'), { status: 503 }); }
+          const nombre = `proveedor:${k}`;
+          try { const antes = cfg.boveda.leer?.(nombre) ?? null; cfg.boveda.guardar(nombre, clave); guardadas.push([nombre, antes]); d.apiKey = ''; d.apiKeyRef = p.apiKeyRef = `boveda:${nombre}`; }
+          catch {
+            // deshace las claves de esta misma petición ya escritas en la bóveda: o se guardan todas o ninguna
+            for (const [n, antes] of guardadas.reverse()) try { antes == null ? cfg.boveda.borrar(n) : cfg.boveda.guardar(n, antes); } catch { }
+            throw Object.assign(new Error('No se pudo guardar la clave en la boveda; configuracion sin cambios'), { status: 503 });
+          }
         } else {
           d.apiKey = clave;
           if (!clave) { try { cfg.boveda?.borrar(`proveedor:${k}`); } catch { } delete d.apiKeyRef; delete p.apiKeyRef; }   // '' = quitar la clave
