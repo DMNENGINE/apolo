@@ -260,3 +260,90 @@ test('nodos: push-to-talk → WAV + evento nodo-audio + transcriptor; daemon exp
   assert.deepStrictEqual(r.j.nodos, []);
   servidor.close(); n2.nodos.apagarOyentes();
 });
+
+test('nodos: skills de la Rabbit R1 (canales r1, r1_pantalla, skill dictada, texto desde el menú)', async () => {
+  const n = nucleo(); n.nodos = crearNodos({ nucleo: n });
+  const prompts = [];
+  n.generarJSON = async o => { prompts.push(o); return { datos: { nombre: 'Modo Cocina', descripcion: 'Enseña los pasos de una receta en la R1. Úsala cuando diga modo cocina.', instrucciones: '1. Pide la receta\n2. Usa r1_pantalla con los pasos', disparadores: ['modo cocina'] } }; };
+  n.nodos.transcriptor = async () => 'modo cocina con los pasos en pantalla';
+  // una skill r1 activa solo entra en el índice (desde cualquier canal) con la R1 conectada
+  const s = await n.skills.taller.crear({ nombre: 'linterna-r1', descripcion: 'Pone la pantalla de la R1 en blanco como linterna.', instrucciones: 'Usa r1_pantalla con un texto en blanco.', canales: ['r1', 'mal canal!'] });
+  assert.deepStrictEqual(s.canales, ['r1']);
+  await n.skills.activar(s.slug, true);
+  assert.deepStrictEqual(n.nodos.canalesActivos(), []);
+  assert.doesNotMatch(n.skills.indice.indice({ canal: 'isla' }), /linterna-r1/);
+  const puerto = await n.nodos.iniciar(0);
+  const c = await clienteWS(puerto);
+  c.json({ ...HOLA, id: 'r1-test', nombre: 'Rabbit R1', modelo: 'rabbit-r1', capacidades: ['pantalla', 'microfono', 'altavoz', 'camara'] });
+  n.nodos.emparejar((await c.tipo('emparejar')).codigo); await c.tipo('bienvenido');
+  assert.deepStrictEqual(n.nodos.canalesActivos(), ['r1']);
+  assert.match(n.skills.indice.indice({ canal: 'isla' }), /linterna-r1/);
+  // r1_pantalla → tarjeta en la R1
+  const h = n.herramientas.porNombre.r1_pantalla;
+  assert.ok(h.disponible());
+  assert.match(await h.ejecutar({ titulo: 'Lista', texto: 'pan\nleche', segundos: 0 }), /fija/);
+  assert.deepStrictEqual(await c.tipo('tarjeta'), { tipo: 'tarjeta', titulo: 'Lista', texto: 'pan\nleche', segundos: 0 });
+  // modo crear-skill: lo dictado no va al chat; el taller lo redacta con el contexto de la R1 y llega el borrador
+  let alChat = false; n.bus.on('nodo-texto', () => { alChat = true; });
+  assert.deepStrictEqual(await n.nodos.http('POST', ['v1', 'nodos', 'r1-test', 'modo'], { modo: 'crear-skill' }), { ok: true, modo: 'crear-skill' });
+  c.json({ tipo: 'audio-inicio', frecuencia: 16000 }); c.bin(Buffer.alloc(3200)); c.json({ tipo: 'audio-fin' });
+  const { skill } = await c.tipo('skill-borrador');
+  assert.strictEqual(skill.slug, 'modo-cocina'); assert.strictEqual(skill.activa, false); assert.deepStrictEqual(skill.canales, ['r1']);
+  assert.match(prompts[0].system, /Rabbit R1/); assert.match(prompts[0].prompt, /modo cocina con los pasos/);
+  assert.strictEqual(alChat, false);
+  // el modo se gasta: lo siguiente vuelve al chat; y "usar" desde el menú entra como si lo hubieras dicho
+  const dicho = new Promise(ok => n.bus.once('nodo-texto', ok));
+  c.json({ tipo: 'audio-inicio', frecuencia: 16000 }); c.bin(Buffer.alloc(3200)); c.json({ tipo: 'audio-fin' });
+  assert.strictEqual((await dicho).texto, 'modo cocina con los pasos en pantalla');
+  const menu = new Promise(ok => n.bus.once('nodo-texto', ok));
+  await n.nodos.http('POST', ['v1', 'nodos', 'r1-test', 'texto'], { texto: 'Ejecuta ahora la skill "modo-cocina".' });
+  assert.strictEqual((await menu).nodo, 'r1-test');
+  await n.nodos.cerrar(); n.nodos.apagarOyentes();
+  assert.deepStrictEqual(n.nodos.canalesActivos(), []);
+});
+
+test('nodos: modo cámara de la R1 → foto-subir se guarda en carpetaFotos a resolución completa', async () => {
+  const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'fotos-r1-'));
+  const n = nucleo({ carpetaFotos: carpeta, maxFotoMB: 1 }); n.nodos = crearNodos({ nucleo: n });
+  const puerto = await n.nodos.iniciar(0);
+  const { c } = await emparejado(n, puerto);
+  const evento = new Promise(ok => n.bus.once('nodo-foto', ok));
+  const jpg = crypto.randomBytes(150_000);
+  c.json({ tipo: 'foto-subir', bytes: jpg.length, nombre: '../R1_20261024_120000.jpg' });
+  for (let off = 0; off < jpg.length; off += 60000) c.bin(jpg.subarray(off, off + 60000));   // el cliente del test solo hace tramas de 16 bits
+  c.json({ tipo: 'foto-subir-fin' });
+  const g = await c.tipo('foto-guardada');
+  assert.strictEqual(path.dirname(g.ruta), carpeta);              // sin salir de la carpeta aunque el nombre traiga ../
+  assert.ok(fs.readFileSync(g.ruta).equals(jpg));
+  assert.strictEqual((await evento).bytes, jpg.length);
+  // el mismo nombre otra vez no pisa la anterior; demasiado grande o incompleta → error
+  c.json({ tipo: 'foto-subir', bytes: 3, nombre: g.nombre }); c.bin(Buffer.from('abc')); c.json({ tipo: 'foto-subir-fin' });
+  assert.notStrictEqual((await c.tipo('foto-guardada')).ruta, g.ruta);
+  c.json({ tipo: 'foto-subir', bytes: 5 * 1024 * 1024 });
+  assert.match((await c.tipo('foto-subir-error')).motivo, /grande/);
+  c.json({ tipo: 'foto-subir', bytes: 10 }); c.bin(Buffer.from('abc')); c.json({ tipo: 'foto-subir-fin' });
+  assert.match((await c.tipo('foto-subir-error')).motivo, /incompleta/);
+  await n.nodos.cerrar(); n.nodos.apagarOyentes();
+});
+
+test('nodos: modo dictado → lo dicho vuelve a la pantalla del nodo (no al chat); /v1/memoria?limite=', async () => {
+  const n = nucleo(); n.nodos = crearNodos({ nucleo: n });
+  n.nodos.transcriptor = async () => 'la impresora';
+  const puerto = await n.nodos.iniciar(0);
+  const { c } = await emparejado(n, puerto);
+  let alChat = false; n.bus.on('nodo-texto', () => { alChat = true; });
+  assert.deepStrictEqual(await n.nodos.http('POST', ['v1', 'nodos', 'ojo-test1', 'modo'], { modo: 'dictado' }), { ok: true, modo: 'dictado' });
+  c.json({ tipo: 'audio-inicio', frecuencia: 16000 }); c.bin(Buffer.alloc(3200)); c.json({ tipo: 'audio-fin' });
+  assert.strictEqual((await c.tipo('dictado')).texto, 'la impresora');
+  assert.strictEqual(alChat, false);
+  await n.nodos.cerrar(); n.nodos.apagarOyentes();
+  // memoria: sin q y con limite → las N más recientes
+  for (const t of ['El taller abre a las nueve', 'La impresora es una Ender 3', 'Brito juega al FC los viernes']) n.memoria.recordar({ texto: t, tipo: 'hecho' });   // distintos: la memoria fusiona los parecidos
+  const { iniciar } = require('../daemon');
+  const { servidor, puerto: pd, token } = await iniciar({ nucleo: n, puerto: 0, sinTareas: true });
+  const r = await new Promise((ok, mal) => http.get({ host: '127.0.0.1', port: pd, path: '/v1/memoria?limite=2', headers: { 'x-robot-token': token } }, res => {
+    let b = ''; res.on('data', d => { b += d; }); res.on('end', () => ok(JSON.parse(b)));
+  }).on('error', mal));
+  assert.strictEqual(r.length, 2);
+  servidor.close();
+});

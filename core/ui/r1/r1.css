@@ -1,0 +1,142 @@
+/* ApoloOS: pantalla de la Rabbit R1 (480x640 físico, 240 dpi -> 320x427 CSS) */
+@font-face { font-family: 'VT323'; src: url('../vendor/vt323.woff2') format('woff2'); }
+
+:root {
+  --verde: #39ff88; --claro: #8affbc; --tenue: #1f7a4a; --fondo: #000;
+  --caja: rgba(3, 18, 10, .9); --borde: rgba(57, 255, 136, .5); --rojo: #ff5a6a; --ambar: #ffb238;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--fondo); color: var(--verde);
+  font-family: 'VT323', monospace; font-size: 20px; user-select: none; }
+.oculto { display: none !important; }
+
+/* sin filter: drop-shadow sobre el lienzo entero se recalcula en cada fotograma y hunde los fps en la R1;
+   el halo es un degradado fijo detrás del casco */
+body { background: radial-gradient(circle at 50% 46%, rgba(40, 120, 255, .18) 0, rgba(40, 120, 255, .06) 38%, #000 62%); }
+#robot { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+#barra { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 8px; align-items: center;
+  padding: 6px 10px; font-size: 18px; background: linear-gradient(#000c, #0000); }
+#hora { margin-right: auto; }
+.chip { border: 1px solid var(--borde); border-radius: 8px; padding: 0 6px; line-height: 20px; }
+.chip.apagado { color: var(--tenue); border-color: var(--tenue); }
+
+#charla { position: fixed; left: 10px; right: 10px; bottom: 34px; display: flex; flex-direction: column; gap: 4px; }
+#charla p { margin: 0; padding: 4px 8px; border-radius: 8px; background: var(--caja); border: 1px solid var(--borde);
+  line-height: 1.1; max-height: 6.6em; overflow: hidden; }
+#oido { color: var(--claro); font-size: 17px; }
+#oido::before { content: '> '; color: var(--tenue); }
+
+#escucha { position: fixed; z-index: 15; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; background: rgba(0, 0, 0, .55); font-size: 24px; }
+#anillo { width: 90px; height: 90px; border-radius: 50%; border: 4px solid var(--verde);
+  box-shadow: 0 0 20px var(--verde); transform: scale(var(--nivel, 1)); transition: transform .08s; }
+
+.tarjeta { position: fixed; z-index: 10; left: 12px; right: 12px; top: 50%; transform: translateY(-50%); padding: 12px;
+  background: var(--caja); border: 2px solid var(--verde); border-radius: 14px; text-align: center; }
+.tarjeta h2 { margin: 0 0 6px; font-size: 26px; font-weight: normal; }
+.tarjeta p { margin: 0 0 8px; color: var(--claro); line-height: 1.1; }
+#permiso { border-color: var(--ambar); }
+#permiso h2 { color: var(--ambar); }
+#pPeligro { color: var(--rojo); }
+.opciones { display: flex; gap: 8px; }
+.opcion { flex: 1; font: inherit; font-size: 22px; padding: 6px; border-radius: 10px; background: none;
+  color: var(--verde); border: 2px solid var(--tenue); }
+.opcion.activa { border-color: var(--verde); background: rgba(57, 255, 136, .15); }
+#pNo.activa { border-color: var(--rojo); color: var(--rojo); background: rgba(255, 90, 106, .12); }
+#codigo { display: block; font-size: 44px; letter-spacing: 6px; }
+
+/* ---------- vistas: casco | lanzador | módulo (body[data-vista]) ---------- */
+#barra { z-index: 8; }
+#titulo { flex: 1; text-align: center; color: var(--claro); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#hora { margin-right: 0; }
+#lanzador, #modulo { position: fixed; inset: 32px 0 26px; display: none; z-index: 4; }
+body[data-vista="lanzador"] #lanzador { display: block; background: radial-gradient(circle at 50% 50%, #021a0e 0, #000 70%); }
+body[data-vista="modulo"] #modulo { display: block; background: #000; }
+body:not([data-vista="apolo"]) #robot { visibility: hidden; }
+#ayuda span { display: none; }
+body[data-vista="apolo"] .a-apolo, body[data-vista="lanzador"] .a-lanz, body[data-vista="modulo"] .a-mod { display: inline; }
+#charla, #toast { z-index: 6; }
+
+/* lanzador: tarjeta grande en el centro, las vecinas asoman arriba y abajo (como el rabbitOS) */
+.tarjeta-mod { position: absolute; left: 22px; right: 22px; top: 50%; height: 190px; padding: 16px 18px; border-radius: 22px;
+  border: 2px solid var(--c); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 22%, #000) 0, #000 85%);
+  transition: transform .22s ease-out, opacity .22s; display: flex; flex-direction: column; justify-content: flex-end; }
+.tarjeta-mod.sel { box-shadow: 0 0 24px color-mix(in srgb, var(--c) 45%, transparent); }
+.t-ico { position: absolute; top: 12px; right: 18px; font-size: 54px; color: var(--c); line-height: 1; }
+.tarjeta-mod h2 { margin: 0; font-size: 34px; font-weight: normal; color: var(--c); }
+.tarjeta-mod p { margin: 2px 0 0; color: var(--claro); font-size: 19px; line-height: 1.1; }
+
+/* módulo: filas con selección (crearLista) */
+#modulo { overflow: hidden; padding: 4px 8px; }
+.m-cab { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 2px 6px; color: var(--claro); font-size: 17px; }
+.m-cab .chip { border-color: var(--c, var(--borde)); }
+.m-lista { position: absolute; inset: 30px 8px 0; overflow: hidden; }
+.fila { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; border: 1px solid transparent; margin-bottom: 2px; }
+.fila.sel { border-color: var(--c, var(--verde)); background: color-mix(in srgb, var(--c, var(--verde)) 14%, transparent); }
+.f-ico { width: 18px; text-align: center; flex: none; color: var(--c, var(--verde)); }
+.f-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.f-txt b { font-weight: normal; font-size: 21px; line-height: 1.05; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.f-txt small { color: var(--tenue); font-size: 16px; line-height: 1.05; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fila.sel .f-txt small { color: var(--claro); }
+.f-der { flex: none; color: var(--claro); font-size: 16px; }
+.fila.apagada b { color: var(--tenue); }
+.fila.peligro b { color: var(--rojo); }
+.vacio { color: var(--tenue); text-align: center; margin-top: 40%; padding: 0 16px; }
+.punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--tenue); }
+.punto.ok { background: var(--verde); } .punto.mal { background: var(--rojo); } .punto.aviso { background: var(--ambar); }
+.punto.vivo { animation: latido .7s ease-in-out infinite alternate; box-shadow: 0 0 6px var(--verde); }
+
+#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 34px; margin: 0; padding: 3px 12px; border-radius: 10px;
+  background: var(--caja); border: 1px solid var(--verde); white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
+
+#carta { text-align: left; }
+#cTexto { white-space: pre-line; max-height: 9.5em; overflow: hidden; font-size: 21px; }
+#cNota { display: block; margin: -4px 0 8px; color: var(--tenue); font-size: 16px; }
+#cOpciones { list-style: none; margin: 0; padding: 0; }
+#cOpciones li { padding: 3px 10px; border-radius: 8px; font-size: 22px; border: 1px solid transparent; }
+#cOpciones li.activa { background: rgba(57, 255, 136, .18); border-color: var(--verde); }
+#cOpciones li.peligro { color: var(--rojo); }
+#cOpciones li.peligro.activa { background: rgba(255, 90, 106, .12); border-color: var(--rojo); }
+
+#camaraAro { position: fixed; z-index: 20; inset: 0; border: 6px solid var(--rojo); box-shadow: inset 0 0 24px rgba(255, 90, 106, .6);
+  pointer-events: none; animation: latido .6s ease-in-out infinite alternate; }
+#camaraAro span { position: absolute; top: 34px; left: 50%; transform: translateX(-50%); color: var(--rojo); font-size: 20px;
+  background: rgba(0, 0, 0, .7); padding: 0 8px; border-radius: 6px; }
+@keyframes latido { from { opacity: .55; } to { opacity: 1; } }
+
+#ayuda { position: fixed; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 15px; color: var(--tenue); }
+
+/* ajustes: fila en edición (la rueda cambia el valor) */
+.fila.editando { border-color: var(--ambar); background: rgba(255, 178, 56, .12); }
+.fila.editando b, .fila.editando .f-der { color: var(--ambar); }
+
+/* chat */
+.ch-caja { position: absolute; inset: 0 6px; overflow: hidden; display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
+.ch-tit { margin: 2px 0 0; text-align: center; color: var(--tenue); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+.burbuja { max-width: 88%; padding: 5px 9px; border-radius: 12px; line-height: 1.1; white-space: pre-line; font-size: 19px; flex: none; }
+.burbuja.yo { align-self: flex-end; background: rgba(90, 209, 255, .14); border: 1px solid rgba(90, 209, 255, .5); color: #bfefff; }
+.burbuja.el { align-self: flex-start; background: var(--caja); border: 1px solid var(--borde); color: var(--claro); }
+
+/* carta con muchas opciones: se desplaza con la selección */
+#cOpciones { max-height: 270px; overflow: hidden; }
+
+/* videos: filas con miniatura */
+.fila.v-fila .f-ico { width: 72px; }
+.v-mini { display: block; width: 72px; height: 40px; object-fit: cover; border-radius: 6px; background: #111; }
+.v-vacia { display: flex; align-items: center; justify-content: center; color: var(--tenue); }
+.fila.v-fila .f-txt b { font-size: 18px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* música: lo que suena arriba, la lista debajo */
+.mu-sonando { position: absolute; left: 8px; right: 8px; top: 2px; height: 128px; display: flex; gap: 10px; align-items: center;
+  padding: 8px; border-radius: 14px; border: 1px solid var(--c); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 16%, #000), #000); }
+.mu-arte { width: 108px; height: 108px; border-radius: 10px; object-fit: cover; flex: none; background: #111; }
+.mu-sin { display: flex; align-items: center; justify-content: center; font-size: 48px; color: var(--c); }
+.mu-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mu-info b { font-weight: normal; font-size: 22px; line-height: 1.05; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mu-info small { color: var(--claro); font-size: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mu-barra { height: 5px; border-radius: 3px; background: #1a2a20; overflow: hidden; margin-top: 4px; }
+.mu-barra i { display: block; height: 100%; background: var(--c); }
+.mu-t { color: var(--tenue) !important; }
+.mu-nada { margin: 0; color: var(--claro); font-size: 18px; line-height: 1.15; }
+.mu-lista { top: 140px; }

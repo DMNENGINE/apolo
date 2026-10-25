@@ -10,7 +10,8 @@ const CJ_nombre = m => { const [p, ...r] = String(m || '').split('/'), x = r.joi
 const CJ_pestanas = actual => `<div class="pestanas cj-pest">
   <button data-ir="#/agentes" class="${actual === 'agentes' ? 'on' : ''}">${ic('robot')}${tr('Agentes')}</button>
   <button data-ir="#/consejo" class="${actual === 'consejo' ? 'on' : ''}">${ic('persona')}${tr('Consejo')}</button>
-  <button data-ir="#/hizo" class="${actual === 'hizo' ? 'on' : ''}">${ic('monitor')}${tr('Lo que hizo')}</button></div>`;
+  <button data-ir="#/hizo" class="${actual === 'hizo' ? 'on' : ''}">${ic('monitor')}${tr('Lo que hizo')}</button>
+  <button data-ir="#/trading" class="${actual === 'trading' ? 'on' : ''}">${ic('grafica')}${tr('Trading')}</button></div>`;
 document.addEventListener('click', e => { const b = e.target.closest('.cj-pest [data-ir]'); if (b) location.hash = b.dataset.ir; });
 
 VISTAS.consejo = {

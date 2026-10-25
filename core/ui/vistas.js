@@ -87,9 +87,9 @@ VISTAS.chat = {
     </div>${insp ? '<aside class="inspector" id="insp"></aside>' : ''}</div>`;
     const entrada = $('#entrada');
     const ajustar = () => { entrada.style.height = 'auto'; entrada.style.height = Math.min(entrada.scrollHeight, 240) + 'px'; };
-    entrada.oninput = ajustar;
+    entrada.oninput = () => { ajustar(); this.estadoBoton(); };
     entrada.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#comp').requestSubmit(); } };
-    $('#comp').onsubmit = e => { e.preventDefault(); this.ocupada() ? this.detener() : this.enviar(entrada.value); };
+    $('#comp').onsubmit = e => { e.preventDefault(); this.ocupada() ? (entrada.value.trim() ? this.corregir(entrada.value) : this.detener()) : this.enviar(entrada.value); };
     $('#chipModelo').onclick = e => this.elegirModelo(e.currentTarget);
     $('#chipCarpeta').onclick = () => this.elegirCarpeta();
     if (s) {
@@ -108,8 +108,8 @@ VISTAS.chat = {
   ocupada() { return this.enviando || (this.sesion && E.trabajando.has(this.sesion.id)); },
   estadoBoton() {
     const b = $('#enviar'); if (!b) return;
-    const o = this.ocupada();
-    b.classList.toggle('parar', o); b.innerHTML = ic(o ? 'parar' : 'enviar'); b.title = tr(o ? 'Detener' : 'Enviar');
+    const o = this.ocupada(), correccion = o && !!$('#entrada')?.value.trim();
+    b.classList.toggle('parar', o && !correccion); b.innerHTML = ic(o && !correccion ? 'parar' : 'enviar'); b.title = correccion ? 'Añadir correccion al trabajo' : tr(o ? 'Detener' : 'Enviar');
   },
   pintarMensajes() {
     const m = $('#msgs'), s = this.sesion;
@@ -129,14 +129,14 @@ VISTAS.chat = {
     }
     m.onclick = null; m.innerHTML = '';
     this.bloque = null;
-    const resultados = Object.fromEntries(s.mensajes.filter(x => x.role === 'tool').map(x => [x.toolCallId, x.content]));
+    const resultados = Object.fromEntries(s.mensajes.filter(x => x.role === 'tool').map(x => [x.toolCallId, x]));
     let ultimoIA = null;
     for (const x of s.mensajes) {
       if (x.role === 'compactacion') { this.resumida(x.content, x.recuerdos); ultimoIA = null; }
       else if (x.role === 'user') { this.yo(x.content); ultimoIA = null; }
       else if (x.role === 'assistant') {
         if (x.content) this.texto(x.content, x.t);
-        for (const c of x.toolCalls || []) this.paso(c.id, c.name, resumenArgs(c.args), resultados[c.id] ?? null);
+        for (const c of x.toolCalls || []) this.paso(c.id, c.name, resumenArgs(c.args), resultados[c.id]?.content ?? null, resultados[c.id]?.estado);
         ultimoIA = x;
       }
     }
@@ -160,7 +160,7 @@ VISTAS.chat = {
   },
   yo(t) { const el = document.createElement('div'); el.className = 'm-yo'; el.textContent = t; this.antesDePensando(el); this.bloque = null; },
   texto(t) { const c = $('.cont', this.bloqueIA()); const d = document.createElement('div'); d.className = 'md'; d.innerHTML = md(t); c.append(d); },
-  paso(id, nombre, resumen, resultado) {
+  paso(id, nombre, resumen, resultado, estado) {
     let el = id && document.getElementById('p-' + id);
     if (!el) {
       const c = $('.cont', this.bloqueIA());
@@ -171,9 +171,11 @@ VISTAS.chat = {
       pasos.append(el);
     }
     if (resultado !== null && resultado !== undefined) {
-      const fallo = /^(error|DENEGADO)/.test(resultado);
-      el.className = 'paso ' + (fallo ? 'fallo' : 'ok');
-      $('.e', el).innerHTML = ic(fallo ? 'x' : 'check');
+      const fallo = ['error', 'denegado'].includes(estado) || (!estado && /^(error|DENEGADO)/i.test(resultado));
+      const ok = estado === 'exito' && !fallo;
+      el.className = 'paso ' + (fallo ? 'fallo' : ok ? 'ok' : 'pendiente');
+      $('.e', el).innerHTML = ic(fallo ? 'x' : ok ? 'check' : 'reloj');
+      $('.e', el).title = tr(fallo ? 'Error o acción denegada' : ok ? 'Ejecutado' : 'Resultado pendiente de verificar');
       $('pre', el).textContent = resultado;
     }
   },
@@ -193,13 +195,20 @@ VISTAS.chat = {
   evento(e) {
     if (!$('#msgs')) return;
     if (e.tipo === 'inicio') this.pensando(true);
-    else if (e.tipo === 'texto') this.texto(e.texto);
+    else if (e.tipo === 'texto-parcial') {
+      const cont = $('.cont', this.bloqueIA()); let parcial = $('.respuesta-parcial', cont);
+      if (!parcial) { parcial = document.createElement('div'); parcial.className = 'respuesta-parcial tenue'; cont.append(parcial); }
+      parcial.textContent = e.texto; this.abajo();
+    }
+    else if (e.tipo === 'texto') { $('.respuesta-parcial', $('#msgs'))?.remove(); this.texto(e.texto); }
+    else if (e.tipo === 'reintento') { $('.respuesta-parcial', $('#msgs'))?.remove(); this.pensando(true); }
+    else if (e.tipo === 'encolado') aviso(`Mensaje en cola (${e.posicion})`);
     else if (e.tipo === 'herramienta') this.paso(e.id, e.nombre, e.resumen || resumenArgs(e.args), null);
-    else if (e.tipo === 'resultado') this.paso(e.id, e.nombre, '', e.resultado);
+    else if (e.tipo === 'resultado') this.paso(e.id, e.nombre, '', e.resultado, e.estado);
     else if (e.tipo === 'compactacion') { this.recargar(); return; }
     else if (e.tipo === 'aviso') { const c = $('.cont', this.bloqueIA()); c.insertAdjacentHTML('beforeend', `<div class="md tenue">${esc(e.texto)}</div>`); }
-    else if (e.tipo === 'error') { this.pensando(false); const c = $('.cont', this.bloqueIA()); c.insertAdjacentHTML('beforeend', `<div class="md mal-txt">${ic('x')} ${esc(e.error)}</div>`); }
-    else if (e.tipo === 'fin') { this.pensando(false); this.pie(e.uso, true); if (this.sesion) this.sesion.uso = e.uso; this.pintarInspector(); }
+    else if (e.tipo === 'error') { $('.respuesta-parcial', $('#msgs'))?.remove(); this.pensando(false); const c = $('.cont', this.bloqueIA()); c.insertAdjacentHTML('beforeend', `<div class="md mal-txt">${ic('x')} ${esc(e.error)}</div>`); }
+    else if (e.tipo === 'fin') { $('.respuesta-parcial', $('#msgs'))?.remove(); this.pensando(false); this.pie(e.uso, true); if (e.estado === 'incompleta') aviso(tr('El trabajo quedó incompleto; revisa los resultados.'), true); if (e.estado === 'requiere_verificacion') aviso(tr('Falta verificar el resultado; revisa las evidencias.'), true); if (this.sesion) this.sesion.uso = e.uso; this.pintarInspector(); }
     this.estadoBoton(); this.abajo();
   },
   alEvento(e) {
@@ -232,6 +241,12 @@ VISTAS.chat = {
     finally { this.enviando = false; this.estadoBoton(); cargarSesiones(); }
   },
   async detener() { if (this.sesion) await api('POST', `/sesiones/${this.sesion.id}/cancelar`).catch(() => { }); },
+  async corregir(texto) {
+    if (!this.sesion || this.corrigiendo) return;
+    this.corrigiendo = true;
+    try { const r = await api('POST', `/sesiones/${this.sesion.id}/corregir`, { texto }); if (!r.entrada) throw new Error('el turno ya termino; vuelve a enviar el mensaje'); this.yo(texto); $('#entrada').value = ''; aviso('Correccion aceptada para el siguiente paso.'); }
+    catch (e) { aviso(e.message, true); } finally { this.corrigiendo = false; this.estadoBoton(); }
+  },
   elegirModelo(ancla) {
     const c = E.config, alias = Object.entries(c.alias);
     const recientes = [...new Set(E.sesiones.map(s => s.modelo))].slice(0, 6);
@@ -284,6 +299,27 @@ VISTAS.chat = {
         await this.recargar();
       } catch (e) { aviso(e.message, true); b.disabled = false; }
     };
+    const trabajos = document.createElement('button'); trabajos.className = 'btn mini'; trabajos.textContent = 'Trabajo pendiente y ejecuciones';
+    trabajos.onclick = () => this.verEjecuciones(); el.append(trabajos);
+  },
+  async verEjecuciones() {
+    const id = this.sesion?.id; if (!id) return;
+    try {
+      const runs = await api('GET', `/sesiones/${id}/ejecuciones`);
+      const opciones = runs.slice(0, 20).map(r => `<section><b>${esc(r.estado)}</b> · ${esc(r.objetivo)}<ul>${r.operaciones.filter(o => o.estado === 'incierto').map(o => `<li>${esc(o.herramienta)}: resultado incierto <button class="btn mini" data-run="${esc(r.id)}" data-op="${esc(o.id)}">Conciliar</button></li>`).join('')}</ul></section>`).join('') || '<p>No hay ejecuciones registradas.</p>';
+      await modal({ titulo: 'Trabajo y resultados', cuerpo: opciones, botones: [{ txt: 'Cerrar', valor: null }, { txt: 'Continuar pendiente', cls: 'pri', valor: 'reanudar' }], alAbrir: m => {
+        m.onclick = async e => { const b = e.target.closest('[data-op]'); if (!b) return;
+          const decision = await modal({ titulo: 'Confirma lo que ocurrio realmente', cuerpo: '<p>Comprueba el servicio o archivo antes de decidir. No se repetira un efecto incierto sin esta conciliacion.</p>', botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Ocurrio', valor: 'confirmada' }, { txt: 'No ocurrio', valor: 'no_ocurrio' }] });
+          if (decision) try { await api('POST', `/sesiones/${id}/conciliar`, { ejecucion: b.dataset.run, operacion: b.dataset.op, decision }); b.disabled = true; b.textContent = 'Conciliado'; } catch (er) { aviso(er.message, true); }
+        };
+      } }).then(r => { if (r === 'reanudar') return this.reanudar(); });
+    } catch (e) { aviso(e.message, true); }
+  },
+  async reanudar() {
+    if (!this.sesion || this.enviando) return;
+    const id = this.sesion.id; this.enviando = true; this.propia = id; this.pensando(true); this.estadoBoton(); this.ctl = new AbortController();
+    try { await flujo('POST', `/sesiones/${id}/reanudar`, {}, e => { if (this.sesion?.id === id) this.evento(e); }, this.ctl.signal); }
+    catch (e) { aviso(e.message, true); } finally { this.enviando = false; this.pensando(false); this.estadoBoton(); }
   },
   // vuelve a pedir la sesión al núcleo y repinta (tras resumirla)
   async recargar() {

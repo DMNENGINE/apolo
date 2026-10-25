@@ -47,7 +47,7 @@ function crearProveedores(cfg) {
     }));
   }
   let primera = Promise.resolve();
-  if (cfg.respaldoAuto !== false && !process.env.NODE_TEST_CONTEXT) {           // en los tests no (no tocar el equipo real)
+  if (cfg.respaldoAuto !== false && !process.env.NODE_TEST_CONTEXT && !process.execArgv.includes('--test')) {           // en los tests no (no tocar el equipo real)
     primera = comprobar().catch(() => { });
     const t = setInterval(() => comprobar().catch(() => { }), 120_000); t.unref?.();
   }
@@ -80,7 +80,7 @@ function crearProveedores(cfg) {
     if (!crear) throw new Error(`tipo de proveedor "${p.tipo}" desconocido`);
     if (['anthropic', 'gemini'].includes(p.tipo) && !p.apiKey) throw new Error(`falta la API key de ${nombre} (config.json o ${p.env})`);
     if (['openai', 'responses'].includes(p.tipo) && !p.apiKey && !p.local) throw new Error(`falta la API key de ${nombre} (config.json o ${p.env})`);
-    return { nombre, model, api: cache[nombre] ||= crear(p) };
+    return { nombre, model, api: cache[nombre] ||= crear({ ...p, nombre }) };
   }
   function disponibles() {
     return Object.entries(cfg.proveedores).map(([nombre, p]) => ({

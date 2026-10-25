@@ -513,6 +513,13 @@
     'confirma con tu huella o tu PIN': 'confirm with your fingerprint or PIN', 'tecla no válida': 'invalid key', 'aún no hay imagen del escritorio': 'no desktop image yet',
   };
   Object.assign(I18N_DIC.en, I18N_EN, I18N_EN_F4, I18N_EN_MOVIL, I18N_EN_REMOTO);
+  Object.assign(I18N_DIC.en, {
+    'Incompleto': 'Incomplete', 'Error o acción denegada': 'Error or action denied', 'Ejecutado': 'Executed',
+    'Resultado pendiente de verificar': 'Result awaiting verification',
+    'El trabajo quedó incompleto; revisa los resultados.': 'Work is incomplete; review the results.',
+    'Falta verificar el resultado; revisa las evidencias.': 'The result needs verification; review the evidence.',
+    'Falta verificar o completar el trabajo': 'Work needs verification or completion', 'REVISAR RESULTADO': 'REVIEW RESULT',
+  });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = I18N;
   else {

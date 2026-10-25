@@ -208,7 +208,8 @@ function crearMcpLocales({ cfg, bus, registrar, quitar, lanzar = spawn, detectar
       } },
       resumen: a => (a.herramienta ? `${a.herramienta}${a.args?.id ? ' ' + a.args.id : ''}` : a.esquema ? `esquema ${a.esquema}` : `listar${a.buscar ? ' ' + a.buscar : ''}`),
       disponible: () => !!obtener(s.id)?.activo,
-      ejecutar: async (a = {}) => {
+      resultado: out => ({ ...(out && typeof out === 'object' ? out : { texto: out }), estado: out?.estado || (/^⚠/.test(typeof out === 'string' ? out : out.texto) ? 'error' : 'desconocido'), verificado: false }),
+      ejecutar: async (a = {}, ctx = {}) => {
         if (!s.herramientas?.length || (!a.herramienta && !a.esquema && Date.now() - (s.probado || 0) > 864e5)) await refrescarHerramientas(s.id);
         if (a.esquema) {
           const h = s.herramientas.find(x => x.name === a.esquema);
@@ -217,7 +218,8 @@ function crearMcpLocales({ cfg, bus, registrar, quitar, lanzar = spawn, detectar
         if (!a.herramienta) return listar(s, a.buscar);
         if (!s.herramientas.some(x => x.name === a.herramienta)) return `no existe la herramienta "${a.herramienta}" en ${s.nombre}. ${listar(s, a.herramienta.split(/[._]/)[0])}`;
         bus?.emit('mcp-local', { id: s.id, herramienta: a.herramienta });
-        return convertir(s.id, await llamar(s.id, a.herramienta, a.args || {}));
+        const respuesta = await llamar(s.id, a.herramienta, a.args || {}), salida = convertir(s.id, respuesta);
+        return ctx.resultadosEstructurados ? { ...(typeof salida === 'string' ? { texto: salida } : salida), estado: respuesta.isError ? 'error' : 'exito', codigo: respuesta.isError ? 'MCP_ERROR' : 'MCP_COMPLETADO', verificado: false } : salida;
       },
     }]);
     registradas.set(s.id, nombre);

@@ -2,7 +2,7 @@
 // Datos: GET /v1/agentes + eventos 'agente' del SSE global (el núcleo los agrupa ~4/s).
 
 const ESTADO_AG = {
-  trabajando: ['ok vivo', 'Trabajando'], listo: ['ok', 'Listo'], error: ['mal', 'Error'], cancelado: ['aviso', 'Cancelado'], quieto: ['', 'En espera'],
+  trabajando: ['ok vivo', 'Trabajando'], listo: ['ok', 'Listo'], incompleto: ['aviso', 'Incompleto'], error: ['mal', 'Error'], cancelado: ['aviso', 'Cancelado'], quieto: ['', 'En espera'],
 };
 const cronoTxt = ms => {
   const s = Math.max(0, Math.round(ms / 1000));

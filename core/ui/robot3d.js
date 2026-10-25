@@ -34,8 +34,9 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   if (!vitrina) addEventListener('mousemove', onMove);
 
   // ---------- escena ----------
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  // opts.pixelRatio / opts.antialias / opts.hudMax: para equipos con GPU modesta (la Rabbit R1); por defecto como siempre
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: opts.antialias !== false, alpha: true });
+  renderer.setPixelRatio(opts.pixelRatio || Math.min(devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
   renderer.setClearColor(0x000000, 0);            // fondo transparente de verdad (sin bloom)            // mismo tono que la isla (el bloom no respeta transparencia)
   const scene = new THREE.Scene();
@@ -74,7 +75,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   const hudTex = new THREE.CanvasTexture(HC); hudTex.flipY = false; hudTex.colorSpace = THREE.SRGBColorSpace;
   let K = 1;
   function tamanoHud(cssW) {
-    const ancho = cssW * Math.min(devicePixelRatio, 2) > 220 ? 1024 : 512;
+    const ancho = Math.min(opts.hudMax || 1024, cssW * Math.min(devicePixelRatio, 2) > 220 ? 1024 : 512);
     if (HC.width === ancho) return;
     HC.width = ancho; HC.height = Math.round(ancho * .9632 / 1.6); K = ancho / 1.6;
     hudTex.dispose(); hudTex.needsUpdate = true;               // three vuelve a reservar la textura con el tamaño nuevo

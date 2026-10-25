@@ -24,7 +24,8 @@
 //   · POST /v1/skills/:slug/escanear · POST /v1/skills/:slug/actualizar {aplicar} → {diff, aplicado}
 //   DEL  /v1/skills/:slug (no las externas)
 //   GET  /v1/skills/marketplace[?refrescar=1] → {entradas, fuentes, etiquetas, actualizado} · GET /v1/skills/marketplace/ficha?id= → {entrada, texto}
-//   taller: POST /v1/skills/crear {nombre,descripcion,instrucciones,scripts?,disparadores?,pruebas?} → {skill}
+//   taller: POST /v1/skills/crear {nombre,descripcion,instrucciones,scripts?,disparadores?,pruebas?,canales?} → {skill}
+//   POST /v1/skills/redactar {idea, canales?} → {skill} (borrador que redacta el modelo; canales ['r1'] = skill de la Rabbit R1)
 //   POST /v1/skills/:slug/mejorar {aplicar?, propuesta?} → {diff, propuesta, cambios, aplicado} · GET /v1/skills/:slug/aprendizaje
 //   POST /v1/skills/:slug/evaluar {modelos[]} → {resultados:[{modelo,aciertos,total,detalles}]} · POST /v1/skills/:slug/exportar {destino?} → {ruta}
 //   GET  /v1/skills/:slug/versiones · POST /v1/skills/:slug/versiones/restaurar {version} (también /restaurar)
@@ -47,6 +48,7 @@
 //   GET /v1/gamer/revision · GET /v1/gamer/limpieza (tamaños) · POST /v1/gamer/limpieza {ids} · PATCH /v1/gamer/config {cerrar[], modo, acciones{}, auto, presentmonAdmin}
 //   fase 2: GET /v1/gamer/rendimiento (PresentMon + medición en vivo + historial) · GET /v1/gamer/sensores · GET /v1/gamer/presentmon/release · POST /v1/gamer/presentmon/descargar {confirmar}
 //   POST /v1/gamer/medir|bench {segundos, juego?, admin?} · POST /v1/gamer/cancelar · GET /v1/gamer/bench[/:id] · GET|POST /v1/gamer/bench/:id/png (tarjeta 1080x1920)
+//   GET  /v1/memoria[?q=…][&limite=N] (sin q: las N más recientes)
 //   GET  /v1/nodos · POST /v1/nodos/emparejar {codigo} · POST /v1/nodos/activar {activo} · PATCH|DEL /v1/nodos/:id
 //   POST /v1/nodos/:id/gesto {gesto|estado} · POST /v1/nodos/:id/foto → {ruta}   (ojo de escritorio ESP32: core/nodos)
 //   APP MÓVIL (core/movil.js, PWA en /m/): POST /v1/movil/canjear {codigo,pin,nombre} (sin token) → token de dispositivo (header x-dispositivo)
@@ -92,6 +94,10 @@ function iniciar(opciones = {}) {
     n.nodos = require('./nodos').crearNodos({ nucleo: n }); n.extensiones.nodos = { http: n.nodos.http };
     if (n.nodos.activo()) n.nodos.iniciar(opciones.puertoNodos).catch(e => console.log(`[nodos] no pude abrir el puerto: ${e.message}`));
   }
+  // vídeos de YouTube/Rumble para la R1 (core/medios): API /v1/medios con token; /v1/medios/ver/<clave> pasa el vídeo por el PC
+  if (!n.medios) { n.medios = require('./medios').crearMedios({ nucleo: n }); n.extensiones.medios = { http: n.medios.http }; }
+  // Spotify Web API (core/spotify): /v1/spotify con token; /spotify/callback (vuelta del login OAuth) sin token, con su state de un solo uso
+  if (!n.spotify) { n.spotify = require('./spotify').crearSpotify({ nucleo: n, puerto: () => n.cfg.puerto || 47900 }); n.extensiones.spotify = { http: n.spotify.http }; }
   // co-host de streaming (core/stream): API /v1/stream con token; overlay de OBS en /stream/* con su clave de solo lectura
   if (!n.stream) {
     n.stream = require('./stream').crearStream({ nucleo: n }); n.extensiones.stream = { http: n.stream.http };
@@ -140,6 +146,11 @@ function iniciar(opciones = {}) {
       const u = new URL(req.url, 'http://x'); const p = u.pathname.split('/').filter(Boolean);
       if (M === 'GET' && u.pathname === '/m') { res.writeHead(301, { location: '/m/' + u.search }); return res.end(); }
       if (p[0] === 'stream' && total) return n.stream.publico(req, res, u);   // overlay de OBS: ?clave= (nunca el token)
+      if (M === 'GET' && p[0] === 'spotify' && p[1] === 'callback' && !p[2] && n.spotify) {
+        const r = await n.spotify.callback(Object.fromEntries(u.searchParams));
+        res.writeHead(r.codigo, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'" });
+        return res.end(r.html);
+      }
       if (M === 'GET' && p[0] !== 'v1') {
         const nombre = p.length ? p.join('/') + (u.pathname.endsWith('/') ? '/index.html' : '') : 'index.html';
         if (lanMovil && !MV.estaticoMovil(nombre)) { res.writeHead(403); return res.end(); }
@@ -182,12 +193,16 @@ function iniciar(opciones = {}) {
         if (M === 'GET') return json(res, 200, admin.configPublica(n.cfg));
         if (M === 'PATCH') {
           const b = await leer(req), antes = n.cfg.permisos.modo;
-          const c = admin.guardarConfig(n.cfg, b); n.proveedores.reset();
+          let c;
+          try { c = admin.guardarConfig(n.cfg, b); }
+          catch (e) { return json(res, e.status || 500, { error: e.message }); }
+          n.proveedores.reset();
           if (n.cfg.permisos.modo !== antes) n.bus.emit('config-seguridad', { resumen: `modo de permisos: ${antes} → ${n.cfg.permisos.modo}` });
           if (b.proveedores) for (const [k, v] of Object.entries(b.proveedores)) if (v && typeof v.apiKey === 'string') n.bus.emit('config-seguridad', { resumen: `clave de ${k} ${v.apiKey ? 'cambiada' : 'quitada'}` });
           return json(res, 200, c);
         }
       }
+      if (M === 'GET' && p[1] === 'medios' && p[2] === 'ver' && n.medios && !disp) return n.medios.proxy(req, res, p[3]);   // vídeo con Range: no pasa por json()
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram
         try {
           let cuerpo = ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req, p[1] === 'mundo' ? 8e6 : 1e6) : {};   // el mundo puede venir con la imagen de referencia
@@ -201,6 +216,11 @@ function iniciar(opciones = {}) {
           }
           return json(res, 200, r);
         } catch (e) { return json(res, e.status || 400, { error: e.message }); }
+      }
+      if (p[1] === 'trading') {                                 // Mission Control → Trading: enjambre de DMN Trader (core/trading.js)
+        if (!maestro) return json(res, 403, { error: 'Trading requiere el escritorio' });
+        try { return json(res, 200, await n.trading.http(M, p, M === 'POST' ? await leer(req) : null, Object.fromEntries(u.searchParams))); }
+        catch (e) { return json(res, e.status || 502, { error: e.message }); }
       }
       if (p[1] === 'consejo') {                                 // consejo de modelos (core/consejo.js)
         if (!p[2] && M === 'GET') return json(res, 200, { candidatos: n.consejo.candidatos(), enCurso: n.consejo.enCurso(), historial: n.consejo.historial(30) });
@@ -262,7 +282,7 @@ function iniciar(opciones = {}) {
       if (p[1] === 'aprobaciones' && M === 'GET') return json(res, 200, n.historialPermisos.lista());
       if (p[1] === 'herramientas' && M === 'GET') {
         const off = new Set(n.cfg.herramientasOff || []);
-        return json(res, 200, require('./herramientas').HERRAMIENTAS.map(h => ({ nombre: h.nombre, descripcion: h.descripcion, riesgo: typeof h.riesgo === 'function' ? 'variable' : h.riesgo, activa: !off.has(h.nombre) })));
+        return json(res, 200, n.herramientas.HERRAMIENTAS.map(h => ({ nombre: h.nombre, descripcion: h.descripcion, riesgo: typeof h.riesgo === 'function' ? 'variable' : h.riesgo, activa: !off.has(h.nombre) })));
       }
       if (p[1] === 'navegador') {                                   // extensión del navegador (long-poll)
         if (!p[2] && M === 'GET') return json(res, 200, n.navegador.estado());
@@ -377,6 +397,7 @@ function iniciar(opciones = {}) {
           try { return json(res, 200, await sk.instalar(String(fuente))); } catch (e) { return err(e); }
         }
         if (p[2] === 'crear' && !p[3] && M === 'POST') { try { return json(res, 201, { skill: sk.publica(await sk.taller.crear(await leer(req))) }); } catch (e) { return err(e); } }
+        if (p[2] === 'redactar' && !p[3] && M === 'POST') { try { const b = await leer(req); return json(res, 201, { skill: sk.publica(await sk.taller.redactar({ idea: b.idea, canales: b.canales })) }); } catch (e) { return err(e); } }
         const s = p[2] && sk.obtener(decodeURIComponent(p[2]));
         if (!s) return json(res, 404, { error: 'skill' });
         if (!p[3] && M === 'GET') return json(res, 200, conSb(s));
@@ -433,7 +454,12 @@ function iniciar(opciones = {}) {
         if (p[3] === 'escanear' && M === 'POST') { try { return json(res, 200, { escaneo: await pl.escanear(nom) }); } catch (e) { return err(e, 500); } }
       }
       if (p[1] === 'memoria') {
-        if (!p[2] && M === 'GET') { const q = u.searchParams.get('q'); return json(res, 200, q ? await n.memoria.buscarH(q, { limite: 50 }) : n.memoria.lista()); }
+        if (!p[2] && M === 'GET') {
+          const q = u.searchParams.get('q'), lim = Math.max(0, Math.min(500, +u.searchParams.get('limite') || 0));   // limite: las N más recientes (la R1 no quiere las 1500)
+          if (q) return json(res, 200, await n.memoria.buscarH(q, { limite: lim || 50 }));
+          const L = n.memoria.lista();
+          return json(res, 200, lim ? [...L].sort((a, b) => (b.actualizada || b.creada || 0) - (a.actualizada || a.creada || 0)).slice(0, lim) : L);
+        }
         if (!p[2] && M === 'POST') { try { return json(res, 201, n.memoria.recordar({ ...(await leer(req)), origen: 'api' })); } catch (e) { return json(res, 400, { error: e.message }); } }
         if (p[2] && M === 'DELETE') return json(res, n.memoria.olvidar(p[2]) ? 200 : 404, {});
       }
@@ -463,6 +489,22 @@ function iniciar(opciones = {}) {
           n.sesiones.guardarMeta(s); const { mensajes, ...m } = s; return json(res, 200, m);
         }
         if (p[3] === 'cancelar' && M === 'POST') return json(res, 200, { ok: n.agente.cancelar(s.id) });
+        if (p[3] === 'ejecuciones' && M === 'GET') return json(res, 200, n.agente.ejecuciones.lista(s.id));
+        if (p[3] === 'reanudar' && M === 'POST') {
+          if (!maestro) return json(res, 403, { error: 'solo el escritorio puede reanudar trabajo interrumpido' });
+          const b = await leer(req); const enviar = sse(res);
+          try { n.agente.reanudar(s, e => { n.bus.emit('evento', e); enviar(e); }, b.entrada).catch(e => enviar({ tipo: 'error', error: e.message })).finally(() => res.end()); }
+          catch (e) { enviar({ tipo: 'error', error: e.message }); res.end(); } return;
+        }
+        if (p[3] === 'corregir' && M === 'POST') {
+          if (!maestro) return json(res, 403, { error: 'la correccion activa requiere el escritorio' });
+          const b = await leer(req); if (!String(b.texto || '').trim()) return json(res, 400, { error: 'texto' });
+          return json(res, 200, { entrada: n.agente.corregir(s, b.texto) });
+        }
+        if (p[3] === 'conciliar' && M === 'POST') {
+          if (!maestro) return json(res, 403, { error: 'solo el escritorio puede conciliar efectos' });
+          const b = await leer(req); return json(res, 200, { ok: n.agente.ejecuciones.conciliar(s.id, b.ejecucion, b.operacion, b.decision) });
+        }
         if (p[3] === 'compactar' && M === 'POST') {
           if (n.agente.ocupada(s.id)) return json(res, 409, { error: 'la sesión ya está trabajando' });
           try {
@@ -476,9 +518,9 @@ function iniciar(opciones = {}) {
         if (p[3] === 'mensajes' && M === 'POST') {
           const { texto } = await leer(req);
           if (!texto) return json(res, 400, { error: 'texto' });
-          if (n.agente.ocupada(s.id)) return json(res, 409, { error: 'la sesión ya está trabajando' });
-          const enviar = sse(res);
-          n.enviar(s, String(texto), enviar).catch(() => { }).finally(() => res.end());
+          const stream = sse(res); let terminal = false;
+          const enviar = e => { if (['fin', 'error'].includes(e.tipo)) terminal = true; stream(e); };
+          n.enviar(s, String(texto), enviar, () => maestro || !!movil.autenticar(String(req.headers['x-dispositivo'] || ''), { ip })).catch(e => { if (!terminal) enviar({ tipo: 'error', error: e.message }); }).finally(() => res.end());
           return;
         }
       }

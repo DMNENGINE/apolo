@@ -86,7 +86,7 @@ function crearCompactador({ cfg, generarJSON, memoria, sesiones }) {
     if (!resumen) throw new Error('el resumen salió vacío');
     const guardados = [];
     for (const x of r.recuerdos || []) {
-      try { const m = memoria?.recordar({ texto: x.texto, tipo: x.tipo, origen: 'compactación' }); if (m) guardados.push(m.texto); } catch { }   // secretos, vacíos…: se ignoran
+      try { const m = memoria?.recordar({ texto: x.texto, tipo: x.tipo, origen: 'compactación' }, { clase: viejos.some(m => m.procedencia === 'externa') ? 'externa' : 'agente', proyecto: s.cwd, usuario: s.usuario, sesion: s.id }); if (m) guardados.push(m.texto); } catch { }
     }
     sesiones.agregar(s, { role: 'compactacion', content: resumen, desde: corte, recuerdos: guardados.length, t: Date.now() });
     s.compactaciones = (s.compactaciones || 0) + 1;

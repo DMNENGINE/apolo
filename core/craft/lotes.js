@@ -30,7 +30,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const dir = path.join(cfg.dir, 'craft');
   const FC = path.join(dir, 'lotes.json'), FE = path.join(dir, 'lotes-estado.json'), FA = path.join(dir, 'aprendizaje.json');
   youtube = youtube || require('./youtube').crearYouTube({ dir, ...(pedir ? { pedir } : {}), abrir: abrirUrl, log });
-  metricas = metricas || metricasMod.crearMetricas({ python: cfg?.craft?.python || 'python', ejecutar, youtube, generarJSON, modelo, log });
+  const FM = path.join(cfg.dir, 'craft', 'meta.json');   // token de la página de Facebook/Instagram (fuera del repo)
+  metricas = metricas || metricasMod.crearMetricas({ python: cfg?.craft?.python || 'python', ejecutar, youtube, generarJSON, modelo, log, meta: { config: () => leer(FM, null) } });
   const leer = (f, def) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return def; } };
   const guardarJ = (f, o) => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(f, JSON.stringify(o, null, 2)); };
   let conf = { salida: path.join(os.homedir(), 'Videos', 'APOLO'), retencionDias: 7, fuentes: [], ...leer(FC, {}) };
@@ -157,7 +158,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     // el plan del director se guarda: pedir un cambio no rehace toda la edición (salvo si cambia el montaje: avance/recorte)
     const clave = claveMontaje(c);
     const plan = c.plan && c.planClave === clave ? c.plan : undefined;
-    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...ajustes, ...(plan ? { plan } : {}) }, ctx);
+    const r = await subtitulador.subtitular({ ...comun, nombre: `${String(c.rank).padStart(2, '0')} - ${c.estilo}`, estilo: c.estilo, escenas: f.escenas ?? 'auto', ...(conf.ajustesDefecto || {}), ...ajustes, ...(plan ? { plan } : {}) }, ctx);
     const d = r.datos || {};
     if (c.estado === 'descartado') {                    // lo descartaron mientras se editaba: fuera lo recién hecho
       for (const k of ['mp4', 'srt', 'previa', 'proyecto']) try { if (d[k]) fs.rmSync(d[k], { force: true }); } catch { }
@@ -183,6 +184,17 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       emojis: d.emojis || 0, editado: Date.now(), estiloForzado: null, retocado: false, plan: d.plan || null, planClave: clave, disenos: d.plan?.disenos || [], sonidos: d.sonidos || 0,
       calidad: d.calidad || null, audioPro: d.audioPro || null, rotulos: d.rotulos || 0, noCorregidas: d.noCorregidas || [],
       portadas, portada: Math.min(c.portada || 0, Math.max(0, portadas.length - 1)), fuenteVideo: d.fuente || null, diccionario: d.diccionario || 0 });
+    // 4K directo (conf.directo4k): se exporta en 4K nada más editar, sin esperar a aprobar. NO publica nada: subir a Drive,
+    // Discord o YouTube sigue siendo solo al aprobar en Revisión
+    if (conf.directo4k && d.proyecto && d.mp4) {
+      ctx.progreso('exportando en 4K', 99);
+      const destino = d.mp4.replace(/\.mp4$/i, ' 4K.mp4');
+      try {
+        await subtitulador.reexportar({ proyecto: d.proyecto, mp4: destino, ancho: ANCHO4K, alto: ALTO4K, srt: false }, ctx);
+        const m = await medir(destino, { ffmpeg: cfg?.craft?.ffmpeg, ligero: true });
+        c.k4 = { estado: 'listo', mp4: destino, hecho: Date.now(), directo: true, medidas: { ancho: m.ancho, alto: m.alto, duracion: m.duracion, bytes: m.bytes } };
+      } catch (e) { c.k4 = { estado: 'error', error: (parar?.signal.aborted ? 'pausado' : e.message).slice(0, 300) }; log('[lotes] 4K directo', id, e.message); }
+    }
     // las correcciones que sí se aplicaron pasan al diccionario del canal (los clips siguientes ya salen bien)
     const corr = (c.ajustes?.correcciones || []).filter(x => !(d.noCorregidas || []).some(n => n.mal === x.mal && n.bien === x.bien));
     if (corr.length && f.perfil) try { diccionario.aprender(f.perfil, corr, c.id); } catch (e) { log('[lotes] diccionario', e.message); }
@@ -668,7 +680,9 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     const u = String(url || '').trim();
     let m = u.match(/tiktok\.com\/.*\/video\/(\d+)/); if (m) return { plataforma: 'tiktok', id: m[1] };
     m = u.match(/(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([\w-]{11})/); if (m) return { plataforma: 'youtube', id: m[1] };
-    throw Object.assign(new Error('pon un enlace de YouTube o de TikTok'), { status: 400 });
+    m = u.match(/facebook\.com\/(?:reel\/|.*\/videos\/|watch\/?\?v=)(\d+)/); if (m) return { plataforma: 'facebook', id: m[1] };
+    m = u.match(/instagram\.com\/(?:reels?|p)\/([\w-]+)/); if (m) return { plataforma: 'instagram', id: m[1] };
+    throw Object.assign(new Error('pon un enlace de YouTube, TikTok, Facebook o Instagram'), { status: 400 });
   }
 
   // pausa: deja de editar (corta lo que esté haciendo y lo devuelve al principio de la cola, sin perder nada) hasta reanudar.
@@ -817,6 +831,12 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
         }
         return { ...youtube.estado(), ...confYT() };
       }
+    }
+    if (p[2] === 'meta') {                               // Facebook/Instagram: GET estado (sin token) · POST conectar · DELETE desconectar
+      const cf = leer(FM, null);
+      if (M === 'GET') return { conectado: !!cf?.token, pagina: cf?.nombre || null, instagram: cf?.ig_usuario || null, largo: !!cf?.largo };
+      if (M === 'DELETE') { try { fs.unlinkSync(FM); } catch { } return { conectado: false }; }
+      if (M === 'POST') { const r = await metricasMod.conectarMeta({ token: b.token, appId: b.appId, appSecret: b.appSecret, pagina: b.pagina }); guardarJ(FM, r.guardar); return { conectado: true, ...r.publico }; }
     }
     if (p[2] === 'metricas') {                           // GET lo aprendido · POST medir ahora (tarda 1–3 min; se avisa por el bus)
       if (M === 'GET') return { aprendido, metricasEn: est.metricasEn || null, midiendo: !!midiendo, cuentas: cuentas() };

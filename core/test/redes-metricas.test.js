@@ -273,7 +273,7 @@ test('lotes: un subtítulo corregido en Revisión pasa al diccionario del canal;
   // vincular a mano una publicación de TikTok
   const v = await l.http('POST', ['', 'revision', encodeURIComponent(c0.id), 'vincular'], { url: 'https://www.tiktok.com/@lagctrucks/video/7697679911368084767' });
   assert.deepStrictEqual(v.vinculos, { tiktok: '7697679911368084767' });
-  await assert.rejects(l.http('POST', ['', 'revision', encodeURIComponent(c0.id), 'vincular'], { url: 'https://x.com/a' }), /YouTube o de TikTok/);
+  await assert.rejects(l.http('POST', ['', 'revision', encodeURIComponent(c0.id), 'vincular'], { url: 'https://x.com/a' }), /YouTube.*TikTok.*Facebook.*Instagram/);
   assert.throws(() => l.aYouTube(l.estado().clips[0]), /ya está en YouTube/);
 });
 

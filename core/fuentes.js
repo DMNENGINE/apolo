@@ -18,8 +18,8 @@ function idYouTube(url) {
 
 const decodificar = s => String(s).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
 
-async function leerYouTube(id, { signal, idioma = 'es' } = {}) {
-  const r = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+async function leerYouTube(id, { signal, idioma = 'es', fetch: fetchFn = fetch } = {}) {
+  const r = await fetchFn('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
     method: 'POST', signal,
     headers: { 'content-type': 'application/json', 'user-agent': 'com.google.android.youtube/20.10.38 (Linux; U; Android 14)' },
     body: JSON.stringify({ videoId: id, context: { client: { ...ANDROID, hl: idioma } } }),

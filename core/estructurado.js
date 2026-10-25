@@ -20,11 +20,12 @@ function extraerJSON(texto) {
 function validar(v, s, ruta = '') {
   if (!s) return '';
   const tipo = Array.isArray(v) ? 'array' : v === null ? 'null' : typeof v;
-  if (s.type === 'integer' ? !Number.isInteger(v) : s.type === 'number' ? typeof v !== 'number' : s.type && s.type !== tipo) return `${ruta || 'raíz'}: se esperaba ${s.type}`;
+  if (s.type === 'integer' ? !Number.isInteger(v) : s.type === 'number' ? (typeof v !== 'number' || !Number.isFinite(v)) : s.type && s.type !== tipo) return `${ruta || 'raíz'}: se esperaba ${s.type}`;
   if (s.enum && !s.enum.includes(v)) return `${ruta}: valor fuera de ${s.enum.join('/')}`;
   if (s.type === 'object') {
-    for (const k of s.required || []) if (!(k in v)) return `${ruta}.${k}: falta`;
-    for (const [k, sub] of Object.entries(s.properties || {})) if (k in v) { const e = validar(v[k], sub, `${ruta}.${k}`); if (e) return e; }
+    for (const k of s.required || []) if (!Object.hasOwn(v, k)) return `${ruta}.${k}: falta`;
+    if (s.additionalProperties === false) for (const k of Object.keys(v)) if (!Object.hasOwn(s.properties || {}, k)) return `${ruta}.${k}: propiedad desconocida`;
+    for (const [k, sub] of Object.entries(s.properties || {})) if (Object.hasOwn(v, k)) { const e = validar(v[k], sub, `${ruta}.${k}`); if (e) return e; }
   }
   if (s.type === 'array' && s.items) for (let i = 0; i < v.length; i++) { const e = validar(v[i], s.items, `${ruta}[${i}]`); if (e) return e; }
   return '';

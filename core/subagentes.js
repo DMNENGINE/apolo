@@ -39,7 +39,7 @@ function crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar }) 
     else if (e.tipo === 'resultado') r.herramienta = null;
     else if (e.tipo === 'texto') r.ultimo = String(e.texto).slice(0, 300);
     else if (e.tipo === 'compactacion') r.compactada = (r.compactada || 0) + 1;
-    else if (e.tipo === 'fin') Object.assign(r, { estado: 'listo', fin: Date.now(), herramienta: null, uso: { ...e.uso }, ultimo: String(e.texto || r.ultimo).slice(0, 300) });
+    else if (e.tipo === 'fin') Object.assign(r, { estado: ['incompleta', 'requiere_verificacion'].includes(e.estado) ? 'incompleto' : 'listo', fin: Date.now(), herramienta: null, uso: { ...e.uso }, ultimo: String(e.texto || r.ultimo).slice(0, 300) });
     else if (e.tipo === 'error') Object.assign(r, { estado: /cancelad/i.test(e.error) ? 'cancelado' : 'error', fin: Date.now(), herramienta: null, error: e.error });
     else return;
     emitir(r);
@@ -74,20 +74,32 @@ function crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar }) 
     emitir(r);
   });
 
-  async function lanzar({ padre, tarea, nombre, modelo, signal }) {
+  async function lanzar({ padre, tarea, nombre, modelo, signal, perfil, dependencias = [] }) {
     tarea = String(tarea || '').trim();
     if (!tarea) throw new Error('falta la tarea');
     if (padre.padre) throw new Error('un subagente no puede delegar');
+    if (signal?.aborted) throw new Error('cancelado');
+    for (const id of dependencias) if (!runs.has(id) || runs.get(id).padre !== padre.id || runs.get(id).estado !== 'listo') throw new Error('dependencia no completada: ' + id);
     const activos = [...runs.values()].filter(r => r.padre === padre.id && r.estado === 'trabajando').length;
     if (activos >= max()) throw new Error(`ya hay ${activos} subagentes trabajando (máximo ${max()})`);
-    const m = modelo ? (cfg.alias[String(modelo).toLowerCase()] || String(modelo)) : padre.modelo;
+    const p = perfil && Object.hasOwn(cfg.subagentes?.perfiles || {}, perfil) ? cfg.subagentes.perfiles[perfil] : {};
+    if (perfil && !Object.keys(p).length) throw new Error('perfil no configurado');
+    const elegido = modelo || p.modelo;
+    const m = elegido ? (cfg.alias[String(elegido).toLowerCase()] || String(elegido)) : padre.modelo;
+    if (cfg.proveedores?.[padre.modelo?.split('/')[0]]?.local && !cfg.proveedores?.[m?.split('/')[0]]?.local && cfg.recuperacion?.permitirNube !== true) throw new Error('cambio local a nube no autorizado');
     proveedores.resolver(m);                               // lanza si el modelo no existe
     nombre = String(nombre || tarea).replace(/\s+/g, ' ').trim().slice(0, 40);
     const s = sesiones.crear({ modelo: m, cwd: padre.cwd, canal: 'subagente', titulo: `⤷ ${nombre}`, padre: padre.id, nombreAgente: nombre });
+    s.soloLectura = !!padre.soloLectura || !!p.soloLectura; s.usuario = padre.usuario;
+    if (padre.herramientasPermitidas || p.herramientas) s.herramientasPermitidas = (p.herramientas || padre.herramientasPermitidas).filter(n => !padre.herramientasPermitidas || padre.herramientasPermitidas.includes(n));
+    if (padre._presupuesto) Object.defineProperty(s, '_presupuesto', { value: padre._presupuesto, configurable: true });
     registro(s);
     const parar = () => cancelar(s.id);
     signal?.addEventListener('abort', parar, { once: true });
-    try { return { ok: true, sesion: s.id, nombre, texto: await enviar(s, INSTRUCCION(tarea)) }; }
+    try {
+      const texto = await enviar(s, INSTRUCCION(tarea)), estado = s.ultimaEjecucion?.estado;
+      return { ok: !estado || estado === 'completada', estado, sesion: s.id, nombre, texto };
+    }
     catch (e) { return { ok: false, sesion: s.id, nombre, texto: e.message }; }
     finally { signal?.removeEventListener('abort', parar); }
   }

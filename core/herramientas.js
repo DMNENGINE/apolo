@@ -5,7 +5,7 @@ const { spawn } = require('child_process');
 
 const MAX = 20_000;
 const recortar = s => (s.length > MAX ? s.slice(0, MAX) + `\n…[recortado, ${s.length - MAX} caracteres más]` : s);
-const ruta = (ctx, r) => path.resolve(ctx.cwd, String(r || '.'));
+const ruta = (ctx, a) => require('./rutas-seguras').comprobarRuta(ctx.cwd, a);
 
 const HERRAMIENTAS = [
   {
@@ -20,29 +20,31 @@ const HERRAMIENTAS = [
       const p = spawn(bin, args, { cwd: ctx.cwd, windowsHide: true });
       let out = '';
       p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
-      const t = setTimeout(() => { p.kill(); out += '\n[cancelado por tiempo]'; }, Math.min(a.timeoutSeg || 120, 600) * 1000);
-      ctx.signal?.addEventListener('abort', () => p.kill(), { once: true });
-      p.on('close', code => { clearTimeout(t); ok(recortar(`${out.trim()}\n[código de salida ${code}]`)); });
+      let vencido = false;
+      const abortar = () => p.kill();
+      const t = setTimeout(() => { vencido = true; p.kill(); out += '\n[cancelado por tiempo]'; }, Math.min(a.timeoutSeg || 120, 600) * 1000);
+      ctx.signal?.addEventListener('abort', abortar, { once: true });
+      p.on('close', code => { clearTimeout(t); ctx.signal?.removeEventListener('abort', abortar); ok({ texto: recortar(`${out.trim()}\n[código de salida ${code}]`), exitCode: code, estado: vencido || code === null ? 'incierto' : code !== 0 ? 'error' : 'exito', codigo: vencido ? 'TIMEOUT' : '', verificado: false }); });
       p.on('error', e => { clearTimeout(t); ok(`error: ${e.message}`); });
     }),
   },
   {
-    nombre: 'leer_archivo', riesgo: 'lectura',
+    nombre: 'leer_archivo', riesgo: 'lectura', paralelizable: true,
     descripcion: 'Lee un archivo de texto. Opcional: desde (línea, 1 = primera) y lineas.',
     parametros: { type: 'object', properties: { ruta: { type: 'string' }, desde: { type: 'number' }, lineas: { type: 'number' } }, required: ['ruta'] },
     resumen: a => a.ruta,
     ejecutar: async (a, ctx) => {
-      const lineas = fs.readFileSync(ruta(ctx, a.ruta), 'utf8').split('\n');
+      const lineas = fs.readFileSync(ruta(ctx, a), 'utf8').split('\n');
       const ini = Math.max(1, a.desde || 1), fin = Math.min(lineas.length, ini - 1 + (a.lineas || 2000));
       return recortar(lineas.slice(ini - 1, fin).map((l, i) => `${ini + i}\t${l}`).join('\n') + (fin < lineas.length ? `\n…(${lineas.length} líneas en total)` : ''));
     },
   },
   {
-    nombre: 'listar', riesgo: 'lectura',
+    nombre: 'listar', riesgo: 'lectura', paralelizable: true,
     descripcion: 'Lista el contenido de una carpeta.',
     parametros: { type: 'object', properties: { ruta: { type: 'string' } } },
     resumen: a => a.ruta || '.',
-    ejecutar: async (a, ctx) => recortar(fs.readdirSync(ruta(ctx, a.ruta), { withFileTypes: true })
+    ejecutar: async (a, ctx) => recortar(fs.readdirSync(ruta(ctx, a), { withFileTypes: true })
       .map(e => (e.isDirectory() ? `${e.name}/` : e.name)).join('\n') || '(vacía)'),
   },
   {
@@ -51,10 +53,12 @@ const HERRAMIENTAS = [
     parametros: { type: 'object', properties: { ruta: { type: 'string' }, contenido: { type: 'string' } }, required: ['ruta', 'contenido'] },
     resumen: a => a.ruta,
     ejecutar: async (a, ctx) => {
-      const f = ruta(ctx, a.ruta);
+      const f = ruta(ctx, a);
       fs.mkdirSync(path.dirname(f), { recursive: true });
+      if (ruta(ctx, a) !== f) throw new Error('la ruta cambio antes de escribir');
       fs.writeFileSync(f, a.contenido);
-      return `escrito ${f} (${Buffer.byteLength(a.contenido)} bytes)`;
+      const igual = fs.readFileSync(f, 'utf8') === a.contenido;
+      return { texto: `escrito ${f} (${Buffer.byteLength(a.contenido)} bytes)`, estado: igual ? 'exito' : 'error', verificado: igual, evidencias: igual ? [f] : [] };
     },
   },
   {
@@ -63,16 +67,18 @@ const HERRAMIENTAS = [
     parametros: { type: 'object', properties: { ruta: { type: 'string' }, buscar: { type: 'string' }, reemplazar: { type: 'string' } }, required: ['ruta', 'buscar', 'reemplazar'] },
     resumen: a => a.ruta,
     ejecutar: async (a, ctx) => {
-      const f = ruta(ctx, a.ruta);
+      const f = ruta(ctx, a);
       const txt = fs.readFileSync(f, 'utf8');
       const n = txt.split(a.buscar).length - 1;
       if (n !== 1) return `error: el texto aparece ${n} veces (debe ser 1)`;
-      fs.writeFileSync(f, txt.replace(a.buscar, () => a.reemplazar));
-      return `editado ${f}`;
+      if (ruta(ctx, a) !== f) throw new Error('la ruta cambio antes de editar');
+      const nuevo = txt.replace(a.buscar, () => a.reemplazar); fs.writeFileSync(f, nuevo);
+      const igual = fs.readFileSync(f, 'utf8') === nuevo;
+      return { texto: `editado ${f}`, estado: igual ? 'exito' : 'error', verificado: igual, evidencias: igual ? [f] : [] };
     },
   },
   {
-    nombre: 'web', riesgo: 'lectura',
+    nombre: 'web', riesgo: a => /^(GET|HEAD)$/i.test(a.metodo || 'GET') ? 'lectura' : 'escritura',
     // enviar datos (POST/PUT…, URLs largas o con texto leído) a un dominio nuevo pide permiso: core/exfil.js
     descripcion: 'Descarga una página web y devuelve su texto. Con un vídeo de YouTube devuelve título, canal, descripción y la transcripción. Opcional: metodo (POST, PUT…) y cuerpo para llamar a una API.',
     parametros: { type: 'object', properties: { url: { type: 'string' }, metodo: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, cuerpo: { type: 'string' } }, required: ['url'] },
@@ -80,8 +86,15 @@ const HERRAMIENTAS = [
     ejecutar: async (a, ctx) => {
       if (!/^https?:\/\//i.test(a.url)) return 'error: solo http(s)';
       const metodo = String(a.metodo || 'GET').toUpperCase(), cuerpo = a.cuerpo != null && !/^(GET|HEAD)$/.test(metodo) ? String(a.cuerpo) : undefined;
-      if (metodo === 'GET') { const esp = await require('./fuentes').especial(a.url, { signal: ctx.signal }); if (esp) return esp.length > 45_000 ? esp.slice(0, 45_000) + `\n…[recortado, ${esp.length - 45_000} caracteres más]` : esp; }   // YouTube (transcripción)
-      const r = await fetch(a.url, { method: metodo, body: cuerpo, signal: ctx.signal,
+      const autorizar = async (url, info) => {
+        if (!ctx.permisos) return false;
+        const h = { nombre: 'web', riesgo: info.privada ? 'escritura' : (/^(GET|HEAD)$/.test(info.metodo) ? 'lectura' : 'escritura'), resumen: () => url,
+          siemprePreguntar: () => info.privada ? 'red local / DNS privado' : '' };
+        return (await ctx.permisos.pedir({ h, args: { url, metodo: info.metodo, cuerpo: info.cuerpo }, sesion: ctx.sesion, signal: ctx.signal })).ok;
+      };
+      const fetchWeb = (url, init) => require('./red-segura').fetchSeguro(url, init, { autorizar });
+      if (metodo === 'GET') { const esp = await require('./fuentes').especial(a.url, { signal: ctx.signal, fetch: fetchWeb }); if (esp) return esp.length > 45_000 ? esp.slice(0, 45_000) + `\n…[recortado, ${esp.length - 45_000} caracteres más]` : esp; }   // YouTube (transcripción)
+      const r = await fetchWeb(a.url, { method: metodo, body: cuerpo, signal: ctx.signal,
         headers: { 'user-agent': 'RobotCompanion/0.1', ...(cuerpo !== undefined ? { 'content-type': /^\s*[[{]/.test(cuerpo) ? 'application/json' : 'text/plain; charset=utf-8' } : {}) } });
       const html = await r.text();
       const txt = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '').replace(/<[^>]+>/g, ' ')
@@ -91,7 +104,7 @@ const HERRAMIENTAS = [
   },
   {
     nombre: 'programar_tarea',
-    riesgo: a => (a.tipo === 'agente' ? 'escritura' : 'lectura'),       // un recordatorio no pide permiso; un agente programado sí
+    riesgo: 'escritura',       // un recordatorio no pide permiso; un agente programado sí
     descripcion: 'Programa un recordatorio (tipo aviso) o una tarea que hará un agente (tipo agente). ' +
       'Usa UNO de: en (fecha-hora local "YYYY-MM-DDTHH:mm", una vez), cron (5 campos "min hora día mes díaSemana", repetir; díaSemana 0=domingo) o cadaMin (cada N minutos). ' +
       'soloSiHayAlgo=true: el agente solo avisa si encuentra algo importante (para vigilar cosas).',
@@ -125,14 +138,14 @@ const HERRAMIENTAS = [
       `${t.proxima ? ' · próxima ' + new Date(t.proxima).toLocaleString('es') : ''}${t.ultimoResultado ? ' · última: ' + t.ultimoResultado.slice(0, 80) : ''}`).join('\n') || '(no hay tareas)',
   },
   {
-    nombre: 'borrar_tarea', riesgo: 'lectura',
+    nombre: 'borrar_tarea', riesgo: 'escritura',
     descripcion: 'Borra una tarea programada por su id (usa ver_tareas para ver los ids).',
     parametros: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     resumen: a => a.id,
     ejecutar: async (a, ctx) => (ctx.tareas.borrar(a.id) ? `tarea ${a.id} borrada` : `no existe la tarea ${a.id}`),
   },
   {
-    nombre: 'cambiar_nombre', riesgo: 'lectura',
+    nombre: 'cambiar_nombre', riesgo: 'escritura',
     descripcion: 'Cambia TU nombre (el del compañero/asistente) cuando el usuario te pone o te cambia el nombre. ' +
       'Se guarda en tu identidad y la isla, el panel y los avisos pasan a usarlo.',
     parametros: { type: 'object', properties: { nombre: { type: 'string' } }, required: ['nombre'] },
@@ -140,7 +153,7 @@ const HERRAMIENTAS = [
     ejecutar: async (a, ctx) => `ahora te llamas ${ctx.personalidad.ponerNombre(a.nombre)}`,
   },
   {
-    nombre: 'recordar', riesgo: 'lectura',
+    nombre: 'recordar', riesgo: 'escritura',
     descripcion: 'Guarda en la memoria permanente un dato útil sobre el usuario para futuras conversaciones (con cualquier modelo o canal). ' +
       'Úsalo SIN que te lo pidan cuando el usuario cuente algo duradero: quién es, sus preferencias, proyectos, personas, decisiones. ' +
       'Un dato por llamada, en una frase clara. tipo: perfil (quién es) | preferencia | proyecto | persona | hecho. ' +
@@ -155,17 +168,20 @@ const HERRAMIENTAS = [
       required: ['texto'],
     },
     resumen: a => `${a.tipo || 'hecho'}: ${a.texto}`,
-    ejecutar: async (a, ctx) => { const m = ctx.memoria.recordar({ ...a, origen: ctx.sesion.modelo }); return `recuerdo ${m.id} ${m.accion}`; },
+    ejecutar: async (a, ctx) => {
+      if (!a.reemplaza && ctx.memoriaInyectada?.includes(a.texto) && ctx.memoria.lista().some(m => m.texto === a.texto)) return 'El recuerdo ya estaba recuperado; no se reextrae ni se aumenta su confianza.';
+      const m = ctx.memoria.recordar({ ...a, origen: ctx.sesion.modelo }, ctx.procedencia || { clase: 'agente', proyecto: ctx.cwd, sesion: ctx.sesion.id }); return `recuerdo ${m.id} ${m.accion}`;
+    },
   },
   {
     nombre: 'buscar_memoria', riesgo: 'lectura',
     descripcion: 'Busca en la memoria permanente datos guardados sobre el usuario.',
     parametros: { type: 'object', properties: { consulta: { type: 'string' } }, required: ['consulta'] },
     resumen: a => a.consulta,
-    ejecutar: async (a, ctx) => { const r = await ctx.memoria.buscarH(a.consulta, { limite: 10 }); ctx.memoria.usar?.('leer', r.map(m => m.id)); return r.map(m => `${m.id} · ${m.tipo} · ${m.texto}`).join('\n') || '(nada guardado sobre eso)'; },
+    ejecutar: async (a, ctx) => { const r = await ctx.memoria.buscarH(a.consulta, { limite: 10, proyecto: ctx.cwd, usuario: ctx.sesion.usuario }); ctx.memoria.usar?.('leer', r.map(m => m.id)); return r.map(m => `${m.id} · ${m.tipo} · ${m.texto}`).join('\n') || '(nada guardado sobre eso)'; },
   },
   {
-    nombre: 'olvidar', riesgo: 'lectura',
+    nombre: 'olvidar', riesgo: 'escritura',
     descripcion: 'Borra un recuerdo de la memoria permanente por su id (cuando el usuario lo pida o el dato ya no es cierto).',
     parametros: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     resumen: a => a.id,
@@ -176,7 +192,7 @@ const HERRAMIENTAS = [
     descripcion: 'Busca en las conversaciones pasadas (últimos 30 días) lo que se habló sobre algo.',
     parametros: { type: 'object', properties: { consulta: { type: 'string' }, dias: { type: 'number' } }, required: ['consulta'] },
     resumen: a => a.consulta,
-    ejecutar: async (a, ctx) => require('./memoria').buscarHistorial({ cfg: ctx.cfg, consulta: a.consulta, dias: a.dias || 30 })
+    ejecutar: async (a, ctx) => require('./memoria').buscarHistorial({ cfg: ctx.cfg, consulta: a.consulta, dias: a.dias || 30, proyecto: ctx.cwd, usuario: ctx.sesion.usuario })
       .filter(r => r.sesion !== ctx.sesion.id)
       .map(r => `[${new Date(r.t).toLocaleString('es')} · ${r.rol === 'user' ? 'usuario' : 'asistente'}] ${r.texto}`).join('\n') || '(no encontré nada)',
   },
@@ -234,7 +250,7 @@ const HERRAMIENTAS = [
     ['arrastrar', 'Arrastra con el botón izquierdo desde (elemento o x,y) hasta (elemento2 o x2,y2).', {
       elemento: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' }, elemento2: { type: 'number' }, x2: { type: 'number' }, y2: { type: 'number' } }, [], a => 'arrastrar'],
   ].map(([nombre, descripcion, properties, required, resumen]) => ({
-    nombre, riesgo: 'lectura',                         // el permiso es el del encargo (tomar_control) + los delicados, que pregunta el control
+    nombre, riesgo: 'control', permisoInterno: true,                         // el permiso es el del encargo (tomar_control) + los delicados, que pregunta el control
     descripcion: `${descripcion} Requiere tomar_control. Las coordenadas x,y son píxeles de la imagen de ver_pantalla. ` +
       'Devuelve una COMPROBACIÓN automática (ventana, foco y elementos que aparecen/desaparecen; los #id siguen valiendo). Si no cambió nada, adjunta la captura.',
     parametros: { type: 'object', required, properties: {
@@ -293,11 +309,11 @@ const HERRAMIENTAS = [
       ruta: { type: 'string' }, ref: { type: 'number' }, pestana: { type: 'number' } }, ['ruta', 'ref'], a => `${a.ruta} → [${a.ref}]`],
     ['volver', 'Vuelve a la página anterior (botón Atrás) en la pestaña.', { pestana: { type: 'number' } }, [], () => 'atrás'],
   ].map(([op, descripcion, properties, required, resumen]) => ({
-    nombre: `navegador_${op}`, riesgo: 'lectura',          // el permiso se pide por sitio dentro de core/navegador.js
+    nombre: `navegador_${op}`, riesgo: ['pestanas', 'leer', 'esperar'].includes(op) ? 'lectura' : 'control', permisoInterno: true,          // el permiso se pide por sitio dentro de core/navegador.js
     descripcion: `${descripcion} Funciona con la extensión del robot instalada en Chrome/Edge.`,
     parametros: { type: 'object', properties, required },
     resumen,
-    ejecutar: (a, ctx) => (ctx.navegador ? ctx.navegador.accion(ctx.sesion, op, a) : 'error: el navegador no está disponible aquí'),
+    ejecutar: (a, ctx) => (ctx.navegador ? (ctx.navegador.accionConEstado || ctx.navegador.accion)(ctx.sesion, op, a) : 'error: el navegador no está disponible aquí'),
   })),
   // ---------- skills (core/skills): instrucciones especializadas instaladas por el usuario ----------
   {
@@ -411,6 +427,7 @@ const HERRAMIENTAS = [
         instrucciones: { type: 'string', description: 'cuerpo del SKILL.md en Markdown: pasos numerados, comandos/herramientas usados, comprobaciones' },
         scripts: { type: 'array', description: 'opcional: archivos de apoyo', items: { type: 'object', properties: { ruta: { type: 'string', description: 'ej. scripts/limpiar.py o references/notas.md' }, contenido: { type: 'string' } }, required: ['ruta', 'contenido'] } },
         disparadores: { type: 'array', items: { type: 'string' }, description: 'opcional: palabras o /regex/ que la activan' },
+        canales: { type: 'array', items: { type: 'string' }, description: 'opcional: ["r1"] si es una skill para la Rabbit R1 (usa su pantalla, cámara o altavoz con r1_pantalla / ver_camara); solo estará disponible con la R1 conectada' },
         pruebas: { type: 'array', description: 'opcional: casos de prueba para evals', items: { type: 'object', properties: { pregunta: { type: 'string' }, debeContener: { type: 'array', items: { type: 'string' } }, criterio: { type: 'string' } }, required: ['pregunta'] } },
       },
       required: ['nombre', 'descripcion', 'instrucciones'],
@@ -438,7 +455,7 @@ const HERRAMIENTAS = [
     },
   },
   {
-    nombre: 'delegar', riesgo: 'lectura',            // lo que haga el subagente pasa por permisos igual que lo tuyo
+    nombre: 'delegar', riesgo: 'escritura',            // lo que haga el subagente pasa por permisos igual que lo tuyo
     descripcion: 'Encarga una subtarea a un SUBAGENTE independiente (contexto limpio, mismas herramientas y permisos) y devuelve su informe final. ' +
       'Si llamas a "delegar" varias veces en la MISMA respuesta, los subagentes trabajan EN PARALELO. Úsalo para trabajo largo o separable ' +
       '(investigar varias cosas a la vez, revisar varias carpetas, comparar opciones…), no para cosas triviales que haces tú en un paso. ' +
@@ -449,6 +466,8 @@ const HERRAMIENTAS = [
         tarea: { type: 'string', description: 'qué tiene que hacer y qué debe devolver, con todo el contexto' },
         nombre: { type: 'string', description: 'nombre corto para verlo en el panel, ej. "revisar logs"' },
         modelo: { type: 'string', description: 'opcional: alias o proveedor/modelo; por defecto el tuyo' },
+        perfil: { type: 'string', description: 'perfil configurado de subagente; limita modelo, herramientas y escritura' },
+        dependencias: { type: 'array', items: { type: 'string' }, description: 'ids de subagentes propios que deben haber terminado' },
         agente: { type: 'string', description: 'opcional: nombre de un agente guardado (ver "AGENTES GUARDADOS" en tus instrucciones); aporta sus instrucciones y su modelo' },
       },
       required: ['tarea', 'nombre'],
@@ -463,7 +482,7 @@ const HERRAMIENTAS = [
         tarea = `INSTRUCCIONES DEL AGENTE "${p.nombre}":\n${p.instrucciones}\n\n${a.tarea}`;
         modelo = modelo || p.modelo;
       }
-      const r = await ctx.subagentes.lanzar({ padre: ctx.sesion, tarea, nombre: a.nombre || a.agente, modelo, signal: ctx.signal });
+      const r = await ctx.subagentes.lanzar({ padre: ctx.sesion, tarea, nombre: a.nombre || a.agente, modelo, perfil: a.perfil, dependencias: a.dependencias, signal: ctx.signal });
       return r.ok ? `[subagente "${r.nombre}" terminó]\n${r.texto || '(sin informe)'}` : `error: subagente "${r.nombre}": ${r.texto}`;
     },
   },
@@ -485,4 +504,12 @@ function registrar(lista) {
 function quitar(nombres) {
   for (const n of [].concat(nombres)) { const i = HERRAMIENTAS.findIndex(x => x.nombre === n); if (i >= 0) HERRAMIENTAS.splice(i, 1); delete porNombre[n]; }
 }
-module.exports = { HERRAMIENTAS, porNombre, registrar, quitar };
+const originales = HERRAMIENTAS.slice();
+function crearRegistro() {
+  const lista = originales.slice(), porNombre = Object.create(null);
+  function registrar(hs) { for (const h of hs) { const i = lista.findIndex(x => x.nombre === h.nombre); if (i < 0) lista.push(h); else lista[i] = h; porNombre[h.nombre] = h; } }
+  function quitar(ns) { for (const n of [].concat(ns)) { const i = lista.findIndex(h => h.nombre === n); if (i >= 0) lista.splice(i, 1); delete porNombre[n]; } }
+  registrar(lista.slice());
+  return { HERRAMIENTAS: lista, porNombre, registrar, quitar };
+}
+module.exports = { HERRAMIENTAS, porNombre, registrar, quitar, crearRegistro };

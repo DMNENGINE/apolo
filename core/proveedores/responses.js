@@ -24,15 +24,17 @@ const parseArgs = s => { if (s && typeof s === 'object') return s; try { return 
 module.exports = (cfg) => {
   const presets = cfg.presets || [];
   const api = {
-    async chat({ model, system, mensajes, herramientas, signal, formatoJSON }) {
+    async chat({ model, system, mensajes, herramientas, signal, formatoJSON, onDelta, maxTokens }) {
       if (!model || model === 'auto') model = cfg.porDefecto || presets[0] || cfg.modelos?.[0];
       const body = { input: aEntrada(mensajes) };
+      if (onDelta && cfg.streaming !== false) body.stream = true;
+      if (maxTokens) body.max_output_tokens = maxTokens;
       if (presets.includes(model)) body.preset = model; else body.model = model;
       if (system) body.instructions = formatoJSON ? `${system}\n\nResponde solo con JSON.` : system;
       const tools = [...(cfg.herramientasNativas || []).map(t => ({ ...t }))];
       if (herramientas?.length) tools.push(...herramientas.map(h => ({ type: 'function', name: h.nombre, description: h.descripcion, parameters: h.parametros })));
       if (tools.length) body.tools = tools;
-      const j = await pedir(`${cfg.baseUrl}/responses`, { headers: cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}, body, signal });
+      const j = await pedir(`${cfg.baseUrl}/responses`, { headers: cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}, body, signal, tipoStream: 'responses', onDelta });
       const salida = j.output || [];
       const texto = j.output_text || salida.filter(o => o.type === 'message').flatMap(o => o.content || []).filter(c => c.type === 'output_text' || c.text).map(c => c.text).join('');
       const toolCalls = salida.filter(o => o.type === 'function_call').map((c, i) => ({ id: c.call_id || c.id || `call_${Date.now()}_${i}`, name: c.name, args: parseArgs(c.arguments) }));

@@ -8,7 +8,6 @@ const os = require('os');
 const path = require('path');
 const M = require('../plugins/manifest');
 const { crear } = require('../sdk/crear');
-const H = require('../herramientas');
 
 const tmp = p => fs.mkdtempSync(path.join(os.tmpdir(), p));
 const escanerFalso = { async escanear(dir) {
@@ -73,7 +72,7 @@ test('plantilla + instalar desde carpeta (desactivado y escaneado) + herramienta
   const r = await n.plugins.instalar(origen);
   assert.strictEqual(r.plugin.nombre, 'demo'); assert.strictEqual(r.plugin.activo, false); assert.strictEqual(r.plugin.escaneo.nivel, 'verde');
   assert.ok(fs.existsSync(path.join(n.cfg.dir, 'plugins', 'demo', 'index.js')));
-  assert.ok(!H.HERRAMIENTAS.some(h => h.nombre === 'demo_eco'));            // instalado ≠ activo
+  assert.ok(!n.herramientas.HERRAMIENTAS.some(h => h.nombre === 'demo_eco'));            // instalado ≠ activo
   await assert.rejects(n.plugins.instalar(origen), /ya está instalado/);
   const a = await n.plugins.activar('demo', true);
   assert.strictEqual(a.estado, 'activo'); assert.deepStrictEqual(a.registrados.herramientas, ['demo_eco']); assert.deepStrictEqual(a.registrados.comandos, ['demo']);
@@ -88,7 +87,7 @@ test('plantilla + instalar desde carpeta (desactivado y escaneado) + herramienta
   assert.strictEqual(await n.plugins.comando('demo', 'qué tal'), 'demo dice: qué tal');
   // desactivar: la herramienta desaparece
   await n.plugins.activar('demo', false);
-  assert.ok(!H.HERRAMIENTAS.some(h => h.nombre === 'demo_eco'));
+  assert.ok(!n.herramientas.HERRAMIENTAS.some(h => h.nombre === 'demo_eco'));
   assert.strictEqual(n.plugins.lista()[0].estado, 'parado');
   await n.plugins.borrar('demo');
   assert.ok(!fs.existsSync(path.join(n.cfg.dir, 'plugins', 'demo'))); assert.deepStrictEqual(n.plugins.lista(), []);
@@ -114,7 +113,7 @@ module.exports = require('@apolo/sdk').definirPlugin({ activar(apolo) {
   });
   await n.plugins.instalar(path.join(raiz, 'espia'));
   await n.plugins.activar('espia', true);
-  const r = JSON.parse(await H.porNombre.espiar.ejecutar({ dir }, {}));
+  const r = JSON.parse(await n.herramientas.porNombre.espiar.ejecutar({ dir }, {}));
   assert.notStrictEqual(r.pid, process.pid);
   assert.ok(!r.env.includes('OPENAI_API_KEY_PRUEBA_PL')); assert.doesNotMatch(r.envTexto, /sk-/);
   assert.deepStrictEqual(r.apoloConfig, { saludo: 'hola' });
@@ -143,21 +142,21 @@ test('se cae → se reinicia con backoff; si sigue cayéndose queda ROTO', async
   });
   await n.plugins.instalar(path.join(raiz, 'fragil'));
   await n.plugins.activar('fragil', true);
-  const pid1 = await H.porNombre.pid_fragil.ejecutar({}, {});
+  const pid1 = await n.herramientas.porNombre.pid_fragil.ejecutar({}, {});
   const reactivado = esperar(n.bus, e => e.tipo === 'plugins' && e.accion === 'activo' && e.nombre === 'fragil');
-  await assert.rejects(H.porNombre.romper.ejecutar({}, {}), /se cayó/);
+  await assert.rejects(n.herramientas.porNombre.romper.ejecutar({}, {}), /se cayó/);
   await reactivado;
-  const pid2 = await H.porNombre.pid_fragil.ejecutar({}, {});
+  const pid2 = await n.herramientas.porNombre.pid_fragil.ejecutar({}, {});
   assert.notStrictEqual(pid1, pid2);
   assert.strictEqual(n.plugins.lista()[0].reinicios, 1);
   // ahora muere siempre al arrancar → 3 reinicios y ROTO
   n.cfg.plugins = { fragil: { morir: true } };
   const roto = esperar(n.bus, e => e.tipo === 'plugins' && e.accion === 'roto' && e.nombre === 'fragil', 15000);
-  await assert.rejects(H.porNombre.romper.ejecutar({}, {}), /se cayó/);
+  await assert.rejects(n.herramientas.porNombre.romper.ejecutar({}, {}), /se cayó/);
   await roto;
   const p = n.plugins.lista()[0];
   assert.strictEqual(p.estado, 'roto'); assert.ok(p.roto?.motivo); assert.strictEqual(p.reinicios, 3);
-  assert.ok(!H.HERRAMIENTAS.some(h => h.nombre === 'pid_fragil' && h.disponible()));
+  assert.ok(!n.herramientas.HERRAMIENTAS.some(h => h.nombre === 'pid_fragil' && h.disponible()));
   // reactivar a mano lo repara
   n.cfg.plugins = {};
   const a = await n.plugins.activar('fragil', true);
@@ -187,7 +186,7 @@ test('permisos: lo no declarado se pregunta siempre; lo declarado no; riesgo dec
   await n.plugins.activar('curioso', true);
   const pedidos = [];
   n.bus.on('permiso', req => { pedidos.push(req); n.permisos.resolver(req.id, /red:/.test(req.resumen) ? 'deny' : 'allow'); });
-  const r = JSON.parse(await H.porNombre.mirar.ejecutar({}, {}));
+  const r = JSON.parse(await n.herramientas.porNombre.mirar.ejecutar({}, {}));
   assert.strictEqual(r.declarado, true);
   assert.match(r.red, /no está declarado.*no lo permitió/);
   assert.strictEqual(r.memoria.accion, 'creada');
@@ -196,13 +195,13 @@ test('permisos: lo no declarado se pregunta siempre; lo declarado no; riesgo dec
   assert.ok(pedidos.every(p => p.origen === 'plugin curioso' && p.peligro));
   assert.match(pedidos[0].resumen, /red:127\.0\.0\.1/); assert.match(pedidos[1].resumen, /memoria/);
   // otra vez: se vuelve a preguntar (sin "siempre")
-  await H.porNombre.mirar.ejecutar({}, {});
+  await n.herramientas.porNombre.mirar.ejecutar({}, {});
   assert.strictEqual(pedidos.length, 4);
   // riesgo: el del manifest (sin riesgo → escritura) aunque el código diga lectura → pasa por permisos normales
   const s = n.sesiones.crear({ canal: 'test' });
-  const p = await n.permisos.pedir({ h: H.porNombre.tocar, args: {}, sesion: s });
+  const p = await n.permisos.pedir({ h: n.herramientas.porNombre.tocar, args: {}, sesion: s });
   assert.strictEqual(p.ok, true); assert.strictEqual(pedidos.at(-1).herramienta, 'tocar');
-  assert.ok((await n.permisos.pedir({ h: H.porNombre.mirar, args: {}, sesion: s })).ok);
+  assert.ok((await n.permisos.pedir({ h: n.herramientas.porNombre.mirar, args: {}, sesion: s })).ok);
   assert.strictEqual(pedidos.length, 5);                                      // mirar (lectura declarada) no preguntó
   await n.plugins.cerrar();
   // registrar algo no declarado en "aporta" → no arranca
@@ -229,6 +228,7 @@ test('API del daemon: /v1/plugins (listar, instalar, activar, recargar, comando,
   let r = await api('POST', '/plugins/instalar', { fuente: origen });
   assert.strictEqual(r.status, 200); assert.strictEqual(r.j.plugin.activo, false);
   r = await api('PATCH', '/plugins/api-demo', { activo: true });
+  assert.strictEqual(r.status, 200, JSON.stringify(r.j));
   assert.strictEqual(r.j.plugin.estado, 'activo');
   r = await api('GET', '/plugins');
   assert.strictEqual(r.j.plugins.length, 1); assert.deepStrictEqual(r.j.comandos.map(c => c.nombre), ['api_demo']); assert.strictEqual(r.j.sdk, '1.0.0');

@@ -33,7 +33,7 @@ function crearMemoria({ cfg, embedder = null }) {
   const fv = path.join(cfg.dir, 'memoria_vec.json');
   let lista = [], mtime = 0;
   const sync = () => { try { const m = fs.statSync(f).mtimeMs; if (m !== mtime) { lista = JSON.parse(fs.readFileSync(f, 'utf8')); mtime = m; } } catch { } };
-  const guardar = () => { fs.writeFileSync(f, JSON.stringify(lista, null, 2)); try { mtime = fs.statSync(f).mtimeMs; } catch { } };
+  const guardar = () => { require('./persistencia').escribirAtomico(f, JSON.stringify(lista, null, 2)); try { mtime = fs.statSync(f).mtimeMs; } catch { } };
   sync();
 
   // vectores: { modelo, v: { id: { h: hash del texto, e: base64 Float32 } } }; si cambia el modelo se rehacen
@@ -58,7 +58,7 @@ function crearMemoria({ cfg, embedder = null }) {
         lote.forEach((m, j) => { vecs.v[m.id] = { h: hash(m.texto), e: aBase64(es[j]) }; });
         cambio = true;
       }
-      if (cambio) fs.writeFileSync(fv, JSON.stringify(vecs));
+      if (cambio) require('./persistencia').escribirAtomico(fv, JSON.stringify(vecs));
       return faltan.length;
     })().finally(() => { indexando = null; });
     return indexando;
@@ -67,17 +67,20 @@ function crearMemoria({ cfg, embedder = null }) {
   indexarLuego();
 
   // guarda o actualiza; si ya hay uno casi igual, lo reemplaza en vez de duplicar
-  function recordar({ texto, tipo = 'hecho', reemplaza, origen, nuevo = false }) {
+  function recordar({ texto, tipo = 'hecho', reemplaza, origen, nuevo = false }, procedencia) {
     sync();
     texto = String(texto || '').trim();
     if (!texto) throw new Error('texto vacío');
     if (texto.length > 600) throw new Error('demasiado largo: guarda un dato concreto (máx. 600 caracteres)');
     if (SECRETO.test(texto)) throw new Error('parece una contraseña o clave: no se guardan secretos en la memoria');
     if (!TIPOS.includes(tipo)) tipo = 'hecho';
-    let m = reemplaza && lista.find(x => x.id === reemplaza);
-    if (!m && !nuevo) m = lista.find(x => x.tipo === tipo && !x.historico && parecido(x.texto, texto) >= 0.6);   // lo histórico (de antes) no se pisa: es su continuidad
-    if (m) { Object.assign(m, { texto, tipo, actualizada: Date.now(), origen: origen || m.origen }); guardar(); indexarLuego(); usar('escribir', [m.id]); return { ...m, accion: 'actualizada' }; }
-    m = { id: crypto.randomUUID().slice(0, 6), texto, tipo, creada: Date.now(), actualizada: Date.now(), usos: 0, origen };
+    const p = procedencia ? { clase: ['usuario', 'agente', 'externa', 'sistema'].includes(procedencia.clase) ? procedencia.clase : 'externa', proyecto: procedencia.proyecto && path.resolve(procedencia.proyecto), usuario: procedencia.usuario, sesion: procedencia.sesion, observada: Date.now(), confianza: procedencia.clase === 'usuario' ? 1 : procedencia.clase === 'agente' ? 0.5 : 0, vigenteHasta: Number.isFinite(procedencia.vigenteHasta) ? procedencia.vigenteHasta : undefined } : undefined;
+    const compatible = x => (!p && !x.procedencia) || (p && x.procedencia?.clase === p.clase && x.procedencia?.proyecto === p.proyecto && x.procedencia?.usuario === p.usuario);
+    let m = reemplaza && lista.find(x => x.id === reemplaza && (compatible(x) || (!x.procedencia && p && !p.usuario && ['usuario', 'agente'].includes(p.clase))));
+    if (reemplaza && !m) throw new Error('recuerdo fuera del alcance o de otra procedencia');
+    if (!m && !nuevo) m = lista.find(x => compatible(x) && x.tipo === tipo && !x.historico && parecido(x.texto, texto) >= 0.6);
+    if (m) { if (m.texto !== texto) m.versiones = [...(m.versiones || []), { texto: m.texto, actualizada: m.actualizada, procedencia: m.procedencia }]; Object.assign(m, { texto, tipo, actualizada: Date.now(), origen: origen || m.origen, ...(p ? { procedencia: p } : {}) }); guardar(); indexarLuego(); usar('escribir', [m.id]); return { ...m, accion: 'actualizada' }; }
+    m = { id: crypto.randomUUID().slice(0, 6), texto, tipo, creada: Date.now(), actualizada: Date.now(), usos: 0, origen, ...(p ? { procedencia: p } : {}) };
     lista.push(m); guardar(); indexarLuego(); usar('escribir', [m.id]);
     return { ...m, accion: 'creada' };
   }
@@ -101,26 +104,27 @@ function crearMemoria({ cfg, embedder = null }) {
       return s;
     });
   }
-  const bonus = m => (1 + 0.1 * Math.min(m.usos || 0, 10)) * ((Date.now() - m.actualizada) / 86400_000 < 30 ? 1.1 : 1);
-  const candidatos = excluirPerfil => lista.filter(m => !(excluirPerfil && m.tipo === 'perfil'));
+  const bonus = m => ((Date.now() - m.actualizada) / 86400_000 < 30 ? 1.1 : 1);
+  const visible = (m, o = {}) => !m.procedencia || ((!m.procedencia.vigenteHasta || m.procedencia.vigenteHasta > Date.now()) && !['externa', 'sistema'].includes(m.procedencia.clase) && (!m.procedencia.proyecto || (o.proyecto && path.resolve(o.proyecto) === m.procedencia.proyecto)) && (!m.procedencia.usuario || o.usuario === m.procedencia.usuario));
+  const candidatos = (excluirPerfil, o) => lista.filter(m => !(excluirPerfil && m.tipo === 'perfil') && visible(m, o));
 
   // solo léxica, síncrona
-  function buscar(consulta, { limite = 6, excluirPerfil = false } = {}) {
+  function buscar(consulta, { limite = 6, excluirPerfil = false, ...alcance } = {}) {
     sync();
-    const docs = candidatos(excluirPerfil), lex = lexico(consulta, docs);
+    const docs = candidatos(excluirPerfil, alcance), lex = lexico(consulta, docs);
     return docs.map((m, i) => ({ m, s: lex[i] * bonus(m) }))
       .filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, limite).map(x => x.m);
   }
 
   // híbrida: significado (coseno) + palabras; si no hay embeddings o fallan, cae a la léxica
-  async function buscarH(consulta, { limite = 6, excluirPerfil = false, timeout = 4000 } = {}) {
-    if (!embedder || !String(consulta || '').trim()) return buscar(consulta, { limite, excluirPerfil });
+  async function buscarH(consulta, { limite = 6, excluirPerfil = false, timeout = 4000, ...alcance } = {}) {
+    if (!embedder || !String(consulta || '').trim()) return buscar(consulta, { limite, excluirPerfil, ...alcance });
     let qv;
     try { [qv] = await embedder.embeber([consulta], { tipo: 'consulta', timeout }); }
-    catch { return buscar(consulta, { limite, excluirPerfil }); }
+    catch { return buscar(consulta, { limite, excluirPerfil, ...alcance }); }
     sync();
     if (lista.some(m => vecs.v[m.id]?.h !== hash(m.texto))) await indexar().catch(() => { });
-    const docs = candidatos(excluirPerfil), lex = lexico(consulta, docs);
+    const docs = candidatos(excluirPerfil, alcance), lex = lexico(consulta, docs);
     const maxLex = Math.max(0, ...lex) || 1;
     return docs.map((m, i) => {
       const v = vector(m.id), sem = v ? coseno(qv, v) : 0;
@@ -135,10 +139,10 @@ function crearMemoria({ cfg, embedder = null }) {
   const alUsar = f => { oyenteUso = f; };
 
   // bloque para el system prompt: perfil siempre + lo relevante para el mensaje actual
-  async function contexto(mensaje, { maxChars = 2500 } = {}) {
+  async function contexto(mensaje, { maxChars = 2500, ...alcance } = {}) {
     sync();
-    const perfil = lista.filter(m => m.tipo === 'perfil');
-    const relevantes = await buscarH(mensaje, { limite: 8, excluirPerfil: true });
+    const perfil = lista.filter(m => m.tipo === 'perfil' && visible(m, alcance));
+    const relevantes = await buscarH(mensaje, { limite: 8, excluirPerfil: true, ...alcance });
     if (relevantes.length) { for (const m of relevantes) m.usos = (m.usos || 0) + 1; guardar(); }
     const lineas = [], leidos = [];
     let n = 0;
@@ -166,25 +170,8 @@ function crearMemoria({ cfg, embedder = null }) {
 }
 
 // búsqueda en conversaciones pasadas (sesiones jsonl)
-function buscarHistorial({ cfg, consulta, dias = 30, limite = 8 }) {
-  const dir = path.join(cfg.dir, 'sesiones');
-  const q = [...new Set(tokens(consulta))].map(raiz);
-  if (!q.length) return [];
-  const desde = Date.now() - dias * 86400_000, res = [];
-  let archivos = []; try { archivos = fs.readdirSync(dir).filter(x => x.endsWith('.jsonl')); } catch { }
-  for (const a of archivos) {
-    const fp = path.join(dir, a);
-    try { if (fs.statSync(fp).mtimeMs < desde) continue; } catch { continue; }
-    for (const l of fs.readFileSync(fp, 'utf8').split('\n')) {
-      if (!l) continue;
-      let m; try { m = JSON.parse(l); } catch { continue; }
-      if ((m.role !== 'user' && m.role !== 'assistant') || !m.content || (m.t && m.t < desde)) continue;
-      const t = new Set(tokens(m.content).map(raiz));
-      const s = q.filter(w => t.has(w)).length;
-      if (s) res.push({ s, t: m.t || 0, rol: m.role, sesion: a.replace('.jsonl', ''), texto: m.content.slice(0, 300) });
-    }
-  }
-  return res.sort((a, b) => b.s - a.s || b.t - a.t).slice(0, limite);
+function buscarHistorial({ cfg, consulta, dias = 30, limite = 8, proyecto, usuario }) {
+  return require('./indice-historial').buscar({ cfg, consulta, dias, limite, proyecto, usuario });
 }
 
 module.exports = { crearMemoria, buscarHistorial, parecido, tokens, normal, raiz, TIPOS, SECRETO };

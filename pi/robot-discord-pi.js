@@ -5,7 +5,7 @@
 //   pc.json      : { "url": "http://<ip-del-pc>:47900", "token": "<token del núcleo>" }  (modo 600)
 const fs = require('fs');
 const path = require('path');
-const { createDiscord } = require('./bot-discord');
+const { createDiscord } = require('./cargar-bot').cargarBot();
 
 const pc = JSON.parse(fs.readFileSync(path.join(__dirname, 'pc.json'), 'utf8'));
 const APAGADO = '💤 El PC está apagado o el robot no está abierto. Cuando vuelva, pídemelo otra vez.';

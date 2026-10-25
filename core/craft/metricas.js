@@ -1,11 +1,13 @@
-// Cómo le va a cada clip publicado: una vez al día lee lo último del canal en YouTube (API si está conectado, si no yt-dlp)
-// y en TikTok (yt-dlp, perfil público), empareja cada publicación con su clip (por id si lo subió APOLO, por enlace puesto
+// Cómo le va a cada clip publicado: una vez al día lee lo último del canal en YouTube (API si está conectado, si no yt-dlp),
+// en TikTok (yt-dlp, perfil público) y en Facebook e Instagram (API Graph de Meta con el token de la página), empareja cada publicación con su clip (por id si lo subió APOLO, por enlace puesto
 // a mano en Revisión, o por fecha + duración + título con el modelo) y saca lo aprendido: qué estilos, diseños, tipos de
 // momento, duraciones y horas rinden más que la media del canal. Eso vuelve como pistas al elegir estilo, título y hora.
 'use strict';
 const { execFile } = require('child_process');
 
 const DIA = 864e5;
+const PLATS = ['youtube', 'tiktok', 'facebook', 'instagram'];
+const GRAPH = 'https://graph.facebook.com/v22.0';
 const norm = s => String(s || '').toLocaleLowerCase('es').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/#\S+/g, '').replace(/[^\p{L}\d ]/gu, ' ').split(/\s+/).filter(w => w.length > 2);
 const parecido = (a, b) => { const A = new Set(norm(a)), B = new Set(norm(b)); if (!A.size || !B.size) return 0; let n = 0; for (const w of A) if (B.has(w)) n++; return n / Math.min(A.size, B.size); };
 const mediana = xs => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : 0; };
@@ -20,7 +22,7 @@ function emparejar(clips, videos) {
   const usados = new Set(), out = {};
   const clave = v => `${v.plataforma}:${v.id}`;
   for (const c of clips) for (const v of videos) {
-    const conocido = (v.plataforma === 'youtube' && c.youtube?.id === v.id) || c.vinculos?.[v.plataforma] === v.id;
+    const conocido = (v.plataforma === 'youtube' && c.youtube?.id === v.id) || c.vinculos?.[v.plataforma] === v.id || (v.codigo && c.vinculos?.[v.plataforma] === v.codigo);
     if (conocido && !usados.has(clave(v))) { (out[c.id] = out[c.id] || {})[v.plataforma] = { ...v, como: 'id' }; usados.add(clave(v)); }
   }
   const candidatos = [];
@@ -28,8 +30,9 @@ function emparejar(clips, videos) {
     const desde = (c.decidido || c.editado || 0) - 2 * 3600e3, d = durClip(c);
     for (const v of videos) {
       if (usados.has(clave(v)) || out[c.id]?.[v.plataforma] || !v.fecha || v.fecha < desde || v.fecha > desde + 30 * DIA) continue;
-      const dd = Math.abs((v.duracion || 0) - d);
       const t = Math.max(parecido(v.titulo, c.gancho), parecido(v.titulo, c.textos?.es?.titulo), parecido(v.titulo, c.textos?.en?.titulo));
+      if (!v.duracion) { if (t >= 0.6) candidatos.push({ c, v, p: 1.5 + t }); continue; }   // Instagram no da la duración: solo por el texto
+      const dd = Math.abs((v.duracion || 0) - d);
       if (dd <= 1.5 && t >= 0.5) candidatos.push({ c, v, p: 2 + t - dd / 10 });
       else if (dd <= 1.5) candidatos.push({ c, v, p: 1 - dd / 10, soloDuracion: true });
     }
@@ -55,7 +58,7 @@ function cruzar(clips, pares, libres) {
   for (const c of clips) {
     const p = pares[c.id]; if (!p) continue;
     const desde = (c.decidido || c.editado || 0) - 2 * 3600e3;
-    for (const [plat, v] of Object.entries(p)) for (const otra of ['youtube', 'tiktok']) {
+    for (const [plat, v] of Object.entries(p)) for (const otra of PLATS) {
       if (otra === plat || p[otra] || !v.duracion) continue;
       const cand = libres.filter(x => x.plataforma === otra && x.fecha >= desde && x.fecha <= desde + 30 * DIA && Math.abs((x.duracion || 0) - v.duracion) <= 1.5
         && !Object.values(pares).some(o => o[otra]?.id === x.id));
@@ -70,16 +73,16 @@ function cruzar(clips, pares, libres) {
 function aprender(clips, canal = {}, { zona } = {}) {
   const horaEn = t => +new Intl.DateTimeFormat('en-US', { timeZone: zona || undefined, hourCycle: 'h23', hour: '2-digit' }).format(new Date(t)) % 24;
   const base = {}, filas = [];
-  for (const p of ['youtube', 'tiktok']) base[p] = mediana((canal[p] || []).map(v => v.vistas).filter(x => x > 0)) || null;
+  for (const p of PLATS) base[p] = mediana((canal[p] || []).map(v => v.vistas).filter(x => x > 0)) || null;
   const retBase = mediana(clips.map(c => c.metricas?.youtube?.retencion).filter(x => x > 0)) || null;
   for (const c of clips) {
     const m = c.metricas || {}, partes = [];
-    for (const p of ['youtube', 'tiktok']) if (m[p]?.vistas > 0 && base[p]) partes.push(Math.log2(m[p].vistas / base[p]));
+    for (const p of PLATS) if (m[p]?.vistas > 0 && base[p]) partes.push(Math.log2(m[p].vistas / base[p]));
     if (!partes.length) continue;
     let r = partes.reduce((a, b) => a + b, 0) / partes.length;
     if (retBase && m.youtube?.retencion > 0) r += 0.5 * Math.log2(m.youtube.retencion / retBase);
-    const fecha = m.youtube?.fecha || m.tiktok?.fecha;
-    filas.push({ c, r, vistas: (m.youtube?.vistas || 0) + (m.tiktok?.vistas || 0), hora: fecha ? horaEn(fecha) : null });
+    const fecha = PLATS.map(p => m[p]?.fecha).find(Boolean);
+    filas.push({ c, r, vistas: PLATS.reduce((s, p) => s + (m[p]?.vistas || 0), 0), hora: fecha ? horaEn(fecha) : null });
   }
   const grupo = f => {
     const g = {};
@@ -117,7 +120,8 @@ function mejoresHoras(ap, delKit) {
   return hs.length >= 2 ? hs : delKit;
 }
 
-function crearMetricas({ python = 'python', ejecutar = execFile, youtube = null, generarJSON = null, modelo = null, log = () => { } } = {}) {
+// meta: { config() → { token, pagina, instagram } | null } — token de página (no caduca) guardado fuera del repo por lotes.js
+function crearMetricas({ python = 'python', ejecutar = execFile, youtube = null, generarJSON = null, modelo = null, log = () => { }, meta = null, pedir = globalThis.fetch } = {}) {
   const sh = (args, timeout = 240_000) => new Promise((ok, mal) => ejecutar(python, ['-m', 'yt_dlp', '--no-warnings', ...args], { windowsHide: true, timeout, maxBuffer: 64 << 20, encoding: 'utf8' },
     (e, out, err) => (e ? mal(new Error(String(err || e.message).trim().split('\n').slice(-2).join(' ').slice(0, 300))) : ok(String(out || '')))));
   const reintentar = async (fn, n = 3) => { let ultimo; for (let i = 0; i < n; i++) { try { return await fn(); } catch (e) { ultimo = e; await new Promise(ok => setTimeout(ok, 5000 * (i + 1))); } } throw ultimo; };
@@ -149,10 +153,50 @@ function crearMetricas({ python = 'python', ejecutar = execFile, youtube = null,
       fecha: e.timestamp ? e.timestamp * 1000 : null, duracion: e.duration || 0, vistas: e.view_count || 0, likes: e.like_count || 0, comentarios: e.comment_count || 0, compartidos: e.repost_count || 0 }));
   }
 
+  // Graph API de Meta (Facebook / Instagram)
+  async function graph(ruta, token, q = {}) {
+    const u = new URL(GRAPH + ruta); for (const [k, v] of Object.entries({ ...q, access_token: token })) u.searchParams.set(k, v);
+    const r = await pedir(u.toString()); const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(`Meta: ${j.error?.message || r.status}`.slice(0, 240));
+    return j;
+  }
+  async function deFacebook(n = 40) {
+    const cf = meta?.config(); if (!cf?.token || !cf?.pagina) return [];
+    const campos = 'id,title,description,created_time,length,permalink_url,views,likes.summary(true).limit(0),comments.summary(true).limit(0)';
+    const vistos = new Map();
+    for (const ruta of [`/${cf.pagina}/video_reels`, `/${cf.pagina}/videos`]) {
+      try { for (const v of (await graph(ruta, cf.token, { fields: campos, limit: n })).data || []) if (!vistos.has(v.id)) vistos.set(v.id, v); }
+      catch (e) { if (ruta.endsWith('/videos')) throw e; log('[metricas] fb reels', e.message); }
+    }
+    const out = [];
+    for (const v of vistos.values()) {
+      let vistas = v.views || 0;
+      if (!vistas) try { vistas = ((await graph(`/${v.id}/video_insights`, cf.token, { metric: 'blue_reels_play_count' })).data || [])[0]?.values?.[0]?.value || 0; } catch { }
+      out.push({ plataforma: 'facebook', id: String(v.id), url: v.permalink_url ? (v.permalink_url.startsWith('http') ? v.permalink_url : `https://www.facebook.com${v.permalink_url}`) : `https://www.facebook.com/${v.id}`,
+        titulo: v.title || v.description || '', fecha: v.created_time ? Date.parse(v.created_time) : null, duracion: v.length || 0, vistas,
+        likes: v.likes?.summary?.total_count || 0, comentarios: v.comments?.summary?.total_count || 0 });
+    }
+    return out;
+  }
+  async function deInstagram(n = 40) {
+    const cf = meta?.config(); if (!cf?.token || !cf?.instagram) return [];
+    const lista = (await graph(`/${cf.instagram}/media`, cf.token, { fields: 'id,caption,media_type,media_product_type,timestamp,permalink,like_count,comments_count', limit: n })).data || [];
+    const out = [];
+    for (const m of lista.filter(m => m.media_type === 'VIDEO' || m.media_product_type === 'REELS')) {
+      const ins = {};
+      try { for (const x of (await graph(`/${m.id}/insights`, cf.token, { metric: 'views,shares,saved' })).data || []) ins[x.name] = x.values?.[0]?.value ?? x.total_value?.value ?? 0; }
+      catch (e) { log('[metricas] ig insights', m.id, e.message); }
+      out.push({ plataforma: 'instagram', id: String(m.id), codigo: (m.permalink || '').match(/\/(?:reel|p)\/([\w-]+)/)?.[1] || null, url: m.permalink || '',
+        titulo: (m.caption || '').split('\n')[0], fecha: m.timestamp ? Date.parse(m.timestamp) : null, duracion: 0, vistas: ins.views || 0,
+        likes: m.like_count || 0, comentarios: m.comments_count || 0, compartidos: ins.shares || 0, guardados: ins.saved || 0 });
+    }
+    return out;
+  }
+
   // lo que la regla no pudo decidir (p. ej. el streamer lo recortó y le puso otro título, en inglés), con el modelo
   async function emparejarConModelo(clips, libres, pares) {
     if (!generarJSON) return 0;
-    const sin = clips.filter(c => !pares[c.id]?.youtube || !pares[c.id]?.tiktok);
+    const sin = clips.filter(c => PLATS.some(p => !pares[c.id]?.[p]));
     const cand = libres.filter(v => v.fecha && sin.some(c => v.fecha >= (c.decidido || 0) - 2 * 3600e3 && v.fecha <= (c.decidido || 0) + 30 * DIA));
     if (!sin.length || !cand.length) return 0;
     const r = await generarJSON({ modelo: modelo?.(), system: 'Emparejas clips editados con las publicaciones de redes que salieron de ellos. Solo emparejas si es claramente el mismo clip.',
@@ -170,19 +214,41 @@ function crearMetricas({ python = 'python', ejecutar = execFile, youtube = null,
     return n;
   }
 
-  // una pasada: devuelve { canal: {youtube:[...], tiktok:[...]}, pares, errores }
+  // una pasada: devuelve { canal: {youtube:[...], tiktok:[...], facebook:[...], instagram:[...]}, pares, errores }
   async function medir(clips, cuentas = {}) {
     const canal = {}, errores = [];
-    for (const [p, fn] of [['youtube', deYouTube], ['tiktok', deTikTok]]) {
-      try { canal[p] = await fn(cuentas[p]); } catch (e) { canal[p] = []; errores.push(`${p}: ${e.message}`); log('[metricas]', p, e.message); }
+    for (const [p, fn] of [['youtube', () => deYouTube(cuentas.youtube)], ['tiktok', () => deTikTok(cuentas.tiktok)], ['facebook', () => deFacebook()], ['instagram', () => deInstagram()]]) {
+      try { canal[p] = await fn(); } catch (e) { canal[p] = []; errores.push(`${p}: ${e.message}`); log('[metricas]', p, e.message); }
     }
-    const todos = [...canal.youtube, ...canal.tiktok];
+    const todos = PLATS.flatMap(p => canal[p]);
     const { pares, libres } = emparejar(clips, todos);
     try { if (await emparejarConModelo(clips, libres, pares)) cruzar(clips, pares, libres); } catch (e) { errores.push(`emparejar: ${e.message}`); }
     return { canal, pares, errores };
   }
 
-  return { medir, deYouTube, deTikTok };
+  return { medir, deYouTube, deTikTok, deFacebook, deInstagram, graph };
 }
 
-module.exports = { crearMetricas, emparejar, cruzar, aprender, pistas, mejoresHoras, parecido, durClip };
+// conectar Meta: con el token de usuario (de Graph API Explorer) y, si se dan, el id y el secreto de la app (para que no caduque),
+// saca el token de la página y su cuenta de Instagram profesional. Devuelve lo que se guarda (con token) y lo que se enseña.
+async function conectarMeta({ token, appId, appSecret, pagina } = {}, pedir = globalThis.fetch) {
+  const g = async (ruta, q) => { const u = new URL(GRAPH + ruta); for (const [k, v] of Object.entries(q)) u.searchParams.set(k, v); const r = await pedir(u.toString()); const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw Object.assign(new Error(`Meta: ${j.error?.message || r.status}`.slice(0, 240)), { status: 400 }); return j; };
+  let t = String(token || '').trim(); if (!t) throw Object.assign(new Error('falta el token'), { status: 400 });
+  if (appId && appSecret) t = (await g('/oauth/access_token', { grant_type: 'fb_exchange_token', client_id: appId, client_secret: appSecret, fb_exchange_token: t })).access_token || t;
+  let pg;
+  try {
+    const cuentas = (await g('/me/accounts', { fields: 'id,name,access_token,instagram_business_account{id,username}', access_token: t })).data || [];
+    pg = cuentas.find(x => x.id === String(pagina) || x.name === pagina) || cuentas[0];
+    if (!pg) throw Object.assign(new Error('ese usuario no administra ninguna página de Facebook'), { status: 400 });
+  } catch (e) {                                          // quizá ya es un token de página
+    const yo = await g('/me', { fields: 'id,name,instagram_business_account{id,username}', access_token: t }).catch(() => null);
+    if (!yo) throw e;
+    pg = { ...yo, access_token: t };
+  }
+  const ig = pg.instagram_business_account;
+  return { guardar: { token: pg.access_token, pagina: pg.id, nombre: pg.name, instagram: ig?.id || null, ig_usuario: ig?.username || null, conectado: Date.now(), largo: !!(appId && appSecret) },
+    publico: { pagina: pg.name, instagram: ig?.username || null } };
+}
+
+module.exports = { crearMetricas, conectarMeta, PLATS, emparejar, cruzar, aprender, pistas, mejoresHoras, parecido, durClip };
