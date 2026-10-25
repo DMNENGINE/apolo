@@ -12,7 +12,7 @@ const NUCLEO = new Set(['shell', 'leer_archivo', 'listar', 'escribir_archivo', '
 
 const CRAFT = ['filmcraft', 'effectcraft', 'photocraft', 'lightcraft', 'vectorcraft', 'cadcraft', 'figcraft', 'designcraft', 'deckcraft', 'wordcraft', 'gridcraft', 'pdfcraft', 'soundcraft'];
 const GRUPOS = {
-  trading: { d: 'DMN Trader: mercado, operar en simulado, backtest, enjambre y su autopiloto (paquete dmn-trader)',
+  trading: { d: 'DMN Trader: mercado, operar en simulado, backtest, enjambre y su autopiloto, y DINERO REAL de la wallet GMGN a través del piloto (trader_real_estado / trader_real_operar; nunca gmgn-cli swap) (paquete dmn-trader)',
     nombres: ['trading_autopiloto'], prefijos: ['trader_'],
     palabras: /trad(er|ing|ear)|bolsa|acci[oó]n(es)? de|cripto|bitcoin|btc|eth\b|forex|cotizaci[oó]n|precio de|mi cartera|posici[oó]n|stop.?loss|take.?profit|backtest|enjambre|autopiloto|memecoin|polymarket/i },
   pantalla: { d: 'ver la pantalla del PC y usar ratón/teclado en cualquier app (clic, escribir, teclas, arrastrar, grabar una demostración)',
