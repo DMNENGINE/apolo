@@ -223,3 +223,30 @@ test('lotes: "editar ya" pasa un clip delante de la cola y corta lo que se estab
   await assert.rejects(async () => l.yaMismo(a.id), /no está esperando/);
   assert.ok(soltar && c);
 });
+
+test('lotes: "editar ya" con la edición en pausa edita solo ese clip y sigue en pausa', async () => {
+  const { EventEmitter } = require('events');
+  const { crearLotes } = require('../craft/lotes');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotes-ya-pausa-'));
+  const ejecutar = (cmd, args, o, cb) => { if (/ffmpeg/.test(cmd)) fs.writeFileSync(args.at(-1), 'v'); cb(null, '', ''); };
+  const subtitulador = { async reexportar(o) { return o; }, async subtitular(a) {
+    if (a.soloTranscribir) return JSON.stringify({ subtitulos: [] });
+    fs.mkdirSync(a.carpeta, { recursive: true });
+    const b = path.join(a.carpeta, a.nombre);
+    for (const e of ['.mp4', '.png', '.fcproj']) fs.writeFileSync(b + e, 'x');
+    return { datos: { mp4: b + '.mp4', srt: null, previa: b + '.png', proyecto: b + '.fcproj', gancho: 'X', fuente: a.video, calidad: { ok: true, errores: [], avisos: [], medidas: { duracion: 5 } } } };
+  } };
+  fs.mkdirSync(path.join(dir, 'craft'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'craft', 'lotes.json'), JSON.stringify({ salida: path.join(dir, 'videos'), fuentes: [], pausado: true }));
+  const l = crearLotes({ cfg: { dir }, bus: new EventEmitter(), subtitulador, ejecutar, generarJSON: async () => ({ datos: { estilo: 'impacto' } }),
+    medir: async () => ({ ancho: 1080, alto: 1920, duracion: 5 }), youtube: { conectado: () => true, estado: () => ({}) }, metricas: {} });
+  const esp = async fn => { const t = Date.now(); while (Date.now() - t < 5000) { const r = fn(); if (r) return r; await new Promise(ok => setTimeout(ok, 10)); } throw new Error('no llegó'); };
+  const subir = async n => { const f = path.join(dir, n + '.mp4'); fs.writeFileSync(f, 'x'); return l.desdeArchivo({ ruta: f, nombre: n + '.mp4' }); };
+  const a = await subir('aaa'), b = await subir('bbb');
+  await esp(() => l.estado().cola.length === 2);
+  l.yaMismo(b.id);
+  await esp(() => l.estado().clips.find(x => x.id === b.id).estado === 'revisar');
+  await new Promise(ok => setTimeout(ok, 50));
+  assert.strictEqual(l.estado().clips.find(x => x.id === a.id).estado, 'en cola', 'el resto sigue esperando');
+  assert.ok(l.estado().pausado);
+});

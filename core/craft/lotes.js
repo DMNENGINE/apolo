@@ -207,8 +207,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   }
 
   async function procesar() {
-    if (enCurso || conf.pausado) return;
-    while (cola.length && !conf.pausado) {
+    if (enCurso || (conf.pausado && !primero)) return;
+    while (cola.length && (!conf.pausado || primero)) {   // en pausa solo pasa el de "editar ya"; luego sigue en pausa
       if (primero && cola.includes(primero)) { cola.splice(cola.indexOf(primero), 1); cola.unshift(primero); }
       const id = cola.shift(); if (id === primero) primero = null; enCurso = id; parar = new AbortController();
       if (id.startsWith('4k:')) { await hacer4k(id.slice(3)); enCurso = null; parar = null; continue; }
@@ -704,7 +704,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       if (enCurso && enCurso !== id) parar?.abort(); else procesar();
     }
     bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
-    return { ...publico(c), pausado: !!conf.pausado };
+    return { ...publico(c), pausado: false };            // en pausa también se edita (solo este)
   }
   // un clip que acaba de bajarse/prepararse entra en la cola (delante de todo si se pidió "editar ya")
   function aCola(c) {
