@@ -118,6 +118,15 @@ ipcMain.handle('listen', (_e, modo) => voz.escuchar(modo));
 // ---------- hooks en ~/.claude y ~/.gemini (main/hooks-config.js) ----------
 const hooksCfg = crearHooksConfig({ empaquetado: () => app.isPackaged, mensaje: o => dialog.showMessageBox(o), tr: (k, v) => tr(k, v), dirDatos: () => app.getPath('userData') });
 try { if (hooksCfg.opencodeAlDia()) console.log('[opencode] plugin actualizado'); } catch { }   // plugin instalado de una versión anterior
+// Claude Code, Gemini CLI y opencode quedan conectados solos (respeta los que el usuario quitó desde la bandeja)
+function conectarAgentes() {
+  const hechos = hooksCfg.conectarTodo();
+  if (!hechos.length) return;
+  const nombres = { claude: 'Claude Code', gemini: 'Gemini CLI', opencode: 'opencode' };
+  console.log('[agentes] conectados:', hechos.join(', '));
+  setTimeout(() => { if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: tr('Agentes conectados'),
+    texto: `${hechos.map(h => nombres[h]).join(', ')}: ${tr('ya te escucho. Abre una sesión nueva para que me lleguen sus permisos y su actividad.')}` }); }, 8000);
+}
 
 // ---------- uso del plan (main/uso.js) ----------
 const uso = crearUso({ claudeDir: CLAUDE_DIR, dirDatos: () => app.getPath('userData'), cerebro: () => cerebro,
@@ -886,6 +895,8 @@ app.whenReady().then(() => {
   nucleo = crearNucleo();                                    // antes que el cerebro: el cerebro usa sus modelos
   nucleo.versionApp = app.getVersion();                      // Acerca de: APOLO v0.2.x (la del núcleo va aparte)
   try { nucleo.espejoCC?.iniciar(); } catch (e) { console.log('[espejo-cc]', e.message); }   // las sesiones de Claude Code también son de APOLO
+  try { nucleo.memoriasAgentes?.iniciar(); } catch (e) { console.log('[memorias-agentes]', e.message); }   // lo que saben Claude Code, Codex, Gemini… del usuario
+  try { conectarAgentes(); } catch (e) { console.log('[agentes]', e.message); }   // hooks de los agentes de programación que haya, sin pasar por la bandeja
   try {                                                       // correo (varias cuentas), GitHub, Hugging Face, ElevenLabs
     const cifra = safeStorage.isEncryptionAvailable();
     conectores = crearConectores({

@@ -57,7 +57,7 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     if (tieneCLI('node') || !empaquetado()) return `node "${js}"`;
     return `ELECTRON_RUN_AS_NODE=1 "${process.env.APPIMAGE || process.execPath}" "${js}"`;
   };
-  function instalar() {
+  function instalar({ callado } = {}) {
     const s = stripOurs(leerJSON(SETTINGS));
     s.hooks = s.hooks || {};
     for (const [ev, timeout] of HOOK_EVENTS) {
@@ -66,14 +66,16 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     const b = copia(SETTINGS);
     fs.mkdirSync(path.dirname(SETTINGS), { recursive: true });
     fs.writeFileSync(SETTINGS, JSON.stringify(s, null, 2));
-    mensaje({ message: tr('Hooks instalados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}\n${tr('Abre una sesión nueva de Claude Code para que los use.')}` });
+    marcar('claude', 'auto');
+    if (!callado) mensaje({ message: tr('Hooks instalados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}\n${tr('Abre una sesión nueva de Claude Code para que los use.')}` });
   }
   function quitar() {
     const b = copia(SETTINGS);
     fs.writeFileSync(SETTINGS, JSON.stringify(stripOurs(leerJSON(SETTINGS)), null, 2));
+    marcar('claude', 'quitado');
     mensaje({ message: tr('Hooks quitados.'), detail: `${tr('Copia de seguridad:')} ${b}` });
   }
-  function gemini(instalar) {
+  function gemini(instalar, { callado } = {}) {
     const s = stripOurs(leerJSON(GEMINI_SETTINGS));
     if (instalar) {
       s.hooks = s.hooks || {};
@@ -82,13 +84,19 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     const b = copia(GEMINI_SETTINGS);
     fs.mkdirSync(path.dirname(GEMINI_SETTINGS), { recursive: true });
     fs.writeFileSync(GEMINI_SETTINGS, JSON.stringify(s, null, 2));
-    mensaje({ message: tr(instalar ? 'Hooks de Gemini CLI instalados.' : 'Hooks de Gemini CLI quitados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}${instalar ? '\n' + tr('Abre una sesión nueva de Gemini CLI. Puedes comprobarlos con /hooks.') : ''}` });
+    marcar('gemini', instalar ? 'auto' : 'quitado');
+    if (!callado) mensaje({ message: tr(instalar ? 'Hooks de Gemini CLI instalados.' : 'Hooks de Gemini CLI quitados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había settings.json)')}${instalar ? '\n' + tr('Abre una sesión nueva de Gemini CLI. Puedes comprobarlos con /hooks.') : ''}` });
   }
+  // lo que el usuario decidió por agente ('auto' | 'quitado'): si los quitó desde la bandeja, conectarTodo() no los vuelve a poner
+  const fDecision = () => dirDatos && path.join(dirDatos(), 'agentes-conectados.json');
+  const decisiones = () => (fDecision() ? leerJSON(fDecision()) : {});
+  function marcar(id, v) { const f = fDecision(); if (!f) return; try { fs.writeFileSync(f, JSON.stringify({ ...decisiones(), [id]: v }, null, 2)); } catch { } }
   const leer = f => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
-  function opencode(instalar) {
+  function opencode(instalar, { callado } = {}) {
     if (instalar) { fs.mkdirSync(path.dirname(OPENCODE_PLUGIN), { recursive: true }); fs.writeFileSync(OPENCODE_PLUGIN, leer(OPENCODE_FUENTE)); }
     else { try { fs.unlinkSync(OPENCODE_PLUGIN); } catch { } }
-    mensaje({ message: tr(instalar ? 'Plugin de opencode instalado.' : 'Plugin de opencode quitado.'), detail: instalar ? `${OPENCODE_PLUGIN}\n${tr('Abre opencode de nuevo: sus permisos saldrán en la isla, el Stream Deck y el móvil.')}` : OPENCODE_PLUGIN });
+    marcar('opencode', instalar ? 'auto' : 'quitado');
+    if (!callado) mensaje({ message: tr(instalar ? 'Plugin de opencode instalado.' : 'Plugin de opencode quitado.'), detail: instalar ? `${OPENCODE_PLUGIN}\n${tr('Abre opencode de nuevo: sus permisos saldrán en la isla, el Stream Deck y el móvil.')}` : OPENCODE_PLUGIN });
   }
   // si ya está instalado y la app trae una versión nueva del plugin, se cambia sin preguntar
   function opencodeAlDia() {
@@ -96,8 +104,18 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     if (actual !== null && nuevo && actual !== nuevo) { try { fs.writeFileSync(OPENCODE_PLUGIN, nuevo); return true; } catch { } }
     return false;
   }
+  // al arrancar (también la 1.ª vez, recién instalado): conecta en silencio cada agente de programación que haya en la PC
+  // y aún no esté conectado → sus sesiones, permisos y actividad llegan a APOLO sin pasar por la bandeja. Devuelve los conectados ahora.
+  function conectarTodo({ hay = tieneCLI } = {}) {
+    const d = decisiones(), hechos = [];
+    const intentar = (id, falta, poner) => { if (d[id] === 'quitado' || !falta()) return; try { poner(); hechos.push(id); } catch (e) { console.log(`[agentes] ${id}: ${e.message}`); } };
+    intentar('claude', () => (fs.existsSync(CLAUDE_DIR) || hay('claude')) && !ES_HOOK.test(JSON.stringify(leerJSON(SETTINGS))), () => instalar({ callado: true }));
+    intentar('gemini', () => hay('gemini') && !ES_HOOK.test(JSON.stringify(leerJSON(GEMINI_SETTINGS))), () => gemini(true, { callado: true }));
+    intentar('opencode', () => hay('opencode') && !fs.existsSync(OPENCODE_PLUGIN), () => opencode(true, { callado: true }));
+    return hechos;
+  }
   return {
-    instalar, quitar, gemini, opencode, opencodeAlDia,
+    instalar, quitar, gemini, opencode, opencodeAlDia, conectarTodo,
     opencodeInstalado: () => fs.existsSync(OPENCODE_PLUGIN),
     instalados: () => ES_HOOK.test(JSON.stringify(leerJSON(SETTINGS))),
     geminiInstalados: () => ES_HOOK.test(JSON.stringify(leerJSON(GEMINI_SETTINGS))),
