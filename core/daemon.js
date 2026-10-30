@@ -177,6 +177,13 @@ function iniciar(opciones = {}) {
       if (p[0] !== 'v1') return json(res, 404, { error: 'ruta' });
       if (disp && !MV.alcance(M, p)) return json(res, 403, { error: 'fuera del alcance del móvil' });
 
+      if (p[1] === 'estudio-video') {                          // estudio de vídeo local (core/estudio-video.js): GET = ¿está instalado? · POST abrir
+        if (!maestro || !local(req.socket.remoteAddress)) return json(res, 403, { error: 'Solo disponible en el PC local' });
+        const ev = require('./estudio-video');
+        if (M === 'GET' && !p[2]) return json(res, 200, { disponible: ev.disponible(n.cfg) });
+        if (M === 'POST' && p[2] === 'abrir') { try { return json(res, 200, await ev.abrir(n.cfg)); } catch (e) { return json(res, e.status || 500, { error: e.message }); } }
+        return json(res, 404, { error: 'ruta' });
+      }
       if (p[1] === 'movil') {
         try { return json(res, 200, await movil.http(M, p, ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req) : {}, { maestro, dispositivo: disp, origen: String(req.headers.origin || ''), ip, puerto: srv.address()?.port })); }
         catch (e) { return json(res, e.status || 400, { error: e.message }); }

@@ -308,7 +308,10 @@ function crearPlugins({ cfg, bus, permisos, memoria, tareas, proveedores, canale
       const ya = herramientas.porNombre[id];
       if (ya && ya.plugin !== nombre) throw new Error(`ya existe una herramienta "${id}" (del núcleo o de otro plugin)`);
       const riesgoBase = maxRiesgo(decl.riesgo || 'escritura', d.riesgo);
-      const confiable = () => estado[nombre]?.dev || estado[nombre]?.escaneo?.nivel === 'verde';
+      // de confianza: modo dev, escaneo verde, o el usuario lo puso en cfg.gestorPlugins.confiables y su firma sigue verificada
+      // (si alguien cambia un archivo, la firma deja de valer y vuelve a preguntar)
+      const confiable = () => estado[nombre]?.dev || estado[nombre]?.escaneo?.nivel === 'verde'
+        || ((op().confiables || []).includes(nombre) && estado[nombre]?.firma?.estado === 'verificada');
       const h = {
         nombre: id, plugin: nombre, parametros: d.parametros && typeof d.parametros === 'object' ? d.parametros : { type: 'object', properties: {} },
         descripcion: String(decl.descripcion || d.descripcion || id).slice(0, 2000),
