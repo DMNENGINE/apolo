@@ -157,3 +157,39 @@ test('lotes + Medal: el clip elegido se trae, se pasa a vertical (fondo desenfoc
   assert.strictEqual(reexp.length, 0, 'sin 4K'); assert.ok(!ap.k4 && !ap.publicado && !ap.youtube);
   assert.ok(fs.existsSync(ap.mp4) && ap.mp4.includes(path.join('Medal', 'aprobados')));
 });
+
+test('lotes + subir video: un vídeo cualquiera del PC se pasa a vertical, se edita con el kit elegido y la copia subida se borra', async () => {
+  const { EventEmitter } = require('events');
+  const { crearLotes } = require('../craft/lotes');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotes-subir-'));
+  const subido = path.join(dir, 'subido.mkv'); fs.writeFileSync(subido, 'horizontal');
+  const ffmpeg = [];
+  const ejecutar = (cmd, args, o, cb) => { if (/ffmpeg/.test(cmd)) { ffmpeg.push(args); fs.writeFileSync(args.at(-1), 'vertical'); } cb(null, '', ''); };
+  const subs = [];
+  const subtitulador = { async reexportar(o) { return o; }, async subtitular(a) {
+    subs.push(a);
+    if (a.soloTranscribir) return JSON.stringify({ subtitulos: [] });
+    fs.mkdirSync(a.carpeta, { recursive: true });
+    const b = path.join(a.carpeta, a.nombre);
+    for (const e of ['.mp4', '.png', '.fcproj']) fs.writeFileSync(b + e, 'x');
+    return { datos: { mp4: b + '.mp4', srt: null, previa: b + '.png', proyecto: b + '.fcproj', gancho: 'X', fuente: a.video, calidad: { ok: true, errores: [], avisos: [], medidas: { duracion: 42 } } } };
+  } };
+  fs.mkdirSync(path.join(dir, 'craft'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'craft', 'lotes.json'), JSON.stringify({ salida: path.join(dir, 'videos'), fuentes: [] }));
+  const l = crearLotes({ cfg: { dir }, bus: new EventEmitter(), subtitulador, ejecutar, generarJSON: async () => ({ datos: { estilo: 'impacto' } }),
+    medir: async f => (f === subido ? { ancho: 1920, alto: 1080, duracion: 42 } : { ancho: 1080, alto: 1920, duracion: 42 }), youtube: { conectado: () => true, estado: () => ({}) }, metricas: {} });
+  const esp = async fn => { const t = Date.now(); while (Date.now() - t < 5000) { const r = fn(); if (r) return r; await new Promise(ok => setTimeout(ok, 10)); } throw new Error('no llegó'); };
+
+  await assert.rejects(l.desdeArchivo({ ruta: path.join(dir, 'no-existe.mp4') }), /no llegó/);
+  await assert.rejects(l.desdeArchivo({ ruta: subido, kit: 'inventado' }), /kit desconocido/);
+  assert.ok(l.estado().kits.some(k => k.id === 'lagctrucks'));
+  const c0 = await l.desdeArchivo({ ruta: subido, nombre: 'Mi partida (final).mkv', kit: 'lagctrucks', titulo: 'Qué final' });
+  assert.deepStrictEqual([c0.fuente, c0.estado, c0.titulo, c0.tituloClip, c0.kit], ['local', 'descargando', 'Mi partida (final)', 'Qué final', 'lagctrucks']);
+  const c = await esp(() => l.estado().clips.find(x => x.id === c0.id && x.estado === 'revisar'));
+  assert.match(ffmpeg[0][ffmpeg[0].indexOf('-filter_complex') + 1], /boxblur.*overlay/);
+  const ed = subs.find(a => !a.soloTranscribir);
+  assert.deepStrictEqual([ed.perfil, ed.sinVoz], ['lagctrucks', true]);
+  assert.strictEqual(c.fin, 42);
+  assert.ok(!fs.existsSync(subido), 'la copia subida se borra');
+  assert.ok(ed.video.includes(path.join('Videos subidos')));
+});

@@ -221,6 +221,23 @@ function iniciar(opciones = {}) {
         }
       }
       if (M === 'GET' && p[1] === 'medios' && p[2] === 'ver' && n.medios && !disp) return n.medios.proxy(req, res, p[3]);   // vídeo con Range: no pasa por json()
+      // Editor de Videos → subir un vídeo del PC: el cuerpo es el archivo (puede pesar GB), va directo a disco y no pasa por leer()
+      if (M === 'POST' && p[1] === 'revision' && p[2] === 'subir' && !p[3] && n.lotes) {
+        if (!maestro) return json(res, 403, { error: 'Subir vídeos requiere el escritorio' });
+        const q = Object.fromEntries(u.searchParams), ext = (path.extname(String(q.nombre || '')).toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.mp4'])[0];
+        const ds = path.join(n.cfg.dir, 'craft', 'subidas'); fs.mkdirSync(ds, { recursive: true });
+        const fa = path.join(ds, crypto.randomBytes(8).toString('hex') + ext);
+        try {
+          await new Promise((ok, mal) => {
+            let l = 0; const out = fs.createWriteStream(fa);
+            req.on('data', d => { l += d.length; if (l > 40e9) { req.destroy(); out.destroy(); mal(Object.assign(new Error('demasiado grande (máx. 40 GB)'), { status: 413 })); } });
+            req.on('error', mal); out.on('error', mal); out.on('finish', ok);
+            req.pipe(out);
+          });
+          if (fs.statSync(fa).size < 10_000) throw Object.assign(new Error('el archivo llegó vacío'), { status: 400 });
+          return json(res, 200, await n.lotes.desdeArchivo({ ruta: fa, nombre: q.nombre, formato: q.formato || 'vertical', titulo: q.titulo, estilo: q.estilo, kit: q.kit }));
+        } catch (e) { fs.rm(fa, { force: true }, () => { }); return json(res, e.status || 400, { error: e.message }); }
+      }
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram
         try {
           let cuerpo = ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req, p[1] === 'mundo' ? 8e6 : 1e6) : {};   // el mundo puede venir con la imagen de referencia

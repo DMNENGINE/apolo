@@ -61,6 +61,9 @@ Object.assign(I18N.dic.en, {
   'Diccionario del canal': 'Channel dictionary', 'Lo que corriges en los subtítulos se aprende aquí y sale bien en los clips siguientes.': 'What you fix in the subtitles is learned here and comes out right in the next clips.',
   'como sale': 'as it comes out', 'como debe ser': 'as it should be', 'Añadir': 'Add', 'Reacción del chat': 'Chat reaction', 'risa': 'laughs', 'choque': 'crash', 'hype': 'hype', 'apoyo': 'support', 'charla': 'chat',
   'Activado': 'On', 'Desactivado': 'Off', 'Pega el JSON': 'Paste the JSON', 'Guardado': 'Saved', 'Acepta en el navegador que se abrió': 'Accept in the browser window that opened', 'Desconectado': 'Disconnected', 'Midiendo… (1–3 min)': 'Measuring… (1–3 min)',
+  'Subir video': 'Upload video', 'Sube cualquier video de tu PC y APOLO lo edita como los demás.': 'Upload any video from your PC and APOLO edits it like the others.',
+  'Elegir archivo': 'Choose file', 'Canal / kit': 'Channel / kit', 'Título (opcional)': 'Title (optional)', 'Subir y editar': 'Upload and edit', 'Elige un video primero': 'Choose a video first',
+  'Subiendo… {p} %': 'Uploading… {p} %', 'Video subido': 'Uploaded video', 'Ese archivo no es un video': 'That file is not a video',
   'Cargando Medal…': 'Loading Medal…', 'No encuentro Medal en este PC.': 'Medal is not installed on this PC.', 'Elegir de Medal': 'Pick from Medal', '{n} clips': '{n} clips',
   'Todos los juegos': 'All games', 'Buscar por título': 'Search by title', 'Más recientes': 'Newest', 'Más antiguos': 'Oldest', 'Más largos': 'Longest', 'Más vistos': 'Most viewed', 'Buscar': 'Search',
   'Formato': 'Format', 'Vertical, partida entera y fondo desenfocado': 'Vertical, whole game with blurred background', 'Vertical, zoom al centro': 'Vertical, zoom to the center', 'Horizontal, tal cual': 'Horizontal, as is',
@@ -230,6 +233,18 @@ function RV_medal(M, estilos, f) {
       ${c.enRevision && !['descartado', 'error'].includes(c.enRevision.estado) ? `<span class="chip ok">${esc(tr(c.enRevision.estado))}</span>`
         : `<button class="btn pri" data-m="editar" data-id="${esc(c.id)}">✂️ ${tr('Editar con APOLO')}</button>`}
     </div>`).join('') || `<p class="tenue">${tr('No hay clips con eso.')}</p>`}</div>
+  </div>`;
+}
+// subir un vídeo cualquiera del PC: archivo, formato, kit (canal) y estilo; se sube por streaming a /v1/revision/subir
+function RV_subir(estilos, kits) {
+  const ops = (l, v) => l.map(([k, t]) => `<option value="${esc(k)}"${k === v ? ' selected' : ''}>${esc(t)}</option>`).join('');
+  return `<div class="caja pad rv-medal">
+    <div class="flex rv-mcab"><b>📤 ${tr('Subir video')}</b><small class="tenue">${tr('Sube cualquier video de tu PC y APOLO lo edita como los demás.')}</small><button class="btn fantasma" data-u="cerrar">✕</button></div>
+    <div class="rv-fila"><input type="file" class="rv-uarchivo" accept="video/*,.mkv,.mov,.avi,.webm,.flv,.ts"><input type="text" class="rv-utitulo" placeholder="${esc(tr('Título (opcional)'))}"></div>
+    <div class="rv-fila">${tr('Formato')}: <select class="rv-uformato">${ops([['vertical', tr('Vertical, partida entera y fondo desenfocado')], ['recorte', tr('Vertical, zoom al centro')], ['horizontal', tr('Horizontal, tal cual')]], 'vertical')}</select>
+      ${tr('Canal / kit')}: <select class="rv-ukit">${ops(kits.map(k => [k.id, k.nombre || k.id]), 'medal')}</select>
+      ${tr('Estilo')}: <select class="rv-uestilo"><option value="">${tr('Que elija APOLO')}</option>${ops(estilos.map(e => [e.id, e.nombre]), '')}</select></div>
+    <div class="rv-fila"><button class="btn pri" data-u="subir">✂️ ${tr('Subir y editar')}</button><small class="tenue rv-uprogreso"></small></div>
   </div>`;
 }
 // comentarios anclados a un momento del vídeo (se acumulan aquí y se mandan juntos)
@@ -466,8 +481,9 @@ VISTAS.revision = {
       return;
     }
     v.innerHTML = `<div class="pagina">${cabecera('Editor de Videos', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.',
-      `<button class="btn" id="rvPausa">⏸️ ${tr('Pausar edición')}</button><button class="btn" id="rvMedal">🎮 ${tr('Elegir de Medal')}</button><button class="btn" id="rvBuscar">${ic('buscar')}${tr('Buscar clips ahora')}</button>`)}
+      `<button class="btn" id="rvPausa">⏸️ ${tr('Pausar edición')}</button><button class="btn" id="rvSubir">📤 ${tr('Subir video')}</button><button class="btn" id="rvMedal">🎮 ${tr('Elegir de Medal')}</button><button class="btn" id="rvBuscar">${ic('buscar')}${tr('Buscar clips ahora')}</button>`)}
       <div id="rvEstado"></div>
+      <div id="rvSubirCaja" hidden></div>
       <div id="rvMedalCaja" hidden></div>
       <div id="rvPanel"></div>
       <div class="rv-filtros">${RV_FILTROS.map(([k, t]) => `<button class="btn ${k === this.filtro ? 'pri' : 'fantasma'}" data-f="${k}">${tr(t)} <span class="rv-n" data-n="${k}"></span></button>`).join('')}</div>
@@ -611,6 +627,38 @@ VISTAS.revision = {
       } catch (er) { aviso(er.message, true); b.disabled = false; }
     }
   },
+  // ── subir un vídeo del PC ──
+  abrirSubir() {
+    const caja = $('#rvSubirCaja', this.v); if (!caja) return;
+    if (!caja.hidden && caja.dataset.subiendo) return;
+    caja.hidden = false; caja.innerHTML = RV_subir(this.L?.estilos || [], this.L?.kits || []);
+  },
+  async clicSubir(b) {
+    const caja = $('#rvSubirCaja', this.v);
+    if (b.dataset.u === 'cerrar') { if (!caja.dataset.subiendo) caja.hidden = true; return; }
+    const arch = $('.rv-uarchivo', caja).files[0];
+    if (!arch) return aviso('Elige un video primero', true);
+    if (arch.type && !/^video\//.test(arch.type) && !/\.(mkv|mov|avi|webm|flv|ts|mp4|m4v)$/i.test(arch.name)) return aviso('Ese archivo no es un video', true);
+    const v = s => $(s, caja).value;
+    const q = new URLSearchParams(Object.entries({ nombre: arch.name, formato: v('.rv-uformato'), kit: v('.rv-ukit'), estilo: v('.rv-uestilo'), titulo: v('.rv-utitulo').trim() }).filter(([, x]) => x));
+    const prog = $('.rv-uprogreso', caja);
+    b.disabled = true; caja.dataset.subiendo = '1';
+    try {
+      await new Promise((ok, mal) => {                  // XHR y no fetch: para ver el % de subida
+        const x = new XMLHttpRequest();
+        x.open('POST', `/v1/revision/subir?${q}`);
+        x.setRequestHeader('x-robot-token', TOKEN);
+        x.setRequestHeader('content-type', 'application/octet-stream');
+        x.upload.onprogress = e => { if (e.lengthComputable) prog.textContent = tr('Subiendo… {p} %', { p: Math.floor(e.loaded / e.total * 100) }); };
+        x.onload = () => { let r = {}; try { r = JSON.parse(x.responseText); } catch { } x.status === 200 ? ok(r) : mal(new Error(r.error || `error ${x.status}`)); };
+        x.onerror = () => mal(new Error('se cortó la subida'));
+        x.send(arch);
+      });
+      aviso('APOLO lo está editando: sale en «Por revisar»');
+      delete caja.dataset.subiendo; caja.hidden = true;
+      this.filtro = 'revisar'; this.firma = null; await this.cargar();
+    } catch (er) { aviso(er.message, true); prog.textContent = ''; b.disabled = false; delete caja.dataset.subiendo; }
+  },
   // barra de la tarjeta que se está editando: se actualiza sola (sin repintar la lista, no corta lo que estás viendo)
   pintarProgreso(L) {
     for (const c of L.clips.filter(x => x.estado === 'editando')) {
@@ -646,7 +694,7 @@ VISTAS.revision = {
       return `<div class="caja rv-clip" data-id="${esc(c.id)}">
         <div class="rv-medio">${listo ? `<img class="rv-previa" alt="" data-previa="${esc(c.id)}"><button class="rv-play" data-a="ver" title="${esc(tr('Ver clip'))}">▶</button>` : `<div class="rv-hueco">${esc(tr(txt))}</div>`}</div>
         <div class="rv-info">
-          <div class="flex rv-cab"><b>#${c.rank}</b><span class="tenue">${RV_mmss(c.fin - c.inicio)} · ${c.fuente === 'medal' ? `🎮 Medal${c.formato && c.formato !== 'vertical' ? ` · ${esc(tr(c.formato))}` : ''}` : `${RV_mmss(c.inicio)} del stream`}</span><span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}${c.momento?.tipo ? `<span class="chip" title="${esc(tr('Reacción del chat'))}">${{ risa: '😂', choque: '💥', hype: '🔥', apoyo: '💲', charla: '💬' }[c.momento.tipo] || '💬'} ${esc(tr(c.momento.tipo))}${c.momento.autores ? ` · ${c.momento.autores} 👤` : ''}</span>` : ''}</div>
+          <div class="flex rv-cab"><b>#${c.rank}</b><span class="tenue">${RV_mmss(c.fin - c.inicio)} · ${c.fuente === 'medal' || c.fuente === 'local' ? `${c.fuente === 'local' ? `📁 ${tr('Video subido')}` : '🎮 Medal'}${c.formato && c.formato !== 'vertical' ? ` · ${esc(tr(c.formato))}` : ''}` : `${RV_mmss(c.inicio)} del stream`}</span><span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}${c.momento?.tipo ? `<span class="chip" title="${esc(tr('Reacción del chat'))}">${{ risa: '😂', choque: '💥', hype: '🔥', apoyo: '💲', charla: '💬' }[c.momento.tipo] || '💬'} ${esc(tr(c.momento.tipo))}${c.momento.autores ? ` · ${c.momento.autores} 👤` : ''}</span>` : ''}</div>
           ${c.gancho ? `<div class="rv-gancho">${esc(c.gancho)}</div>` : ''}
           ${c.error ? `<div class="rv-error">${esc(c.error)}</div>` : ''}
           ${c.estado === 'revisar' ? (c.calidad ? `<div class="flex" style="gap:6px;flex-wrap:wrap">${RV_chipCalidad(c)}${c.ajustes?.subtitulosFijos ? `<span class="chip">✏️ ${tr('subtítulos a mano')}</span>` : ''}</div>` : '') : RV_info(c, listo)}
@@ -705,7 +753,7 @@ VISTAS.revision = {
       <div class="rve-cab">
         <a class="btn fantasma" href="#/revision">← ${tr('Editor de Videos')}</a>
         <div class="rve-tit"><b>#${c.rank} · ${esc(c.gancho || c.titulo || c.stream)}</b>
-          <small class="tenue">${esc(c.fecha)} · ${RV_mmss(c.fin - c.inicio)} · ${c.fuente === 'medal' ? '🎮 Medal' : `${RV_mmss(c.inicio)} ${tr('del stream')}`}</small></div>
+          <small class="tenue">${esc(c.fecha)} · ${RV_mmss(c.fin - c.inicio)} · ${c.fuente === 'medal' ? '🎮 Medal' : c.fuente === 'local' ? `📁 ${tr('Video subido')}` : `${RV_mmss(c.inicio)} ${tr('del stream')}`}</small></div>
         <span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}${c.calidad ? RV_chipCalidad(c) : ''}
         ${c.ajustes?.plataforma ? `<span class="chip">${tr('para')} ${esc((RV_REDES.find(r => r[0] === c.ajustes.plataforma) || [, c.ajustes.plataforma])[1])}</span>` : ''}${c.ajustes?.banner === false ? `<span class="chip">${tr('sin banner')}</span>` : ''}
         <span class="rve-sp"></span>
@@ -788,6 +836,8 @@ VISTAS.revision = {
       b.disabled = false; this.firma = null; return this.cargar();
     }
     if (e.target.closest('#rvMedal')) return this.abrirMedal();
+    if (e.target.closest('#rvSubir')) return this.abrirSubir();
+    const ub = e.target.closest('[data-u]'); if (ub) return this.clicSubir(ub);
     const mb = e.target.closest('[data-m]'); if (mb) return this.clicMedal(mb);
     const g = e.target.closest('[data-g]'); if (g) return this.clicPanel(g);
     const st = e.target.closest('[data-st]'); if (st) return this.clicSubs(st);
