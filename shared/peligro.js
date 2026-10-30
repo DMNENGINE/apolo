@@ -35,6 +35,7 @@
     [/\bschtasks\b[^\n]*\/create|\bRegister-ScheduledTask\b|\bNew-Service\b|\bsc\s+(create|config)\b/i, 'crea tarea/servicio persistente'],
     [/\bSet-MpPreference\b|\bAdd-MpPreference\b[^\n]*Exclusion|\bnetsh\s+(advfirewall|firewall)\b|\bSet-NetFirewall/i, 'desactiva protecciones (Defender/firewall)'],
     [/\bSet-ExecutionPolicy\b/i, 'cambia la política de ejecución'],
+    [/\bgmgn-cli\b[^\n]*\b(swap|cooking|order\s+strategy\s+(create|cancel)|order\s+(create|cancel))\b/i, 'mueve DINERO REAL fuera del piloto de DMN Trader (usa trader_real_operar)'],
     [/\b(npm|pnpm|yarn)\s+publish\b|\b(twine|cargo)\s+(upload|publish)\b/i, 'publica paquete'],
     [/\b(sudo|runas|gsudo)\b|-Verb\s+RunAs\b/i, 'eleva privilegios'],
     [/\b(kill|pkill|killall|taskkill|Stop-Process)\b[^\n]*(-9|\/F\b|-Force)/i, 'mata procesos a la fuerza'],

@@ -169,6 +169,10 @@ function crearNucleo(opciones = {}) {
       aprenderPronto = setTimeout(() => aprenderCC.aprender().catch(() => { }), 12 * 60_000); aprenderPronto.unref?.();
     }
   });
+  // memorias (.md) de los agentes de programación de la PC (Claude Code, Codex, Gemini/Antigravity, Qwen, opencode, OpenClaw…) → memoria;
+  // la vigilancia la arranca la app (memoriasAgentes.iniciar() en main.js), no los tests
+  nucleo.memoriasAgentes = require('./memorias-agentes').crearMemoriasAgentes({ cfg, memoria, generarJSON: generarJSONvivo, modelo: modeloCerebro, bus, registro });
+  nucleo.extensiones['memorias-agentes'] = { http: (...a) => nucleo.memoriasAgentes.http(...a) };
   nucleo.espejoCC = { ...espejoCC, iniciar() { espejoCC.actualizar({ forzar: true }).catch(() => { }); setInterval(() => espejoCC.actualizar().catch(() => { }), 10 * 60_000).unref(); } };
   // recetas fijas de la suite (kit de marca, control de calidad, portadas, audio de estudio, rótulo/título animados)
   const craft = require('./craft/herramientas').crearHerramientasCraft({ mcpLocales, cfg });
@@ -195,6 +199,8 @@ function crearNucleo(opciones = {}) {
   const panico = require('./panico').crearPanico({ nucleo });
   nucleo.panico = panico; nucleo.extensiones.panico = { http: (...a) => panico.http(...a) };
   nucleo.trading = require('./trading-autopiloto').crearTrading({ nucleo, fetch: opciones.fetchTrading });
+  // el cerebro de APOLO decide las entradas y salidas del piloto real de DMN Trader (POST /v1/trading/decidir)
+  nucleo.tradingDecidir = require('./trading-decidir').crearDecidir({ generarJSON: (...a) => nucleo.generarJSON(...a), memoria, personalidad, modelo: modeloCerebro, registro });
   // el agente maneja el autopiloto SIMULADO con su guardia (duración + pérdida máxima); el dinero real, solo desde el panel
   herramientas.registrar([{
     nombre: 'trading_autopiloto',

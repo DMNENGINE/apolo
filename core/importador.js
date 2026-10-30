@@ -32,6 +32,21 @@ const limpiaRuta = r => String(r).replace(/\\/g, '/').split('/').filter(p => p &
 const tapar = t => String(t ?? '').replace(SECRETO, '[REDACTADO]');
 const buscar = (archivos, re) => Object.entries(archivos).find(([k]) => re.test(k.split('/').pop()))?.[1] || '';
 
+// hechos duraderos sobre el usuario de un trozo de texto (≤24k) con memoria/notas de otro asistente → { hechos, identidad }
+// (la usan este importador y core/memorias-agentes.js; las claves se tapan antes de mandarlo al modelo)
+async function extraerHechos({ generarJSON, modelo, texto, fuente = 'otro asistente de IA del usuario' }) {
+  const r = (await generarJSON({
+    modelo,
+    system: 'Extraes datos para la memoria de un asistente personal. Respondes en español.',
+    prompt: `Estos son archivos de ${fuente} (su memoria, perfil y notas). ` +
+      'Extrae SOLO hechos duraderos y útiles sobre el USUARIO: quién es, cómo le gusta que le hablen, preferencias, proyectos, personas, equipos/servidores (sin contraseñas ni claves). ' +
+      'Ignora plantillas genéricas, instrucciones para el asistente, problemas técnicos ya resueltos y datos que caducan. Cada hecho en una frase clara en tercera persona ("Se llama…", "Prefiere…"). Máximo 40.\n' +
+      'Si los archivos describen la identidad del propio asistente (nombre, carácter), resúmela en "identidad".\n\n' + tapar(texto),
+    schema: ESQUEMA,
+  })).datos || {};
+  return { hechos: Array.isArray(r.hechos) ? r.hechos : [], identidad: String(r.identidad || '') };
+}
+
 function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tareas, proveedores, skills: motorSkills }) {
   async function importar(entrada = {}) {
     const origen = String(entrada.origen || 'externo').replace(/[^\w-]/g, '').slice(0, 30) || 'externo';
@@ -76,17 +91,8 @@ function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tare
     if (trozos.length > 16) res.errores.push(`mucho texto: solo se analizaron 16 de ${trozos.length} trozos para la memoria (el resto está en el backup)`);
     for (const t of trozos.slice(0, 16)) {
       let r;
-      try {
-        r = (await generarJSON({
-          modelo: modelo(),
-          system: 'Extraes datos para la memoria de un asistente personal. Respondes en español.',
-          prompt: 'Estos son archivos exportados de otro asistente de IA del usuario (su memoria, perfil y notas). ' +
-            'Extrae SOLO hechos duraderos y útiles sobre el USUARIO: quién es, cómo le gusta que le hablen, preferencias, proyectos, personas, equipos/servidores (sin contraseñas ni claves). ' +
-            'Ignora plantillas genéricas, instrucciones para el asistente, problemas técnicos ya resueltos y datos que caducan. Cada hecho en una frase clara en tercera persona ("Se llama…", "Prefiere…"). Máximo 40.\n' +
-            'Si los archivos describen la identidad del propio asistente (nombre, carácter), resúmela en "identidad".\n\n' + t,
-          schema: ESQUEMA,
-        })).datos;
-      } catch (e) { res.errores.push(`memoria: ${e.message}`); continue; }
+      try { r = await extraerHechos({ generarJSON, modelo: modelo(), texto: t, fuente: 'otro asistente de IA del usuario, exportados' }); }
+      catch (e) { res.errores.push(`memoria: ${e.message}`); continue; }
       if (r.identidad && !res.identidad) res.identidad = r.identidad.slice(0, 800);
       for (const h of (r.hechos || []).slice(0, 40)) {
         try { const m = memoria.recordar({ texto: h.texto, tipo: h.tipo, origen: `importado de ${origen}` }); m.accion === 'creada' ? res.creados++ : res.actualizados++; }
@@ -158,4 +164,4 @@ function crearImportador({ cfg, memoria, generarJSON, modelo, personalidad, tare
 // plantillas de subagente importadas (las usa la herramienta "delegar")
 function leerAgentes(cfg) { try { return JSON.parse(fs.readFileSync(path.join(cfg.dir, 'agentes.json'), 'utf8')); } catch { return []; } }
 
-module.exports = { crearImportador, limpiaRuta, leerAgentes, tapar };
+module.exports = { crearImportador, limpiaRuta, leerAgentes, tapar, extraerHechos };

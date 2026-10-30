@@ -34,6 +34,7 @@ const MK = {
       try { this.datos = await api('GET', '/skills/marketplace' + (refrescar ? '?refrescar=1' : '')); if (refrescar) aviso(tr('Catálogo actualizado')); }
       catch (er) { c.innerHTML = `<div class="caja">${vacio('info', esc(er.message))}</div>`; return; }
     }
+    await this.cargarPlugins();
     if (this.c !== c || !c.isConnected) return;
     c.innerHTML = `<div class="mk-barra">
         <div class="sk-busca mk-busca">${ic('buscar')}<input id="mkQ" placeholder="${tr('Buscar en el catálogo…')}" value="${esc(this.q)}" autocomplete="off" spellcheck="false"></div>
@@ -67,6 +68,30 @@ const MK = {
       + (d.actualizado ? `<span class="tenue">${tr('actualizado {x}', { x: hace(d.actualizado) })} · ${tr('caché de {n} h', { n: d.cacheHoras || 6 })}</span>` : '')
       + `<span class="tenue mk-nota">${ic('escudo')}${tr('Todo lo que instalas entra desactivado y pasa por el escáner y la comprobación de firma.')}</span>`;
   },
+  // estado de los plugins instalados: el Mercado es donde se activan los que no son canales
+  async cargarPlugins() {
+    try { this.plugins = Object.fromEntries(((await api('GET', '/plugins')).plugins || []).map(p => [p.nombre, p])); } catch { this.plugins = {}; }
+  },
+  botonPlugin(e, inst) {
+    const p = (this.plugins || {})[inst] || (this.plugins || {})[e.nombre];
+    if (!p) return `<button class="btn mini" data-mk-abrir="${esc(inst)}" data-tipo="plugin">${ic('check')}${tr('Instalada')}</button>`;
+    return p.activo ? `<button class="btn mini" data-mk-plugin="${esc(p.nombre)}" data-on="0" title="${esc(tr('Desactivar'))}"><span class="punto ok"></span>${tr('Activo')}</button>`
+      : `<button class="btn mini pri" data-mk-plugin="${esc(p.nombre)}" data-on="1">${ic('mas')}${tr('Activar')}</button>`;
+  },
+  async activarPlugin(nombre, on, boton) {
+    if (boton) boton.disabled = true;
+    try {
+      try { await api('PATCH', `/plugins/${encodeURIComponent(nombre)}`, { activo: on }); }
+      catch (er) {
+        if (!on) throw er;
+        // escaneo rojo (409): solo con confirmación explícita
+        if (!await modal({ titulo: tr('Activar {x}', { x: nombre }), cuerpo: esc(er.message), botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Activar igualmente', cls: 'mal', valor: true }] })) return;
+        await api('PATCH', `/plugins/${encodeURIComponent(nombre)}`, { activo: true, forzar: true });
+      }
+      aviso(on ? tr('{s} activado', { s: nombre }) : tr('{s} desactivado', { s: nombre }));
+    } catch (er) { aviso(er.message, true); }
+    finally { await this.cargarPlugins(); this.repintar(); }
+  },
   tarjeta(e) {
     const inst = e.instalada;
     return `<article class="sk-tarjeta mk-tarjeta" data-mk="${esc(e.id)}" tabindex="0">
@@ -76,7 +101,7 @@ const MK = {
       <p class="sk-desc">${esc(e.descripcion || tr('Sin descripción.'))}</p>
       <div class="mk-tags">${e.etiquetas.slice(0, 5).map(t => `<span class="chip ${t === 'recomendada' || t === 'oficial' ? 'ok' : ''}">${esc(t)}</span>`).join('')}${e.firma ? `<span class="chip ok" title="${esc(e.firma.autor || '')}">${ic('llave')}${tr('Firmada')}</span>` : ''}</div>
       <div class="sk-pie"><code class="crece mk-fuente" title="${esc(e.fuente)}">${esc(e.fuente)}</code>
-        ${inst ? `<button class="btn mini" data-mk-abrir="${esc(inst)}" data-tipo="${e.tipo}">${ic('check')}${tr('Instalada')}</button>` : `<button class="btn mini pri" data-mk-instalar="${esc(e.id)}">${ic('mas')}${tr('Instalar')}</button>`}</div>
+        ${inst && e.tipo === 'plugin' ? this.botonPlugin(e, inst) : inst ? `<button class="btn mini" data-mk-abrir="${esc(inst)}" data-tipo="${e.tipo}">${ic('check')}${tr('Instalada')}</button>` : `<button class="btn mini pri" data-mk-instalar="${esc(e.id)}">${ic('mas')}${tr('Instalar')}</button>`}</div>
     </article>`;
   },
   entrada(id) { return (this.datos?.entradas || []).find(e => e.id === id); },
@@ -85,6 +110,8 @@ const MK = {
     if (et) { this.etiqueta = et.dataset.etiq; this.repintar(); return; }
     const ins = ev.target.closest('[data-mk-instalar]');
     if (ins) { ev.stopPropagation(); return this.instalar(this.entrada(ins.dataset.mkInstalar), ins); }
+    const pl = ev.target.closest('[data-mk-plugin]');
+    if (pl) { ev.stopPropagation(); return this.activarPlugin(pl.dataset.mkPlugin, pl.dataset.on === '1', pl); }
     const ab = ev.target.closest('[data-mk-abrir]');
     if (ab) { ev.stopPropagation(); if (ab.dataset.tipo === 'plugin') location.hash = '#/plugins'; else VISTAS.skills.abrir(ab.dataset.mkAbrir); return; }
     const t = ev.target.closest('.mk-tarjeta');
