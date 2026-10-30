@@ -44,7 +44,7 @@ const POR_DEFECTO = {
   },
   // atajos: "qwen: haz X" desde la isla, Discord o voz
   alias: {
-    qwen: 'ollama/qwen3.6', gemma: 'ollama/gemma4:31b-cloud', haiku: 'claudecode/haiku', sonnet: 'claudecode/sonnet',
+    qwen: 'ollama/qwen3.6', gemma: 'ollama/gemma4:31b-cloud', beam: 'ollama/beam:cloud', haiku: 'claudecode/haiku', sonnet: 'claudecode/sonnet',
     gpt: 'openai/gpt-4.1-mini', gemini: 'gemini/gemini-3.8-flash', google: 'gemini/gemini-3.8-flash',
     chatgpt: 'chatgpt/default', codex: 'chatgpt/default',
     deepseek: 'deepseek/auto', grok: 'xai/auto', groq: 'groq/auto', mistral: 'mistral/auto', kimi: 'moonshot/auto', glm: 'zai/auto',
