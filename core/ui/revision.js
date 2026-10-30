@@ -63,7 +63,8 @@ Object.assign(I18N.dic.en, {
   'Activado': 'On', 'Desactivado': 'Off', 'Pega el JSON': 'Paste the JSON', 'Guardado': 'Saved', 'Acepta en el navegador que se abrió': 'Accept in the browser window that opened', 'Desconectado': 'Disconnected', 'Midiendo… (1–3 min)': 'Measuring… (1–3 min)',
   'Subir video': 'Upload video', 'Sube cualquier video de tu PC y APOLO lo edita como los demás.': 'Upload any video from your PC and APOLO edits it like the others.',
   'Elegir archivo': 'Choose file', 'Canal / kit': 'Channel / kit', 'Título (opcional)': 'Title (optional)', 'Subir y editar': 'Upload and edit', 'Elige un video primero': 'Choose a video first',
-  'Subiendo… {p} %': 'Uploading… {p} %', 'Video subido': 'Uploaded video', 'Ese archivo no es un video': 'That file is not a video',
+  'Subiendo… {p} %': 'Uploading… {p} %', 'Editar ya': 'Edit now', 'Editar ya (saltar la cola)': 'Edit now (skip the queue)',
+  'Va el primero: lo que se estaba editando vuelve a la cola': 'It goes first: whatever was being edited goes back to the queue', 'Está en pausa: dale a Reanudar': 'Editing is paused: press Resume', 'Video subido': 'Uploaded video', 'Ese archivo no es un video': 'That file is not a video',
   'Cargando Medal…': 'Loading Medal…', 'No encuentro Medal en este PC.': 'Medal is not installed on this PC.', 'Elegir de Medal': 'Pick from Medal', '{n} clips': '{n} clips',
   'Todos los juegos': 'All games', 'Buscar por título': 'Search by title', 'Más recientes': 'Newest', 'Más antiguos': 'Oldest', 'Más largos': 'Longest', 'Más vistos': 'Most viewed', 'Buscar': 'Search',
   'Formato': 'Format', 'Vertical, partida entera y fondo desenfocado': 'Vertical, whole game with blurred background', 'Vertical, zoom al centro': 'Vertical, zoom to the center', 'Horizontal, tal cual': 'Horizontal, as is',
@@ -244,6 +245,7 @@ function RV_subir(estilos, kits) {
     <div class="rv-fila">${tr('Formato')}: <select class="rv-uformato">${ops([['vertical', tr('Vertical, partida entera y fondo desenfocado')], ['recorte', tr('Vertical, zoom al centro')], ['horizontal', tr('Horizontal, tal cual')]], 'vertical')}</select>
       ${tr('Canal / kit')}: <select class="rv-ukit">${ops(kits.map(k => [k.id, k.nombre || k.id]), 'medal')}</select>
       ${tr('Estilo')}: <select class="rv-uestilo"><option value="">${tr('Que elija APOLO')}</option>${ops(estilos.map(e => [e.id, e.nombre]), '')}</select></div>
+    <div class="rv-fila"><label><input type="checkbox" class="rv-uya" checked> ⏫ ${tr('Editar ya (saltar la cola)')}</label></div>
     <div class="rv-fila"><button class="btn pri" data-u="subir">✂️ ${tr('Subir y editar')}</button><small class="tenue rv-uprogreso"></small></div>
   </div>`;
 }
@@ -640,7 +642,7 @@ VISTAS.revision = {
     if (!arch) return aviso('Elige un video primero', true);
     if (arch.type && !/^video\//.test(arch.type) && !/\.(mkv|mov|avi|webm|flv|ts|mp4|m4v)$/i.test(arch.name)) return aviso('Ese archivo no es un video', true);
     const v = s => $(s, caja).value;
-    const q = new URLSearchParams(Object.entries({ nombre: arch.name, formato: v('.rv-uformato'), kit: v('.rv-ukit'), estilo: v('.rv-uestilo'), titulo: v('.rv-utitulo').trim() }).filter(([, x]) => x));
+    const q = new URLSearchParams(Object.entries({ nombre: arch.name, formato: v('.rv-uformato'), kit: v('.rv-ukit'), estilo: v('.rv-uestilo'), titulo: v('.rv-utitulo').trim(), ya: $('.rv-uya', caja).checked ? '1' : '' }).filter(([, x]) => x));
     const prog = $('.rv-uprogreso', caja);
     b.disabled = true; caja.dataset.subiendo = '1';
     try {
@@ -701,6 +703,8 @@ VISTAS.revision = {
           ${c.estado === 'revisar' ? '' : listo ? RV_portadas(c) : ''}
           ${c.estado === 'aprobado' ? `<div class="rv-k4 flex" data-k4="${esc(c.id)}">${RV_k4(c)}</div>${RV_publicacion(c, L)}` : ''}
           ${c.diccionario ? `<small class="tenue">📖 ${tr('diccionario')}: ${c.diccionario}</small>` : ''}
+          ${c.estado === 'en cola' || c.estado === 'descargando' ? `<div class="rv-acc flex"><button class="btn pri" data-a="yamismo">⏫ ${tr('Editar ya')}</button>
+            <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button></div>` : ''}
           ${c.estado === 'revisar' || c.estado === 'error' ? `<div class="rv-acc flex">
             <a class="btn pri" href="#/revision/${encodeURIComponent(c.id)}">✏️ ${tr('Abrir editor')}</a>
             ${c.estado === 'revisar' ? `<button class="btn" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
@@ -758,7 +762,7 @@ VISTAS.revision = {
         ${c.ajustes?.plataforma ? `<span class="chip">${tr('para')} ${esc((RV_REDES.find(r => r[0] === c.ajustes.plataforma) || [, c.ajustes.plataforma])[1])}</span>` : ''}${c.ajustes?.banner === false ? `<span class="chip">${tr('sin banner')}</span>` : ''}
         <span class="rve-sp"></span>
         ${nav(ant, 'Clip anterior', '‹')}<span class="tenue rve-n">${i + 1} / ${lista.length}</span>${nav(sig, 'Clip siguiente', '›')}
-        ${trabajando ? '' : `${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
+        ${trabajando ? (c.estado === 'en cola' ? `<button class="btn pri" data-a="yamismo">⏫ ${tr('Editar ya')}</button>` : '') : `${c.estado === 'revisar' ? `<button class="btn pri" data-a="aprobar">${ic('check')}${tr('Aprobar')}</button>` : ''}
         <button class="btn mal" data-a="descartar">${ic('x')}${tr('Descartar')}</button>`}
       </div>
       ${trabajando ? `<div class="caja pad rve-trab"><div class="rve-prog">${c.estado === 'en cola' ? esc(tr('En cola: empieza cuando terminen los de delante')) : RV_progreso(c.progreso)}</div>
@@ -935,6 +939,7 @@ VISTAS.revision = {
         return;
       }
       if (this.idEd) this.firmaEd = null;
+      if (ruta === 'yamismo') { aviso(r?.pausado ? 'Está en pausa: dale a Reanudar' : 'Va el primero: lo que se estaba editando vuelve a la cola', !!r?.pausado); this.firma = null; return this.cargar(); }
       aviso(ruta === 'modificar' ? (r?.respuesta || (cuerpo.comentarios ? 'Se rehace con tus comentarios' : 'Se rehace con tus cambios'))
         : { aprobar: 'Aprobado: está en la carpeta de aprobados', rehacer: 'Se rehace con otro estilo', descartar: 'Descartado', abrir: 'Abierto en FilmCraft', exportar: 'Exportando lo retocado', '4k': '4K en cola',
           youtube: 'En cola para YouTube', redes: 'Preparando títulos e inglés', vincular: 'Vinculado: se mide en la próxima pasada' }[ruta]);

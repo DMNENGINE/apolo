@@ -235,7 +235,7 @@ function iniciar(opciones = {}) {
             req.pipe(out);
           });
           if (fs.statSync(fa).size < 10_000) throw Object.assign(new Error('el archivo llegó vacío'), { status: 400 });
-          return json(res, 200, await n.lotes.desdeArchivo({ ruta: fa, nombre: q.nombre, formato: q.formato || 'vertical', titulo: q.titulo, estilo: q.estilo, kit: q.kit }));
+          return json(res, 200, await n.lotes.desdeArchivo({ ruta: fa, nombre: q.nombre, formato: q.formato || 'vertical', titulo: q.titulo, estilo: q.estilo, kit: q.kit, ya: q.ya === '1' }));
         } catch (e) { fs.rm(fa, { force: true }, () => { }); return json(res, e.status || 400, { error: e.message }); }
       }
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram

@@ -41,6 +41,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   const cola = [];                                     // ids de clips por editar (en orden)
   let enCurso = null, revisando = false;
   let parar = null;                                    // AbortController del trabajo en curso (lo dispara la pausa)
+  let primero = null;                                  // "editar ya": este id pasa delante de todo (también de lo que se cortó para él)
   for (const c of Object.values(est.clips)) if (c.estado === 'editando' || c.estado === 'en cola') { c.estado = 'en cola'; cola.push(c.id); }   // tras reiniciar
   for (const c of Object.values(est.clips)) if (c.estado === 'descargando') { c.estado = 'error'; c.error = 'la descarga se cortó al reiniciar; pídelo otra vez'; }
   // textos para redes + inglés ("en:<id>") y exportaciones 4K ("4k:<id>") pendientes: van en la misma cola, en ese orden
@@ -208,7 +209,8 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   async function procesar() {
     if (enCurso || conf.pausado) return;
     while (cola.length && !conf.pausado) {
-      const id = cola.shift(); enCurso = id; parar = new AbortController();
+      if (primero && cola.includes(primero)) { cola.splice(cola.indexOf(primero), 1); cola.unshift(primero); }
+      const id = cola.shift(); if (id === primero) primero = null; enCurso = id; parar = new AbortController();
       if (id.startsWith('4k:')) { await hacer4k(id.slice(3)); enCurso = null; parar = null; continue; }
       if (id.startsWith('en:')) { await prepararRedes(id.slice(3)); enCurso = null; parar = null; continue; }
       try { await editarUno(id); }
@@ -690,6 +692,28 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
 
   // pausa: deja de editar (corta lo que esté haciendo y lo devuelve al principio de la cola, sin perder nada) hasta reanudar.
   // Sigue buscando streams nuevos; solo no edita ni exporta. Queda guardada en lotes.json (sobrevive a reiniciar APOLO)
+  // "editar ya": saltarse la cola. Si se está editando/exportando otra cosa se corta (vuelve a la cola justo detrás, desde
+  // cero). Si todavía se está bajando/preparando, entra el primero en cuanto esté listo
+  function yaMismo(id) {
+    const c = est.clips[id];
+    if (!c || !['en cola', 'descargando'].includes(c.estado)) throw Object.assign(new Error('ese clip no está esperando en la cola'), { status: 409 });
+    primero = id; if (c.estado === 'descargando') c.prioridad = true; guardarEst();
+    if (c.estado === 'en cola') {
+      if (cola.includes(id)) cola.splice(cola.indexOf(id), 1);
+      cola.unshift(id);
+      if (enCurso && enCurso !== id) parar?.abort(); else procesar();
+    }
+    bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
+    return { ...publico(c), pausado: !!conf.pausado };
+  }
+  // un clip que acaba de bajarse/prepararse entra en la cola (delante de todo si se pidió "editar ya")
+  function aCola(c) {
+    if (c.estado === 'descartado') { borrar(path.join(carpetaFuente(fuenteDe(c.fuente) || { id: c.fuente }), `${c.fecha}_${c.stream}`, 'originales', c.archivo)); return; }   // lo descartó mientras se bajaba
+    c.estado = 'en cola'; c.error = null; cola.push(c.id); guardarEst();
+    if (c.prioridad) { delete c.prioridad; yaMismo(c.id); }
+    bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar();
+  }
+
   function pausar(si = true) {
     conf.pausado = !!si; guardarConf();
     if (si) parar?.abort(); else procesar();
@@ -763,7 +787,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       try { fs.appendFileSync(path.join(dir, 'descargas.log'), `${new Date().toISOString()} ${id}\n${e.completo || e.stack}\n\n`); } catch { }
       throw e;
     }))
-      .then(() => { c.estado = 'en cola'; cola.push(id); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar(); })
+      .then(() => aCola(c))
       .catch(e => { c.estado = 'error'; c.error = `no se pudo descargar el tramo: ${String(e.message).slice(0, 300)}`; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); });
     return publico(c);
   }
@@ -806,13 +830,13 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
       fs.mkdirSync(path.dirname(destino), { recursive: true });
       await aFormato(c, bajado, destino, formato);
     })()
-      .then(() => { c.estado = 'en cola'; c.error = null; cola.push(cid); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar(); })
+      .then(() => aCola(c))
       .catch(e => { c.estado = 'error'; c.error = `no se pudo preparar el clip de Medal: ${String(e.message).slice(0, 300)}`; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); });
     return publico(c);
   }
 
   // ── 7. un vídeo cualquiera subido desde el panel (el daemon ya lo dejó en `ruta`): formato, kit y estilo como en Medal ──
-  async function desdeArchivo({ ruta, nombre, formato = 'vertical', titulo, estilo, kit, ajustes = {} } = {}) {
+  async function desdeArchivo({ ruta, nombre, formato = 'vertical', titulo, estilo, kit, ajustes = {}, ya = false } = {}) {
     if (!ruta || !fs.existsSync(ruta)) throw Object.assign(new Error('no llegó el vídeo'), { status: 400 });
     if (!FORMATOS.includes(formato)) throw Object.assign(new Error(`formato: ${FORMATOS.join(' | ')}`), { status: 400 });
     if (estilo && !estilos.ESTILOS[estilo]) throw Object.assign(new Error(`estilo desconocido: ${estilo}`), { status: 400 });
@@ -822,12 +846,12 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     const fecha = new Date().toISOString().slice(0, 10);
     const c = est.clips[cid] = { id: cid, fuente: 'local', stream, titulo: base, fecha, carpeta: null, rank: 1, archivo: `${stream}.mp4`, inicio: 0, fin: 0, formato,
       estado: 'descargando', creado: Date.now(), manual: true, ajustes: ajustes && typeof ajustes === 'object' ? ajustes : {},
-      ...(titulo ? { tituloClip: String(titulo) } : {}), ...(estilo ? { estiloForzado: estilo } : {}), ...(kit ? { kit } : {}) };
+      ...(titulo ? { tituloClip: String(titulo) } : {}), ...(estilo ? { estiloForzado: estilo } : {}), ...(kit ? { kit } : {}), ...(ya ? { prioridad: true } : {}) };
     guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) });
     const destino = path.join(carpetaFuente(FUENTE_LOCAL), `${fecha}_${stream}`, 'originales', c.archivo);
     fs.mkdirSync(path.dirname(destino), { recursive: true });
     aFormato(c, ruta, destino, formato)
-      .then(() => { c.estado = 'en cola'; c.error = null; cola.push(cid); guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); procesar(); })
+      .then(() => aCola(c))
       .catch(e => { c.estado = 'error'; c.error = `no se pudo preparar el vídeo: ${String(e.message).slice(0, 300)}`; guardarEst(); bus?.emit('lotes', { tipo: 'clip', clip: publico(c) }); })
       .finally(() => borrar(ruta));                      // la copia subida (ya está en originales/)
     return publico(c);
@@ -911,6 +935,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     }
     if (M === 'POST' && ['aprobar', 'descartar', 'rehacer', 'repetir'].includes(p[3])) return decidir(c.id, p[3], b);
     if (M === 'POST' && p[3] === 'modificar') return modificar(c.id, b);
+    if (M === 'POST' && p[3] === 'yamismo') return yaMismo(c.id);
     if (M === 'GET' && p[3] === 'subtitulos') return subtitulos(c.id);
     if (M === 'POST' && p[3] === 'subtitulos') return guardarSubtitulos(c.id, b);
     if (M === 'POST' && p[3] === 'abrir') return abrir(c.id);
@@ -955,7 +980,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
     },
   };
 
-  return { HERRAMIENTA, revisar, procesar, pausar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, prepararRedes, actualizarMetricas, aYouTube, reintentarYouTube, desdeMedal, desdeArchivo, ESTILOS_DEFECTO };
+  return { HERRAMIENTA, revisar, procesar, pausar, decidir, publicar, modificar, nuevo, interpretar, abrir, reexportar, limpiar, estado, programar, http, elegirEstilo, prepararRedes, actualizarMetricas, aYouTube, reintentarYouTube, desdeMedal, desdeArchivo, yaMismo, ESTILOS_DEFECTO };
 }
 
 module.exports = { crearLotes, ESTILOS_DEFECTO };

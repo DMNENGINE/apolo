@@ -193,3 +193,33 @@ test('lotes + subir video: un vídeo cualquiera del PC se pasa a vertical, se ed
   assert.ok(!fs.existsSync(subido), 'la copia subida se borra');
   assert.ok(ed.video.includes(path.join('Videos subidos')));
 });
+
+test('lotes: "editar ya" pasa un clip delante de la cola y corta lo que se estaba editando (vuelve detrás)', async () => {
+  const { EventEmitter } = require('events');
+  const { crearLotes } = require('../craft/lotes');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lotes-ya-'));
+  const ejecutar = (cmd, args, o, cb) => { if (/ffmpeg/.test(cmd)) fs.writeFileSync(args.at(-1), 'v'); cb(null, '', ''); };
+  const orden = []; let soltar = null;
+  const subtitulador = { async reexportar(o) { return o; }, async subtitular(a, ctx) {
+    if (a.soloTranscribir) return JSON.stringify({ subtitulos: [] });
+    orden.push(path.basename(path.dirname(path.dirname(a.video))));
+    if (orden.length === 1) await new Promise((ok, mal) => { soltar = ok; ctx.signal.addEventListener('abort', () => mal(new Error('abortado'))); });   // el primero tarda
+    fs.mkdirSync(a.carpeta, { recursive: true });
+    const b = path.join(a.carpeta, a.nombre);
+    for (const e of ['.mp4', '.png', '.fcproj']) fs.writeFileSync(b + e, 'x');
+    return { datos: { mp4: b + '.mp4', srt: null, previa: b + '.png', proyecto: b + '.fcproj', gancho: 'X', fuente: a.video, calidad: { ok: true, errores: [], avisos: [], medidas: { duracion: 5 } } } };
+  } };
+  fs.mkdirSync(path.join(dir, 'craft'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'craft', 'lotes.json'), JSON.stringify({ salida: path.join(dir, 'videos'), fuentes: [] }));
+  const l = crearLotes({ cfg: { dir }, bus: new EventEmitter(), subtitulador, ejecutar, generarJSON: async () => ({ datos: { estilo: 'impacto' } }),
+    medir: async () => ({ ancho: 1080, alto: 1920, duracion: 5 }), youtube: { conectado: () => true, estado: () => ({}) }, metricas: {} });
+  const esp = async fn => { const t = Date.now(); while (Date.now() - t < 5000) { const r = fn(); if (r) return r; await new Promise(ok => setTimeout(ok, 10)); } throw new Error('no llegó'); };
+  const subir = async (n, ya) => { const f = path.join(dir, n + '.mp4'); fs.writeFileSync(f, 'x'); return l.desdeArchivo({ ruta: f, nombre: n + '.mp4', ya }); };
+  const a = await subir('aaa'); await esp(() => orden.length === 1);
+  const b = await subir('bbb'); await esp(() => l.estado().clips.find(x => x.id === b.id).estado === 'en cola');
+  const c = await subir('ccc', true);                    // subido con "editar ya": corta a aaa y va antes que bbb
+  await esp(() => ['aaa', 'bbb', 'ccc'].every(n => l.estado().clips.find(x => x.stream.startsWith(n)).estado === 'revisar'));
+  assert.deepStrictEqual(orden.map(x => x.slice(11, 14)), ['aaa', 'ccc', 'aaa', 'bbb']);
+  await assert.rejects(async () => l.yaMismo(a.id), /no está esperando/);
+  assert.ok(soltar && c);
+});
