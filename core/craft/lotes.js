@@ -804,8 +804,13 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   async function aFormato(c, entrada, destino, formato) {
     const md = await medir(entrada, { ffmpeg: cfg?.craft?.ffmpeg, ligero: true });
     if (md.duracion) c.fin = +(+md.duracion).toFixed(2);
-    if (formato === 'horizontal' || !(md.ancho > md.alto)) fs.copyFileSync(entrada, destino);
-    else await sh(cfg?.craft?.ffmpeg || 'ffmpeg', ['-y', '-v', 'error', '-i', entrada, '-filter_complex', FILTROS[formato], '-map', '[v]', '-map', '0:a?',
+    // sin pista de audio (p. ej. vídeos generados con IA) Whisper, los sonidos y el control de calidad fallan: se le pone silencio
+    const silencio = md.audio === false ? ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo'] : [], audio = silencio.length ? ['-map', '1:a', '-shortest'] : ['-map', '0:a?'];
+    const tal = formato === 'horizontal' || !(md.ancho > md.alto);
+    if (tal && !silencio.length) fs.copyFileSync(entrada, destino);
+    else if (tal) await sh(cfg?.craft?.ffmpeg || 'ffmpeg', ['-y', '-v', 'error', '-i', entrada, ...silencio, '-map', '0:v:0', ...audio,
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', destino], { timeout: 1_800_000 });
+    else await sh(cfg?.craft?.ffmpeg || 'ffmpeg', ['-y', '-v', 'error', '-i', entrada, ...silencio, '-filter_complex', FILTROS[formato], '-map', '[v]', ...audio,
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', destino], { timeout: 1_800_000 });
   }
   async function desdeMedal({ id, formato = 'vertical', titulo, estilo, ajustes = {} } = {}) {
