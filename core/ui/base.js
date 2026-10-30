@@ -417,7 +417,8 @@ document.addEventListener('visibilitychange', () => avisarFoco());
 const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['turno', 'Turno de noche', 'luna'], ['auto', 'Automatizaciones', 'reloj'], ['skills', 'Skills', 'pieza'], ['memoria', 'Memoria', 'cerebro'], ['wrapped', 'Wrapped', 'chispa'], ['uso', 'Uso', 'grafica']];
 // pestañas que aportan los plugins activos (aporta.vistas), justo después de Mission Control
 let NAV_PLUGINS = [];
-const navApp = () => { const i = NAV_APP.findIndex(x => x[0] === 'agentes') + 1; return [...NAV_APP.slice(0, i), ...NAV_PLUGINS, ...NAV_APP.slice(i)]; };
+// una entrada puede llevar un 4.º elemento: función que dice si se enseña (p. ej. Revisión solo si hay fuente de clips)
+const navApp = () => { const l = NAV_APP.filter(x => !x[3] || x[3]()), i = l.findIndex(x => x[0] === 'agentes') + 1; return [...l.slice(0, i), ...NAV_PLUGINS, ...l.slice(i)]; };
 async function cargarVistasPlugin() {
   let l = []; try { l = (await api('GET', '/plugins/vistas')).vistas || []; } catch { }
   const nuevo = l.map(v => [`p/${v.plugin}/${v.nombre}`, v.titulo, P[v.icono] ? v.icono : 'pieza']), antes = JSON.stringify(NAV_PLUGINS);

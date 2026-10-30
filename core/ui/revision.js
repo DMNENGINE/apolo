@@ -2,7 +2,16 @@
 // en su reproductor con el gancho, el estilo, las escenas, el chat de ese momento y las frases en las que Whisper dudó;
 // el usuario decide Aprobar (→ carpeta aprobados) / Otro estilo (se rehace) / Descartar. Globales con prefijo RV_.
 P.clip = '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>';
-NAV_APP.splice(NAV_APP.findIndex(n => n[0] === 'reuniones'), 0, ['revision', 'Revisión', 'clip']);
+// la pestaña solo sale si el editor por lotes tiene una fuente configurada o ya hay clips (la página sigue en #/revision)
+let RV_enUso = false;
+NAV_APP.splice(NAV_APP.findIndex(n => n[0] === 'reuniones'), 0, ['revision', 'Revisión', 'clip', () => RV_enUso]);
+{ const antes = cargarVistasPlugin;                         // se comprueba al arrancar el panel y cuando cambian los plugins
+  cargarVistasPlugin = async (...a) => {
+    const [cambio, r] = await Promise.all([antes(...a), api('GET', '/revision').catch(() => null)]);
+    const ahora = !!r && ((r.config?.fuentes || []).length > 0 || (r.clips || []).length > 0), cambia = ahora !== RV_enUso;
+    RV_enUso = ahora;
+    return cambio || cambia;
+  }; }
 
 Object.assign(I18N.dic.en, {
   'Revisión': 'Review', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.': 'Clips edited automatically from your streams. Watch them and decide: approve, another style or discard. Nothing is published without your approval.',
