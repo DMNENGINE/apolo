@@ -26,7 +26,7 @@ const AGENTES = [
   { id: 'codex', nombre: 'Codex', dir: '.codex', archivos: ['AGENTS.md', 'AGENTS.override.md'], carpetas: ['memories', 'memory'] },
   { id: 'gemini', nombre: 'Gemini CLI', dir: '.gemini', archivos: ['GEMINI.md'], carpetas: [] },
   { id: 'antigravity', nombre: 'Antigravity', dir: path.join('.gemini', 'antigravity'), archivos: [], carpetas: ['knowledge'] },
-  { id: 'qwen', nombre: 'Qwen Code', dir: '.qwen', archivos: ['QWEN.md', 'AGENTS.md'], carpetas: ['memories', 'memory'] },
+  { id: 'qwen', nombre: 'Qwen Code', dir: '.qwen', archivos: ['QWEN.md', 'AGENTS.md'], carpetas: ['memories', 'memory'], memoriaProyectos: true },
   { id: 'opencode', nombre: 'opencode', dir: path.join('.config', 'opencode'), archivos: ['AGENTS.md'], carpetas: [] },
   { id: 'openclaw', nombre: 'OpenClaw', dir: path.join('.openclaw', 'workspace'), archivos: ['USER.md', 'MEMORY.md', 'IDENTITY.md'], carpetas: ['memory'] },
   { id: 'cursor', nombre: 'Cursor', dir: '.cursor', archivos: ['AGENTS.md'], carpetas: ['memories'] },
@@ -65,7 +65,7 @@ function crearMemoriasAgentes({ cfg, memoria, generarJSON, modelo, bus, registro
       const archivos = [];
       for (const f of a.archivos) { const r = path.join(raiz, f); if (fs.existsSync(r)) archivos.push(r); }
       for (const c of a.carpetas) mdsDe(path.join(raiz, c), MAX_POR_AGENTE, archivos);
-      if (a.memoriaProyectos) {                               // Claude Code: ~/.claude/projects/<proyecto>/memory/*.md
+      if (a.memoriaProyectos) {                               // Claude Code y Qwen Code: ~/.<agente>/projects/<proyecto>/memory/*.md
         let ps = []; try { ps = fs.readdirSync(path.join(raiz, 'projects')); } catch { }
         for (const p of ps) mdsDe(path.join(raiz, 'projects', p, 'memory'), MAX_POR_AGENTE, archivos);
       }

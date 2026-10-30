@@ -2,7 +2,9 @@
 // resume cada sesión con el modelo del cerebro y guarda lo duradero en la memoria (origen 'claude-code').
 // Los resúmenes quedan en <datos>/aprender-cc/AAAA-MM-DD.jsonl: salen en la línea de tiempo (tipo 'claude') y en el diario.
 // Solo lee el texto de la conversación (lo que pide el usuario y lo que contesta Claude), no las salidas de herramientas;
-// las claves y contraseñas se tapan antes de mandarlo al modelo. cfg.aprenderClaude { activo, hora, dir, maxSesiones }.
+// las claves y contraseñas se tapan antes de mandarlo al modelo. cfg.aprenderClaude { activo, hora, dir, maxSesiones, otros }.
+// También aprende de las conversaciones de Codex, Gemini CLI, Qwen Code y opencode (lectores de core/conversaciones-agentes.js;
+// cfg.aprenderClaude.otros === false lo apaga): por sesión guarda cuántos mensajes ya resumió y solo manda los nuevos.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -13,17 +15,17 @@ const TAPAR = new RegExp(SECRETO.source, 'gi');
 const ESQ = {
   type: 'object', required: ['resumen', 'recuerdos'],
   properties: {
-    resumen: { type: 'string', description: '2-5 frases: qué hizo el usuario con Claude Code en esta sesión, en qué proyecto y cómo acabó' },
+    resumen: { type: 'string', description: '2-5 frases: qué hizo el usuario con el agente en esta sesión, en qué proyecto y cómo acabó' },
     recuerdos: { type: 'array', maxItems: 6, items: { type: 'object', required: ['texto', 'tipo'], properties: { texto: { type: 'string' }, tipo: { type: 'string', enum: TIPOS } } } },
   },
 };
-const SISTEMA = 'Eres la memoria de un asistente personal. Te paso una conversación del usuario con Claude Code (otro asistente de programación). ' +
+const sistema = (agente = 'Claude Code') => `Eres la memoria de un asistente personal. Te paso una conversación del usuario con ${agente} (otro asistente de programación). ` +
   'Resume qué hicieron y extrae SOLO lo duradero que te sirva para ayudar al usuario en el futuro: cómo le gusta trabajar y que le hablen, ' +
   'decisiones y estado de sus proyectos, sus gustos, personas y datos de su vida. Nada de pasos técnicos de un solo uso, rutas temporales ni ' +
   'detalles que caducan mañana. NUNCA guardes claves, tokens, contraseñas ni datos de acceso. Cada recuerdo es una frase corta en español ' +
   'y en tercera persona ("El usuario…", "El proyecto X…"). Si no hay nada duradero, recuerdos vacío. Responde solo JSON.';
 
-function crearAprenderCC({ cfg, memoria, generarJSON, modelo, tareas, registro }) {
+function crearAprenderCC({ cfg, memoria, generarJSON, modelo, tareas, registro, lectores = [] }) {
   const conf = () => ({ ...DEF, ...(cfg.aprenderClaude || {}) });
   const dirCC = () => conf().dir || path.join(os.homedir(), '.claude', 'projects');
   const dir = path.join(cfg.dir, 'aprender-cc'), fEstado = path.join(dir, 'estado.json');
@@ -60,7 +62,7 @@ function crearAprenderCC({ cfg, memoria, generarJSON, modelo, tareas, registro }
           const d = path.join(dirCC(), p); let ls = []; try { ls = fs.readdirSync(d); } catch { continue; }
           for (const f of ls) if (f.endsWith('.jsonl')) { const r = path.join(d, f); const st = fs.statSync(r); if (st.mtimeMs >= desde && st.size > (est.offsets[r] || 0)) archivos.push({ r, st }); }
         }
-      } catch (e) { return { sesiones: 0, recuerdos: 0, error: `no encuentro las conversaciones de Claude Code (${dirCC()})` }; }
+      } catch { archivos = []; }                                  // sin Claude Code: se sigue con los demás agentes
       archivos = archivos.sort((a, b) => a.st.mtimeMs - b.st.mtimeMs).slice(-c.maxSesiones);
       fs.mkdirSync(dir, { recursive: true });
       let sesiones = 0, recuerdos = 0;
@@ -75,7 +77,7 @@ function crearAprenderCC({ cfg, memoria, generarJSON, modelo, tareas, registro }
         let conv = msgs.map(m => `${m.rol}: ${m.texto}`).join('\n\n');
         if (conv.length > 40_000) conv = conv.slice(0, 8_000) + '\n\n[…]\n\n' + conv.slice(-32_000);
         try {
-          const { datos } = await generarJSON({ modelo: modelo(), system: SISTEMA, schema: ESQ, prompt: `Proyecto (carpeta): ${cwd || '?'}\n\n${conv}`, signal: AbortSignal.timeout(180_000) });
+          const { datos } = await generarJSON({ modelo: modelo(), system: sistema(), schema: ESQ, prompt: `Proyecto (carpeta): ${cwd || '?'}\n\n${conv}`, signal: AbortSignal.timeout(180_000) });
           let n = 0;
           for (const x of (datos?.recuerdos || []).slice(0, 6)) {
             try { if (x?.texto && !SECRETO.test(x.texto)) { memoria.recordar({ texto: String(x.texto).slice(0, 400), tipo: x.tipo, origen: 'claude-code' }); n++; } } catch { }
@@ -87,10 +89,48 @@ function crearAprenderCC({ cfg, memoria, generarJSON, modelo, tareas, registro }
           fs.writeFileSync(fEstado, JSON.stringify(est));
         } catch (e) { registro?.add?.('aviso', 'aprender-claude', `${path.basename(r)}: ${e.message}`); }
       }
+      const porAgente = {};
+      if (c.otros !== false) {
+        est.otros = est.otros || {}; est.agentes = est.agentes || {};
+        const pend = [];
+        for (const lec of lectores) {
+          const desdeA = Date.now() - (dias || (est.agentes[lec.id] ? 30 : c.primeraVezDias)) * 86400_000;
+          let ses = []; try { ses = await lec.sesiones({ desde: desdeA }); } catch (e) { registro?.add?.('aviso', 'aprender-claude', `${lec.nombre}: ${e.message}`); }
+          for (const x of ses) { const p = est.otros[x.clave]; if (!p || p.mtime !== x.mtime) pend.push({ lec, x }); }
+          est.agentes[lec.id] = true;
+        }
+        for (const { lec, x } of pend.sort((a, b) => a.x.mtime - b.x.mtime).slice(0, Math.max(0, c.maxSesiones - sesiones))) {
+          if (Date.now() - x.mtime < 10 * 60_000) continue;                   // sesión viva: la próxima vez
+          try {
+            const { msgs = [], cwd = '' } = await x.leer(), ya = est.otros[x.clave]?.n || 0, nuevos = msgs.slice(ya);
+            if (nuevos.filter(m => m.rol === 'USUARIO').reduce((n, m) => n + m.texto.length, 0) >= 40) {
+              const n = await resumirOtro(lec, x.clave, nuevos, cwd, x.mtime);
+              sesiones++; recuerdos += n; porAgente[lec.nombre] = (porAgente[lec.nombre] || 0) + n;
+            }
+            est.otros[x.clave] = { n: msgs.length, mtime: x.mtime };
+            fs.writeFileSync(fEstado, JSON.stringify(est));
+          } catch (e) { registro?.add?.('aviso', 'aprender-claude', `${lec.nombre} ${x.clave}: ${e.message}`); }
+        }
+      }
       fs.writeFileSync(fEstado, JSON.stringify(est));
-      return { sesiones, recuerdos };
+      return Object.keys(porAgente).length ? { sesiones, recuerdos, porAgente } : { sesiones, recuerdos };
     })().finally(() => { enCurso = null; });
     return enCurso;
+  }
+
+  // conversación de otro agente: misma receta que la de Claude Code; devuelve los recuerdos guardados
+  async function resumirOtro(lec, clave, msgs, cwd, mtime) {
+    let conv = msgs.map(m => `${m.rol}: ${m.texto.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').replace(TAPAR, '[secreto]').slice(0, 1500)}`).join('\n\n');
+    if (conv.length > 40_000) conv = conv.slice(0, 8_000) + '\n\n[…]\n\n' + conv.slice(-32_000);
+    const { datos } = await generarJSON({ modelo: modelo(), system: sistema(lec.nombre), schema: ESQ, prompt: `Proyecto (carpeta): ${cwd || '?'}\n\n${conv}`, signal: AbortSignal.timeout(180_000) });
+    let n = 0;
+    for (const x of (datos?.recuerdos || []).slice(0, 6)) {
+      try { if (x?.texto && !SECRETO.test(x.texto)) { memoria.recordar({ texto: String(x.texto).slice(0, 400), tipo: x.tipo, origen: lec.id }); n++; } } catch { }
+    }
+    const tUlt = msgs.at(-1)?.t || mtime;
+    fs.appendFileSync(path.join(dir, `${dia(tUlt)}.jsonl`), JSON.stringify({ t: tUlt, inicio: msgs[0]?.t || tUlt, sesion: clave, agente: lec.nombre, proyecto: cwd,
+      resumen: String(datos?.resumen || '').replace(TAPAR, '[secreto]').slice(0, 1200), recuerdos: n }) + '\n');
+    return n;
   }
 
   // para la línea de tiempo (y el diario, que la consulta)
@@ -107,14 +147,14 @@ function crearAprenderCC({ cfg, memoria, generarJSON, modelo, tareas, registro }
     if (!tareas) return null;
     tareas.registrarInterna('aprender-claude', async () => {
       const r = await aprender();
-      return { registro: r.error || `aprendí de ${r.sesiones} sesión(es) de Claude Code · ${r.recuerdos} recuerdo(s) nuevo(s)` };
+      return { registro: r.error || `aprendí de ${r.sesiones} sesión(es) de tus agentes de programación · ${r.recuerdos} recuerdo(s) nuevo(s)` };
     });
     const c = conf(), [h, m] = String(c.hora).split(':').map(Number), cron = `${m || 0} ${h || 3} * * *`;
     const ya = tareas.lista().find(t => t.accion?.tipo === 'interna' && t.accion.nombre === 'aprender-claude');
     if (!c.activo) { if (ya) tareas.borrar(ya.id); return null; }
     if (ya && ya.cuando?.cron === cron) return ya;
     if (ya) tareas.borrar(ya.id);
-    return tareas.crear({ nombre: 'Aprender de Claude Code', cuando: { cron }, accion: { tipo: 'interna', nombre: 'aprender-claude' }, canal: 'isla' });
+    return tareas.crear({ nombre: 'Aprender de tus agentes de programación', cuando: { cron }, accion: { tipo: 'interna', nombre: 'aprender-claude' }, canal: 'isla' });
   }
 
   // API /v1/aprender-claude: GET = estado y resúmenes de 7 días · POST = aprender ahora { dias? }

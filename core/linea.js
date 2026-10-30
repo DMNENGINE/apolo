@@ -74,10 +74,10 @@ function crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPer
       ev.push({ t: r.inicio, fin: r.fin || r.inicio, tipo: 'reunion', titulo: `Reunión: ${r.titulo}`, detalle: r.resumen || `${r.segmentos} fragmentos`, ruta: `#/reuniones/${r.id}`,
         extra: { fuente: r.fuente, tareas: r.tareas, hablantes: r.hablantes.length } });
     }
-    if (quiero.has('claude') && aprenderCC) for (const c of aprenderCC.resumenes({ desde, hasta })) {      // sesiones de Claude Code aprendidas
-      const proy = path.basename(c.proyecto || '') || 'Claude Code';
-      if (!coincide(nq, c.resumen, proy)) continue;
-      ev.push({ t: c.inicio || c.t, fin: c.t, tipo: 'claude', titulo: `Con Claude Code · ${proy}`, detalle: c.resumen, extra: { recuerdos: c.recuerdos, sesion: c.sesion } });
+    if (quiero.has('claude') && aprenderCC) for (const c of aprenderCC.resumenes({ desde, hasta })) {      // sesiones aprendidas de Claude Code, Codex, Gemini…
+      const agente = c.agente || 'Claude Code', proy = path.basename(String(c.proyecto || '').replace(/[\\/]+$/, '')) || agente;
+      if (!coincide(nq, c.resumen, proy, agente)) continue;
+      ev.push({ t: c.inicio || c.t, fin: c.t, tipo: 'claude', titulo: `Con ${agente} · ${proy}`, detalle: c.resumen, extra: { recuerdos: c.recuerdos, sesion: c.sesion } });
     }
     if (quiero.has('sueno') && sueno) for (const s of sueno.informes(60)) {
       if (!en(s.inicio) || !coincide(nq, s.resumen, s.frase)) continue;

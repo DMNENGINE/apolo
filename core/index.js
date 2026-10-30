@@ -117,7 +117,9 @@ function crearNucleo(opciones = {}) {
   herramientas.registrar([grafoMod.HERRAMIENTA]);
   herramientas.registrar(require('./archive').HERRAMIENTAS);    // Internet Archive: buscar, ver, leer libros, Wayback, guardar
   // lo que el usuario hace en Claude Code → memoria + línea de tiempo + diario (tarea nocturna, core/aprender-cc.js)
-  const aprenderCC = require('./aprender-cc').crearAprenderCC({ cfg, memoria, generarJSON: generarJSONvivo, modelo: modeloCerebro, tareas, registro });
+  // + Codex, Gemini CLI, Qwen Code y opencode (core/conversaciones-agentes.js); los tests pasan opciones.lectoresAgentes
+  const aprenderCC = require('./aprender-cc').crearAprenderCC({ cfg, memoria, generarJSON: generarJSONvivo, modelo: modeloCerebro, tareas, registro,
+    lectores: opciones.lectoresAgentes || require('./conversaciones-agentes').crearLectores() });
   nucleo.extensiones['aprender-claude'] = { http: (...a) => aprenderCC.http(...a) };
   const linea = require('./linea').crearLinea({ cfg, sesiones, tareas, turno, consejo, sueno, historialPermisos, memoria, reuniones: () => nucleo.reuniones, aprenderCC });
   const privacidad = require('./privacidad').crearPrivacidad({ cfg, memoria, grafo, sesiones, personalidad, registro, bus });
@@ -161,9 +163,10 @@ function crearNucleo(opciones = {}) {
   const espejoCC = require('./espejo-cc').crearEspejoCC({ cfg, sesiones, log: (...a) => console.log(...a) });
   let aprenderPronto = null;
   bus.on('motor-hook', ev => {
-    if ((ev?._motor || 'claude') !== 'claude') return;
-    if (['UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'].includes(ev.hook_event_name)) espejoCC.tocar(ev.transcript_path);
-    // la memoria aprende de la sesión en cuanto se queda parada (aprender-cc salta las que tienen actividad de hace < 10 min), no a las 3 de la noche
+    const esClaude = (ev?._motor || 'claude') === 'claude';
+    if (esClaude && ['UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'].includes(ev.hook_event_name)) espejoCC.tocar(ev.transcript_path);
+    // la memoria aprende de la sesión en cuanto se queda parada (aprender-cc salta las que tienen actividad de hace < 10 min), no a las 3 de la noche;
+    // vale para Claude Code y para los motores con hooks (Gemini CLI, opencode); Codex y Qwen Code se leen en la vuelta nocturna
     if (['Stop', 'SessionEnd'].includes(ev.hook_event_name) && cfg.aprenderClaude?.activo !== false && cfg.aprenderClaude?.alMomento !== false) {
       clearTimeout(aprenderPronto);
       aprenderPronto = setTimeout(() => aprenderCC.aprender().catch(() => { }), 12 * 60_000); aprenderPronto.unref?.();

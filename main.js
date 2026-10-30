@@ -896,6 +896,8 @@ app.whenReady().then(() => {
   nucleo.versionApp = app.getVersion();                      // Acerca de: APOLO v0.2.x (la del núcleo va aparte)
   try { nucleo.espejoCC?.iniciar(); } catch (e) { console.log('[espejo-cc]', e.message); }   // las sesiones de Claude Code también son de APOLO
   try { nucleo.memoriasAgentes?.iniciar(); } catch (e) { console.log('[memorias-agentes]', e.message); }   // lo que saben Claude Code, Codex, Gemini… del usuario
+  // y sus conversaciones: una vuelta a los 3 min de arrancar (recién instalado no espera a la tarea de la madrugada)
+  if (nucleo.cfg.aprenderClaude?.activo !== false) setTimeout(() => nucleo.aprenderCC?.aprender().then(r => console.log('[aprender]', JSON.stringify(r))).catch(e => console.log('[aprender]', e.message)), 3 * 60_000).unref?.();
   try { conectarAgentes(); } catch (e) { console.log('[agentes]', e.message); }   // hooks de los agentes de programación que haya, sin pasar por la bandeja
   try {                                                       // correo (varias cuentas), GitHub, Hugging Face, ElevenLabs
     const cifra = safeStorage.isEncryptionAvailable();
