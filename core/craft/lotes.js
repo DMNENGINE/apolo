@@ -227,7 +227,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
           for (const x of del) x.avisado = true; guardarEst();
           const f = fuenteDe(c.fuente);
           bus?.emit('aviso-externo', { origen: 'Clips', urgente: false,
-            texto: `🎬 ${listos} clips de ${f?.nombre || c.fuente} (${c.titulo || c.stream}) listos para revisar en el panel → Revisión.${malos ? ` ${malos} fallaron.` : ''} Estilos: ${[...new Set(del.map(x => x.estilo).filter(Boolean))].join(', ')}.` });
+            texto: `🎬 ${listos} clips de ${f?.nombre || c.fuente} (${c.titulo || c.stream}) listos para revisar en el panel → Editor de Videos.${malos ? ` ${malos} fallaron.` : ''} Estilos: ${[...new Set(del.map(x => x.estilo).filter(Boolean))].join(', ')}.` });
         }
       }
     }
@@ -912,7 +912,7 @@ function crearLotes({ cfg, bus, tareas, subtitulador, generarJSON, modelo, ejecu
   // para que el usuario se lo pida a APOLO (voz, Discord, chat): "pausa la edición de clips hasta que me duerma"
   const HERRAMIENTA = {
     nombre: 'editor_clips', riesgo: a => (a?.accion === 'estado' ? 'lectura' : 'escritura'),
-    descripcion: 'El editor automático de clips (Revisión: clips de los streams que APOLO edita solo con FilmCraft). '
+    descripcion: 'El editor automático de clips (Editor de Videos: clips de los streams que APOLO edita solo con FilmCraft). '
       + 'accion: estado (qué edita, cuántos en cola, si está en pausa) · pausar (deja de editar/exportar YA; lo que estaba haciendo vuelve a la cola sin perderse; '
       + 'sigue pausado aunque APOLO se reinicie) · reanudar (sigue con la cola). Úsalo cuando el usuario pida parar/pausar/dejar de editar clips para liberar el PC.',
     parametros: { type: 'object', properties: { accion: { type: 'string', enum: ['estado', 'pausar', 'reanudar'] } }, required: ['accion'] },

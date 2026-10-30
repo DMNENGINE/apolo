@@ -4,7 +4,7 @@
 P.clip = '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>';
 // la pestaña solo sale si el editor por lotes tiene una fuente configurada o ya hay clips (la página sigue en #/revision)
 let RV_enUso = false;
-NAV_APP.splice(NAV_APP.findIndex(n => n[0] === 'reuniones'), 0, ['revision', 'Revisión', 'clip', () => RV_enUso]);
+NAV_APP.splice(NAV_APP.findIndex(n => n[0] === 'reuniones'), 0, ['revision', 'Editor de Videos', 'clip', () => RV_enUso]);
 { const antes = cargarVistasPlugin;                         // se comprueba al arrancar el panel y cuando cambian los plugins
   cargarVistasPlugin = async (...a) => {
     const [cambio, r] = await Promise.all([antes(...a), api('GET', '/revision').catch(() => null)]);
@@ -14,7 +14,7 @@ NAV_APP.splice(NAV_APP.findIndex(n => n[0] === 'reuniones'), 0, ['revision', 'Re
   }; }
 
 Object.assign(I18N.dic.en, {
-  'Revisión': 'Review', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.': 'Clips edited automatically from your streams. Watch them and decide: approve, another style or discard. Nothing is published without your approval.',
+  'Editor de Videos': 'Video Editor', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.': 'Clips edited automatically from your streams. Watch them and decide: approve, another style or discard. Nothing is published without your approval.',
   'Buscar clips ahora': 'Look for clips now', 'Pausar edición': 'Pause editing', 'Reanudar edición': 'Resume editing',
   'Edición en pausa': 'Editing paused', 'no edita ni exporta hasta que la reanudes; lo que estaba haciendo vuelve a la cola sin perderse.': "won't edit or export until you resume it; whatever it was doing goes back to the queue, nothing is lost.",
   'En pausa': 'Paused', 'Reanudado': 'Resumed', 'Por revisar': 'To review', 'Aprobados': 'Approved', 'Descartados': 'Discarded', 'Todos': 'All',
@@ -465,7 +465,7 @@ VISTAS.revision = {
       this.reloj = setInterval(() => this.cargar(true), 3000);
       return;
     }
-    v.innerHTML = `<div class="pagina">${cabecera('Revisión', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.',
+    v.innerHTML = `<div class="pagina">${cabecera('Editor de Videos', 'Clips editados solos a partir de tus streams. Míralos y decide: aprobar, otro estilo o descartar. Nada se publica sin tu aprobación.',
       `<button class="btn" id="rvPausa">⏸️ ${tr('Pausar edición')}</button><button class="btn" id="rvMedal">🎮 ${tr('Elegir de Medal')}</button><button class="btn" id="rvBuscar">${ic('buscar')}${tr('Buscar clips ahora')}</button>`)}
       <div id="rvEstado"></div>
       <div id="rvMedalCaja" hidden></div>
@@ -690,7 +690,7 @@ VISTAS.revision = {
   pintarEditor(L, silencio) {
     const raiz = $('.rve', this.v); if (!raiz) return;
     const c = L.clips.find(x => x.id === this.idEd);
-    if (!c) { raiz.innerHTML = `<div class="rve-cab"><a class="btn fantasma" href="#/revision">← ${tr('Revisión')}</a></div><div class="caja pad rv-vacio">${tr('Ese clip ya no está en Revisión.')}</div>`; return; }
+    if (!c) { raiz.innerHTML = `<div class="rve-cab"><a class="btn fantasma" href="#/revision">← ${tr('Editor de Videos')}</a></div><div class="caja pad rv-vacio">${tr('Ese clip ya no está en el Editor de Videos.')}</div>`; return; }
     const trabajando = ['editando', 'en cola'].includes(c.estado);
     const firma = JSON.stringify([trabajando, c.estado, c.editado, c.estilo, c.portada, c.portadas?.length]);
     if (silencio && firma === this.firmaEd) { if (trabajando) { const p = $('.rve-trab .rve-prog', raiz); if (p) p.innerHTML = c.estado === 'en cola' ? esc(tr('En cola: empieza cuando terminen los de delante')) : RV_progreso(c.progreso); } return; }
@@ -703,7 +703,7 @@ VISTAS.revision = {
     const TABS = [['subs', '✏️ ' + tr('Subtítulos')], ['estilo', '🎨 ' + tr('Estilo')], ['coms', '💬 ' + tr('Comentarios')], ['cambios', '🛠 ' + tr('Cambios')], ['portada', '🖼 ' + tr('Portada')], ['info', 'ℹ️ ' + tr('Info')]];
     raiz.innerHTML = `
       <div class="rve-cab">
-        <a class="btn fantasma" href="#/revision">← ${tr('Revisión')}</a>
+        <a class="btn fantasma" href="#/revision">← ${tr('Editor de Videos')}</a>
         <div class="rve-tit"><b>#${c.rank} · ${esc(c.gancho || c.titulo || c.stream)}</b>
           <small class="tenue">${esc(c.fecha)} · ${RV_mmss(c.fin - c.inicio)} · ${c.fuente === 'medal' ? '🎮 Medal' : `${RV_mmss(c.inicio)} ${tr('del stream')}`}</small></div>
         <span class="chip ${cls}">${esc(tr(txt))}</span>${c.estilo ? `<span class="chip">${esc(c.estilo)}</span>` : ''}${c.calidad ? RV_chipCalidad(c) : ''}
