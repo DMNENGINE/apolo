@@ -150,7 +150,7 @@ function crearServicios({ almacen }) {
       } },
     { nombre: 'pixelsins_publicar', servicio: 'pixelsins', riesgo: 'escritura', descripcion: 'PixelSins: publica una imagen o video de este equipo (solo clave de admin con escritura). La web pone la marca de agua. Pide permiso.',
       parametros: { type: 'object', properties: { archivo: { type: 'string', description: 'ruta del archivo en este equipo' }, titulo: { type: 'string' }, descripcion: { type: 'string' }, etiquetas: { type: 'string', description: 'separadas por comas' },
-        categoria: { type: 'string' }, niveles: { type: 'string', description: 'PG, PG13, R, X o XXX separados por comas' }, albumId: { type: 'number' }, anunciar: { type: 'boolean', description: 'publicar también en el Discord (por defecto sí)' } }, required: ['archivo', 'titulo'] },
+        categoria: { type: 'string' }, niveles: { type: 'string', description: 'PG, PG-13, R, X o XXX separados por comas' }, albumId: { type: 'number' }, anunciar: { type: 'boolean', description: 'publicar también en el Discord (por defecto sí)' } }, required: ['archivo', 'titulo'] },
       resumen: a => `publicar en PixelSins "${a.titulo}" (${a.archivo})${a.anunciar === false ? ' sin anunciar' : ' y anunciarlo en Discord'}`,
       ejecutar: async a => {
         const f = path.resolve(String(a.archivo));
