@@ -453,7 +453,7 @@ function dondeClave(nombre, p = {}) {
 const enlaceClave = (nombre, p) => { const d = dondeClave(nombre, p); return d ? `<div class="tenue" style="font-size:12.5px;margin-top:8px">🔑 ${tr('Consíguela en')} <a href="${d.url}" target="_blank" rel="noopener"><b>${esc(d.sitio)}</b> → ${esc(d.url.replace(/^https:\/\//, ''))}</a>${d.nota ? `<br>${esc(tr(d.nota))}` : ''}</div>` : ''; };
 
 VISTAS['ajustes/claves'] = {
-  claves: 'api key secreto token openai anthropic gemini',
+  claves: 'api key secreto token openai anthropic gemini servicios github hugging face elevenlabs pixelsins',
   async pintar(v) {
     const c = E.config = await api('GET', '/config');
     const conKey = Object.entries(c.proveedores).filter(([, p]) => !p.local && !['claude-cli', 'codex-cli'].includes(p.tipo));
@@ -462,8 +462,26 @@ VISTAS['ajustes/claves'] = {
         ${conKey.map(([k, p]) => `<tr data-k="${esc(k)}"><td><span class="flex">${avatar(k + '/')}<b>${esc(k)}</b></span></td>
           <td>${p.tieneKey ? `<span class="chip ok">${tr('configurada')}</span>` : `<span class="chip">${tr('sin clave')}</span>${dondeClave(k, p) ? ` <a href="${dondeClave(k, p).url}" target="_blank" rel="noopener" style="font-size:12px">${tr('conseguir')}</a>` : ''}`}</td><td class="suave">${p.tieneKey ? tr(p.keyDeEntorno ? 'entorno' : 'config') : '—'}</td>
           <td class="mono tenue">${esc(p.env || '—')}</td><td class="der" style="white-space:nowrap"><button class="btn mini" data-x="poner">${tr(p.tieneKey ? 'Cambiar' : 'Añadir')}</button>${p.tieneKey && !p.keyDeEntorno ? ` <button class="btn mini mal" data-x="quitar">${tr('Quitar')}</button>` : ''}</td></tr>`).join('')}</table></div>
+      <div class="seccion">${tr('Servicios')}</div><p class="seccion-ayuda">${tr('Claves de tus cuentas en otras webs. Se guardan cifradas en este equipo y APOLO solo usa las herramientas de lo que esté conectado.')}</p>
+      <div class="caja" id="clServ"><div class="tenue" style="padding:14px 16px">${tr('Cargando…')}</div></div>
       <p class="tenue" style="font-size:12px;margin-top:12px">${ic('candado')} ${tr('Las contraseñas y claves también se bloquean en la memoria del robot: nunca las guarda.')}</p></div>`;
+    api('GET', '/conectores').then(d => {
+      const box = $('#clServ', v); if (!box) return;
+      box.innerHTML = Object.entries(SERV).map(([k, [n, desc, url]]) => { const s = d.servicios?.[k] || {}; return `<div class="fila-a" data-sv="${k}"><div class="t"><b>${n}</b><small>${tr(desc)} ${s.conectado ? `· <span class="ok-txt">✓ ${esc(s.quien)}</span>` : `· <a href="${url}" target="_blank" rel="noopener">${tr('conseguir clave')}</a>`}</small></div>
+        <div class="c">${s.conectado ? `<button class="btn mini" data-sx="probar">${tr('Probar')}</button><button class="btn mini" data-sx="poner">${tr('Cambiar')}</button><button class="btn mini mal" data-sx="quitar">${tr('Quitar')}</button>` : `<button class="btn mini pri" data-sx="poner">${tr('Añadir')}</button>`}</div></div>`; }).join('');
+    }).catch(er => { const box = $('#clServ', v); if (box) box.innerHTML = `<div class="mal-txt" style="padding:14px 16px">${esc(er.message)}</div>`; });
     v.onclick = async e => {
+      const sb = e.target.closest('button[data-sx]');
+      if (sb) {
+        const k = sb.closest('[data-sv]').dataset.sv, [n, , url, ph] = SERV[k];
+        if (sb.dataset.sx === 'quitar') { if (await confirmar('Quitar clave', tr('Se borrará la clave de {k}.', { k: n }), true)) { await api('DELETE', `/conectores/servicio/${k}`); this.pintar(v); } return; }
+        if (sb.dataset.sx === 'probar') { const r = await api('POST', `/conectores/servicio/${k}/probar`).catch(er => ({ error: er.message })); return aviso(r.error || `✓ ${r.quien}`, !!r.error); }
+        const t = await modal({ titulo: tr('Clave de {k}', { k: n }), cuerpo: `<div class="campo">${esc(tr(ph))}<input id="kk" type="password" autocomplete="off" placeholder="${tr('pega la clave')}"></div><small class="tenue">${tr('Consíguela en {u}. Se guarda cifrada en este equipo.', { u: `<a href="${url}" target="_blank" rel="noopener">${esc(url.replace(/^https:\/\//, ''))}</a>` })}</small>`,
+          alAbrir: m => m.querySelector('#kk').focus(), botones: [{ txt: 'Cancelar', valor: null }, { txt: 'Guardar', cls: 'pri', valor: m => $('#kk', m).value.trim() || false }] });
+        if (!t) return;
+        const r = await api('PUT', `/conectores/servicio/${k}`, { token: t }).catch(er => ({ error: er.message }));
+        aviso(r.error || tr('✓ {x} conectado: {q}', { x: n, q: r.quien }), !!r.error); return this.pintar(v);
+      }
       const b = e.target.closest('button[data-x]'); if (!b) return;
       const k = b.closest('[data-k]').dataset.k;
       if (b.dataset.x === 'quitar') { if (await confirmar('Quitar clave', tr('Se borrará la clave de {k}.', { k }), true) && await guardarConfig({ proveedores: { [k]: { apiKey: '' } } }, 'Clave quitada')) this.pintar(v); return; }
@@ -615,9 +633,10 @@ const SERV = {
   github: ['GitHub', 'Notificaciones, repos, issues y PRs. Crear o comentar pide permiso.', 'https://github.com/settings/tokens?type=beta', 'Token personal (github_pat_… o ghp_…)'],
   huggingface: ['Hugging Face', 'Buscar modelos, datasets y spaces.', 'https://huggingface.co/settings/tokens', 'Token de acceso (hf_…)'],
   elevenlabs: ['ElevenLabs', 'Voces y generar audio (gasta créditos: pide permiso).', 'https://elevenlabs.io/app/settings/api-keys', 'API key'],
+  pixelsins: ['PixelSins', 'Tu galería: catálogo, monedas, descargar, publicar y editar obras (gastar o publicar pide permiso).', 'https://pixelsins.com/settings', 'Clave de API (pxs_…)'],
 };
 VISTAS['ajustes/conexiones'] = {
-  claves: 'correo email gmail outlook hotmail yahoo icloud imap smtp github hugging face elevenlabs token cuentas',
+  claves: 'correo email gmail outlook hotmail yahoo icloud imap smtp github hugging face elevenlabs pixelsins token cuentas',
   async pintar(v) {
     const d = await api('GET', '/conectores').catch(e => ({ error: e.message }));
     if (d.error) { v.innerHTML = `<div class="pagina estrecha">${cabecera('Correo y servicios', '')}<div class="caja pad mal-txt">${esc(d.error)}</div></div>`; return; }

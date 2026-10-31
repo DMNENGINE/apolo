@@ -1,4 +1,4 @@
-// Servicios con token o API key: GitHub, Hugging Face y ElevenLabs.
+// Servicios con token o API key: GitHub, Hugging Face, ElevenLabs y PixelSins.
 // Consultar = lectura. Crear o gastar (issues, comentarios, generar audio con créditos) = pide permiso.
 const fs = require('fs');
 const os = require('os');
@@ -21,12 +21,19 @@ function crearServicios({ almacen }) {
   const hf = (ruta, o = {}) => pedir('https://huggingface.co' + ruta, { ...o, headers: { authorization: 'Bearer ' + tok('huggingface') } });
   // ---------- ElevenLabs (API key: elevenlabs.io → Profile → API keys) ----------
   const el = (ruta, o = {}) => pedir('https://api.elevenlabs.io' + ruta, { ...o, headers: { 'xi-api-key': tok('elevenlabs') } });
+  // ---------- PixelSins (clave pxs_…: pixelsins.com → Ajustes → API) ----------
+  const PXS = (process.env.PIXELSINS_URL || 'https://pixelsins.com').replace(/\/+$/, '');
+  const pxsAuth = () => ({ authorization: 'Bearer ' + tok('pixelsins') });
+  const px = (ruta, o = {}) => pedir(PXS + ruta, { ...o, headers: pxsAuth() });
+  const pxObra = m => `- #${m.id} ${m.title || '(sin título)'} · ${m.kind || 'image'} · ${m.category || '—'}${m.premium ? ' · 💎 premium' : ''}${m.tags?.length ? ' · ' + m.tags.slice(0, 6).join(', ') : ''}${m.likes != null ? ` · ♥${m.likes}` : ''}${m.views != null ? ` · 👁${m.views}` : ''}`;
+  const pxQuery = a => new URLSearchParams(Object.entries(a).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])).toString();
 
   // probar = comprobar el token y saber de quién es
   const PROBAR = {
     github: async () => { const u = await gh('/user'); return `@${u.login}`; },
     huggingface: async () => { const u = await hf('/api/whoami-v2'); return `@${u.name}`; },
     elevenlabs: async () => { const s = await el('/v1/user/subscription'); return `${s.tier} · ${s.character_count}/${s.character_limit} caracteres`; },
+    pixelsins: async () => { const m = await px('/api/v1/me'); return `@${m.user?.username}${m.user?.role === 'admin' ? ' (admin)' : ''} · ${(m.key?.scopes || []).join('+')}`; },
   };
 
   const herramientas = [
@@ -98,6 +105,74 @@ function crearServicios({ almacen }) {
         const f = path.join(os.homedir(), 'Downloads', (a.nombreArchivo || `apolo-voz-${Date.now()}`).replace(/[^\w.-]+/g, '_').replace(/\.mp3$/i, '') + '.mp3');
         fs.writeFileSync(f, mp3);
         return `guardado: ${f} (${Math.round(mp3.length / 1024)} KB)`;
+      } },
+
+    // PixelSins (galería +18 del usuario; leer es gratis, descargar sin marca gasta monedas, publicar/editar = admin)
+    { nombre: 'pixelsins_cuenta', servicio: 'pixelsins', riesgo: 'lectura', descripcion: 'PixelSins: tu cuenta, saldo de monedas, plan, coste de descarga y totales del sitio.',
+      parametros: { type: 'object', properties: {} }, resumen: () => 'cuenta de PixelSins',
+      ejecutar: async () => {
+        const [me, w, st] = await Promise.all([px('/api/v1/me'), px('/api/v1/wallet'), px('/api/v1/stats').catch(() => null)]);
+        return recortar(JSON.stringify({ usuario: me.user?.username, rol: me.user?.role, permisosClave: me.key?.scopes, monedas: w.tokens, plan: w.plan, costeDescarga: w.downloadCost,
+          compras: w.purchased, sitio: st && { ...st, usage: undefined }, uso: st?.usage }, null, 1));
+      } },
+    { nombre: 'pixelsins_buscar', servicio: 'pixelsins', riesgo: 'lectura', descripcion: 'PixelSins: busca obras del catálogo (texto, categoría, etiqueta, tipo image|video, orden new|top|views).',
+      parametros: { type: 'object', properties: { q: { type: 'string' }, category: { type: 'string' }, tag: { type: 'string' }, kind: { type: 'string', enum: ['image', 'video'] }, sort: { type: 'string' }, page: { type: 'number' }, limit: { type: 'number' } } },
+      resumen: a => `buscar en PixelSins${a.q ? ` "${a.q}"` : ''}${a.category ? ` · ${a.category}` : ''}`,
+      ejecutar: async a => {
+        const r = await px('/api/v1/media?' + pxQuery({ ...a, limit: Math.min(a.limit || 20, 60) }));
+        return `${r.total ?? r.items.length} obras${r.page ? ` (página ${r.page})` : ''}\n` + (r.items.map(pxObra).join('\n') || '(nada)');
+      } },
+    { nombre: 'pixelsins_obra', servicio: 'pixelsins', riesgo: 'lectura', descripcion: 'PixelSins: detalle de una obra por id (título, descripción, etiquetas, nivel, enlaces) y obras relacionadas.',
+      parametros: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] }, resumen: a => `obra #${a.id} de PixelSins`,
+      ejecutar: async a => {
+        const m = await px('/api/v1/media/' + a.id);
+        const { related = [], ...obra } = m;
+        return recortar(JSON.stringify(obra, null, 1) + (related.length ? '\nRelacionadas:\n' + related.map(pxObra).join('\n') : ''));
+      } },
+    { nombre: 'pixelsins_albumes', servicio: 'pixelsins', riesgo: 'lectura', descripcion: 'PixelSins: álbumes (con precio premium y número de obras), o uno concreto con id.',
+      parametros: { type: 'object', properties: { id: { type: 'number' }, q: { type: 'string' } } }, resumen: a => a.id ? `álbum #${a.id} de PixelSins` : 'álbumes de PixelSins',
+      ejecutar: async a => {
+        if (a.id) { const al = await px('/api/v1/albums/' + a.id); return `📚 ${al.title}${al.premium ? ` · 💎 ${al.tokenPrice} monedas` : ''}${al.owned ? ' · desbloqueado' : ''}\n` + (al.items || []).map(pxObra).join('\n'); }
+        const r = await px('/api/v1/albums?' + pxQuery({ q: a.q, limit: 60 }));
+        return r.items.map(x => `- #${x.id} ${x.title} · ${x.itemCount ?? '?'} obras${x.premium ? ` · 💎 ${x.tokenPrice} monedas` : ''}`).join('\n') || '(ninguno)';
+      } },
+    { nombre: 'pixelsins_descargar', servicio: 'pixelsins', riesgo: 'escritura', descripcion: 'PixelSins: descarga una obra a Descargas\\PixelSins. Sin marca de agua gasta monedas la primera vez (re-descargar es gratis); con marca=true es gratis. Pide permiso.',
+      parametros: { type: 'object', properties: { id: { type: 'number' }, marca: { type: 'boolean', description: 'true = versión con marca de agua (gratis)' } }, required: ['id'] },
+      resumen: a => `descargar la obra #${a.id} de PixelSins${a.marca ? ' (con marca, gratis)' : ' (sin marca: puede gastar monedas)'}`,
+      ejecutar: async a => {
+        const r = await fetch(`${PXS}/api/v1/download/${a.id}${a.marca ? '?watermark=1' : ''}`, { headers: { ...pxsAuth(), 'user-agent': 'APOLO' }, signal: AbortSignal.timeout(120_000) });
+        if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error(`HTTP ${r.status}: ${t.slice(0, 300)}`); }
+        const buf = Buffer.from(await r.arrayBuffer());
+        const dir = path.join(os.homedir(), 'Downloads', 'PixelSins'); fs.mkdirSync(dir, { recursive: true });
+        const f = path.join(dir, `pixelsins-${a.id}${a.marca ? '-marca' : ''}.webp`);
+        fs.writeFileSync(f, buf);
+        return `guardado: ${f} (${Math.round(buf.length / 1024)} KB) · gastadas ${r.headers.get('x-tokens-spent') || 0} monedas${r.headers.get('x-tokens-balance') ? ` · saldo ${r.headers.get('x-tokens-balance')}` : ''}`;
+      } },
+    { nombre: 'pixelsins_publicar', servicio: 'pixelsins', riesgo: 'escritura', descripcion: 'PixelSins: publica una imagen o video de este equipo (solo clave de admin con escritura). La web pone la marca de agua. Pide permiso.',
+      parametros: { type: 'object', properties: { archivo: { type: 'string', description: 'ruta del archivo en este equipo' }, titulo: { type: 'string' }, descripcion: { type: 'string' }, etiquetas: { type: 'string', description: 'separadas por comas' },
+        categoria: { type: 'string' }, niveles: { type: 'string', description: 'PG, PG13, R, X o XXX separados por comas' }, albumId: { type: 'number' }, anunciar: { type: 'boolean', description: 'publicar también en el Discord (por defecto sí)' } }, required: ['archivo', 'titulo'] },
+      resumen: a => `publicar en PixelSins "${a.titulo}" (${a.archivo})${a.anunciar === false ? ' sin anunciar' : ' y anunciarlo en Discord'}`,
+      ejecutar: async a => {
+        const f = path.resolve(String(a.archivo));
+        if (!fs.existsSync(f)) throw new Error('no existe: ' + f);
+        const ext = path.extname(f).toLowerCase(), MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.avif': 'image/avif', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime' };
+        if (!MIME[ext]) throw new Error('tipo no admitido: ' + ext);
+        const fd = new FormData();
+        fd.append('file', new Blob([fs.readFileSync(f)], { type: MIME[ext] }), path.basename(f));
+        const campos = { title: a.titulo, description: a.descripcion, tags: a.etiquetas, category: a.categoria, nsfwLevels: a.niveles, albumId: a.albumId, announce: a.anunciar === false ? '0' : undefined };
+        for (const [k, v] of Object.entries(campos)) if (v !== undefined && v !== '') fd.append(k, String(v));
+        const r = await fetch(PXS + '/api/v1/media', { method: 'POST', headers: { ...pxsAuth(), 'user-agent': 'APOLO' }, body: fd, signal: AbortSignal.timeout(300_000) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(`HTTP ${r.status}: ${j.error || ''}`);
+        return `publicada #${j.media?.id} «${j.media?.title}» → ${PXS}/m/${j.media?.id}${j.pendingReview ? ' (pendiente de revisión)' : ''}${j.albumAdded ? ' · añadida al álbum' : ''}`;
+      } },
+    { nombre: 'pixelsins_editar', servicio: 'pixelsins', riesgo: 'escritura', descripcion: 'PixelSins: edita una obra (solo admin): título, descripción, etiquetas, categoría, visibilidad public|private. Pide permiso.',
+      parametros: { type: 'object', properties: { id: { type: 'number' }, titulo: { type: 'string' }, descripcion: { type: 'string' }, etiquetas: { type: 'string' }, categoria: { type: 'string' }, visibilidad: { type: 'string', enum: ['public', 'private'] } }, required: ['id'] },
+      resumen: a => `editar la obra #${a.id} de PixelSins`,
+      ejecutar: async a => {
+        const cuerpo = Object.fromEntries(Object.entries({ title: a.titulo, description: a.descripcion, tags: a.etiquetas, category: a.categoria, visibility: a.visibilidad }).filter(([, v]) => v !== undefined));
+        const m = await px('/api/v1/media/' + a.id, { metodo: 'PATCH', cuerpo });
+        return `editada #${a.id}: ${JSON.stringify(m.media || m).slice(0, 400)}`;
       } },
   ];
   return { herramientas, probar: async k => PROBAR[k](), SERVICIOS: Object.keys(PROBAR) };

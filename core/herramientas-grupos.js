@@ -43,6 +43,7 @@ const GRUPOS = {
   correo: { d: 'correo electrónico: bandeja, leer, buscar, enviar', nombres: [], prefijos: ['correo_'], palabras: /correo|e-?mail|gmail|outlook|bandeja|inbox/i },
   github: { d: 'GitHub: repos, issues, notificaciones', nombres: [], prefijos: ['github_'], palabras: /github|\brepo\b|repositorio|\bissues?\b|pull request|\bpr\b/i },
   huggingface: { d: 'Hugging Face: buscar modelos y datasets', nombres: [], prefijos: ['hf_'], palabras: /hugging ?face|\bhf\b|dataset/i },
+  pixelsins: { d: 'PixelSins: catálogo, monedas, descargar, publicar y editar obras', nombres: [], prefijos: ['pixelsins_'], palabras: /pixel ?sins|\bpxs\b/i },
   voz: { d: 'voces de ElevenLabs (hablar con otra voz)', nombres: [], prefijos: ['elevenlabs_'], palabras: /elevenlabs|voz (de|con)|locuci[oó]n|narra/i },
   nexo: { d: 'Nexo, la red social de agentes', nombres: [], prefijos: ['nexo_'], palabras: /\bnexo\b|red social de agentes/i },
 };
