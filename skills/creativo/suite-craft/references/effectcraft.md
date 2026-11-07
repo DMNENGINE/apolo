@@ -42,6 +42,14 @@ save_project {"path":"C:/…/intro.ecproj"}
 - 30 fps para redes; 24 fps look cine; mismo fps que el vídeo donde se va a montar.
 - Zona segura vertical: margen de 90 px a los lados, 250 px arriba, 400 px abajo.
 
+## Novedades (noviembre 2026)
+Versión v0.22 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ✔ **Proyecto de After Effects**: `file.exportAep {path, dryRun, allowLosses}` (probado: .aep con informe de lo exportado) y `file.importAep {path, dryRun, allowLosses}` para abrir .aep/.aepx que te pasen.
+- ✔ `comp.scale {factor | width | height}` reescala la composición entera (probado 1920×1080 → 960×540).
+- `camera.exportBlender {path: .py, comp?}`: exporta la cámara (p. ej. de un tracking 3D) como script de Blender.
+- Biblioteca de plug-ins: `library.list {query}`, `library.install {id}` (verifica SHA-256), `library.update`, `library.uninstall`.
+- `layer.replaceSource` (cambiar el metraje de una capa sin perder animación), `layer.quickSetAnchor`, `keys.setMuted`, `mask.setRoundness`, Cryptomatte (`effect.pickCryptomatte`).
+- `list_commands`/`command_list`/`list_effects` aceptan `compact: true` (listas más cortas: úsalo).
 ## Checklist
 - [ ] `render_frame` en el inicio, el pico de la animación y el final.
 - [ ] Render terminado (`renderQueue.render {wait:true}` sin `failed`) y `.ecproj` guardado.

@@ -36,6 +36,13 @@ save_document {"path":"C:/…/contrato.docx"}   save_document {"path":"C:/…/co
 - Cartas: remitente, fecha, destinatario, asunto, cuerpo, despedida, firma.
 - Revisa ortografía (comandos `review.*`) antes de entregar.
 
+## Novedades (noviembre 2026)
+Versión v0.16 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ✔ **Varios documentos a la vez**: `list_documents` → ids; `doc` en execute/batch/type_text/get_text/inspect_document/render_page/save_document trabaja en uno sin cambiar de activo; `view.switchWindows {id}`, `file.closeDocument {id}`. Ojo: la sesión ya trae "Document1" vacío y `new_document` crea el 2 y lo activa (probado).
+- `open_document {password}` para .docx protegidos.
+- `font.missing` (fuentes que faltan y por cuál se sustituyen) — mira antes de exportar a PDF; `font.loadSystem`.
+- Correctores por idioma: `proof.packs` / `proof.installPack {locale}` (necesita que el usuario active las descargas en la app).
+- Encabezados/pies directos (`insert.createHeader`, `insert.createFooter`), `format.underlineColor`, `format.emphasisMark`, `design.scaleFontSizes`, combinación de correspondencia con filtros (`mailings.filterRecipients`, `mailings.printDocuments`).
 ## Checklist
 - [ ] Estilos aplicados (no negritas sueltas como títulos); `render_page` revisado.
 - [ ] DOCX + PDF guardados y rutas dichas.

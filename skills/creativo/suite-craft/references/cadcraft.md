@@ -38,6 +38,14 @@ save {"path":"C:/…/placa.dxf"}  y  save {"path":"C:/…/placa.pdf"}
 - Láser/CNC: contornos cerrados (`pline` cerrada), sin líneas duplicadas, cada operación en su capa; DXF R2018.
 - Cotas: las imprescindibles para fabricar, sin duplicar; referencias desde una arista base.
 
+## Novedades (noviembre 2026)
+Versión v0.18 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ✔ `volume.measure {points:[[x,y]…] | handle, height}` → volumen y área de una extrusión (probado: 10×10×5 = 500).
+- `minsert` (bloque repetido en filas/columnas, el bloque debe existir), `txt2mtxt` (TEXT → MTEXT), `burst`, `blockreplace`, `-wblock`, `mocoro` (mover/copiar/rotar de una vez), `chprop`/`change`, `thickness`, `oops`.
+- Imágenes ráster: `imageattach {path, at, width}` (PNG/JPG/BMP/TIFF como referencia, se ven en pantalla y en el PNG) e `image` para listarlas; `xclip`/`xclipframe` recortan referencias.
+- Análisis: `shapes` (perímetro, área, sentido, autointersecciones de cada forma cerrada: ideal para comprobar un perfil antes de cortar en láser), `usage`, `loops`; `compareexport` saca la comparación de dibujos como dibujo nuevo.
+- `dview {twist}` gira la vista; fuentes SHX (planos AutoCAD antiguos se ven bien); DWG grandes abren mejor.
+- `render` acepta `background` y `plot_style`; `query_entities` acepta `selected`.
 ## Checklist
 - [ ] `running: null` al final y `inspect_drawing` con los conteos esperados.
 - [ ] Render revisado; DXF + PDF/PNG guardados.

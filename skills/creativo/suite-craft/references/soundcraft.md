@@ -37,6 +37,11 @@ bounce_mix {"path":"C:/…/mezcla.wav"}   → lee lufs
 - Exporta WAV 48 kHz 24 bits para montar en vídeo; MP3 320 kbps solo para entregar audio final.
 - Reverb casi nunca en voz hablada; si se usa, `mix` bajo (10–15 %).
 
+## Novedades (noviembre 2026)
+Versión v0.18 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- `edit.strip_silence_preview {threshold_db, min_length_ms, pad_before_ms, pad_after_ms}`: enseña qué quitaría Strip Silence sin tocar nada — compruébalo antes de `edit.strip_silence`.
+- `clip.auto_rename {name, number, zeros}`: nombres en serie para los trozos que salen al cortar.
+- `track.group_modify`, `clip.remove_sync_point`. Sin cambios en las herramientas MCP ni en la receta de masterizado.
 ## Checklist
 - [ ] `inspect_session` con pistas/plugins esperados; bounce con LUFS y pico dentro del objetivo.
 - [ ] Sesión guardada (`save_session`) + WAV; rutas dichas.

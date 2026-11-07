@@ -31,6 +31,13 @@ Editor de vídeo no lineal: montaje multipista, recortes, títulos, subtítulos,
 - Ritmo vertical: un cambio visual (corte, zoom, texto, emoji) cada 2–4 s.
 - Nunca subtítulos inventados: si no se entiende, mejor sin subtítulo.
 
+## Novedades (noviembre 2026)
+Versión v0.18 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- `sequence.duplicateFrames` lista fotogramas repetidos (para detectar tirones en grabaciones de juego); `sequence.showDuplicateFrameMarkers`.
+- `timeline.delete {clips, ripple:true}` borra clips cerrando el hueco.
+- `captions.duplicate {captions, delta}`, `graphics.moveLayers {clip, layers, delta:[dx,dy]}` (mover capas de un gráfico de texto de una vez).
+- Área de trabajo: `sequence.setWorkArea`/`setWorkAreaIn`/`setWorkAreaOut`; colores propios `colors.addCustom`; `history.clear`.
+- Sin cambios en las herramientas MCP ni en la receta de subtítulos.
 ## Checklist
 - [ ] `render_frame` en inicio, mitad y final revisados.
 - [ ] `offlineMedia` vacío; duración y resolución correctas (`sequence_inspect`).

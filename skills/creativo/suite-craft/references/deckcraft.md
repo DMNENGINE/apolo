@@ -36,6 +36,15 @@ save_presentation {"path":"C:/…/deck.pptx"}   export {"path":"C:/…/deck.pdf"
 - Estructura: portada → problema/contexto → 3 puntos clave → datos → cierre con llamada a la acción.
 - Transiciones sobrias e iguales en todo el deck.
 
+## Novedades (noviembre 2026)
+Versión v0.16 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ✔ **GIF animado del pase**: `export {path:"….gif", format:"gif", secondsPerSlide, loop}` (probado: 3 fotogramas 960×540). Incluye la diapositiva 0 vacía si no la borras — bórrala antes. Para vídeo MP4 usa FilmCraft.
+- `export` PDF admite `layout: notes|handouts`, `paper`, `orientation`; `insert_chart` acepta ya `x, y, w, h`.
+- ⚠ `run_command` lleva `{"command": "…", "params": {…}}` (no `id`).
+- **SmartArt**: `smartArt.fromText {id}` convierte un cuadro de viñetas en diagrama (niveles de sangría = niveles); `smartArt.layout`, `smartArt.style`, `smartArt.colors`, `setNodes`/`addNode`.
+- **Ideas de diseño**: `design.ideas {slide}` → `design.applyIdea {id, slide}`; `design.variant(s)`, `design.effects`.
+- Imágenes: `picture.removeBackground {tolerance}`, `picture.style`, `picture.recolor`, `picture.artisticEffect`, `picture.compress`; `insert.icon {name, rect}` (galería `insert.icons`), `insert.photoAlbum`, `insert.zoom`.
+- `file.templates` (plantillas de inicio), `slide.reuse` (traer diapositivas de otro archivo), `font.used`/`font.replace`, `text.find`/`text.replace`, editar puntos de formas (`shape.editPoints`…), `review.compare` y revisiones.
 ## Checklist
 - [ ] Sin diapositiva vacía al principio; tema aplicado.
 - [ ] Todas renderizadas y revisadas; PPTX + PDF entregados.

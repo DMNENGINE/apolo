@@ -31,6 +31,15 @@ save_workbook {"path":"C:/…/vistas.xlsx"}
 - Presupuestos/facturas: subtotal, impuesto en celda propia (tasa como supuesto), total; bloquea fórmulas.
 - Comprueba siempre los totales con `read_range` antes de entregar.
 
+## Novedades (noviembre 2026)
+Versión v0.17 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ✔ **Macros sin código**: `macro.save {name, steps:[{type:"command", id, params}, {type:"repeat"…}, {type:"if"…}]}` → `macro.run {name}` (probado: B1:B3 = A×2 + suma). Una macro que falla se deshace entera. Pasos útiles: `range.setValues {range, values}`, `cell.set {cell, input}`; `range.fill` ajusta las referencias desde la celda activa (dio #CIRC!: no lo uses en macros). `macro.record` graba lo que haces.
+- Controles: `insert.button {at, text, macro | command}`, `insert.slider`, `insert.spinButton`, `control.press {id}`.
+- ✔ `insert.equation {latex, at}` (ecuación LaTeX como objeto).
+- Varios libros/ventanas: `list_windows`; todas las herramientas aceptan `doc`/`window`. Ojo: la sesión ya trae "Book1" vacío y `new_workbook` crea "Book2".
+- `write_range {parse:false}` guarda textos tal cual (fechas dd.mm.yyyy, ceros a la izquierda).
+- Fórmulas: `formulas.traceError`, `selectPrecedents/Dependents`, `convertToNumber`; Solver con modelos guardables.
+- `python.set {cell, code}` crea celdas Python, pero sin motor de Python se quedan en `#BLOCKED!`: no las uses para entregar resultados.
 ## Checklist
 - [ ] Fórmulas verificadas con `read_range` (sin `#REF!`, `#DIV/0!`).
 - [ ] Encabezados formateados, números con formato; XLSX guardado (CSV solo si lo piden: pierde fórmulas y formato).

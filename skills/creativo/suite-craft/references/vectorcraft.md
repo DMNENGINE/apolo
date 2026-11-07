@@ -36,6 +36,14 @@ export {"path":"C:/…/logo.png"}
 - Iconos: rejilla de 24 px, trazo 2 px, esquinas 2 px.
 - Para corte láser/vinilo/CNC: exporta DXF y quita rellenos (solo contornos).
 
+## Novedades (noviembre 2026)
+Versión v0.22 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ⚠ Sigue igual: **cada forma hereda la pintura de la anterior** (comprobado otra vez: la elipse salió roja) → pasa `fill` y `stroke` siempre.
+- ✔ **Add-ons**: `addon.arrange.grid {columns, gapX, gapY}` (probado), `addon.arrange.sort/size/swap/groupOverlapping`; ✔ `addon.cleanup.check {scope:"document"}` (puntos sueltos, duplicados, objetos fuera de la mesa…) → `addon.cleanup.fix` lo arregla todo de una vez: **pásalo antes de entregar un logo o SVG**. `addon.cleanup.simplify`, `deepUngroup`, `replaceFonts`.
+- `addon.color.swatchLegend` dibuja la carta de colores de la marca con sus códigos; `addon.color.nearestSwatch/applyNearestSwatch`, `fillToStroke`.
+- `select.globalEdit` (editar a la vez todas las copias de una forma), `object.compoundShape.make {mode}` (forma compuesta no destructiva), presets de degradado `gradient.presets.list/apply/save`, `artboard.deleteEmpty`.
+- `inspect_document`/`doc_inspect` aceptan `ids`, `kind`, `limit`, `offset`; `save_file` acepta `version`, `compress`, `precision`; `screenshot` acepta `max_side`. Herramienta `answer_dialog` (solo con la app abierta).
+- Bibliotecas de pinceles y símbolos, eventos SVG interactivos (`svgInteractivity.*`).
 ## Checklist
 - [ ] Captura revisada; colores y trazos explícitos en cada forma.
 - [ ] SVG con texto a contornos + PNG; `warnings` de export leídos.

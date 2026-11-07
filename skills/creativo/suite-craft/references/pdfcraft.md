@@ -30,6 +30,13 @@ Leer y editar PDF: texto, páginas, unir/dividir, marcas de agua, encabezados, f
 - Para enviar por correo: < 10 MB (`doc_reduce`).
 - Accesibilidad: `accessibility_check` y `accessibility_autotag_apply` en documentos públicos.
 
+## Novedades (noviembre 2026)
+Versión v0.19 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ✔ `text_word_count {doc, pages?}` (palabras y caracteres por página) y ✔ `text_styles {doc}` (fuentes y tamaños usados, de mayor a menor) — probados.
+- `bookmark_from_text_styles {doc, levels:[estilo de text_styles…]}`: marcadores automáticos a partir de los títulos de un PDF sin etiquetas.
+- **OCR revisable**: `ocr_words` (cada palabra con caja, confianza y "sospechosa") → `ocr_review_apply {corrections}`; `ocr_recognize` acepta `deskew`, `denoise`, `binarize`, `auto_rotate`, `engine`, `strategy`, `region`. `page_enhance_scan` limpia páginas escaneadas sin perder el texto OCR.
+- `doc_bates_multi` (numeración Bates en varios PDF), `attachment_add`/`attachment_delete`, `page_reverse`, `page_duplicate {at}`, `comments_copy`/`comments_paste` entre documentos, `bookmark_export/import/copy`, `form_add_field_table` (rejilla de campos), `layer_set`, `xfa_to_static`, `standards_remove_id`, `model_add`/`model_render` (3D PRC).
+- `doc_optimize` acepta `preset`, `compatibility`, `object_streams`, `mono`; `doc_header_footer` acepta `font` y `shrink`; `page_add_text` acepta `aligns` y `char_spacing`.
 ## Checklist
 - [ ] `render_preview` de las páginas tocadas revisado.
 - [ ] Guardado a una ruta nueva; ruta dicha al usuario.

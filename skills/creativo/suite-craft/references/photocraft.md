@@ -45,6 +45,15 @@ render_preview {} → revisar → doc_save {"path":".../miniatura.png"}
 - Ajusta el color antes que la nitidez; aplica la nitidez al tamaño final.
 - Fuentes: Impact o la fuente propia **Trueno** para miniaturas de camiones; máximo 2 familias por pieza.
 
+## Novedades (noviembre 2026)
+Versión v0.21 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ✔ **Detectar caras**: `command_run image.detectFaces {minScore}` → rectángulo + ojos, nariz y comisuras de cada cara, la mejor primero (probado). Úsalo para encuadrar miniaturas y recortes.
+- `layer.list {flat}`: árbol de capas con ids y límites (más ligero que doc_inspect).
+- **Marcos** (como Photoshop 2024): `layer.frame.convert`, `layer.frame.setContent {layer, content}`, `layer.frame.fit {mode}` — plantillas de miniatura con hueco para la foto.
+- `doc_replace_smart_object {layer, path}`: cambia el contenido de un objeto inteligente manteniendo transformación y filtros (plantillas reutilizables).
+- Presets de exportación `file.export.presets.save/list/get` (formato, calidad, tamaño, perfil); `doc_export`/`doc_save` admiten opciones TIFF (`tiffCompression`…) y DDS (`ddsCompression`, `ddsMipmaps`, texturas de juego), y `.pcraft` con composición completa (`pcraftFullComposite`).
+- `doc_open`/`doc_place` piden `approve_high_memory` en PSD enormes.
+- Pinceles mezcladores (`brush.mixer.*`), `paint.artHistoryBrush`, estilos ASL (`style.presets.importAsl/exportAsl`), formas CSH, OpenType (`type.openType.*`), texto en área (`type.fillPath`).
 ## Checklist antes de entregar
 - [ ] `render_preview` revisado (texto legible en miniatura pequeña, a 320 px de ancho).
 - [ ] Nada importante en los bordes ni tapado por la interfaz.

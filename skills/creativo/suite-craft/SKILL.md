@@ -4,7 +4,7 @@ description: Usa las apps creativas de la suite ArtCraft instaladas en el PC (Fi
 license: MIT
 metadata:
   apolo:
-    version: 1.3.0
+    version: 1.4.0
     autor: DMN / APOLO
     disparadores: [vídeo, video, clip, clips, subtítulos, subtitulos, subtitula, subtitular, tiktok, short, shorts, reel, reels, edita el video, edita este video, miniatura, thumbnail, portada, foto, fotos, retoca, recorta, logo, svg, vector, plano, planos, cad, dxf, dwg, autocad, pieza, presentación, diapositivas, hoja de cálculo, excel, pdf, audio, podcast, mezcla, masteriza, lufs, rótulo, rotulo, lower third, título animado, marca, kit de marca, colores de la marca, calidad, filmcraft, photocraft, cadcraft, lightcraft, vectorcraft, effectcraft, figcraft, designcraft, deckcraft, wordcraft, gridcraft, pdfcraft, soundcraft, artcraft, textura, texturas, texturizar, pbr, substance, material, materiales, tileable, pieza 3d, stl, step, imprimir pieza, impresión 3d, solidworks, fusion, paramétrico, cómo funciona esta app, recrear, texturecraft, materialcraft, solidcraft, craft anything, craft-anything]
 ---
@@ -43,15 +43,24 @@ Para lo que se repite hay herramientas con la receta ya probada con las apps rea
 | hoja de cálculo, fórmulas, gráficos | `gridcraft` |
 | leer/editar/unir/dividir PDF | `pdfcraft` |
 | audio, mezcla, podcast | `masterizar_audio` o `soundcraft` |
+| GIF animado de una presentación | `deckcraft` (`export` format gif) |
+| pase de fotos en vídeo/PDF, hoja de contactos para imprimir | `lightcraft` (`cmd_slideshow_export`, `cmd_print_exportPdf`) |
+| encontrar las caras en una foto para encuadrar | `photocraft` (`image.detectFaces`) |
+| macro o botón en una hoja de cálculo | `gridcraft` (`macro.save` / `macro.run`, `insert.button`) |
+| maqueta → PowerPoint editable | `designcraft` (`file.exportPptx`) |
+| proyecto .aep de After Effects (abrir o entregar) | `effectcraft` (`file.importAep` / `file.exportAep`) |
+| limpiar un logo/SVG antes de entregar | `vectorcraft` (`addon.cleanup.check` → `addon.cleanup.fix`) |
 | texturizar un modelo 3D, pintar desgaste, texturas PBR para Unreal/Blender | `texturecraft` |
 | material procedural / textura tileable (madera, metal, piedra…), .sbs | `materialcraft` |
 | pieza 3D con medidas para imprimir o mecanizar (STL, STEP, 3MF, URDF) | `solidcraft` (planos 2D/DXF: `cadcraft`) |
 | entender cómo funciona un programa, una web o una app y hacer uno propio | `craft-anything` |
 
 ## Guías profesionales (LÉELAS)
+Cada guía termina con **«Novedades (noviembre 2026)»**: lo que añadió cada app hasta su última versión (✔ = probado). Míralo antes de decir que una app no puede hacer algo.
+
 Cada app tiene su guía en `references/<app>.md` (p. ej. `references/photocraft.md`): reglas verificadas de la app, una receta probada de principio a fin, los comandos clave y los **estándares profesionales** del oficio (tamaños, LUFS, sangrados, rejillas, tipografía) + checklist de entrega. **Antes de la primera tarea con una app en una conversación, léela con `leer_recurso_skill {"nombre":"suite-craft","ruta":"references/<app>.md"}`** y trabaja con ese nivel: no entregues nada sin pasar su checklist.
 
-Trampas ya comprobadas (resumen): PhotoCraft solo abre/guarda dentro de la carpeta del usuario (copia desde D:\ al Escritorio) · VectorCraft: cada forma hereda la pintura anterior, pasa `fill` y `stroke` siempre · DeckCraft nace con una diapositiva vacía · WordCraft necesita `paragraphs:true` para varios párrafos · DesignCraft: páginas 0-based y el color del texto es una muestra (`swatch.create`) · CadCraft: un comando a medias se come lo siguiente (mira `running`) · SoundCraft: sesión sin pistas ni master, créalos · LightCraft no sobrescribe al exportar (añade `-2`) · FigCraft: marcos nuevos con alto fijo, usa `sizingV:"hug"`. · TextureCraft/MaterialCraft: rutas relativas a la carpeta del usuario con `/`; haz `bake` antes de materiales inteligentes; el `.mcmat` de MaterialCraft 0.2 aún no carga en TextureCraft 0.4 (pasa los PNG) · SolidCraft: `solid.box` sale con la esquina en el origen (usa `center`), pasa `expect` con el volumen calculado y lee `skill_reference` antes de piezas complejas · Craft Anything: activa conjuntos con `enable_toolset`, pide permiso antes de ejecutar o instrumentar nada.
+Trampas ya comprobadas (resumen): PhotoCraft solo abre/guarda dentro de la carpeta del usuario (copia desde D:\ al Escritorio) · VectorCraft: cada forma hereda la pintura anterior, pasa `fill` y `stroke` siempre · DeckCraft nace con una diapositiva vacía (también sale en el GIF) y `run_command` lleva `{command, params}` · WordCraft necesita `paragraphs:true` para varios párrafos · WordCraft y GridCraft arrancan con un documento vacío propio: `new_document`/`new_workbook` crea el segundo (usa `list_documents`/`list_windows` y `doc`) · DesignCraft: páginas 0-based y el color del texto es una muestra (`swatch.create`) · CadCraft: un comando a medias se come lo siguiente (mira `running`) · SoundCraft: sesión sin pistas ni master, créalos · LightCraft: `export` con `path` SOBRESCRIBE (desde v0.19) y sin ventana la biblioteca empieza vacía en cada arranque (importa en la misma sesión) · FigCraft: marcos nuevos con alto fijo, usa `sizingV:"hug"`. · TextureCraft/MaterialCraft: rutas relativas a la carpeta del usuario con `/`; haz `bake` antes de materiales inteligentes; el `.mcmat` de MaterialCraft 0.2 aún no carga en TextureCraft 0.4 (pasa los PNG) · SolidCraft: `solid.box` sale con la esquina en el origen (usa `center`), pasa `expect` con el volumen calculado y lee `skill_reference` antes de piezas complejas · Craft Anything: activa conjuntos con `enable_toolset`, pide permiso antes de ejecutar o instrumentar nada.
 
 ## Cómo usar cualquier app
 1. `{}` (sin argumentos) → lista sus herramientas y sus **instrucciones** (léelas la primera vez). Con `{"buscar": "caption"}` filtras.

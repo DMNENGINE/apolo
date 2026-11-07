@@ -39,6 +39,15 @@ save_document {"path":"C:/…/poster.pdf"}   (y .designcraft para editar)
 - Póster: legible a 3 m → titular ≥ 72 pt en A3; fecha/lugar/llamada a la acción claros.
 - Tamaños: A4 210×297 mm, A3 297×420, tarjeta de visita 85×55, flyer A5 148×210.
 
+## Novedades (noviembre 2026)
+Versión v0.18 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- ✔ **Exportar a PowerPoint**: `execute file.exportPptx {path, pages?, lineBreaks: keep|reflow, rasterize, embedFonts}` → cada página es una diapositiva editable (probado).
+- `new_document` acepta `intent: print|web|mobile`, `units`, `startPage`, `primaryTextFrame`, `slug`.
+- `file.exportBatch {job:{layouts, versions:[{name, format: pdf|png|jpeg, bleed, marks, ppi}]}, dir}`: varias versiones (imprenta con sangrado + web) en una llamada; presets con `file.saveExportPreset`.
+- **Flex Layout** (como auto layout): `flex.convert {ids}`, `flex.add`, `flex.set`, `flex.reorder`.
+- `color.extractTheme {id: marco de imagen}` → hasta 5 colores de la foto (para casar el folleto con la imagen); `swatch.addColorTheme`.
+- Estilos: `style.paragraph.redefine`, `style.load` (de otro documento); tabulaciones `type.tabs.*`; OpenType `type.feature`; listas `list.bullets`/`list.numbers`; tablas con cabecera/pie (`table.convertRowsToHeader`).
+- Herramienta `ime` para escritura con método de entrada (japonés/chino).
 ## Checklist
 - [ ] Sin texto desbordado (`inspect_document` → stories con overset); páginas renderizadas.
 - [ ] PDF exportado (+ archivo editable); rutas dichas.

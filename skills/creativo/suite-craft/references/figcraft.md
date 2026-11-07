@@ -37,6 +37,12 @@ save_file {"path":"C:/…/login.figcraft"}
 - Componentes para todo lo que se repite; variables de color para claro/oscuro.
 - Para guías más profundas usa las skills de diseño (fundamentos, accesibilidad, formularios-acceso, onboarding…).
 
+## Novedades (noviembre 2026)
+Versión v0.16 (todo instalado y al día 2026-11-07). ✔ = probado de verdad por MCP; lo demás sale del catálogo de comandos.
+- **Comentarios**: `run_command comment.list` devuelve los hilos (texto, nodo, marco, posición, respuestas); arréglalos, responde qué cambiaste y resuélvelos. Prompts nuevos `fix_comments` y `watch_comments`; recurso `figcraft://comments`. `wait_for_changes {after, timeoutMs}` espera comentarios nuevos (solo con la app abierta; sin ventana vuelve al momento).
+- Varios archivos abiertos: casi todas las herramientas aceptan `document` (id de `doc.list` o la ruta).
+- `inspect_document`/`get_node` aceptan `fields`, `outline`, `maxBytes`, `offset`: pide solo lo que necesitas en archivos grandes.
+- `create_node` crea vectores con `points` + `closed`; `batch` acepta `onError`; `export` acepta `vdCompat`; `open_file {reload}`.
 ## Checklist
 - [ ] `inspect_document` sin marcos con alto fijo raro; captura revisada.
 - [ ] PNG @2x exportado + archivo editable guardado.
