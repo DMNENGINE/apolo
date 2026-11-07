@@ -29,6 +29,10 @@ const CRAFT = {
   gridcraft: { nombre: 'GridCraft', carpeta: 'GridCraft', descripcion: 'hoja de cálculo (estilo Excel): celdas, fórmulas, gráficos, XLSX/CSV' },
   pdfcraft: { nombre: 'PdfCraft', carpeta: 'PdfCraft', descripcion: 'lector y editor de PDF: páginas, texto, anotaciones, formularios, unir/dividir' },
   soundcraft: { nombre: 'SoundCraft', carpeta: 'SoundCraft', descripcion: 'estudio de audio (DAW): pistas, mezcla, efectos, exportar WAV/MP3' },
+  texturecraft: { nombre: 'TextureCraft', carpeta: 'TextureCraft', args: ['--read-root', os.homedir(), '--write-root', os.homedir()], descripcion: 'pintura de texturas 3D (estilo Substance Painter): proyecto desde una malla, capas, materiales inteligentes, bake de mapas, render y exportar texturas PBR' },
+  materialcraft: { nombre: 'MaterialCraft', carpeta: 'MaterialCraft', args: ['--read-root', os.homedir(), '--write-root', os.homedir()], descripcion: 'materiales procedurales por nodos (estilo Substance Designer): grafos .sbs, render en esfera, exportar texturas PBR y .mcmat para TextureCraft' },
+  solidcraft: { nombre: 'SolidCraft', carpeta: 'SolidCraft', args: ['--headless', '--allow-path', os.homedir()], descripcion: 'CAD 3D paramétrico (estilo SolidWorks/Fusion): bocetos, extrusiones, piezas, ensamblajes, exportar STEP/STL para imprimir' },
+  'craft-anything': { nombre: 'Craft Anything', carpeta: 'Craft Anything', descripcion: 'entender cómo funciona cualquier software o web (inspección, evidencias, capturas) y recrearlo en un proyecto propio' },
 };
 // nombres de herramientas MCP que solo miran: no piden permiso
 const SOLO_MIRA = /^(list|inspect|get|find|query|read|search|describe|info|render|screenshot|ui_inspect|ui_elements|doc_inspect|doc_info|doc_list|project_inspect|sequence_inspect|command_list|list_commands|fonts?_list)|(_|^)(list|inspect|info|get|read|search|query|describe|preview|thumbnail)(_|$)/i;
@@ -55,6 +59,8 @@ function crearMcpLocales({ cfg, bus, registrar, quitar, lanzar = spawn, detectar
   const dir = cfg.dir, F = path.join(dir, 'mcp-locales.json');
   const conf = () => ({ inactivoMin: 30, timeoutSeg: 600, ...(cfg.mcpLocales || {}) });
   let lista = null;
+  const FQ = path.join(dir, 'mcp-locales-quitados.json');   // apps de la suite que el usuario borró: no se re-añaden solas
+  const leerQuitados = () => { try { const q = JSON.parse(fs.readFileSync(FQ, 'utf8')); return Array.isArray(q) ? q : []; } catch { return []; } };
   try { lista = JSON.parse(fs.readFileSync(F, 'utf8')); } catch { }
   const guardar = () => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(F, JSON.stringify(lista, null, 2)); };
   const obtener = id => lista.find(x => x.id === id);
@@ -63,11 +69,13 @@ function crearMcpLocales({ cfg, bus, registrar, quitar, lanzar = spawn, detectar
     try { for (const s of detectar()) lista.push({ ...s, activo: true, herramientas: [] }); } catch (e) { log('[mcp-local] detectar:', e.message); }
     guardar();
   } else {                                             // los args de la suite pueden cambiar entre versiones: manda la detección
-    let cambio = false;
+    let cambio = false;                                // y una app de la suite instalada después entra sola (salvo si se borró a mano)
     try {
+      const quitados = leerQuitados();
       for (const d of detectar()) {
         const s = obtener(d.id);
-        if (s && s.origen === 'craft' && JSON.stringify(s.args) !== JSON.stringify(d.args)) { s.args = d.args; cambio = true; }
+        if (!s && !quitados.includes(d.id)) { lista.push({ ...d, activo: true, herramientas: [] }); cambio = true; }
+        else if (s && s.origen === 'craft' && JSON.stringify(s.args) !== JSON.stringify(d.args)) { s.args = d.args; cambio = true; }
       }
     } catch (e) { log('[mcp-local] detectar:', e.message); }
     if (cambio) guardar();
@@ -255,7 +263,11 @@ function crearMcpLocales({ cfg, bus, registrar, quitar, lanzar = spawn, detectar
     lista.push(s); guardar(); registrarDe(s); return s;
   }
   function activar(id, activo) { const s = obtener(id); if (!s) return false; s.activo = !!activo; if (!activo) parar(id); guardar(); registrarDe(s); return true; }
-  function borrar(id) { const i = lista.findIndex(x => x.id === id); if (i < 0) return false; parar(id); activar(id, false); lista.splice(i, 1); guardar(); return true; }
+  function borrar(id) {
+    const i = lista.findIndex(x => x.id === id); if (i < 0) return false;
+    if (lista[i].origen === 'craft') { const q = leerQuitados(); if (!q.includes(id)) { q.push(id); try { fs.writeFileSync(FQ, JSON.stringify(q)); } catch { } } }
+    parar(id); activar(id, false); lista.splice(i, 1); guardar(); return true;
+  }
   const estado = () => lista.map(s => ({ id: s.id, nombre: s.nombre, descripcion: s.descripcion, comando: s.comando, args: s.args, origen: s.origen, activo: !!s.activo,
     vivo: vivos.has(s.id), herramientas: (s.herramientas || []).length }));
 
