@@ -159,13 +159,18 @@ class Gen:
         self.ya.add(h(q)); self.e['hechas'] += 1; self.e['fases'][fuente] = self.e['fases'].get(fuente, 0) + 1
         self.e['ultima'] = time.time(); self.e['error'] = ''; self.guardar()
 
-    def fiel(self, fuente_texto, q, r):
-        """Juez de fidelidad: la respuesta no puede afirmar nada que no esté en el texto de origen."""
-        j = self.chat_json([{'role': 'system', 'content': 'Eres un revisor muy estricto de datos de entrenamiento.'},
-                            {'role': 'user', 'content': f'TEXTO DE ORIGEN:\n{fuente_texto}\n\nPREGUNTA: {q}\nRESPUESTA: {r}\n\n'
+    def fiel(self, fuente_texto, q, r, recuerdo=False):
+        """Juez: fidelidad (nada fuera del texto de origen), papeles claros y, en recuerdos, que la respuesta DIGA el dato."""
+        extra = ('"completa": true solo si la respuesta dice claramente el dato principal del recuerdo (no vale "es importante para ti" sin decirlo), '
+                 '"papeles": true si confunde quién es quién (el USUARIO se llama Demon; el asistente es APOLO y nunca dice que él es Demon), ') if recuerdo else ''
+        j = self.chat_json([{'role': 'system', 'content': 'Eres un revisor muy estricto de datos de entrenamiento. En estos diálogos el USUARIO es Demon y el ASISTENTE es APOLO.'},
+                            {'role': 'user', 'content': f'TEXTO DE ORIGEN:\n{fuente_texto}\n\nPREGUNTA (de Demon): {q}\nRESPUESTA (de APOLO): {r}\n\n'
                              'Devuelve JSON {"fiel": true solo si TODO lo que afirma la respuesta está en el texto de origen (puede reformularlo y añadir tono, nunca datos nuevos), '
-                             '"natural": true si suena a un asistente cercano hablando, no a una ficha, "nota": 1-5}'}], 120)
-        return bool(j.get('fiel')) and bool(j.get('natural', True)), int(j.get('nota') or 0)
+                             + extra + '"natural": true si suena a un asistente cercano hablando, no a una ficha, "nota": 1-5}'}], 160)
+        ok = bool(j.get('fiel')) and bool(j.get('natural', True))
+        if recuerdo:
+            ok = ok and bool(j.get('completa')) and not j.get('papeles')
+        return ok, int(j.get('nota') or 0)
 
     def fase_identidad(self, alma, objetivo):
         if not alma or objetivo <= 0:
@@ -205,10 +210,12 @@ class Gen:
             if not lote:
                 continue
             try:
-                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente de Demon. Tu forma de ser:\n' + voz},
-                                    {'role': 'user', 'content': 'Estos son recuerdos tuyos:\n' + '\n'.join(f'{k}. [{x["tipo"]}] {x["t"]}' for k, x in enumerate(lote)) +
-                                     '\n\nPara CADA recuerdo escribe 2 pares distintos: una pregunta natural que Demon te haría (informal, como él escribe) donde ese recuerdo es la respuesta, '
-                                     'y tu respuesta en primera persona, cercana, 1-4 frases, que use el recuerdo con naturalidad ("sí, me acuerdo…", "claro, tu…") '
+                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente personal de tu usuario. Tu usuario se llama Demon: él te habla y tú le respondes. '
+                                     'Tú NO eres Demon. Los recuerdos son cosas que sabes DE ÉL (de su vida, su gente, sus gustos y proyectos). Tu forma de ser:\n' + voz},
+                                    {'role': 'user', 'content': 'Estos son recuerdos tuyos sobre Demon:\n' + '\n'.join(f'{k}. [{x["tipo"]}] {x["t"]}' for k, x in enumerate(lote)) +
+                                     '\n\nPara CADA recuerdo escribe 2 pares distintos: una pregunta natural que Demon te haría (informal, como él escribe, hablándote de tú) cuya respuesta sea ese recuerdo, '
+                                     'y tu respuesta: 1-3 frases que DIGAN EL DATO CONCRETO del recuerdo con tus palabras, hablándole a él de tú ("tu taller…", "te gusta…"). '
+                                     'Empieza cada respuesta de forma distinta y directa (prohibido empezar con "Sí, me acuerdo" o "Claro"). '
                                      'SIN añadir ningún dato que no esté en el recuerdo. JSON {"pares":[{"recuerdo":0,"pregunta":"...","respuesta":"..."}]}'}], 1600)
                 for p in r.get('pares', []):
                     k = p.get('recuerdo')
@@ -217,7 +224,9 @@ class Gen:
                     q, resp = str(p.get('pregunta', '')).strip(), str(p.get('respuesta', '')).strip()
                     if len(q) < 4 or len(resp) < 10 or h(q) in self.ya or TITULO.search(resp) or URL.search(resp) or NIEGA.search(resp):
                         continue
-                    ok, nota = self.fiel(lote[k]['t'], q, resp)
+                    if re.match(r'\s*(s[ií],? me acuerdo|claro,? tu)', resp, re.I):
+                        self.e['descartadas'] += 1; continue
+                    ok, nota = self.fiel(lote[k]['t'], q, resp, recuerdo=True)
                     if ok and nota >= self.a.nota:
                         self.escribir('recuerdo', q, resp, nota, {'tipo': lote[k]['tipo']})
                     else:
