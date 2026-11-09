@@ -222,7 +222,7 @@ const OPS = {
     if (accion === 'soltar') {
       await esperarCarga(pestana, 10_000);
       await chrome.tabs.update(pestana, { active: true });
-      await chrome.scripting.executeScript({ target: { tabId: pestana }, files: ['aranas.js'] });
+      await chrome.scripting.executeScript({ target: { tabId: pestana }, files: ['arana-motor.js', 'aranas.js'] });
       return enPagina(pestana, x => window.__apoloAranas.soltar(x), [a]);
     }
     if (accion === 'esperar') { await esperarCarga(pestana, 15_000); const t = await chrome.tabs.get(pestana); return { url: t.url, titulo: t.title }; }

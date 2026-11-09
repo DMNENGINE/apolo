@@ -1043,9 +1043,22 @@ $('panic') && $('panic').addEventListener('click', () => { if (!window.bridge ||
 // arañas digitales: salen de dentro del casco cuando APOLO suelta una (core/aranas.js) y vuelven al terminar
 if (window.bridge && bridge.onAranas) bridge.onAranas(e => {
   if (!e) return;
-  const [x, y] = center();
-  if (e.fase === 'salen') { reaccion('sorpresa', 1.4); robot.greet && robot.greet(`🕷 ${String(e.nombre || 'ARAÑA').toUpperCase()}`); salirDelCasco(x, y, e.color || '#3df2ff', e.tipo === 'lectora' ? 3 : 2); emit(x, y, 14, [e.color || '#3df2ff', '#ffffff'], 'burst'); }
-  if (e.fase === 'vuelven') { volverAlCasco(x, y, e.color || '#3df2ff', 2); setTimeout(() => reaccion('feliz', 1.2), 1600); }
+  const r = rwrap.getBoundingClientRect(), tam = r.width || 90;
+  const x = r.left + r.width / 2, y = r.top + r.height * .47;           // el nido está detrás del visor
+  const color = e.color || '#3df2ff';
+  robot.setFps && robot.setFps(40);
+  if (e.fase === 'salen') {
+    casco.abrirCasco(6);                                                 // la compuerta se abre de golpe…
+    reaccion('sorpresa', 1.2); sound.play('permiso');
+    setTimeout(() => { salirDelCasco(x, y, color, e.tipo === 'lectora' ? 3 : 2, tam); emit(x, y, 18, [color, '#ff1f3d', '#8a2be2'], 'burst'); }, 450);   // …y salen del nido
+    setTimeout(() => robot.greet && robot.greet(`🕷 ${String(e.nombre || 'ARAÑA').toUpperCase()}`), 3800);
+  }
+  if (e.fase === 'vuelven') {
+    casco.abrirCasco(5.5);
+    volverAlCasco(x, y, color, 2, tam);
+    setTimeout(() => { casco.cerrarCasco(); reaccion('feliz', 1.2); }, 4600);
+  }
+  setTimeout(() => { try { ajustarFps(); } catch { } }, 8000);
 });
 // reuniones: piloto REC rojo fijo en la isla mientras APOLO graba/toma notas (core/reuniones.js)
 if (window.bridge && bridge.onReunion) bridge.onReunion(r => {

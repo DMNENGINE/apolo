@@ -279,6 +279,30 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   const hudMat = new THREE.MeshBasicMaterial({ map: hudTex, color: 0xd0d0d0 });
 
   const head = new THREE.Group(); scene.add(head);
+  // ---------- compuerta del visor (arañas): el visor se abre hacia arriba por una bisagra y deja ver el nido ----------
+  const bisagra = new THREE.Group(); bisagra.position.set(0, .5, .32);
+  let abierto = 0, abrirObj = 0, abrirHasta = 0;
+  const nido = new THREE.Group(); nido.visible = false; nido.position.set(0, -.02, .5);
+  {
+    const fondo = new THREE.Mesh(new THREE.CircleGeometry(.74, 48), new THREE.MeshBasicMaterial({ color: 0x030008 }));
+    fondo.scale.set(1.08, .66, 1); nido.add(fondo);
+    const halo = new THREE.Mesh(new THREE.RingGeometry(.6, .76, 48), new THREE.MeshBasicMaterial({ color: 0x8a2be2, transparent: true, opacity: .55 }));
+    halo.scale.set(1.08, .66, 1); halo.position.z = .005; nido.add(halo); nido.userData.halo = halo;
+    const hilos = new THREE.Group(); hilos.position.z = .01; nido.add(hilos);   // telaraña dentro del casco
+    const mh = new THREE.LineBasicMaterial({ color: 0x9a7bff, transparent: true, opacity: .45 });
+    for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; hilos.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(Math.cos(a) * .78, Math.sin(a) * .48, 0)]), mh)); }
+    for (let r = 1; r <= 4; r++) { const pts = []; for (let k = 0; k <= 10; k++) { const a = k / 10 * Math.PI * 2, f = r / 4 * (.92 + (k % 2) * .08); pts.push(new THREE.Vector3(Math.cos(a) * .78 * f, Math.sin(a) * .48 * f, 0)); } hilos.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mh)); }
+    const ojos = new THREE.Group(); ojos.position.z = .02; nido.add(ojos); nido.userData.ojos = ojos;   // ojos rojos que parpadean en la oscuridad
+    const mo = new THREE.MeshBasicMaterial({ color: 0xff2040, transparent: true });
+    for (let k = 0; k < 7; k++) {
+      const par = new THREE.Group(), x = (Math.random() - .5) * 1.1, y = (Math.random() - .5) * .55, r = .018 + Math.random() * .014;
+      par.position.set(x, y, 0); par.userData.fase = Math.random() * 10;
+      for (const dx of [-r * 1.6, r * 1.6]) { const o = new THREE.Mesh(new THREE.CircleGeometry(r, 10), mo); o.position.x = dx; par.add(o); }
+      ojos.add(par);
+    }
+    const luz = new THREE.PointLight(0x9a40ff, 0, 2.5); luz.position.set(0, 0, .3); nido.add(luz); nido.userData.luz = luz;
+  }
+  head.add(nido); head.add(bisagra);
   new GLTFLoader().load(glbUrl, g => {
     g.scene.traverse(o => {
       if (!o.isMesh) return;
@@ -289,6 +313,9 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       else if (has(/^Voz_/)) o.material = vozMat;
     });
     head.add(g.scene);
+    g.scene.updateMatrixWorld(true);
+    const visor = []; g.scene.traverse(o => { if (o.isMesh && /^(MarcoVisor|Pantalla)/.test(o.name + '|' + (o.parent?.name || '')) && !visor.includes(o)) visor.push(o); });
+    for (const o of visor) bisagra.attach(o);                    // la bisagra conserva su posición: solo gira al abrir
   }, undefined, e => console.error('casco.glb', e));
 
   // ---------- bucle ----------
@@ -343,6 +370,18 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       else if (gesto === 'navegando') { gy = Math.sin(t * 1.3) * .35 * g; gx = .08 * g + Math.sin(t * .65) * .06 * g; }   // recorre la página con la mirada
       else if (gesto === 'feliz') gz = Math.sin(t * 5) * .08 * g;
     }
+    // compuerta: se abre con un golpe seco (rebote) y se cierra despacio; dentro el nido late
+    if (abrirHasta && performance.now() > abrirHasta) { abrirObj = 0; abrirHasta = 0; }
+    abierto += (abrirObj - abierto) * (1 - Math.pow(abrirObj > abierto ? .0008 : .02, step));
+    const temblor = abrirObj > abierto + .05 ? Math.sin(now / 18) * .03 : 0;
+    bisagra.rotation.x = -1.5 * abierto + temblor;
+    nido.visible = abierto > .03;
+    if (nido.visible) {
+      const pulso = .5 + .5 * Math.sin(now / 260);
+      nido.userData.halo.material.opacity = (.35 + .4 * pulso) * abierto; nido.userData.luz.intensity = 2.2 * abierto * (.6 + .4 * pulso);
+      for (const par of nido.userData.ojos.children) { const f = (now / 1000 + par.userData.fase) % 4; par.scale.y = f < .12 ? .15 : 1; par.position.x += Math.sin(now / 700 + par.userData.fase) * .0006; }
+      if (abierto > .4) { gx += -.06 * abierto; wob = Math.max(wob, .08 * abierto); }
+    }
     head.rotation.y = hxS * .38 * (1 - cur.sleep) + spinA + gy; head.rotation.x = hyS * .22 * (1 - cur.sleep) + cur.sleep * .32 + gx;   // dormido: cabeza caída
     head.rotation.z = Math.sin(now / 45) * .2 * wob + gz;                   // sacudida al tocarlo
     // flota; dormido respira más lento y hondo
@@ -394,6 +433,10 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       if (msg !== undefined) flash(base === 'dormido' ? 'reposo' : base, msg, secs);
     },
     ocupado: () => performance.now() < gestoHasta || react > 0,
+    // compuerta del visor: abre el casco (las arañas salen del nido) durante secs; cerrarCasco() lo cierra ya
+    abrirCasco(secs = 4) { abrirObj = 1; abrirHasta = performance.now() + secs * 1000; },
+    cerrarCasco() { abrirObj = 0; abrirHasta = 0; },
+    abierto: () => abierto,
     // se muda de monitor: rueda en la dirección del viaje (dir = 1 derecha, -1 izquierda)
     rodar(dir = 1) { const base = react > 0 ? prevState : stateName; spin = 1.7 * dir; wob = .35; flash(base === 'dormido' ? 'reposo' : base, '', 1.3); },
     setState(name, msg = '') {

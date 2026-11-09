@@ -75,6 +75,7 @@ print(json.dumps({'servidores': out, 'errores': errores[:20]}, ensure_ascii=Fals
 `;
 
 function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secreto = () => null, fetch: fetchX = globalThis.fetch, ejecutarSsh }) {
+  let visor = null;   // ventana de arañas de APOLO (main.js → ponerVisor): escanea sin depender de la extensión
   const conf = () => cfg.aranas || {};
   const dirDatos = () => { const d = path.join(cfg.dir, 'aranas'); fs.mkdirSync(d, { recursive: true }); return d; };
   const dirInformes = () => { const d = conf().informes || path.join(os.homedir(), 'Downloads', 'APOLO arañas'); fs.mkdirSync(d, { recursive: true }); return d; };
@@ -114,44 +115,122 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     if (!p.ok) throw new Error(`DENEGADO: el usuario no permite leer ${dom}`);
     s._sitios.add(dom);
   }
-  const orden = (pestana, accion, args = {}, ms = 30_000) => navegador.orden('aranas', { pestana, accion, ...args }, ms);
+  // pestana numérica = pestaña de Chrome (extensión); 'v:…' = ventana de arañas de APOLO
+  const orden = (pestana, accion, args = {}, ms = 30_000) => (typeof pestana === 'string' && pestana.startsWith('v:'))
+    ? Promise.race([visor.accion(pestana, accion, args), new Promise((_, mal) => { const t = setTimeout(() => mal(new Error(`la ventana de arañas no respondió a "${accion}"`)), ms); t.unref?.(); })])
+    : navegador.orden('aranas', { pestana, accion, ...args }, ms);
   const recogerLuego = (pestana, tipo, ms = 9000) => { const t = setTimeout(() => { orden(pestana, 'recoger', { tipo }).catch(() => { }); vuelven(tipo); }, ms); t.unref?.(); };
   const lista = b => b.map(x => `[${x.i}] ${x.texto.replace(/\s+/g, ' ').slice(0, 1200)}`);
   const recorte = (lineas, max) => { const out = []; let n = 0; for (const l of lineas) { if (n + l.length > max) break; out.push(l); n += l.length; } return out.join('\n'); };
 
+  // trocea el texto por párrafos (sin cortar frases) para que el modelo lea TODO, no solo el principio
+  function partir(texto, max = 11000) {
+    const out = []; let cur = '';
+    const piezas = [];
+    for (const p of String(texto).split(/\n{2,}/)) {
+      if (p.length <= max) { piezas.push(p); continue; }
+      let resto = p;                                           // párrafo enorme: cortar por frases (o a lo bruto si no hay)
+      while (resto.length > max) { let k = resto.lastIndexOf('. ', max); if (k < max * .5) k = max - 2; piezas.push(resto.slice(0, k + 2)); resto = resto.slice(k + 2); }
+      if (resto) piezas.push(resto);
+    }
+    for (const p of piezas) {
+      if (cur && cur.length > 400 && cur.length + p.length + 2 > max) { out.push(cur); cur = ''; }   // un título suelto va con lo que sigue
+      cur += (cur ? '\n\n' : '') + p;
+    }
+    if (cur.trim()) out.push(cur);
+    return out;
+  }
+  async function enParalelo(lista, n, fn) {
+    const res = new Array(lista.length); let i = 0;
+    await Promise.all(Array.from({ length: Math.min(n, lista.length) }, async () => { while (i < lista.length) { const k = i++; res[k] = await fn(lista[k], k); } }));
+    return res;
+  }
+  const SIS_TROZO = 'Eres la araña lectora de APOLO. Lees UN TROZO de un documento y lo explicas en español claro para una persona normal. ' +
+    'REGLA DE ORO: no ocultes nada. Todo lo que el trozo diga sobre obligaciones, derechos, prohibiciones, cobros, precios, reembolsos, plazos, renovaciones, cancelación, ' +
+    'datos personales y con quién se comparten, licencias, renuncias, limitación de responsabilidad, arbitraje o tribunales, cambios unilaterales, suspensión de cuentas, edad, ' +
+    'garantías y excepciones TIENE que aparecer. Prohibido "entre otros", "etc." o "varias cosas": dilo todo. Si algo es ambiguo o perjudica al lector, ponlo en alertas con la frase exacta (corta, copiada literal). No inventes nada que no esté en el trozo.';
+  const ESQ_TROZO = { type: 'object', properties: { seccion: { type: 'string' }, resumen: { type: 'string' }, puntos: { type: 'array', items: { type: 'string' } },
+    alertas: { type: 'array', items: { type: 'object', properties: { texto: { type: 'string' }, frase: { type: 'string' } }, required: ['texto'] } },
+    datos: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string' }, valor: { type: 'string' } }, required: ['tipo', 'valor'] } } }, required: ['seccion', 'resumen', 'puntos'] };
+  async function resumirDetallado(texto, { titulo, url, consulta }) {
+    const trozos = partir(texto);
+    const hechos = await enParalelo(trozos, Number(conf().paralelo) || 2, async (tr, k) => {
+      const prompt = `DOCUMENTO: ${titulo}${url ? ` (${url})` : ''}\nTROZO ${k + 1} DE ${trozos.length}${consulta ? `\nLO QUE QUIERE SABER EL USUARIO: ${consulta}` : ''}\n\n---\n${tr}\n---\n\n` +
+        'Devuelve: seccion (título de lo que trata este trozo), resumen (detallado y explicado, 5-12 frases, con TODAS las condiciones importantes), puntos (cada regla/obligación/derecho concreto, uno por línea), alertas (lo que puede perjudicar o sorprender, con su frase literal) y datos (cifras, plazos, importes, fechas, edades, correos, direcciones).';
+      let ultimoError = '';
+      for (let intento = 0; intento < 2; intento++) {
+        try { return { ok: true, ...(await JSONm(SIS_TROZO, prompt, ESQ_TROZO)) }; }
+        catch (e) { ultimoError = e.message; }
+      }
+      return { ok: false, error: ultimoError };
+    });
+    const ok = hechos.filter(h => h.ok);
+    let fin = null;
+    if (ok.length) {
+      try {
+        fin = await JSONm('Eres la araña lectora de APOLO. Con los resúmenes de TODAS las partes de un documento, escribes el informe final en español: completo, explicado y sin esconder nada (sobre todo lo que perjudica al lector). No inventes.',
+          `DOCUMENTO: ${titulo}\n${consulta ? `LO QUE QUIERE SABER EL USUARIO: ${consulta}\n` : ''}PARTES (${ok.length} de ${trozos.length}):\n\n` +
+          // TODAS las partes caben: a cada una le toca la misma porción (antes se cortaba al final y el modelo creía que faltaban partes)
+          hechos.map((h, k) => (h.ok ? `## Parte ${k + 1}: ${h.seccion}\n${h.resumen}\nAlertas: ${(h.alertas || []).map(x => x.texto).join(' | ') || '-'}` : `## Parte ${k + 1}: NO SE PUDO RESUMIR`)
+            .slice(0, Math.floor(48000 / hechos.length))).join('\n\n') + `\n\n(FIN: estas son las ${hechos.length} partes del documento completo, ninguna falta${ok.length < hechos.length ? `, salvo las ${hechos.length - ok.length} marcadas como NO SE PUDO RESUMIR` : ''}.)` +
+          '\n\nDevuelve: titular (1 frase), resumen (10-15 frases que cubran el documento entero, en orden), explicacion (qué significa para el usuario en la práctica, como se lo explicarías a un amigo), importante (lo imprescindible), alertas (todo lo que puede perjudicarle o pillarle por sorpresa) y recomendaciones (qué debería hacer o vigilar).',
+          { type: 'object', properties: { titular: { type: 'string' }, resumen: { type: 'string' }, explicacion: { type: 'string' }, importante: { type: 'array', items: { type: 'string' } },
+            alertas: { type: 'array', items: { type: 'string' } }, recomendaciones: { type: 'array', items: { type: 'string' } } }, required: ['titular', 'resumen', 'explicacion'] });
+      } catch (e) { fin = { titular: '', resumen: `(no pude escribir el informe final: ${e.message}; abajo están todas las partes resumidas)`, explicacion: '' }; }
+    }
+    return { trozos, hechos, fin };
+  }
+
   async function lectora(t, a, s) {
     const paginas = Math.max(1, Math.min(Number(a.paginas) || 1, 20));
-    const partes = [], todos = [];
+    const partes = [];
     let r, pest = t.id;
     for (let p = 0; p < paginas; p++) {
       r = await orden(pest, 'soltar', { tipo: 'lectora', color: TIPOS.lectora.color });
-      partes.push(`\n\n===== ${r.titulo} — ${r.url} =====\n\n` + r.bloques.map(b => b.texto).join('\n\n'));
-      todos.push(...r.bloques.map(b => ({ ...b, pagina: p + 1 })));
+      partes.push({ titulo: r.titulo, url: r.url, texto: r.completo || r.bloques.map(b => b.texto).join('\n\n'), pagina: r.caracteresPagina, de: r.de || 'página', bloques: r.bloques });
       if (p + 1 >= paginas) break;
-      await new Promise(ok => setTimeout(ok, Math.min(30_000, 2500 + r.bloques.length * 120)));   // que se vea el paseo antes de pasar página
+      await new Promise(ok => setTimeout(ok, Math.min(30_000, 2500 + r.bloques.length * 120)));
       const sig = await orden(pest, 'siguiente').catch(() => ({ url: null }));
-      if (!sig.url) { partes.push('\n\n(no encontré botón de "siguiente": fin)'); break; }
+      if (!sig.url) break;
       await new Promise(ok => setTimeout(ok, 1500)); await orden(pest, 'esperar', {}, 20_000).catch(() => { });
     }
-    const textoTodo = partes.join('').trim();
-    const ultimas = todos.filter(b => b.pagina === (todos[todos.length - 1]?.pagina || 1));
-    let d = { resumen: '', ideas: [], datos: [], marcas: [] };
-    try {
-      d = await JSONm('Eres la araña lectora de APOLO. Lees el texto completo de una página o libro y lo resumes en español, sin inventar nada que no esté en el texto.',
-        `TÍTULO: ${r.titulo}\nURL: ${r.url}\nPÁGINAS LEÍDAS: ${partes.length}\n${a.consulta ? `LO QUE BUSCA EL USUARIO: ${a.consulta}\n` : ''}\nTEXTO (bloques numerados de la última página; antes van las anteriores):\n` +
-        (partes.length > 1 ? recorte(textoTodo.split('\n').filter(Boolean).slice(0, 400), 9000) : '(una sola página)') + '\n\nBLOQUES DE LA ÚLTIMA PÁGINA:\n' + recorte(lista(ultimas), partes.length > 1 ? 12000 : 20000) +
-        '\n\nDevuelve: resumen (5-8 frases), ideas clave, datos concretos (ISBN, DOI, fechas, nombres, cifras, enlaces) y hasta 8 marcas = pasajes importantes de la última página (i del bloque + frase exacta corta copiada del texto + etiqueta de 1-3 palabras).',
-        { type: 'object', properties: { resumen: { type: 'string' }, ideas: { type: 'array', items: { type: 'string' } },
-          datos: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string' }, valor: { type: 'string' } }, required: ['tipo', 'valor'] } },
-          marcas: { type: 'array', items: { type: 'object', properties: { i: { type: 'integer' }, frase: { type: 'string' }, etiqueta: { type: 'string' } }, required: ['i', 'etiqueta'] } } }, required: ['resumen'] });
-    } catch (e) { d.resumen = `(no pude resumir: ${e.message})`; }
-    await orden(pest, 'marcar', { tipo: 'lectora', marcas: (d.marcas || []).slice(0, 8).map(m => ({ ...m, etiqueta: String(m.etiqueta || '').toUpperCase().slice(0, 24) })) }).catch(() => { });
-    recogerLuego(pest, 'lectora');
-    const informe = [`ARAÑA LECTORA · ${r.titulo}`, r.url, `${new Date().toLocaleString('es')} · ${partes.length} página(s) · ${textoTodo.length.toLocaleString('es')} caracteres${r.cortado ? ' (página muy larga: recortada)' : ''}`,
-      '', 'RESUMEN', d.resumen, '', 'IDEAS CLAVE', ...(d.ideas || []).map(x => `• ${x}`), '', 'DATOS', ...(d.datos || []).map(x => `• ${x.tipo}: ${x.valor}`), '', '='.repeat(60), 'TEXTO COMPLETO', textoTodo].join('\n');
-    const archivo = guardarInforme('lectora', r.titulo, informe, { url: r.url });
-    return `🕷 La araña lectora leyó "${r.titulo}" (${partes.length} página(s), ${textoTodo.length.toLocaleString('es')} caracteres).\n\n${d.resumen}\n` +
-      ((d.ideas || []).length ? `\nIdeas clave:\n${d.ideas.slice(0, 6).map(x => `• ${x}`).join('\n')}\n` : '') + `\nTexto completo guardado en: ${archivo}`;
+    const textoTodo = partes.map(x => partes.length > 1 ? `===== ${x.titulo} — ${x.url} =====\n\n${x.texto}` : x.texto).join('\n\n');
+    const caracteres = textoTodo.length;
+    const { trozos, hechos, fin } = await resumirDetallado(textoTodo, { titulo: r.titulo, url: r.url, consulta: a.consulta });
+    const okN = hechos.filter(h => h.ok).length;
+    // en la página se marca en rojo lo que puede perjudicar (frase literal)
+    const ultima = partes[partes.length - 1];
+    const norm = x => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const marcas = hechos.flatMap(h => (h.ok ? h.alertas || [] : [])).filter(x => x.frase).slice(0, 20)
+      .map(x => { const f = norm(x.frase).slice(0, 60), b = ultima.bloques.find(b => norm(b.texto).includes(f)); return b ? { i: b.i, frase: x.frase, etiqueta: 'OJO', color: '#ff3355' } : null; }).filter(Boolean);
+    await orden(pest, 'marcar', { tipo: 'lectora', marcas }).catch(() => { });
+    recogerLuego(pest, 'lectora', 14_000);
+    const cobertura = `${caracteres.toLocaleString('es')} caracteres leídos (${partes.map(x => `${x.de}: ${x.texto.length.toLocaleString('es')} de ${(x.pagina || x.texto.length).toLocaleString('es')} que tiene la página entera con menús`).join(' · ')}) · resumido en ${okN} de ${trozos.length} partes${okN < trozos.length ? ' ⚠ FALTAN PARTES (abajo dice cuáles)' : ' = 100 %'}`;
+    const L = [];
+    L.push(`ARAÑA LECTORA · ${r.titulo}`, partes.map(x => x.url).join('\n'), new Date().toLocaleString('es'), `COBERTURA: ${cobertura}`, '');
+    if (fin) {
+      L.push('EN UNA FRASE', fin.titular, '', 'RESUMEN COMPLETO', fin.resumen, '', 'QUÉ SIGNIFICA PARA TI', fin.explicacion, '');
+      if ((fin.alertas || []).length) L.push('⚠ OJO CON ESTO', ...fin.alertas.map(x => `• ${x}`), '');
+      if ((fin.importante || []).length) L.push('LO IMPRESCINDIBLE', ...fin.importante.map(x => `• ${x}`), '');
+      if ((fin.recomendaciones || []).length) L.push('QUÉ HACER', ...fin.recomendaciones.map(x => `• ${x}`), '');
+    }
+    L.push('='.repeat(60), 'PARTE POR PARTE (todo el documento, en orden)', '');
+    hechos.forEach((h, k) => {
+      if (!h.ok) { L.push(`── Parte ${k + 1}/${trozos.length}: ⚠ NO SE PUDO RESUMIR (${h.error}). Su texto está completo al final del informe.`, ''); return; }
+      L.push(`── Parte ${k + 1}/${trozos.length}: ${h.seccion}`, h.resumen, ...(h.puntos || []).map(x => `  • ${x}`),
+        ...(h.alertas || []).map(x => `  ⚠ ${x.texto}${x.frase ? `  «${x.frase}»` : ''}`), ...(h.datos || []).map(x => `  # ${x.tipo}: ${x.valor}`), '');
+    });
+    L.push('='.repeat(60), 'TEXTO COMPLETO', '', textoTodo);
+    const archivo = guardarInforme('lectora', r.titulo, L.join('\n'), { url: r.url, caracteres, partes: trozos.length, resumidas: okN });
+    const chat = [`🕷 La araña lectora leyó "${r.titulo}" entero.`, `Cobertura: ${cobertura}`, ''];
+    if (fin) {
+      chat.push(`**${fin.titular}**`, '', fin.resumen, '', `**Qué significa para ti:** ${fin.explicacion}`);
+      if ((fin.alertas || []).length) chat.push('', '**⚠ Ojo con esto:**', ...fin.alertas.map(x => `• ${x}`));
+      if ((fin.recomendaciones || []).length) chat.push('', '**Qué hacer:**', ...fin.recomendaciones.map(x => `• ${x}`));
+    }
+    chat.push('', '**Parte por parte:**', ...hechos.map((h, k) => h.ok ? `${k + 1}. **${h.seccion}** — ${h.resumen}` : `${k + 1}. ⚠ no se pudo resumir (${h.error})`));
+    chat.push('', `Informe completo (con cada punto, cifras y el texto entero): ${archivo}`);
+    return chat.join('\n');
   }
 
   async function ia(t, a) {
@@ -324,7 +403,20 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     corriendo.set(tipo, { desde: Date.now() });
     try {
       if (TIPOS[tipo].web) {
-        if (!navegador?.conectado?.()) throw new Error('la extensión del navegador no está conectada (Chrome con la extensión de APOLO, versión 0.4.0 o más nueva)');
+        const conExt = !!navegador?.conectado?.();
+        // con enlace: la ventana de arañas de APOLO (no depende de la extensión); cfg.aranas.motor = 'extension' fuerza Chrome
+        if (a.url && visor && (conf().motor !== 'extension' || !conExt)) {
+          let url = String(a.url).trim(); if (!/^[a-z]+:/i.test(url)) url = 'https://' + url;
+          if (!/^https?:|^file:/i.test(url)) throw new Error('solo abro direcciones http(s) o archivos');
+          if (navegador?.protegido?.(url, '')) throw new Error(`"${dominio(url)}" es un sitio protegido: ahí no suelto arañas`);
+          await permisoSitio(s, url);
+          const v = await visor.abrir(url);
+          salen(tipo, dominio(v.url) || 'archivo');
+          const t = { id: v.id, url: v.url, titulo: v.titulo };
+          try { return await ({ lectora, ia, codigo })[tipo](t, a, s); }
+          catch (e) { orden(t.id, 'recoger', { tipo }).catch(() => { }); vuelven(tipo); throw e; }
+        }
+        if (!conExt) throw new Error(visor ? 'pásame el enlace (url) de lo que quieres escanear: lo abro en la ventana de arañas de APOLO' : 'la extensión del navegador no está conectada');
         if (a.url) {                                     // un enlace: se abre en una pestaña nueva y ahí se sueltan
           let url = String(a.url).trim(); if (!/^[a-z]+:/i.test(url)) url = 'https://' + url;
           if (!/^https?:/i.test(url)) throw new Error('solo abro direcciones http(s)');
@@ -347,7 +439,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
   }
 
   async function http(M, p, b = {}, q = {}) {   // /v1/aranas
-    if (M === 'GET' && !p[2]) return { tipos: TIPOS, trabajando: [...corriendo.keys()], informes: leerIndice().slice(0, 40), extension: !!navegador?.conectado?.() };
+    if (M === 'GET' && !p[2]) return { tipos: TIPOS, trabajando: [...corriendo.keys()], informes: leerIndice().slice(0, 40), extension: !!navegador?.conectado?.(), ventana: !!visor };
     if (M === 'GET' && p[2] === 'informe') {
       const inf = leerIndice().find(x => x.id === (q.id || p[3]));
       if (!inf || !fs.existsSync(inf.archivo)) throw Object.assign(new Error('no existe'), { status: 404 });
@@ -357,7 +449,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     throw Object.assign(new Error('ruta desconocida'), { status: 404 });
   }
 
-  return { soltar, http, tipos: TIPOS, informes: leerIndice, trabajando: () => [...corriendo.keys()] };
+  return { soltar, http, tipos: TIPOS, informes: leerIndice, trabajando: () => [...corriendo.keys()], ponerVisor: v => { visor = v; }, partir };
 }
 
 // ---------- herramientas del agente ----------
@@ -371,7 +463,7 @@ const HERRAMIENTAS = [
       '"codigo" = revisa el código de la página (GitHub, docs, foros) buscando fallos de seguridad y cómo arreglarlos; ' +
       '"discord" = lee los servidores donde está el bot CONTROL-COMANDER (servidor, canal, horas, consulta) y resume temas, preguntas sin responder y destacados; ' +
       '"radar" = lo nuevo y en tendencia de GitHub y Hugging Face (repos, modelos, spaces, papers) elegido para el usuario (dias, temas, consulta). ' +
-      'Las de página usan la pestaña activa (o "pestana") del navegador con la extensión. Tardan de 10 s a 2 min.',
+      'Las de página: con "url" la abren en la ventana de arañas de APOLO (no necesita la extensión); sin url usan la pestaña activa de Chrome con la extensión. La lectora lee el texto ENTERO y lo resume por partes (cobertura al 100 %). Tardan de 10 s a 4 min.',
     parametros: { type: 'object', properties: {
       tipo: { type: 'string', enum: Object.keys(TIPOS) },
       url: { type: 'string', description: 'enlace a abrir y escanear (si no, la pestaña activa)' },
