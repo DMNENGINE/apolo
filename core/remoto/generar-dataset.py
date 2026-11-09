@@ -11,6 +11,12 @@ import argparse, hashlib, json, os, random, re, sys, time, urllib.request
 PREG = re.compile(r"\?|^(qu[eé]|c[oó]mo|por ?qu[eé]|cu[aá]l|cu[aá]nto|d[oó]nde|qui[eé]n|explica|expl[ií]came|dime|h[aá]blame|habla|cu[eé]ntame|opinas|crees|sabes|recomi[eé]nda|compara|diferencia)", re.I)
 MALA = re.compile(r"<think>|como (modelo de lenguaje|una ia|inteligencia artificial),? no|as an ai|no tengo acceso a internet|ya (lo )?he (hecho|creado|guardado|abierto|instalado|subido|publicado)|listo, ya (est[aá]|lo)", re.I)
 TITULO = re.compile(r"^#{1,4}\s", re.M)
+# preguntas que en la vida real APOLO resuelve con herramientas (datos en vivo) o que tratan de cosas concretas del usuario: fuera
+VIVO = re.compile(r"precio|cotiza|ahora mismo|\bhoy\b|clima|tiempo hace|noticia|[uú]ltim[ao] versi[oó]n|resultado del partido|cu[aá]nto (vale|cuesta)|"
+                  r"mi (p[aá]gina|web|app|tel[eé]fono|pc|cuenta|servidor|correo)|tu (p[aá]gina|web|panel)|control", re.I)
+# respuestas que enseñarían a negarse ("no tengo acceso") o con direcciones inventadas
+NIEGA = re.compile(r"no tengo acceso|no puedo acceder|en tiempo real|no puedo (navegar|buscar|consultar)|como (asistente|ia) no puedo", re.I)
+URL = re.compile(r"https?://|www\.|\b[\w-]+\.(com|net|org|io|engine|app|dev)\b", re.I)
 
 
 def h(t):
@@ -76,12 +82,13 @@ class Gen:
         for t in m.get('preguntas', []):
             if self.parar() or len(cola) + self.e['hechas'] >= a.objetivo:
                 break
-            if h(t) in self.ya:
+            if h(t) in self.ya or VIVO.search(t):
                 continue
             try:
                 r = self.chat([{'role': 'system', 'content': 'Respondes solo SI o NO.'}, {'role': 'user', 'content':
-                               '¿Este mensaje se puede contestar bien SIN ver la conversación anterior ni el ordenador del usuario (es una pregunta general o de opinión, '
-                               f'se entiende sola y no nombra cosas que no conoces)?\n\n"{t}"'}], maximo=4, temp=0).upper()
+                               '¿Este mensaje se puede contestar bien SIN ver la conversación anterior ni el ordenador del usuario? Responde NO si pregunta por cosas concretas '
+                               'del usuario (sus webs, apps, cuentas, configuraciones, proyectos), por datos en tiempo real, o si depende de algo dicho antes. '
+                               f'SI solo si es una pregunta general, de opinión o de charla que se entiende sola.\n\n"{t}"'}], maximo=4, temp=0).upper()
                 if r.startswith('SI') or r.startswith('SÍ'):
                     cola.append(('tuya', t)); self.ya.add(h(t))
             except Exception as er:
@@ -102,7 +109,7 @@ class Gen:
                                      '\n\nCosas de su vida y proyectos (inspiración, sin datos privados exactos):\n' + ('\n'.join('- ' + x for x in temas) or '- tecnología, IA, camiones, impresión 3D, juegos') +
                                      '\n\nDevuelve JSON {"mensajes":["...", ...]} con 10 mensajes distintos.'}], 1200)
                 for t in r.get('mensajes', []):
-                    if isinstance(t, str) and len(t) > 6 and h(t) not in self.ya:
+                    if isinstance(t, str) and len(t) > 6 and h(t) not in self.ya and not VIVO.search(t):
                         self.ya.add(h(t)); cola.append(('sus temas', t))
             except Exception as er:
                 self.e['error'] = str(er)[:200]
@@ -114,10 +121,10 @@ class Gen:
                     break
                 try:
                     resp = self.chat([{'role': 'system', 'content': sys_apolo}, *ejemplos, {'role': 'user', 'content': q}], maximo=550)
-                    if len(resp) < 15 or MALA.search(resp) or TITULO.search(resp):
+                    if len(resp) < 15 or MALA.search(resp) or TITULO.search(resp) or NIEGA.search(resp) or URL.search(resp):
                         self.e['descartadas'] += 1; continue
                     j = self.chat_json([{'role': 'system', 'content': 'Eres un revisor exigente de datos de entrenamiento. Puntúas la respuesta de un asistente llamado APOLO.'},
-                                        {'role': 'user', 'content': f'PREGUNTA: {q}\n\nRESPUESTA: {resp}\n\nDevuelve JSON {{"inventa": true si afirma datos o explica cosas que probablemente no existen o no puede saber, '
+                                        {'role': 'user', 'content': f'PREGUNTA: {q}\n\nRESPUESTA: {resp}\n\nDevuelve JSON {{"inventa": true si afirma datos que no puede saber (direcciones web, nombres, cifras, configuraciones o planes del usuario, cosas que dice haber hecho) o explica cosas que probablemente no existen, '
                                          '"plantilla": true si parece un folleto de chatbot (títulos, listas de ventajas), "nota": 1-5 (5 = útil, correcta, natural y con personalidad)}'}], 120)
                     nota = 1 if (j.get('inventa') or j.get('plantilla')) else int(j.get('nota') or 0)
                     if nota < a.nota:
