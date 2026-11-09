@@ -111,10 +111,10 @@ function crearDataset({ cfg, nombre = () => 'APOLO' }) {
   }
   const leer = n => { try { return JSON.parse(fs.readFileSync(path.join(dirOut(), n), 'utf8')); } catch { return null; } };
   async function http(M, p, b = {}) {   // /v1/dataset
-    if (M === 'GET' && !p[2]) return { resumen: leer('resumen.json'), muestra: leer('muestra.json') || [], generacion: generador?.estado() || null,
-      generadas: (generador?.hechas() || []).sort(() => Math.random() - .5).slice(0, 12) };
-    if (M === 'POST' && p[2] === 'generar') { if (!generador) throw new Error('generador no disponible'); if (!fs.existsSync(path.join(dirOut(), 'apolo-train.jsonl'))) exportar(); return { generacion: await generador.generar(b) }; }
-    if (M === 'POST' && p[2] === 'parar') return { generacion: generador?.parar() || null };
+    if (M === 'GET' && !p[2]) return { resumen: leer('resumen.json'), muestra: leer('muestra.json') || [], generacion: generador ? await generador.estado() : null,
+      generadas: generador ? await generador.hechas() : [] };
+    if (M === 'POST' && p[2] === 'generar') { if (!generador) throw new Error('generador no disponible'); return { generacion: await generador.generar(b) }; }
+    if (M === 'POST' && p[2] === 'parar') return { generacion: generador ? await generador.parar() : null };
     if (M === 'POST' && p[2] === 'exportar') { const r = exportar(); return { resumen: r, muestra: leer('muestra.json') || [] }; }
     throw Object.assign(new Error('ruta desconocida'), { status: 404 });
   }

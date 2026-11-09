@@ -94,7 +94,8 @@ function crearEntrenamiento({ cfg, bus, ssh: sshX, ahora = () => Date.now() }) {
     if (e.procesos > 0) throw new Error(`ya hay un entrenamiento en marcha (${e.resumen.fase})`);
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const cmd = `mkdir -p ${DIR}/apolo-logs && cd ${DIR} && HF_HOME=${DIR}/cache/huggingface setsid nohup /opt/Soup/.venv/bin/python cola.py --config ${comillas(config)} --yes${resume ? ` --resume ${comillas(resume)}` : ''} > apolo-logs/${ts}.log 2>&1 < /dev/null &`;
-    await ssh(c.ssh, ['pct', 'exec', String(Number(c.ct)), '--', 'su', '-', c.usuario, '-c', comillas(cmd)]);
+    // en segundo plano EN EL HOST: pct exec retiene la sesión ssh mientras vive el hijo
+    await ssh(c.ssh, ['bash', '-c', comillas(`nohup pct exec ${Number(c.ct)} -- su - ${c.usuario} -c ${comillas(cmd)} > /dev/null 2>&1 < /dev/null &`)]);
     ultimo = null;
     bus?.emit('entrenamiento', { accion: resume ? 'continuar' : 'iniciar' });
     return { ok: true, log: `${DIR}/apolo-logs/${ts}.log`, config, resume: resume || null };
