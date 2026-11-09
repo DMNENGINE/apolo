@@ -1,4 +1,5 @@
-// Arañas digitales de APOLO en una página: caminan por el texto y lo "leen" (láser, letras que vuelan a la araña, esquinas HUD).
+// Arañas digitales de APOLO en una página: aparecen en el centro de la pantalla y bajan caminando de palabra en palabra,
+// mordiendo cada una (las de alrededor se iluminan como leídas, las letras vuelan a la araña). Nada de barrer renglones.
 // Lo inyectan sw.js (extensión) o la ventana de arañas de APOLO (main.js), SIEMPRE después de arana-motor.js.
 // El análisis lo hace el núcleo (core/aranas.js); aquí se recoge el texto COMPLETO, se anima y se pintan las marcas.
 // Nunca lee campos de contraseña ni formularios.
@@ -106,17 +107,72 @@
 
   // ---------- efectos ----------
   function caja(x, y, w, h, color, opts = {}) {
-    const k = { x, y, w, h, color, t: performance.now(), fuerte: !!opts.fuerte, etiqueta: opts.etiqueta || '' };
+    const k = { x, y, w, h, color, t: performance.now() + (opts.retraso || 0), fuerte: !!opts.fuerte, tenue: !!opts.tenue, etiqueta: opts.etiqueta || '' };
     cajas.push(k); if (cajas.length > 5000) cajas.splice(0, cajas.length - 5000);
     return k;
   }
-  function escanearLinea(l, color, a, texto) {      // láser que barre la línea + letras que salen volando hacia la araña
-    barridos.push({ ...l, color, t: performance.now() });
-    caja(l.x1, l.y, l.x2 - l.x1, l.h, color);
-    const n = Math.min(9, 2 + ((l.x2 - l.x1) / 70) | 0);
-    for (let i = 0; i < n; i++) chispas.push({ x: l.x1 + Math.random() * (l.x2 - l.x1), y: l.y + l.h / 2, a, color, ch: GLIFOS[Math.random() * GLIFOS.length | 0], t: 0, v: .6 + Math.random() * .8 });
-    if (texto) tickerObj = texto;
-    leidos++;
+  // palabras de la página (coordenadas de documento) agrupadas por filas de 40 px para buscar vecinas rápido
+  let palabras = [], filas = new Map(), leidas = 0;
+  const FILA = 40;
+  function palabrasDe(lista) {
+    const r = document.createRange(), out = [];
+    for (const b of lista) {
+      for (const n of nodosTexto(b.el)) {
+        const re = /\S{2,}/g; let m;
+        while ((m = re.exec(n.data)) && out.length < 20000) {
+          r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length);
+          const x = r.getBoundingClientRect(); if (x.width < 2 || x.height < 4) continue;
+          out.push({ x: x.left + scrollX, y: x.top + scrollY, w: x.width, h: x.height, txt: m[0], leida: false, b });
+        }
+      }
+      if (!out.length || out[out.length - 1].b !== b) {             // bloque sin nodos de texto (visor de código): rejilla de su caja
+        const q = rectBloque(b.el);
+        if (q.w > 5 && q.h > 5) for (let yy = q.y; yy < q.y + Math.min(q.h, 4000); yy += 22) for (let xx = q.x + 10; xx < q.x + Math.min(q.w, 900); xx += 70)
+          out.push({ x: xx, y: yy, w: 54, h: 16, txt: '', leida: false, b });
+      }
+    }
+    filas = new Map();
+    for (const w of out) { const k = Math.floor(w.y / FILA); (filas.get(k) || filas.set(k, []).get(k)).push(w); }
+    return out;
+  }
+  function cerca(y1, y2) { const out = []; for (let k = Math.floor(y1 / FILA); k <= Math.floor(y2 / FILA); k++) { const f = filas.get(k); if (f) out.push(...f); } return out; }
+  function leer(w, color, fuerte) {
+    if (w.leida) return false;
+    w.leida = true; leidas++;
+    caja(w.x, w.y, w.w, w.h, color, { tenue: !fuerte, retraso: fuerte ? 0 : 60 + Math.random() * 350 });
+    return true;
+  }
+  // la araña muerde una palabra: se para, la palabra se enciende, las de alrededor se van iluminando y las letras vuelan a su boca
+  function morder(a, w, color, pistas) {
+    leer(w, color, true);
+    const cx = w.x + w.w / 2, cy = w.y + w.h / 2, R = 95 + Math.random() * 55;
+    let n = 0;
+    for (const v of cerca(cy - R, cy + R)) if (Math.hypot(v.x + v.w / 2 - cx, v.y + v.h / 2 - cy) < R && leer(v, color, false)) n++;
+    a.hechos += n + 1;
+    const txt = w.txt || '';
+    for (let i = 0; i < Math.min(8, 2 + txt.length); i++) chispas.push({ x: w.x + Math.random() * w.w, y: cy, a, color, ch: txt[i] || GLIFOS[Math.random() * GLIFOS.length | 0], t: 0, v: .7 + Math.random() * .7 });
+    if (txt) tickerObj = (tickerObj + ' ' + txt).slice(-400);
+    for (const [re, et] of pistas) { re.lastIndex = 0; if (re.test(w.b.texto) && !w.b['p_' + et]) { w.b['p_' + et] = 1; for (const r of rectsDeFrase(w.b.el, new RegExp(re.source, re.flags))) { caja(r.x, r.y, r.w, r.h, color, { fuerte: true, etiqueta: et }); a.marcas.push({ x: r.x, y: r.y }); } } }
+    // trabaja: pausa corta mordiendo; a veces se queda quieta amenazando, a veces tiende un hilo hasta su última presa
+    a.pausa = .05 + Math.random() * .2;
+    if (Math.random() < .05) { a.pausa = .7 + Math.random() * .5; a.temblor = 1; }
+    if (a.ultima && Math.random() < .12) hilos.push({ x1: a.ultima.x, y1: a.ultima.y, x2: cx, y2: cy, color });
+    a.ultima = { x: cx, y: cy };
+  }
+  // siguiente presa: una palabra sin leer un poco más abajo, cerca y dentro de su franja (zigzag natural hacia abajo)
+  function siguientePaso(a) {
+    const busca = (abajo, ancho) => cerca(a.y - 25, a.y + abajo).filter(w => !w.leida && w.x + w.w / 2 > a.banda[0] && w.x + w.w / 2 < a.banda[1] && Math.abs(w.x + w.w / 2 - a.x) < ancho);
+    let cand = busca(110, 260);
+    if (!cand.length) cand = busca(500, 2000);
+    if (!cand.length) { const resto = palabras.filter(w => !w.leida && w.y > a.y - 25 && w.x + w.w / 2 > a.banda[0] && w.x + w.w / 2 < a.banda[1]); cand = resto.slice(0, 40); }
+    if (!cand.length) { a.trabajo = false; a.estado = 'leído ✓'; a.vagar = { x: a.x, y: a.y }; return; }
+    let mejor = null, ms = Infinity;
+    for (const w of cand) {
+      const dx = w.x + w.w / 2 - a.x, dy = w.y + w.h / 2 - a.y;
+      const sc = Math.abs(dx) * .6 + Math.abs(dy - 45) * 1.1 + (dy < -5 ? 120 : 0) + Math.random() * 70;
+      if (sc < ms) { ms = sc; mejor = w; }
+    }
+    a.ruta.push({ x: mejor.x + mejor.w / 2, y: mejor.y + mejor.h / 2, vel: 180 + Math.random() * 220, al: ar => morder(ar, mejor, ar.color, PISTAS[ar.tipo] || []) });
   }
   function rectsDeFrase(el, re) {
     const out = [], r = document.createRange();
@@ -141,7 +197,9 @@
   function dibujarCajas(ox, oy, ahora) {
     for (const k of cajas) {
       const x = k.x - ox, y = k.y - oy; if (y + k.h < -20 || y > H + 20) continue;
-      const edad = (ahora - k.t) / 1000, nace = Math.min(1, edad / .22);
+      const edad = (ahora - k.t) / 1000; if (edad < 0) continue;
+      const nace = Math.min(1, edad / .22);
+      if (k.tenue) { c.save(); c.fillStyle = k.color; c.globalAlpha = Math.max(.07, .3 - edad * .12) * nace; c.fillRect(x - 1, y, k.w + 2, k.h); c.restore(); continue; }
       const glitch = Math.random() < .004 ? (Math.random() - .5) * 6 : 0;
       c.save();
       c.fillStyle = k.color; c.globalAlpha = k.fuerte ? .22 + .08 * Math.sin(ahora / 300) : Math.max(.05, .16 - edad * .02);
@@ -201,27 +259,29 @@
       const pct = Math.round(100 * Math.min(1, a.hechos / Math.max(1, a.total)));
       return `<div class="f"><span style="color:${a.color}">● ${NOMBRES[a.tipo] || a.tipo}</span><span class="p">${a.estado || pct + '%'}</span></div><div class="bar"><i style="width:${pct}%;background:${a.color}"></i></div>`;
     }).join('') || '<div class="p">Escaneo terminado. Las marcas se quedan hasta que pulses Limpiar.</div>';
-    nEl.textContent = total ? `${leidos.toLocaleString()} líneas escaneadas · ${total.toLocaleString()} caracteres` : '';
+    nEl.textContent = total ? `✓ texto capturado entero: ${total.toLocaleString()} caracteres · las arañas han recorrido ${leidas.toLocaleString()} de ${palabras.length.toLocaleString()} palabras` : '';
     if (ticker.length < tickerObj.length || !tickerObj.startsWith(ticker)) ticker = tickerObj.startsWith(ticker) ? tickerObj.slice(0, ticker.length + 6) : tickerObj.slice(0, 6);
-    tk.textContent = '> ' + ticker.slice(-150) + (Math.floor(performance.now() / 400) % 2 ? '▌' : '');
+    tk.textContent = '> ' + ticker.slice(-110) + (Math.floor(performance.now() / 400) % 2 ? '▌' : '');
   }
 
   function frame(ahora) {
     if (!vivo) return;
     const dt = Math.min(0.05, (ahora - ultimo) / 1000); ultimo = ahora;
     for (const a of [...aranas]) {
+      if (a.trabajo && !a.ruta.length && a.pausa <= 0) siguientePaso(a);
       M.mover(a, dt);
-      a.haz = !!a.ruta.length && !a.fuera;
+      a.haz = (a.trabajo || !!a.ruta.length) && !a.fuera;
       (a.rastro ||= []).push({ x: a.x, y: a.y }); if (a.rastro.length > 40) a.rastro.shift();
       if (a.fuera && a.alpha <= 0) aranas.splice(aranas.indexOf(a), 1);
     }
-    const lider = aranas.find(a => a.lider && !a.fuera && a.ruta.length);
-    if (lider && ahora - ultimaRueda > 2500) {
-      const vy = lider.y - scrollY;
-      if (vy > H * 0.68 || vy < H * 0.12) scrollBy(0, (vy - H * 0.42) * Math.min(1, dt * 4));
+    // la página baja suave siguiendo a la araña que va más arriba (para no dejar a ninguna fuera de la vista)
+    const vivas = aranas.filter(a => !a.fuera && (a.trabajo || a.ruta.length));
+    if (vivas.length && ahora - ultimaRueda > 2500) {
+      const vy = Math.min(...vivas.map(a => a.y)) - scrollY;
+      if (vy > H * 0.45 || vy < H * 0.08) scrollBy(0, (vy - H * 0.3) * Math.min(1, dt * 1.5));
     }
     c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, W, H);
-    dibujarCajas(scrollX, scrollY, ahora); dibujarBarridos(scrollX, scrollY, ahora); dibujarHilos(scrollX, scrollY); dibujarChispas(scrollX, scrollY, dt);
+    dibujarCajas(scrollX, scrollY, ahora); dibujarHilos(scrollX, scrollY); dibujarChispas(scrollX, scrollY, dt);
     for (const a of aranas) M.dibujar(c, a, scrollX, scrollY, { W, H });
     if (ahora - hudT > 120) { pintarHud(); hudT = ahora; }
     requestAnimationFrame(frame);
@@ -230,33 +290,6 @@
 
   // ---------- rutas ----------
   const entrada = () => ({ x: scrollX + W - 40, y: scrollY - 30 });   // bajan desde arriba a la derecha
-  function rutaLectura(lista, a, color, tipo) {
-    const pistas = PISTAS[tipo] || [];
-    lista.forEach(b => {
-      let lin = lineasDe(b.el);
-      if (!lin.length) {
-        const r = rectBloque(b.el); if (r.w < 5 || r.h < 5) { a.ruta.push({ x: a.x, y: a.y, al: ar => { ar.hechos++; } }); return; }
-        lin = Array.from({ length: Math.min(40, Math.ceil(r.h / 22)) }, (_, k) => ({ x1: r.x + 8, x2: r.x + Math.min(r.w, 900) - 8, y: r.y + k * 22, h: 18 }));
-      }
-      const frases = b.texto.split('\n').filter(Boolean);
-      const paso = Math.max(1, Math.ceil(lin.length / 6));
-      lin.forEach((l, j) => {
-        const trozo = frases[Math.min(frases.length - 1, Math.floor(j / lin.length * frases.length))] || '';
-        if (j % paso && j !== lin.length - 1) { a.ruta.push({ x: l.x1, y: l.y + l.h / 2, al: ar => escanearLinea(l, color, ar, trozo) }); return; }
-        a.ruta.push({ x: l.x1, y: l.y + l.h / 2 });
-        a.ruta.push({ x: l.x2, y: l.y + l.h / 2, al: ar => escanearLinea(l, color, ar, trozo) });
-      });
-      const u = lin[lin.length - 1];
-      a.ruta.push({ x: u.x2, y: u.y + u.h / 2, al: ar => {
-        for (const [re, et] of pistas) for (const r of rectsDeFrase(b.el, new RegExp(re.source, re.flags))) { caja(r.x, r.y, r.w, r.h, color, { fuerte: true, etiqueta: et }); ar.marcas.push({ x: r.x, y: r.y }); }
-        ar.hechos++;
-      } });
-    });
-    a.total = lista.length;
-    const largo = a.ruta.reduce((s, p, i, r) => s + (i ? Math.hypot(p.x - r[i - 1].x, p.y - r[i - 1].y) : 0), 0);
-    a.vel = Math.max(450, Math.min(1600, largo / 50));
-  }
-
   // ---------- API (sw.js o la ventana de arañas de APOLO) ----------
   let bloquesVivos = [];
   window.__apoloAranas = {
@@ -270,22 +303,29 @@
       bloquesVivos.push(...lista);
       const comp = textoCompleto(zona);
       total += comp.texto.length;
-      const n = Math.max(1, Math.min(4, cuantas || (tipo === 'lectora' ? (lista.length > 40 ? 3 : 2) : 1)));
-      const trozos = Array.from({ length: n }, (_, k) => lista.filter((_, i) => Math.floor(i * n / Math.max(1, lista.length)) === k));
-      trozos.forEach((tr, k) => {
-        const e = entrada(), a = M.crear(tipo, color, e.x - k * 60, e.y - k * 30, { r: 12 });
-        aranas.push(a); a.lider = k === 0;
-        if (!tr.length) { a.ruta.push({ x: scrollX + W / 2, y: scrollY + H / 2 }); a.estado = 'nada que leer'; a.vagar = { x: scrollX + W / 2, y: scrollY + H / 2 }; return; }
-        rutaLectura(tr, a, color, tipo);
-        const ult = a.ruta[a.ruta.length - 1] || { x: scrollX + W / 2, y: scrollY + H / 2 };
-        a.ruta.push({ x: ult.x, y: ult.y, al: ar => { ar.estado = 'leído ✓'; ar.vagar = { x: ar.x, y: ar.y }; } });
-      });
+      palabras = palabrasDe(lista);
+      const n = Math.max(1, Math.min(4, cuantas || (tipo === 'lectora' ? 3 : 2)));
+      const zr = zona.getBoundingClientRect(), z0 = Math.max(0, zr.left) + scrollX, z1 = Math.min(W, zr.right) + scrollX, cx = scrollX + W / 2, cy = scrollY + H / 2;
+      for (let k = 0; k < n; k++) {
+        const a = M.crear(tipo, color, cx + (k - (n - 1) / 2) * 30, scrollY - 20, { r: 12 });
+        aranas.push(a);
+        a.banda = [z0 + (z1 - z0) * k / n - 40, z0 + (z1 - z0) * (k + 1) / n + 40];
+        a.total = Math.max(1, Math.round(palabras.length / n));
+        a.ruta = [
+          { x: a.x, y: scrollY - 20, espera: k * .5 },
+          { x: cx + (k - (n - 1) / 2) * 50, y: cy - 40, vel: 160, colgada: true, al: ar => { ar.hilo = null; ar.pausa = .6; ar.temblor = 1; } },   // se descuelga hasta el centro
+          { x: (a.banda[0] + a.banda[1]) / 2, y: cy, vel: 200, al: ar => { ar.trabajo = true; } },
+        ];
+        a.hilo = { x: a.x, y: scrollY - 400 };
+      }
+      if (!palabras.length) for (const a of aranas) { a.estado = 'nada que leer'; a.vagar = { x: cx, y: cy }; }
       const sumaBloques = lista.reduce((s, b) => s + b.texto.length, 0);
       return { titulo: document.title, url: location.href, bloques: lista.map(b => ({ i: b.i, t: b.t, texto: b.texto.slice(0, 20000) })), total: lista.length,
         completo: comp.texto, de: comp.de, caracteresPagina: comp.pagina, caracteresBloques: sumaBloques };
     },
     marcar({ tipo, marcas = [], color } = {}) {
       color = color || COLORES[tipo] || '#ff3df2';
+      for (const x of aranas) if (x.tipo === tipo && x.trabajo) { x.trabajo = false; }   // dejan de leer: van a marcar
       let a = aranas.find(x => x.tipo === tipo && !x.fuera);
       if (!a) { const e = entrada(); a = M.crear(tipo, color, e.x, e.y, { r: 12 }); aranas.push(a); }
       a.ruta.length = 0; a.vel = 900; a.estado = 'marcando'; a.hechos = 0; a.total = marcas.length || 1; a.lider = true; a.vagar = null;
@@ -313,7 +353,7 @@
       return { ok: true, marcadas: ok };
     },
     recoger({ tipo } = {}) {
-      for (const a of aranas) if (!tipo || a.tipo === tipo) { a.vagar = null; a.pausa = 0; a.ruta = [{ x: scrollX + W - 30, y: scrollY - 40, al: ar => { ar.fuera = true; } }]; a.vel = 1100; a.lider = false; }
+      for (const a of aranas) if (!tipo || a.tipo === tipo) { a.vagar = null; a.pausa = 0; a.trabajo = false; a.ruta = [{ x: scrollX + W - 30, y: scrollY - 40, al: ar => { ar.fuera = true; } }]; a.vel = 1100; a.lider = false; }
       return { ok: true };
     },
     siguiente() {
