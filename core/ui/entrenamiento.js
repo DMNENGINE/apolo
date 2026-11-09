@@ -61,8 +61,35 @@ VISTAS.entrenamiento = {
           ${(d.arbitro?.eventos || []).slice().reverse().map(e => `<div style="font-size:13px;padding:3px 0"><span class="tenue">${esc(new Date(e.hora * 1000).toLocaleTimeString())}</span> ${esc(e.texto)}</div>`).join('') || `<p class="tenue">${tr('Sin eventos')}</p>`}
         </div></div>
       </div>
+      <div class="tarjeta" style="margin-top:10px"><header>${ic('memoria')}<span class="crece">${tr('Dataset de APOLO')}</span></header><div id="enDataset"></div></div>
       ${d.log?.cola ? `<div class="tarjeta" style="margin-top:10px"><header>${ic('terminal')}<span class="crece">${tr('Salida del entrenamiento')}</span><span class="tenue" style="font-size:12px">${esc((d.log.archivo || '').split('/').pop())}</span></header><div class="cuerpo"><pre style="max-height:220px;overflow:auto;font-size:12px;white-space:pre-wrap">${esc(d.log.cola.replace(/\r/g, '\n').split('\n').filter(Boolean).slice(-25).join('\n'))}</pre></div></div>` : ''}`;
+    this.pintarDataset();
   },
-  alEvento(e) { if (e.tipo === 'entrenamiento' && this.v) { clearTimeout(this.t); this.t = setTimeout(() => this.refrescar(), 500); } },
+  // ---------- dataset de APOLO ----------
+  async pintarDataset() {
+    const el = $('#enDataset', this.v); if (!el) return;
+    let d; try { d = await api('GET', '/dataset'); } catch (e) { el.innerHTML = `<p class="mal">${esc(e.message)}</p>`; return; }
+    const r = d.resumen, g = d.generacion;
+    const ej = (q, a, tag) => `<div style="padding:8px 0;border-bottom:1px solid var(--linea,#ffffff10)">${tag ? `<span class="tenue" style="font-size:11px">${esc(tag)}</span>` : ''}
+      <div style="font-size:13px"><b>${tr('Tú')}:</b> ${esc(String(q).slice(0, 300))}</div><div style="font-size:13px;margin-top:3px"><b>APOLO:</b> ${esc(String(a).slice(0, 600))}</div></div>`;
+    el.innerHTML = `<div class="cuerpo" style="padding:12px 16px">
+      <p class="tenue" style="margin-top:0">${tr('Ejemplos para entrenar el modelo propio de APOLO. Solo conversaciones con modelos abiertos (nada de Claude ni ChatGPT), datos sensibles tapados. El resto lo escribe qwen como APOLO y un juez descarta lo flojo.')}</p>
+      ${r ? `<div style="display:flex;gap:18px;flex-wrap:wrap;margin:8px 0"><div><b style="font-size:20px">${r.ejemplos}</b> <span class="tenue">${tr('ejemplos')}</span></div><div>${r.reales ?? '—'} <span class="tenue">${tr('de tus conversaciones')}</span></div><div>${r.generados ?? 0} <span class="tenue">${tr('generados')}</span></div><div>${r.train}/${r.val} <span class="tenue">${tr('entrenar / validar')}</span></div><div class="${r.suficiente ? 'ok' : 'aviso'}">${r.suficiente ? tr('suficiente para entrenar') : tr('aún pocos (mínimo ~200)')}</div></div>
+        <details><summary class="tenue" style="cursor:pointer">${tr('Qué se dejó fuera y por qué')}</summary>${(r.fuera || []).map(([k, n]) => `<div style="font-size:13px">${esc(k)}: <b>${n}</b> ${tr('sesiones')}</div>`).join('')}</details>` : `<p>${tr('Todavía no se ha exportado.')}</p>`}
+      ${g ? `<div style="margin:10px 0;font-size:13px">${g.activo ? '⏳ ' : ''}${esc(tr(g.fase))} · ${g.hechas}/${g.objetivo} ${tr('generados')} · ${g.descartadas || 0} ${tr('descartados por el juez')}${g.error ? ` · <span class="mal">${esc(g.error)}</span>` : ''}</div>` : ''}
+      <div class="flex" style="gap:8px;margin:10px 0;flex-wrap:wrap"><button class="btn" id="dsExportar">${ic('recargar')}${tr('Exportar de nuevo')}</button>
+        <label class="tenue" style="display:flex;align-items:center;gap:6px">${tr('Objetivo')} <input id="dsObjetivo" type="number" value="1200" min="20" max="5000" style="width:80px"></label>
+        <button class="btn pri" id="dsGenerar" ${g?.activo ? 'hidden' : ''}>${ic('chispa')}${tr('Generar con qwen (GPU del PC)')}</button><button class="btn mal" id="dsParar" ${g?.activo ? '' : 'hidden'}>${ic('parar')}${tr('Parar')}</button></div>
+      ${(d.generadas || []).length ? `<div class="seccion">${tr('Muestra de lo generado (revísalo)')}</div>${d.generadas.slice(0, 8).map(x => ej(x.pregunta, x.respuesta, `${x.fuente} · nota ${x.nota ?? '?'}`)).join('')}` : ''}
+      ${(d.muestra || []).length ? `<details style="margin-top:8px"><summary class="tenue" style="cursor:pointer">${tr('Muestra de tus conversaciones reales')}</summary>${d.muestra.slice(0, 8).map(m => ej(m[1]?.content, m[2]?.content)).join('')}</details>` : ''}
+    </div>`;
+    $('#dsExportar', el).onclick = async () => { try { await api('POST', '/dataset/exportar'); aviso(tr('Exportado')); this.pintarDataset(); } catch (e) { aviso(e.message, true); } };
+    $('#dsGenerar', el).onclick = async () => { if (!(await confirmar('Generar ejemplos', 'qwen3:14b usará la GPU de este PC un rato (unos 3-4 s por ejemplo). No lo lances mientras juegas.'))) return; try { await api('POST', '/dataset/generar', { objetivo: +$('#dsObjetivo', el).value }); this.pintarDataset(); } catch (e) { aviso(e.message, true); } };
+    $('#dsParar', el).onclick = async () => { await api('POST', '/dataset/parar').catch(() => { }); this.pintarDataset(); };
+  },
+  alEvento(e) {
+    if (e.tipo === 'entrenamiento' && this.v) { clearTimeout(this.t); this.t = setTimeout(() => this.refrescar(), 500); }
+    if (e.tipo === 'dataset' && this.v) { clearTimeout(this.td); this.td = setTimeout(() => this.pintarDataset(), 1500); }
+  },
   salir() { clearInterval(this.reloj); this.v = null; },
 };

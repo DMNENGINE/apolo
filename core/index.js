@@ -242,6 +242,10 @@ function crearNucleo(opciones = {}) {
   herramientas.registrar(entrenMod.HERRAMIENTAS);
   nucleo.entrenamiento = entrenamiento; nucleo.extensiones.entrenamiento = { http: (...a) => entrenamiento.http(...a) };
   if (!process.env.NODE_TEST_CONTEXT && !opciones.sshEntrenamiento) entrenamiento.empezarVigilancia();
+  // dataset de APOLO (sus conversaciones con modelos abiertos + ejemplos generados por qwen como APOLO) → /v1/dataset
+  const dataset = require('./dataset').crearDataset({ cfg, nombre: () => personalidad.nombre?.() || 'APOLO' });
+  dataset.ponerGenerador(require('./dataset-generar').crearGenerador({ cfg, bus, dataset }));
+  nucleo.dataset = dataset; nucleo.extensiones.dataset = { http: (...a) => dataset.http(...a) };
   // arañas digitales: salen del casco y rastrean páginas (lectora, IA, código), Discord (bot en la Pi) y GitHub/Hugging Face → /v1/aranas
   const aranasMod = require('./aranas');
   const aranas = aranasMod.crearAranas({ cfg, bus, navegador, permisos, generarJSON: generarJSONvivo, modelo: modeloCerebro,

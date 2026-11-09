@@ -26,6 +26,7 @@ function limpiar(t, home) {
 }
 
 function crearDataset({ cfg, nombre = () => 'APOLO' }) {
+  let generador = null;   // core/dataset-generar.js (lo pone index.js)
   const conf = () => ({ permitidos: PERMITIDOS, maxChars: 5500, val: 0.05, minEjemplos: 200, ...(cfg.dataset || {}) });
   const dirSes = () => path.join(cfg.dir, 'sesiones');
   const dirOut = () => { const d = path.join(cfg.dir, 'dataset'); fs.mkdirSync(d, { recursive: true }); return d; };
@@ -80,6 +81,19 @@ function crearDataset({ cfg, nombre = () => 'APOLO' }) {
       }
       cerrar();
     }
+    const reales = ejemplos.length;
+    // + lo generado con el modelo abierto (preguntas tuyas o de tus temas, respuestas de qwen como APOLO)
+    let generados = 0;
+    try {
+      for (const l of fs.readFileSync(path.join(dirOut(), 'generado.jsonl'), 'utf8').split('\n')) {
+        if (!l.trim()) continue;
+        const g = JSON.parse(l);
+        const mensajes = [{ role: 'system', content: system }, { role: 'user', content: g.pregunta }, { role: 'assistant', content: g.respuesta }];
+        const h = crypto.createHash('sha1').update(JSON.stringify(mensajes.slice(1))).digest('hex');
+        if (vistos.has(h)) continue;
+        vistos.add(h); ejemplos.push({ messages: mensajes, _sesion: 'gen-' + h.slice(0, 10) }); generados++;
+      }
+    } catch { }
     // separación entrenamiento / validación POR SESIÓN (una conversación no puede estar en los dos lados)
     const ses = [...new Set(ejemplos.map(e => e._sesion))].sort(() => Math.random() - .5);
     const nVal = Math.max(ejemplos.length >= 40 ? 1 : 0, Math.round(ses.length * c.val)), sVal = new Set(ses.slice(0, nVal));
@@ -90,18 +104,21 @@ function crearDataset({ cfg, nombre = () => 'APOLO' }) {
     const muestra = [...ejemplos].sort(() => Math.random() - .5).slice(0, 25).map(e => e.messages);
     fs.writeFileSync(path.join(dirOut(), 'muestra.json'), JSON.stringify(muestra, null, 1));
     const caracteres = ejemplos.reduce((s, e) => s + e.messages.reduce((t, x) => t + x.content.length, 0), 0);
-    const resumen = { fecha: Date.now(), sesiones, usadas, ejemplos: ejemplos.length, train: train.length, val: val.length, caracteres,
+    const resumen = { fecha: Date.now(), sesiones, usadas, reales, generados, ejemplos: ejemplos.length, train: train.length, val: val.length, caracteres,
       fuera: Object.entries(fuera).sort((a, b) => b[1] - a[1]), permitidos: c.permitidos, suficiente: ejemplos.length >= c.minEjemplos, dir: dirOut() };
     fs.writeFileSync(path.join(dirOut(), 'resumen.json'), JSON.stringify(resumen, null, 1));
     return resumen;
   }
   const leer = n => { try { return JSON.parse(fs.readFileSync(path.join(dirOut(), n), 'utf8')); } catch { return null; } };
-  async function http(M, p) {   // /v1/dataset
-    if (M === 'GET' && !p[2]) return { resumen: leer('resumen.json'), muestra: leer('muestra.json') || [] };
+  async function http(M, p, b = {}) {   // /v1/dataset
+    if (M === 'GET' && !p[2]) return { resumen: leer('resumen.json'), muestra: leer('muestra.json') || [], generacion: generador?.estado() || null,
+      generadas: (generador?.hechas() || []).sort(() => Math.random() - .5).slice(0, 12) };
+    if (M === 'POST' && p[2] === 'generar') { if (!generador) throw new Error('generador no disponible'); if (!fs.existsSync(path.join(dirOut(), 'apolo-train.jsonl'))) exportar(); return { generacion: await generador.generar(b) }; }
+    if (M === 'POST' && p[2] === 'parar') return { generacion: generador?.parar() || null };
     if (M === 'POST' && p[2] === 'exportar') { const r = exportar(); return { resumen: r, muestra: leer('muestra.json') || [] }; }
     throw Object.assign(new Error('ruta desconocida'), { status: 404 });
   }
-  return { exportar, http, dir: dirOut };
+  return { exportar, http, dir: dirOut, ponerGenerador: g => { generador = g; } };
 }
 
 module.exports = { crearDataset, limpiar, PERMITIDOS };
