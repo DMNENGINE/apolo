@@ -30,7 +30,9 @@
       if (o && o.espera > 0) o.espera -= dt;
       else if (o) {
         a.proxPausa -= dt;
-        if (a.proxPausa <= 0 && !o.colgada && !a.fuera) { a.pausa = rnd(.25, .9); a.proxPausa = rnd(1.6, 4.5); a.temblor = 1; }
+        if (a.proxPausa <= 0 && !o.colgada && !a.fuera) {
+          a.pausa = a.animo === 'agresiva' ? rnd(.5, 1.3) : rnd(.25, .9); a.proxPausa = a.animo === 'agresiva' ? rnd(.4, 1.2) : rnd(1.6, 4.5); a.temblor = 1;
+        }
         const tirones = .45 + 1.05 * Math.pow(Math.max(0, Math.sin(t * 6.3)), .5) + .25 * Math.sin(t * 17);
         const dx = o.x - a.x, dy = o.y - a.y, d = Math.hypot(dx, dy), paso = (o.vel || a.vel) * tirones * dt;
         if (d > .5 && !o.colgada) {
@@ -43,6 +45,8 @@
       } else if (a.vagar && !a.fuera && Math.random() < dt * .7) a.ruta.push({ x: a.vagar.x + rnd(-120, 120), y: a.vagar.y + rnd(-70, 70) });
     }
     a.temblor = Math.max(0, a.temblor - dt * 2);
+    if (a.animo === 'agresiva' && a.pausa > 0) a.temblor = Math.max(a.temblor, .7);   // furiosa: no para de temblar
+    a.salto = a.animo === 'contenta' ? Math.abs(Math.sin(t * 7)) : 0;
     const colgada = a.ruta[0]?.colgada;
     const grupo = Math.floor(t * 9) % 2;
     a.patas.forEach((p, k) => {
@@ -57,7 +61,8 @@
   }
 
   function dibujar(c, a, ox = 0, oy = 0, opts = {}) {
-    const x = a.x - ox, y = a.y - oy, r = a.r, now = performance.now() / 1000 + a.semilla;
+    const x = a.x - ox, y = a.y - oy - (a.salto || 0) * a.r * .9, r = a.r, now = performance.now() / 1000 + a.semilla;
+    const furia = a.animo === 'agresiva', feliz = a.animo === 'contenta';
     if (a.alpha <= 0 || x < -80 || y < -80 || x > (opts.W || 1e5) + 80 || y > (opts.H || 1e5) + 80) return;
     const tiembla = a.temblor > 0 ? (Math.random() - .5) * a.temblor * 1.6 : 0;
     c.save(); c.globalAlpha = Math.max(0, Math.min(1, a.alpha)); c.lineCap = 'round'; c.lineJoin = 'round';
@@ -91,7 +96,7 @@
     c.translate(x + tiembla, y); c.rotate(a.ang);
     // abdomen negro con borde neón y marca en forma de reloj de arena
     const resp = 1 + .05 * Math.sin(now * 3);
-    c.fillStyle = '#05040a'; c.strokeStyle = a.color; c.shadowColor = a.color; c.shadowBlur = 12; c.lineWidth = Math.max(1, r * .12);
+    c.fillStyle = '#05040a'; c.strokeStyle = a.color; c.shadowColor = furia ? '#ff1f3d' : a.color; c.shadowBlur = furia ? 18 + 10 * Math.sin(now * 12) : 12; c.lineWidth = Math.max(1, r * .12);
     c.beginPath(); c.ellipse(-r * 1.25, 0, r * 1.15 * resp, r * .85 * resp, 0, 0, Math.PI * 2); c.fill(); c.stroke();
     c.shadowBlur = 0; c.fillStyle = a.color; c.globalAlpha = Math.max(0, a.alpha) * (.55 + .3 * Math.sin(now * 4));
     c.beginPath(); c.moveTo(-r * 1.75, -r * .32); c.lineTo(-r * .85, -r * .32); c.lineTo(-r * 1.3, 0); c.lineTo(-r * .85, r * .32); c.lineTo(-r * 1.75, r * .32); c.lineTo(-r * 1.3, 0); c.closePath(); c.fill();
@@ -100,14 +105,18 @@
     c.fillStyle = '#07060d'; c.shadowColor = a.color; c.shadowBlur = 8;
     c.beginPath(); c.ellipse(r * .1, 0, r * .62, r * .52, 0, 0, Math.PI * 2); c.fill(); c.stroke();
     // colmillos (quelíceros) que se abren y cierran
-    const mord = .25 + .25 * Math.max(0, Math.sin(now * 7));
+    const mord = .25 + (furia ? .45 : .25) * Math.max(0, Math.sin(now * (furia ? 22 : 7)));
     c.shadowBlur = 0; c.lineWidth = Math.max(1, r * .12);
     for (const s of [-1, 1]) { c.beginPath(); c.moveTo(r * .62, s * r * .16); c.quadraticCurveTo(r * 1.05, s * r * (.3 + mord), r * .95, s * r * (.05 + mord * .2)); c.stroke(); }
     // 8 ojos rojos (2 grandes + 6 pequeños) que brillan y parpadean
     const parpadeo = ((now * .7) % 5) < .08 ? .1 : 1;
-    c.fillStyle = '#ff1f3d'; c.shadowColor = '#ff1f3d'; c.shadowBlur = 8;
+    const ojo = furia ? 1.45 : 1;
+    c.fillStyle = feliz ? '#ffe36b' : '#ff1f3d'; c.shadowColor = c.fillStyle; c.shadowBlur = furia ? 14 : 8;
     for (const [ex, ey, er] of [[.42, -.14, .13], [.42, .14, .13], [.3, -.3, .07], [.3, .3, .07], [.22, -.08, .06], [.22, .08, .06], [.14, -.22, .05], [.14, .22, .05]]) {
-      c.beginPath(); c.ellipse(r * ex, r * ey, r * er, r * er * parpadeo, 0, 0, Math.PI * 2); c.fill();
+      if (feliz && er > .1) {                                   // ojos grandes felices: ^ ^
+        c.strokeStyle = '#ffe36b'; c.lineWidth = Math.max(1, r * .08); c.beginPath(); c.arc(r * ex, r * ey, r * er, Math.PI * .15, Math.PI * .85, true); c.stroke(); continue;
+      }
+      c.beginPath(); c.ellipse(r * ex, r * ey, r * er * ojo, r * er * ojo * parpadeo, 0, 0, Math.PI * 2); c.fill();
     }
     // haz de escaneo (rojo-color) cuando trabaja
     if (opts.haz || a.haz) {

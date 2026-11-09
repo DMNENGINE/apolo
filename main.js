@@ -556,7 +556,10 @@ async function startNucleo() {
   });
   nucleo.bus.on('reunion-enviar', ({ texto }) => movil.reply(texto));
   // arañas digitales (core/aranas.js): salen del casco al soltarlas y vuelven al terminar
-  nucleo.bus.on('aranas', e => { if (win && !win.isDestroyed()) win.webContents.send('aranas', e); });
+  nucleo.bus.on('aranas', e => {
+    if (e && e.fase === 'informe' && e.archivo) { shell.openPath(e.archivo).catch(() => { }); return; }   // el resumen se abre solo al terminar
+    if (win && !win.isDestroyed()) win.webContents.send('aranas', e);
+  });
   // ventana de arañas propia: escanea enlaces sin depender de la extensión de Chrome
   try { const va = require('./main/aranas-ventana').crearVentanaAranas({ dir: __dirname }); nucleo.aranas?.ponerVisor(va); nucleo.bus.on('panico', () => va.cerrarTodas()); } catch (e) { console.error('[arañas] ventana:', e.message); }
   try { const d = await iniciarDaemon({ nucleo }); console.log(`[núcleo] API en :${d.puerto}${(nucleo.cfg.red?.permitidos || []).length ? ` (LAN solo: ${nucleo.cfg.red.permitidos.join(", ")})` : " (solo este equipo)"} · modelo por defecto ${nucleo.cfg.modeloPorDefecto}`); }

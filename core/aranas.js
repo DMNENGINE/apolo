@@ -74,6 +74,37 @@ for g in api('/users/@me/guilds') or []:
 print(json.dumps({'servidores': out, 'errores': errores[:20]}, ensure_ascii=False))
 `;
 
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function informeHTML({ titulo, urls, cobertura, fin, hechos, txt }) {
+  const lista = (xs, cls) => (xs || []).length ? `<ul class="${cls}">${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+  const caja = (t, cls, cuerpo) => cuerpo ? `<section class="${cls}"><h2>${t}</h2>${cuerpo}</section>` : '';
+  const partes = hechos.map((h, k) => h.ok ? `<details${k ? '' : ' open'}><summary><b>${k + 1}.</b> ${esc(h.seccion)}${(h.alertas || []).length ? ` <span class="n mal">⚠ ${h.alertas.length}</span>` : ''}${(h.buenas || []).length ? ` <span class="n bien">★ ${h.buenas.length}</span>` : ''}</summary>
+    <p>${esc(h.resumen)}</p>${lista(h.puntos, 'puntos')}
+    ${(h.alertas || []).map(x => `<div class="al mal">⚠ ${esc(x.texto)}${x.frase ? `<q>${esc(x.frase)}</q>` : ''}</div>`).join('')}
+    ${(h.buenas || []).map(x => `<div class="al bien">★ ${esc(x.texto)}${x.frase ? `<q>${esc(x.frase)}</q>` : ''}</div>`).join('')}
+    ${(h.datos || []).length ? `<div class="datos">${h.datos.map(d => `<span><i>${esc(d.tipo)}</i> ${esc(d.valor)}</span>`).join('')}</div>` : ''}</details>`
+    : `<details open><summary><b>${k + 1}.</b> <span class="n mal">NO SE PUDO RESUMIR</span></summary><p>${esc(h.error)} — su texto está entero en el .txt</p></details>`).join('');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>🕷 ${esc(titulo)}</title><style>
+  :root{color-scheme:dark}body{margin:0;background:#07060d;color:#e6e3f0;font:16px/1.6 system-ui,Segoe UI,sans-serif}
+  main{max-width:880px;margin:0 auto;padding:28px 18px 60px}h1{font-size:26px;margin:.2em 0;color:#fff}h2{font-size:15px;letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px}
+  .top{color:#c79bff;font:700 12px ui-monospace,Consolas,monospace;letter-spacing:.15em}.urls a{color:#7fe3ff;font-size:13px;word-break:break-all}
+  .cob{margin:14px 0;padding:10px 14px;border:1px solid #2a3a2a;background:#0b1a10;border-radius:10px;color:#9dffb8;font:13px ui-monospace,Consolas,monospace}
+  .tit{font-size:20px;font-weight:700;color:#fff;margin:18px 0}section{margin:18px 0;padding:16px 18px;border-radius:12px;background:#100e1a;border:1px solid #241f3a}
+  section.mal{background:#1a070c;border-color:#5a1222}section.mal h2{color:#ff6b81}section.bien{background:#071a10;border-color:#14532d}section.bien h2{color:#5dffa0}
+  section.hacer h2{color:#ffd166}section.sig h2{color:#7fe3ff}ul{margin:6px 0;padding-left:20px}li{margin:4px 0}
+  details{margin:8px 0;border:1px solid #241f3a;border-radius:10px;background:#0d0b16;padding:8px 14px}summary{cursor:pointer;font-weight:600}
+  .n{font:700 11px ui-monospace,Consolas,monospace;padding:1px 6px;border-radius:6px;margin-left:6px}.n.mal{background:#5a1222;color:#ffb3c0}.n.bien{background:#14532d;color:#b8ffd2}
+  .al{margin:6px 0;padding:8px 10px;border-radius:8px;font-size:14px}.al.mal{background:#2a0a12;border-left:3px solid #ff3355}.al.bien{background:#0a2a16;border-left:3px solid #3dff8a}
+  q{display:block;margin-top:4px;color:#b9b3cc;font-style:italic;font-size:13px}.datos span{display:inline-block;margin:3px 6px 3px 0;padding:2px 8px;border-radius:6px;background:#1a1730;font-size:13px}.datos i{color:#c79bff;font-style:normal}
+  .pie{margin-top:30px;color:#8a85a0;font-size:13px}.pie a{color:#7fe3ff}</style></head><body><main>
+  <div class="top">🕷 ARAÑA LECTORA DE APOLO · ${esc(new Date().toLocaleString('es'))}</div><h1>${esc(titulo)}</h1>
+  <div class="urls">${urls.map(u => `<a href="${esc(u)}">${esc(u)}</a>`).join('<br>')}</div><div class="cob">✓ ${esc(cobertura)}</div>
+  ${fin ? `<div class="tit">${esc(fin.titular)}</div>${caja('Resumen completo', 'res', `<p>${esc(fin.resumen)}</p>`)}${caja('Qué significa para ti', 'sig', `<p>${esc(fin.explicacion).replace(/\n+/g, '</p><p>')}</p>`)}
+  ${caja('⚠ Trampas: ojo con esto', 'mal', lista(fin.alertas))}${caja('★ A tu favor', 'bien', lista(fin.afavor))}${caja('Qué hacer', 'hacer', lista(fin.recomendaciones))}${caja('Lo imprescindible', 'imp', lista(fin.importante))}` : ''}
+  <h2 style="margin-top:28px">Parte por parte (todo el documento, en orden)</h2>${partes}
+  <div class="pie">Texto entero palabra por palabra: <a href="file:///${esc(String(txt).replace(/\\/g, '/'))}">${esc(path.basename(txt))}</a></div></main></body></html>`;
+}
+
 function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secreto = () => null, fetch: fetchX = globalThis.fetch, ejecutarSsh }) {
   let visor = null;   // ventana de arañas de APOLO (main.js → ponerVisor): escanea sin depender de la extensión
   const conf = () => cfg.aranas || {};
@@ -89,6 +120,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     const ind = leerIndice();
     ind.unshift({ id: `${Date.now().toString(36)}`, tipo, titulo, archivo, fecha: Date.now(), ...extra });
     fs.writeFileSync(indiceRuta(), JSON.stringify(ind.slice(0, 80), null, 1));
+    ultimo[tipo] = archivo;
     return archivo;
   }
   const JSONm = async (system, prompt, schema) => (await generarJSON({ modelo: conf().modelo || modelo?.(), system, prompt, schema })).datos;
@@ -119,7 +151,9 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
   const orden = (pestana, accion, args = {}, ms = 30_000) => (typeof pestana === 'string' && pestana.startsWith('v:'))
     ? Promise.race([visor.accion(pestana, accion, args), new Promise((_, mal) => { const t = setTimeout(() => mal(new Error(`la ventana de arañas no respondió a "${accion}"`)), ms); t.unref?.(); })])
     : navegador.orden('aranas', { pestana, accion, ...args }, ms);
-  const recogerLuego = (pestana, tipo, ms = 9000) => { const t = setTimeout(() => { orden(pestana, 'recoger', { tipo }).catch(() => { }); vuelven(tipo); }, ms); t.unref?.(); };
+  // las arañas de la PÁGINA se quedan vigilando sus marcas (agresivas en las trampas, contentas en lo bueno); a la isla vuelven las suyas
+  const recogerLuego = (pestana, tipo, ms = 9000) => { const t = setTimeout(() => { if (conf().recoger) orden(pestana, 'recoger', { tipo }).catch(() => { }); vuelven(tipo); }, ms); t.unref?.(); };
+  const ultimo = {};   // tipo -> informe a abrir al terminar
   const lista = b => b.map(x => `[${x.i}] ${x.texto.replace(/\s+/g, ' ').slice(0, 1200)}`);
   const recorte = (lineas, max) => { const out = []; let n = 0; for (const l of lineas) { if (n + l.length > max) break; out.push(l); n += l.length; } return out.join('\n'); };
 
@@ -148,15 +182,17 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
   const SIS_TROZO = 'Eres la araña lectora de APOLO. Lees UN TROZO de un documento y lo explicas en español claro para una persona normal. ' +
     'REGLA DE ORO: no ocultes nada. Todo lo que el trozo diga sobre obligaciones, derechos, prohibiciones, cobros, precios, reembolsos, plazos, renovaciones, cancelación, ' +
     'datos personales y con quién se comparten, licencias, renuncias, limitación de responsabilidad, arbitraje o tribunales, cambios unilaterales, suspensión de cuentas, edad, ' +
-    'garantías y excepciones TIENE que aparecer. Prohibido "entre otros", "etc." o "varias cosas": dilo todo. Si algo es ambiguo o perjudica al lector, ponlo en alertas con la frase exacta (corta, copiada literal). No inventes nada que no esté en el trozo.';
+    'garantías y excepciones TIENE que aparecer. Prohibido "entre otros", "etc." o "varias cosas": dilo todo. Si algo es ambiguo o perjudica al lector (una trampa), ponlo en alertas con la frase exacta (corta, copiada literal). ' +
+    'Si algo le BENEFICIA o es de interés para él (derechos, reembolsos, plazos a su favor, protecciones, algo útil o sorprendente para bien), ponlo en buenas, también con su frase literal. No inventes nada que no esté en el trozo.';
   const ESQ_TROZO = { type: 'object', properties: { seccion: { type: 'string' }, resumen: { type: 'string' }, puntos: { type: 'array', items: { type: 'string' } },
     alertas: { type: 'array', items: { type: 'object', properties: { texto: { type: 'string' }, frase: { type: 'string' } }, required: ['texto'] } },
+    buenas: { type: 'array', items: { type: 'object', properties: { texto: { type: 'string' }, frase: { type: 'string' } }, required: ['texto'] } },
     datos: { type: 'array', items: { type: 'object', properties: { tipo: { type: 'string' }, valor: { type: 'string' } }, required: ['tipo', 'valor'] } } }, required: ['seccion', 'resumen', 'puntos'] };
   async function resumirDetallado(texto, { titulo, url, consulta }) {
     const trozos = partir(texto);
     const hechos = await enParalelo(trozos, Number(conf().paralelo) || 2, async (tr, k) => {
       const prompt = `DOCUMENTO: ${titulo}${url ? ` (${url})` : ''}\nTROZO ${k + 1} DE ${trozos.length}${consulta ? `\nLO QUE QUIERE SABER EL USUARIO: ${consulta}` : ''}\n\n---\n${tr}\n---\n\n` +
-        'Devuelve: seccion (título de lo que trata este trozo), resumen (detallado y explicado, 5-12 frases, con TODAS las condiciones importantes), puntos (cada regla/obligación/derecho concreto, uno por línea), alertas (lo que puede perjudicar o sorprender, con su frase literal) y datos (cifras, plazos, importes, fechas, edades, correos, direcciones).';
+        'Devuelve: seccion (título de lo que trata este trozo), resumen (detallado y explicado, 5-12 frases, con TODAS las condiciones importantes), puntos (cada regla/obligación/derecho concreto, uno por línea), alertas (trampas: lo que puede perjudicar o sorprender, con su frase literal), buenas (lo que le favorece o le interesa, con su frase literal) y datos (cifras, plazos, importes, fechas, edades, correos, direcciones).';
       let ultimoError = '';
       for (let intento = 0; intento < 2; intento++) {
         try { return { ok: true, ...(await JSONm(SIS_TROZO, prompt, ESQ_TROZO)) }; }
@@ -171,11 +207,11 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
         fin = await JSONm('Eres la araña lectora de APOLO. Con los resúmenes de TODAS las partes de un documento, escribes el informe final en español: completo, explicado y sin esconder nada (sobre todo lo que perjudica al lector). No inventes.',
           `DOCUMENTO: ${titulo}\n${consulta ? `LO QUE QUIERE SABER EL USUARIO: ${consulta}\n` : ''}PARTES (${ok.length} de ${trozos.length}):\n\n` +
           // TODAS las partes caben: a cada una le toca la misma porción (antes se cortaba al final y el modelo creía que faltaban partes)
-          hechos.map((h, k) => (h.ok ? `## Parte ${k + 1}: ${h.seccion}\n${h.resumen}\nAlertas: ${(h.alertas || []).map(x => x.texto).join(' | ') || '-'}` : `## Parte ${k + 1}: NO SE PUDO RESUMIR`)
+          hechos.map((h, k) => (h.ok ? `## Parte ${k + 1}: ${h.seccion}\n${h.resumen}\nAlertas: ${(h.alertas || []).map(x => x.texto).join(' | ') || '-'}\nA favor: ${(h.buenas || []).map(x => x.texto).join(' | ') || '-'}` : `## Parte ${k + 1}: NO SE PUDO RESUMIR`)
             .slice(0, Math.floor(48000 / hechos.length))).join('\n\n') + `\n\n(FIN: estas son las ${hechos.length} partes del documento completo, ninguna falta${ok.length < hechos.length ? `, salvo las ${hechos.length - ok.length} marcadas como NO SE PUDO RESUMIR` : ''}.)` +
-          '\n\nDevuelve: titular (1 frase), resumen (10-15 frases que cubran el documento entero, en orden), explicacion (qué significa para el usuario en la práctica, como se lo explicarías a un amigo), importante (lo imprescindible), alertas (todo lo que puede perjudicarle o pillarle por sorpresa) y recomendaciones (qué debería hacer o vigilar).',
+          '\n\nDevuelve: titular (1 frase), resumen (10-15 frases que cubran el documento entero, en orden), explicacion (qué significa para el usuario en la práctica, como se lo explicarías a un amigo), importante (lo imprescindible), alertas (todo lo que puede perjudicarle o pillarle por sorpresa), afavor (lo que le beneficia o le interesa) y recomendaciones (qué debería hacer o vigilar).',
           { type: 'object', properties: { titular: { type: 'string' }, resumen: { type: 'string' }, explicacion: { type: 'string' }, importante: { type: 'array', items: { type: 'string' } },
-            alertas: { type: 'array', items: { type: 'string' } }, recomendaciones: { type: 'array', items: { type: 'string' } } }, required: ['titular', 'resumen', 'explicacion'] });
+            alertas: { type: 'array', items: { type: 'string' } }, afavor: { type: 'array', items: { type: 'string' } }, recomendaciones: { type: 'array', items: { type: 'string' } } }, required: ['titular', 'resumen', 'explicacion'] });
       } catch (e) { fin = { titular: '', resumen: `(no pude escribir el informe final: ${e.message}; abajo están todas las partes resumidas)`, explicacion: '' }; }
     }
     return { trozos, hechos, fin };
@@ -201,16 +237,20 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     // en la página se marca en rojo lo que puede perjudicar (frase literal)
     const ultima = partes[partes.length - 1];
     const norm = x => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const marcas = hechos.flatMap(h => (h.ok ? h.alertas || [] : [])).filter(x => x.frase).slice(0, 20)
-      .map(x => { const f = norm(x.frase).slice(0, 60), b = ultima.bloques.find(b => norm(b.texto).includes(f)); return b ? { i: b.i, frase: x.frase, etiqueta: 'OJO', color: '#ff3355' } : null; }).filter(Boolean);
+    const buscar = (x, extra) => { const f = norm(x.frase).slice(0, 60), b = ultima.bloques.find(b => norm(b.texto).includes(f)); return b ? { i: b.i, frase: x.frase, ...extra } : null; };
+    const marcas = [
+      ...hechos.flatMap(h => (h.ok ? h.alertas || [] : [])).filter(x => x.frase).slice(0, 24).map(x => buscar(x, { etiqueta: '⚠ TRAMPA', color: '#ff3355', animo: 'agresiva' })),
+      ...hechos.flatMap(h => (h.ok ? h.buenas || [] : [])).filter(x => x.frase).slice(0, 16).map(x => buscar(x, { etiqueta: '★ A TU FAVOR', color: '#3dff8a', animo: 'contenta' })),
+    ].filter(Boolean);
     await orden(pest, 'marcar', { tipo: 'lectora', marcas }).catch(() => { });
-    recogerLuego(pest, 'lectora', 14_000);
+    recogerLuego(pest, 'lectora', 20_000);
     const cobertura = `${caracteres.toLocaleString('es')} caracteres leídos (${partes.map(x => `${x.de}: ${x.texto.length.toLocaleString('es')} de ${(x.pagina || x.texto.length).toLocaleString('es')} que tiene la página entera con menús`).join(' · ')}) · resumido en ${okN} de ${trozos.length} partes${okN < trozos.length ? ' ⚠ FALTAN PARTES (abajo dice cuáles)' : ' = 100 %'}`;
     const L = [];
     L.push(`ARAÑA LECTORA · ${r.titulo}`, partes.map(x => x.url).join('\n'), new Date().toLocaleString('es'), `COBERTURA: ${cobertura}`, '');
     if (fin) {
       L.push('EN UNA FRASE', fin.titular, '', 'RESUMEN COMPLETO', fin.resumen, '', 'QUÉ SIGNIFICA PARA TI', fin.explicacion, '');
       if ((fin.alertas || []).length) L.push('⚠ OJO CON ESTO', ...fin.alertas.map(x => `• ${x}`), '');
+      if ((fin.afavor || []).length) L.push('★ A TU FAVOR', ...fin.afavor.map(x => `• ${x}`), '');
       if ((fin.importante || []).length) L.push('LO IMPRESCINDIBLE', ...fin.importante.map(x => `• ${x}`), '');
       if ((fin.recomendaciones || []).length) L.push('QUÉ HACER', ...fin.recomendaciones.map(x => `• ${x}`), '');
     }
@@ -218,18 +258,22 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     hechos.forEach((h, k) => {
       if (!h.ok) { L.push(`── Parte ${k + 1}/${trozos.length}: ⚠ NO SE PUDO RESUMIR (${h.error}). Su texto está completo al final del informe.`, ''); return; }
       L.push(`── Parte ${k + 1}/${trozos.length}: ${h.seccion}`, h.resumen, ...(h.puntos || []).map(x => `  • ${x}`),
-        ...(h.alertas || []).map(x => `  ⚠ ${x.texto}${x.frase ? `  «${x.frase}»` : ''}`), ...(h.datos || []).map(x => `  # ${x.tipo}: ${x.valor}`), '');
+        ...(h.alertas || []).map(x => `  ⚠ ${x.texto}${x.frase ? `  «${x.frase}»` : ''}`), ...(h.buenas || []).map(x => `  ★ ${x.texto}${x.frase ? `  «${x.frase}»` : ''}`), ...(h.datos || []).map(x => `  # ${x.tipo}: ${x.valor}`), '');
     });
     L.push('='.repeat(60), 'TEXTO COMPLETO', '', textoTodo);
     const archivo = guardarInforme('lectora', r.titulo, L.join('\n'), { url: r.url, caracteres, partes: trozos.length, resumidas: okN });
+    const html = archivo.replace(/\.txt$/, '.html');
+    fs.writeFileSync(html, informeHTML({ titulo: r.titulo, urls: partes.map(x => x.url), cobertura, fin, hechos, txt: archivo }), 'utf8');
+    ultimo.lectora = html;
     const chat = [`🕷 La araña lectora leyó "${r.titulo}" entero.`, `Cobertura: ${cobertura}`, ''];
     if (fin) {
       chat.push(`**${fin.titular}**`, '', fin.resumen, '', `**Qué significa para ti:** ${fin.explicacion}`);
       if ((fin.alertas || []).length) chat.push('', '**⚠ Ojo con esto:**', ...fin.alertas.map(x => `• ${x}`));
+      if ((fin.afavor || []).length) chat.push('', '**★ A tu favor:**', ...fin.afavor.map(x => `• ${x}`));
       if ((fin.recomendaciones || []).length) chat.push('', '**Qué hacer:**', ...fin.recomendaciones.map(x => `• ${x}`));
     }
     chat.push('', '**Parte por parte:**', ...hechos.map((h, k) => h.ok ? `${k + 1}. **${h.seccion}** — ${h.resumen}` : `${k + 1}. ⚠ no se pudo resumir (${h.error})`));
-    chat.push('', `Informe completo (con cada punto, cifras y el texto entero): ${archivo}`);
+    chat.push('', `Informe (se abrió solo): ${html}`, `Texto entero y cada punto: ${archivo}`);
     return chat.join('\n');
   }
 
@@ -244,7 +288,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
       { type: 'object', properties: { veredicto: { type: 'string' }, global: { type: 'integer' },
         parrafos: { type: 'array', items: { type: 'object', properties: { i: { type: 'integer' }, prob: { type: 'integer' }, senales: { type: 'array', items: { type: 'string' } } }, required: ['i', 'prob'] } } }, required: ['veredicto', 'parrafos'] });
     const ps = (d.parrafos || []).filter(p => parr.some(b => b.i === p.i));
-    const marcas = ps.filter(p => p.prob >= 40).map(p => ({ i: p.i, etiqueta: `${p.prob >= 60 ? 'IA' : '¿IA?'} ${p.prob}%`, color: p.prob >= 60 ? TIPOS.ia.color : '#ffb020' }));
+    const marcas = ps.filter(p => p.prob >= 40).map(p => ({ i: p.i, etiqueta: `${p.prob >= 60 ? 'IA' : '¿IA?'} ${p.prob}%`, color: p.prob >= 60 ? TIPOS.ia.color : '#ffb020', animo: p.prob >= 60 ? 'agresiva' : null }));
     await orden(t.id, 'marcar', { tipo: 'ia', marcas }).catch(() => { });
     recogerLuego(t.id, 'ia');
     const global = Number.isFinite(d.global) ? d.global : Math.round(ps.reduce((s, p) => s + p.prob, 0) / Math.max(1, ps.length));
@@ -268,7 +312,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
         hallazgos: { type: 'array', items: { type: 'object', properties: { i: { type: 'integer' }, severidad: { type: 'string', enum: ['critica', 'alta', 'media', 'baja'] }, tipo: { type: 'string' },
           frase: { type: 'string' }, explicacion: { type: 'string' }, arreglo: { type: 'string' } }, required: ['i', 'severidad', 'tipo', 'explicacion'] } } }, required: ['resumen', 'hallazgos'] });
     const hs = (d.hallazgos || []).filter(h => bl.some(b => b.i === h.i));
-    await orden(t.id, 'marcar', { tipo: 'codigo', marcas: hs.map(h => ({ i: h.i, frase: h.frase, color: SEV[h.severidad] || SEV.media, etiqueta: `${h.severidad.toUpperCase()} · ${String(h.tipo).slice(0, 22)}` })) }).catch(() => { });
+    await orden(t.id, 'marcar', { tipo: 'codigo', marcas: hs.map(h => ({ i: h.i, frase: h.frase, color: SEV[h.severidad] || SEV.media, animo: ['critica', 'alta'].includes(h.severidad) ? 'agresiva' : null, etiqueta: `${h.severidad.toUpperCase()} · ${String(h.tipo).slice(0, 22)}` })) }).catch(() => { });
     recogerLuego(t.id, 'codigo', 12_000);
     const orden2 = ['critica', 'alta', 'media', 'baja'];
     hs.sort((x, y) => orden2.indexOf(x.severidad) - orden2.indexOf(y.severidad));
@@ -396,6 +440,8 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
       ((d.tendencias || []).length ? `\n\nTendencias: ${d.tendencias.join(' · ')}` : '') + (avisos.length ? `\n(avisos: ${avisos.slice(0, 3).join(' · ')})` : '') + `\n\nInforme completo: ${archivo}`;
   }
 
+  const abrirInforme = tipo => { if (ultimo[tipo] && conf().abrirInforme !== false) bus.emit('aranas', { fase: 'informe', tipo, archivo: ultimo[tipo] }); };
+
   // ---------- soltar ----------
   async function soltar(a = {}, s = null) {
     const tipo = TIPOS[a.tipo] ? a.tipo : 'lectora';
@@ -413,7 +459,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
           const v = await visor.abrir(url);
           salen(tipo, dominio(v.url) || 'archivo');
           const t = { id: v.id, url: v.url, titulo: v.titulo };
-          try { return await ({ lectora, ia, codigo })[tipo](t, a, s); }
+          try { const res = await ({ lectora, ia, codigo })[tipo](t, a, s); abrirInforme(tipo); return res; }
           catch (e) { orden(t.id, 'recoger', { tipo }).catch(() => { }); vuelven(tipo); throw e; }
         }
         if (!conExt) throw new Error(visor ? 'pásame el enlace (url) de lo que quieres escanear: lo abro en la ventana de arañas de APOLO' : 'la extensión del navegador no está conectada');
@@ -429,11 +475,11 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
         const t = await pestanaObjetivo(a.pestana);
         await permisoSitio(s, t.url);
         salen(tipo, dominio(t.url));
-        try { return await ({ lectora, ia, codigo })[tipo](t, a, s); }
+        try { const res = await ({ lectora, ia, codigo })[tipo](t, a, s); abrirInforme(tipo); return res; }
         catch (e) { orden(t.id, 'recoger', { tipo }).catch(() => { }); vuelven(tipo); throw e; }
       }
       salen(tipo, tipo === 'discord' ? 'Discord' : 'GitHub + Hugging Face');
-      try { const r = tipo === 'discord' ? await discord(a) : await radar(a); vuelven(tipo, r.split('\n')[0]); return r; }
+      try { const r = tipo === 'discord' ? await discord(a) : await radar(a); vuelven(tipo, r.split('\n')[0]); abrirInforme(tipo); return r; }
       catch (e) { vuelven(tipo); throw e; }
     } finally { corriendo.delete(tipo); }
   }

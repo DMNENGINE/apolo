@@ -41,7 +41,7 @@
   const medir = () => { DPR = devicePixelRatio || 1; W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; };
   medir(); addEventListener('resize', medir);
 
-  const aranas = [], cajas = [], hilos = [], chispas = [], barridos = [];
+  const aranas = [], cajas = [], hilos = [], chispas = [], barridos = [], alegria = [];
   let ultimaRueda = 0, vivo = true, ultimo = performance.now(), leidos = 0, ticker = '', tickerObj = '';
   addEventListener('wheel', () => { ultimaRueda = performance.now(); }, { passive: true });
   addEventListener('keydown', e => { if (/Page|Arrow|Home|End|^ $/.test(e.key)) ultimaRueda = performance.now(); }, { passive: true });
@@ -107,7 +107,7 @@
 
   // ---------- efectos ----------
   function caja(x, y, w, h, color, opts = {}) {
-    const k = { x, y, w, h, color, t: performance.now() + (opts.retraso || 0), fuerte: !!opts.fuerte, tenue: !!opts.tenue, etiqueta: opts.etiqueta || '' };
+    const k = { x, y, w, h, color, t: performance.now() + (opts.retraso || 0), fuerte: !!opts.fuerte, tenue: !!opts.tenue, etiqueta: opts.etiqueta || '', pulso: !!opts.pulso };
     cajas.push(k); if (cajas.length > 5000) cajas.splice(0, cajas.length - 5000);
     return k;
   }
@@ -208,6 +208,10 @@
       c.globalAlpha = k.fuerte ? .95 : Math.max(.25, .7 - edad * .1);
       esquinas(x - 3 + glitch, y - 2, (k.w + 6) * nace, k.h + 4, Math.min(8, k.h / 2));
       if (k.fuerte) { c.globalAlpha = .4; c.strokeRect(x - 3, y - 2, k.w + 6, k.h + 4); }
+      if (k.pulso) {                                     // trampa: el marco late en rojo
+        const pl = .5 + .5 * Math.sin(ahora / 140); c.globalAlpha = .5 + .5 * pl; c.lineWidth = 1.5 + 2 * pl; c.shadowBlur = 10 + 14 * pl;
+        c.strokeRect(x - 5 - pl * 3, y - 4 - pl * 3, k.w + 10 + pl * 6, k.h + 8 + pl * 6);
+      }
       if (k.etiqueta) {
         c.font = '700 10px ui-monospace,Consolas,monospace'; const tw = c.measureText(k.etiqueta).width + 8;
         c.shadowBlur = 0; c.globalAlpha = nace; c.fillStyle = k.color; c.fillRect(x - 3, y - 16, tw, 13);
@@ -237,6 +241,28 @@
       c.fillText(p.ch, x, y);
     }
     c.restore();
+  }
+  function dibujarAlegria(ox, oy, dt) {           // ✦ ♥ ★ que suben de las arañas contentas
+    c.save(); c.font = '700 13px system-ui';
+    for (let i = alegria.length - 1; i >= 0; i--) {
+      const p = alegria[i]; p.t += dt; if (p.t > 1.4) { alegria.splice(i, 1); continue; }
+      c.globalAlpha = Math.max(0, 1 - p.t / 1.4); c.fillStyle = p.color; c.shadowColor = p.color; c.shadowBlur = 8;
+      c.fillText(p.ch, p.x - ox + Math.sin(p.t * 6 + i) * 8, p.y - oy - p.t * 55);
+    }
+    c.restore();
+  }
+  // de guardia sobre su marca: la agresiva ronda la trampa a acometidas y se para amenazando; la contenta da vueltitas y salta
+  function guardar(a, ahora) {
+    const g = a.guardias[a.gi % a.guardias.length];
+    if (ahora > a.cambio && a.guardias.length > 1) { a.gi++; a.cambio = ahora + 9000 + Math.random() * 6000; }
+    a.animo = g.animo;
+    const lado = Math.random() * 4 | 0, m = g.animo === 'agresiva' ? 14 : 22;
+    const px = lado < 2 ? g.x - m + Math.random() * (g.w + 2 * m) : (lado === 2 ? g.x - m : g.x + g.w + m);
+    const py = lado >= 2 ? g.y - m + Math.random() * (g.h + 2 * m) : (lado === 0 ? g.y - m : g.y + g.h + m);
+    a.ruta.push({ x: px, y: py, vel: g.animo === 'agresiva' ? 230 + Math.random() * 120 : 90 + Math.random() * 60, al: ar => {
+      if (g.animo === 'agresiva') { ar.pausa = .5 + Math.random() * .9; ar.ang = Math.atan2(g.y + g.h / 2 - ar.y, g.x + g.w / 2 - ar.x); }   // se planta mirando a la trampa
+      else { ar.pausa = .2 + Math.random() * .4; for (let i = 0; i < 3; i++) alegria.push({ x: ar.x + (Math.random() - .5) * 20, y: ar.y - 10, t: Math.random() * .3, ch: '✦♥★✧'[Math.random() * 4 | 0], color: Math.random() < .5 ? '#ffe36b' : ar.colorBueno || '#3dff8a' }); }
+    } });
   }
   function dibujarHilos(ox, oy) {
     c.save(); c.lineWidth = .8;
@@ -269,6 +295,8 @@
     const dt = Math.min(0.05, (ahora - ultimo) / 1000); ultimo = ahora;
     for (const a of [...aranas]) {
       if (a.trabajo && !a.ruta.length && a.pausa <= 0) siguientePaso(a);
+      else if (a.guardias && a.guardias.length && !a.ruta.length && a.pausa <= 0 && !a.fuera) guardar(a, ahora);
+      if (a.animo === 'contenta' && Math.random() < dt * 3) alegria.push({ x: a.x, y: a.y - 12, t: 0, ch: '✦♥★✧'[Math.random() * 4 | 0], color: '#ffe36b' });
       M.mover(a, dt);
       a.haz = (a.trabajo || !!a.ruta.length) && !a.fuera;
       (a.rastro ||= []).push({ x: a.x, y: a.y }); if (a.rastro.length > 40) a.rastro.shift();
@@ -281,7 +309,7 @@
       if (vy > H * 0.45 || vy < H * 0.08) scrollBy(0, (vy - H * 0.3) * Math.min(1, dt * 1.5));
     }
     c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, W, H);
-    dibujarCajas(scrollX, scrollY, ahora); dibujarHilos(scrollX, scrollY); dibujarChispas(scrollX, scrollY, dt);
+    dibujarCajas(scrollX, scrollY, ahora); dibujarHilos(scrollX, scrollY); dibujarAlegria(scrollX, scrollY, dt); dibujarChispas(scrollX, scrollY, dt);
     for (const a of aranas) M.dibujar(c, a, scrollX, scrollY, { W, H });
     if (ahora - hudT > 120) { pintarHud(); hudT = ahora; }
     requestAnimationFrame(frame);
@@ -325,35 +353,52 @@
     },
     marcar({ tipo, marcas = [], color } = {}) {
       color = color || COLORES[tipo] || '#ff3df2';
-      for (const x of aranas) if (x.tipo === tipo && x.trabajo) { x.trabajo = false; }   // dejan de leer: van a marcar
-      let a = aranas.find(x => x.tipo === tipo && !x.fuera);
-      if (!a) { const e = entrada(); a = M.crear(tipo, color, e.x, e.y, { r: 12 }); aranas.push(a); }
-      a.ruta.length = 0; a.vel = 900; a.estado = 'marcando'; a.hechos = 0; a.total = marcas.length || 1; a.lider = true; a.vagar = null;
-      let ok = 0;
+      let equipo = aranas.filter(x => x.tipo === tipo && !x.fuera);
+      if (!equipo.length) { const e = entrada(); const a = M.crear(tipo, color, e.x, e.y, { r: 12 }); aranas.push(a); equipo = [a]; }
+      const puntos = [];
       for (const m of marcas) {
         let b = bloquesVivos.find(x => x.i === m.i);
         if ((!b || !b.el.isConnected) && m.frase) { const f = String(m.frase).replace(/\s+/g, ' ').trim().slice(0, 60).toLowerCase(); b = bloquesVivos.find(x => x.el.isConnected && x.texto.replace(/\s+/g, ' ').toLowerCase().includes(f)); }
         if (!b || !b.el.isConnected) continue;
-        const col = m.color || color;
         let rs = [];
         if (m.frase) { const f = String(m.frase).slice(0, 80).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'); try { rs = rectsDeFrase(b.el, new RegExp(f, 'gi')).slice(0, 1); } catch { } }
         if (!rs.length) rs = [rectBloque(b.el)];
-        const r = rs[0];
-        a.ruta.push({ x: r.x - 14, y: r.y + Math.min(r.h, 30) / 2 });
-        a.ruta.push({ x: r.x + Math.min(r.w, 400), y: r.y + Math.min(r.h, 30) / 2, al: ar => {
-          caja(r.x, r.y, r.w, r.h, col, { fuerte: true, etiqueta: m.etiqueta || '' }); ar.marcas.push({ x: r.x, y: r.y }); ar.hechos++;
-          ar.pausa = .6; ar.temblor = 1;                    // se para encima y levanta las patas
-          const prev = ar.marcas[ar.marcas.length - 2]; if (prev) hilos.push({ x1: prev.x, y1: prev.y, x2: r.x, y2: r.y, color: col });
-          tickerObj = `[${m.etiqueta || 'MARCA'}] ${m.frase || b.texto.slice(0, 120)}`;
-        } });
-        ok++;
+        puntos.push({ ...rs[0], m, b, color: m.color || color, animo: m.animo || null });
       }
-      const ult = a.ruta[a.ruta.length - 1] || { x: a.x, y: a.y };
-      a.ruta.push({ x: ult.x, y: ult.y, al: ar => { ar.estado = `${ok} marcas ✓`; ar.vagar = { x: ar.x, y: ar.y }; } });
-      return { ok: true, marcadas: ok };
+      // las trampas primero (son las que hay que vigilar), luego lo bueno, luego el resto
+      const peso = p => p.animo === 'agresiva' ? 0 : p.animo === 'contenta' ? 1 : 2;
+      puntos.sort((p, q) => peso(p) - peso(q) || p.y - q.y);
+      equipo.forEach((a, k) => {
+        a.trabajo = false; a.ruta.length = 0; a.vagar = null; a.vel = 700; a.estado = 'marcando'; a.hechos = 0; a.lider = k === 0;
+        a.guardias = []; a.gi = 0; a.cambio = performance.now() + 12000;
+      });
+      puntos.forEach((p, k) => {
+        const a = equipo[k % equipo.length]; a.total = Math.ceil(puntos.length / equipo.length);
+        a.ruta.push({ x: p.x - 14, y: p.y + Math.min(p.h, 30) / 2 });
+        a.ruta.push({ x: p.x + Math.min(p.w, 400), y: p.y + Math.min(p.h, 30) / 2, al: ar => {
+          caja(p.x, p.y, p.w, p.h, p.color, { fuerte: true, etiqueta: p.m.etiqueta || '', pulso: p.animo === 'agresiva' }); ar.marcas.push({ x: p.x, y: p.y }); ar.hechos++;
+          const prev = ar.marcas[ar.marcas.length - 2]; if (prev) hilos.push({ x1: prev.x, y1: prev.y, x2: p.x, y2: p.y, color: p.color });
+          if (p.animo === 'agresiva') { ar.animo = 'agresiva'; ar.pausa = 1.3; ar.temblor = 1; }
+          else if (p.animo === 'contenta') { ar.animo = 'contenta'; ar.pausa = 1; for (let i = 0; i < 10; i++) alegria.push({ x: ar.x + (Math.random() - .5) * 40, y: ar.y, t: Math.random() * .5, ch: '✦♥★✧'[Math.random() * 4 | 0], color: Math.random() < .5 ? '#ffe36b' : p.color }); }
+          else ar.animo = null;
+          tickerObj = `[${p.m.etiqueta || 'MARCA'}] ${p.m.frase || p.b.texto.slice(0, 120)}`;
+        } });
+        if (p.animo) a.guardias.push(p);
+      });
+      // sin marcas propias con ánimo: vigila la trampa más cercana del equipo (las trampas nunca se quedan solas)
+      const trampas = puntos.filter(p => p.animo === 'agresiva');
+      equipo.forEach((a, k) => {
+        if (!a.guardias.length && puntos.some(p => p.animo)) a.guardias.push(trampas[k % Math.max(1, trampas.length)] || puntos.find(p => p.animo));
+        a.guardias.sort((p, q) => peso(p) - peso(q));
+        a.ruta.push({ x: a.ruta.length ? a.ruta[a.ruta.length - 1].x : a.x, y: a.ruta.length ? a.ruta[a.ruta.length - 1].y : a.y, al: ar => {
+          ar.estado = trampas.length ? `${trampas.length} trampas vigiladas` : `${puntos.length} marcas ✓`;
+          if (!ar.guardias.length) { ar.animo = null; ar.vagar = { x: ar.x, y: ar.y }; }
+        } });
+      });
+      return { ok: true, marcadas: puntos.length, trampas: trampas.length, buenas: puntos.filter(p => p.animo === 'contenta').length };
     },
     recoger({ tipo } = {}) {
-      for (const a of aranas) if (!tipo || a.tipo === tipo) { a.vagar = null; a.pausa = 0; a.trabajo = false; a.ruta = [{ x: scrollX + W - 30, y: scrollY - 40, al: ar => { ar.fuera = true; } }]; a.vel = 1100; a.lider = false; }
+      for (const a of aranas) if (!tipo || a.tipo === tipo) { a.vagar = null; a.pausa = 0; a.trabajo = false; a.guardias = null; a.animo = null; a.ruta = [{ x: scrollX + W - 30, y: scrollY - 40, al: ar => { ar.fuera = true; } }]; a.vel = 1100; a.lider = false; }
       return { ok: true };
     },
     siguiente() {
