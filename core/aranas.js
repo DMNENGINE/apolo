@@ -325,6 +325,15 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     try {
       if (TIPOS[tipo].web) {
         if (!navegador?.conectado?.()) throw new Error('la extensión del navegador no está conectada (Chrome con la extensión de APOLO, versión 0.4.0 o más nueva)');
+        if (a.url) {                                     // un enlace: se abre en una pestaña nueva y ahí se sueltan
+          let url = String(a.url).trim(); if (!/^[a-z]+:/i.test(url)) url = 'https://' + url;
+          if (!/^https?:/i.test(url)) throw new Error('solo abro direcciones http(s)');
+          if (navegador.protegido(url, '')) throw new Error(`"${dominio(url)}" es un sitio protegido: ahí no suelto arañas`);
+          await permisoSitio(s, url);
+          const nt = await navegador.orden('abrir', { url, pestana: null, grupo: cfg.nombreGrupo || null }, 45_000);
+          a = { ...a, pestana: nt.id };
+          await new Promise(ok => setTimeout(ok, 1200));
+        }
         const t = await pestanaObjetivo(a.pestana);
         await permisoSitio(s, t.url);
         salen(tipo, dominio(t.url));
@@ -365,6 +374,7 @@ const HERRAMIENTAS = [
       'Las de página usan la pestaña activa (o "pestana") del navegador con la extensión. Tardan de 10 s a 2 min.',
     parametros: { type: 'object', properties: {
       tipo: { type: 'string', enum: Object.keys(TIPOS) },
+      url: { type: 'string', description: 'enlace a abrir y escanear (si no, la pestaña activa)' },
       pestana: { type: 'number', description: 'id de pestaña (opcional; si no, la activa)' },
       paginas: { type: 'integer', description: 'lectora: cuántas páginas seguir con "siguiente" (1-20)' },
       consulta: { type: 'string', description: 'qué busca el usuario (foco del resumen)' },
