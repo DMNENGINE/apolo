@@ -45,7 +45,10 @@ if logs:
     log = {"archivo": f, "mtime": os.path.getmtime(f), "paso": int(pasos[-1][0]) if pasos else None, "total": int(pasos[-1][1]) if pasos else None,
            "perdidas": perdidas[-200:], "eventos": ev[-15:], "cola": txt[-1500:]}
 procs = os.popen("pgrep -x soup-cola; pgrep -x soup-worker").read().split()
-print(json.dumps({"jobs": jobs, "log": log, "procesos": len(procs)}))
+nacer = {}
+try: nacer = json.load(open(R + "/apolo/nacer.json"))
+except Exception: pass
+print(json.dumps({"jobs": jobs, "log": log, "procesos": len(procs), "nacer": nacer}))
 '''
 try:
     r = subprocess.run(['pct', 'exec', str(CT), '--', 'python3', '-c', CT_CODE], capture_output=True, text=True, timeout=40)

@@ -1,0 +1,23 @@
+# Entrenamiento del modelo propio de APOLO (CT107, Soup). Lo sube APOLO; no toca soup-python.yaml de Codex.
+# Meta: que el modelo SEA APOLO (identidad + recuerdos de su usuario + forma de hablar), no un programador.
+# LoRA en TODAS las capas lineales y 3 épocas para que los recuerdos pasen a los pesos (no solo el estilo).
+base: /srv/entrenamiento/models/qwen3-4b
+task: sft
+data:
+  train: /srv/entrenamiento/apolo/apolo-train.jsonl
+  format: chatml
+  val_split: 0.05
+  max_length: 1536
+training:
+  epochs: 3
+  lr: 0.0002
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  gradient_checkpointing: full
+  optimizer: adamw_torch
+  lora:
+    r: 32
+    alpha: 64
+    target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  quantization: 4bit
+output: /srv/entrenamiento/output/apolo
