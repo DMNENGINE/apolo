@@ -50,6 +50,8 @@ VISTAS.entrenamiento = {
         ${kpi('Loss', r.loss != null ? r.loss.toFixed(4) : '—')}
         ${kpi('GPU', g.total ? `${(g.usada / 1024).toFixed(1)} / ${(g.total / 1024).toFixed(1)} GB` : '—', g.total ? `<div class="tenue" style="font-size:12px">${esc(g.nombre || '')} · ${g.temp} °C · ${g.uso} %</div>${barra(vram, vram > 85 ? '#ff4d4d' : '#3ddc84')}` : '')}
         ${kpi('La GPU la tiene', esc(tr(r.gpuDe || '—')))}
+        ${d.nacer?.paso ? kpi('Nacimiento de APOLO', esc(tr({ descargando: 'Bajando su base', 'esperando-dataset': 'Esperando el dataset', validando: 'Validando', entrenando: 'Naciendo (entrenando)', terminado: 'Ha nacido ✓', fallo: 'Falló', error: 'Error' }[d.nacer.paso] || d.nacer.paso)),
+          `<div class="tenue" style="font-size:12px">${esc(d.nacer.detalle || '')} · ${esc(new Date(d.nacer.hora * 1000).toLocaleTimeString())}</div>`) : ''}
       </div>
       <div class="tarjeta"><header>${ic('grafica')}<span class="crece">${tr('Curva de aprendizaje')}</span></header><div class="cuerpo">${EN_curva(d.log?.perdidas)}</div></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-top:10px">
