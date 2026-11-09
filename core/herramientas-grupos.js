@@ -30,6 +30,8 @@ const GRUPOS = {
     palabras: /dashboard|tablero|panel de (datos|m[eé]tricas)|kpi|m[eé]trica|gr[aá]fic/i },
   aranas: { d: 'arañas digitales: escanear la página (lectora/.txt, detector de IA, fallos en código), rastrear servidores de Discord, radar de GitHub y Hugging Face', nombres: [], prefijos: ['arana_', 'aranas_'],
     palabras: /ara[ñn]a|escan[eé]a|escanear|rastrea|radar|lo (m[aá]s )?nuevo de (github|hugging)|[uú]ltimos repos|tendencias? (de|en) (github|hugging|ia)|hecho con (ia|inteligencia)|escrito por (una )?ia|vulnerabilidad|exploit|discord/i },
+  entrenamiento: { d: 'entrenamiento de modelos en Proxmox (Soup, CT107): estado, empezar, parar, continuar', nombres: [], prefijos: ['entrenamiento_'],
+    palabras: /entren(a|o|amiento)|fine.?tun|lora|qlora|soup|checkpoint|ct ?107|proxmox|dataset|mi modelo/i },
   reuniones: { d: 'reuniones: grabar, transcribir y resumir', nombres: ['reunion_empezar', 'reunion_parar', 'reuniones_ver', 'reunion_resumen'],
     palabras: /reuni[oó]n|reuniones|\bmeet\b|zoom|acta|minuta/i },
   gamer: { d: 'modo gamer: rendimiento del PC, limpiar, medir FPS', nombres: [], prefijos: ['gamer_', 'modo_gamer'],

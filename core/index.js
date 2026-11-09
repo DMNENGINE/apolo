@@ -235,6 +235,13 @@ function crearNucleo(opciones = {}) {
     lanzarGrabadora: opciones.lanzarGrabadora, transcribir: opciones.transcribirReunion });
   herramientas.registrar(reunMod.HERRAMIENTAS);
   nucleo.reuniones = reuniones; nucleo.extensiones.reuniones = { http: (...a) => reuniones.http(...a) };
+  nucleo.reuniones = reuniones; nucleo.extensiones.reuniones = { http: (...a) => reuniones.http(...a) };
+  // entrenamiento de modelos en Proxmox (CT107, Soup + árbitro de GPU): ver, empezar, parar, continuar y avisos → /v1/entrenamiento
+  const entrenMod = require('./entrenamiento');
+  const entrenamiento = entrenMod.crearEntrenamiento({ cfg, bus, ssh: opciones.sshEntrenamiento });
+  herramientas.registrar(entrenMod.HERRAMIENTAS);
+  nucleo.entrenamiento = entrenamiento; nucleo.extensiones.entrenamiento = { http: (...a) => entrenamiento.http(...a) };
+  if (!process.env.NODE_TEST_CONTEXT && !opciones.sshEntrenamiento) entrenamiento.empezarVigilancia();
   // arañas digitales: salen del casco y rastrean páginas (lectora, IA, código), Discord (bot en la Pi) y GitHub/Hugging Face → /v1/aranas
   const aranasMod = require('./aranas');
   const aranas = aranasMod.crearAranas({ cfg, bus, navegador, permisos, generarJSON: generarJSONvivo, modelo: modeloCerebro,
