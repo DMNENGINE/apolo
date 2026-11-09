@@ -235,6 +235,12 @@ function crearNucleo(opciones = {}) {
     lanzarGrabadora: opciones.lanzarGrabadora, transcribir: opciones.transcribirReunion });
   herramientas.registrar(reunMod.HERRAMIENTAS);
   nucleo.reuniones = reuniones; nucleo.extensiones.reuniones = { http: (...a) => reuniones.http(...a) };
+  // arañas digitales: salen del casco y rastrean páginas (lectora, IA, código), Discord (bot en la Pi) y GitHub/Hugging Face → /v1/aranas
+  const aranasMod = require('./aranas');
+  const aranas = aranasMod.crearAranas({ cfg, bus, navegador, permisos, generarJSON: generarJSONvivo, modelo: modeloCerebro,
+    secreto: k => nucleo?.extensiones?.conectores?.almacen?.secreto?.(k), fetch: opciones.fetchAranas, ejecutarSsh: opciones.sshAranas });
+  herramientas.registrar(aranasMod.HERRAMIENTAS);
+  nucleo.aranas = aranas; nucleo.extensiones.aranas = { http: (...a) => aranas.http(...a) };
   // ETAPA J: Modo Gamer (core/gamer) → /v1/gamer; al arrancar deshace una sesión que quedara abierta (cierre a medias)
   const gamer = require('./gamer').crearGamer({ cfg, bus, permisos, so: opciones.soGamer });
   nucleo.gamer = gamer; nucleo.extensiones.gamer = { http: (...a) => gamer.http(...a) };

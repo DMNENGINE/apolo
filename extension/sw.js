@@ -217,6 +217,17 @@ const OPS = {
     }
     throw new Error(`acción de reunión desconocida: ${accion}`);
   },
+  // arañas digitales (core/aranas.js): inyecta aranas.js, las suelta por el texto y pinta las marcas que manda el núcleo
+  async aranas({ accion, pestana, ...a }) {
+    if (accion === 'soltar') {
+      await esperarCarga(pestana, 10_000);
+      await chrome.tabs.update(pestana, { active: true });
+      await chrome.scripting.executeScript({ target: { tabId: pestana }, files: ['aranas.js'] });
+      return enPagina(pestana, x => window.__apoloAranas.soltar(x), [a]);
+    }
+    if (accion === 'esperar') { await esperarCarga(pestana, 15_000); const t = await chrome.tabs.get(pestana); return { url: t.url, titulo: t.title }; }
+    return enPagina(pestana, (acc, x) => (window.__apoloAranas && window.__apoloAranas[acc]) ? window.__apoloAranas[acc](x) : { error: 'las arañas ya no están en esta página' }, [accion, a]);
+  },
   async volver({ pestana }) {
     await chrome.tabs.goBack(pestana); await esperarCarga(pestana);
     const t = await chrome.tabs.get(pestana); return { titulo: t.title, url: t.url };

@@ -2,6 +2,7 @@
 import { createRobot } from './robot.js';
 import { createPersonaje } from './personaje.js';
 import { emit, COLORS, sound } from './fx.js';
+import { salirDelCasco, volverAlCasco } from './aranas.js';
 
 const $ = id => document.getElementById(id);
 // i18n: ../core/ui/i18n.js (script clásico, va antes) deja tr() global; sin él, el español tal cual
@@ -1039,6 +1040,13 @@ let panicoOn = false;
 const pintarPanico = s => { panicoOn = !!(s && s.activo); const b = $('panic'); if (!b) return; b.textContent = panicoOn ? 'REANUDAR' : 'STOP'; b.style.color = panicoOn ? '#4dff88' : '#ff4d4d'; if (panicoOn) $('h2').textContent = '🛑 PÁNICO — todo parado'; };
 if (window.bridge && bridge.onPanico) { bridge.onPanico(pintarPanico); bridge.panicoEstado().then(pintarPanico).catch(() => { }); }
 $('panic') && $('panic').addEventListener('click', () => { if (!window.bridge || !bridge.panico) return; if (panicoOn || confirm('¿Parar TODO? (turnos, control del PC, tareas, permisos)')) bridge.panico(!panicoOn); });
+// arañas digitales: salen de dentro del casco cuando APOLO suelta una (core/aranas.js) y vuelven al terminar
+if (window.bridge && bridge.onAranas) bridge.onAranas(e => {
+  if (!e) return;
+  const [x, y] = center();
+  if (e.fase === 'salen') { reaccion('sorpresa', 1.4); robot.greet && robot.greet(`🕷 ${String(e.nombre || 'ARAÑA').toUpperCase()}`); salirDelCasco(x, y, e.color || '#3df2ff', e.tipo === 'lectora' ? 3 : 2); emit(x, y, 14, [e.color || '#3df2ff', '#ffffff'], 'burst'); }
+  if (e.fase === 'vuelven') { volverAlCasco(x, y, e.color || '#3df2ff', 2); setTimeout(() => reaccion('feliz', 1.2), 1600); }
+});
 // reuniones: piloto REC rojo fijo en la isla mientras APOLO graba/toma notas (core/reuniones.js)
 if (window.bridge && bridge.onReunion) bridge.onReunion(r => {
   let el = document.getElementById('rec');

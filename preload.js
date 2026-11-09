@@ -47,5 +47,6 @@ contextBridge.exposeInMainWorld('bridge', {
   panico: on => ipcRenderer.send('panico', !!on),                       // kill switch global (FASE 9)
   panicoEstado: () => ipcRenderer.invoke('panico-estado'),
   onPanico: fn => ipcRenderer.on('panico', (_e, s) => fn(s)),
-  onReunion: fn => ipcRenderer.on('reunion', (_e, r) => fn(r)),                // REC mientras APOLO toma notas de una reunión
+  onReunion: fn => ipcRenderer.on('reunion', (_e, r) => fn(r)),
+  onAranas: fn => ipcRenderer.on('aranas', (_e, r) => fn(r)),                  // arañas digitales: salen del casco / vuelven (core/aranas.js)                // REC mientras APOLO toma notas de una reunión
 });

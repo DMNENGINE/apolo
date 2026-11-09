@@ -555,6 +555,8 @@ async function startNucleo() {
       texto: [e.resumen.resumen, ...e.resumen.tareas.map(t => `• ${t.quien ? t.quien + ': ' : ''}${t.que}`)].join('\n') });
   });
   nucleo.bus.on('reunion-enviar', ({ texto }) => movil.reply(texto));
+  // arañas digitales (core/aranas.js): salen del casco al soltarlas y vuelven al terminar
+  nucleo.bus.on('aranas', e => { if (win && !win.isDestroyed()) win.webContents.send('aranas', e); });
   try { const d = await iniciarDaemon({ nucleo }); console.log(`[núcleo] API en :${d.puerto}${(nucleo.cfg.red?.permitidos || []).length ? ` (LAN solo: ${nucleo.cfg.red.permitidos.join(", ")})` : " (solo este equipo)"} · modelo por defecto ${nucleo.cfg.modeloPorDefecto}`); }
   catch (e) { console.error('[núcleo] sin API HTTP:', e.message); }
   try { conectarOjo(); } catch (e) { console.error('[ojo]', e.message); }   // nucleo.nodos lo crea iniciarDaemon
