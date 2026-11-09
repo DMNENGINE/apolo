@@ -16,6 +16,8 @@ VIVO = re.compile(r"precio|cotiza|ahora mismo|\bhoy\b|clima|tiempo hace|noticia|
                   r"mi (p[aá]gina|web|app|tel[eé]fono|pc|cuenta|servidor|correo)|tu (p[aá]gina|web|panel)|control", re.I)
 # respuestas que enseñarían a negarse ("no tengo acceso") o con direcciones inventadas
 NIEGA = re.compile(r"no tengo acceso|no puedo acceder|en tiempo real|no puedo (navegar|buscar|consultar)|como (asistente|ia) no puedo", re.I)
+MULETILLA = re.compile(r"¿\s*sabes (que|qu[eé])\b", re.I)                           # tic que el modelo aprendería
+TAPADO = re.compile(r"\[(correo|tel[eé]fono|REDACTADO|redactado)\]|\*{4,}")           # datos tapados: no enseñan nada
 URL = re.compile(r"https?://|www\.|\b[\w-]+\.(com|net|org|io|engine|app|dev)\b", re.I)
 
 
@@ -215,7 +217,8 @@ class Gen:
                                     {'role': 'user', 'content': 'Estos son recuerdos tuyos sobre Demon:\n' + '\n'.join(f'{k}. [{x["tipo"]}] {x["t"]}' for k, x in enumerate(lote)) +
                                      '\n\nPara CADA recuerdo escribe 2 pares distintos: una pregunta natural que Demon te haría (informal, como él escribe, hablándote de tú) cuya respuesta sea ese recuerdo, '
                                      'y tu respuesta: 1-3 frases que DIGAN EL DATO CONCRETO del recuerdo con tus palabras, hablándole a él de tú ("tu taller…", "te gusta…"). '
-                                     'Empieza cada respuesta de forma distinta y directa (prohibido empezar con "Sí, me acuerdo" o "Claro"). '
+                                     'Empieza cada respuesta de forma distinta y directa (prohibido empezar con "Sí, me acuerdo" o "Claro") y NO termines con preguntas '
+                                     'retóricas tipo "¿sabes que…?" ni comentarios inventados: el dato y, como mucho, una frase corta natural. '
                                      'SIN añadir ningún dato que no esté en el recuerdo. JSON {"pares":[{"recuerdo":0,"pregunta":"...","respuesta":"..."}]}'}], 1600)
                 for p in r.get('pares', []):
                     k = p.get('recuerdo')
@@ -224,7 +227,7 @@ class Gen:
                     q, resp = str(p.get('pregunta', '')).strip(), str(p.get('respuesta', '')).strip()
                     if len(q) < 4 or len(resp) < 10 or h(q) in self.ya or TITULO.search(resp) or URL.search(resp) or NIEGA.search(resp):
                         continue
-                    if re.match(r'\s*(s[ií],? me acuerdo|claro,? tu)', resp, re.I):
+                    if re.match(r'\s*(s[ií],? me acuerdo|claro,? tu)', resp, re.I) or MULETILLA.search(resp) or TAPADO.search(q + ' ' + resp + ' ' + lote[k]['t']):
                         self.e['descartadas'] += 1; continue
                     ok, nota = self.fiel(lote[k]['t'], q, resp, recuerdo=True)
                     if ok and nota >= self.a.nota:
