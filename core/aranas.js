@@ -76,12 +76,14 @@ print(json.dumps({'servidores': out, 'errores': errores[:20]}, ensure_ascii=Fals
 
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 function informeHTML({ titulo, urls, cobertura, fin, hechos, txt }) {
+  // 📍 en la ventana de arañas lleva la página a esa frase (main/aranas-ventana.js intercepta apolo-arana://)
+  const ir = f => f ? `<a class="ir" href="apolo-arana://ir?f=${encodeURIComponent(String(f).slice(0, 120))}" title="Ver en la página"><q>${esc(f)}</q><span>📍 ver en la página</span></a>` : '';
   const lista = (xs, cls) => (xs || []).length ? `<ul class="${cls}">${xs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
   const caja = (t, cls, cuerpo) => cuerpo ? `<section class="${cls}"><h2>${t}</h2>${cuerpo}</section>` : '';
   const partes = hechos.map((h, k) => h.ok ? `<details${k ? '' : ' open'}><summary><b>${k + 1}.</b> ${esc(h.seccion)}${(h.alertas || []).length ? ` <span class="n mal">⚠ ${h.alertas.length}</span>` : ''}${(h.buenas || []).length ? ` <span class="n bien">★ ${h.buenas.length}</span>` : ''}</summary>
     <p>${esc(h.resumen)}</p>${lista(h.puntos, 'puntos')}
-    ${(h.alertas || []).map(x => `<div class="al mal">⚠ ${esc(x.texto)}${x.frase ? `<q>${esc(x.frase)}</q>` : ''}</div>`).join('')}
-    ${(h.buenas || []).map(x => `<div class="al bien">★ ${esc(x.texto)}${x.frase ? `<q>${esc(x.frase)}</q>` : ''}</div>`).join('')}
+    ${(h.alertas || []).map(x => `<div class="al mal">⚠ ${esc(x.texto)}${ir(x.frase)}</div>`).join('')}
+    ${(h.buenas || []).map(x => `<div class="al bien">★ ${esc(x.texto)}${ir(x.frase)}</div>`).join('')}
     ${(h.datos || []).length ? `<div class="datos">${h.datos.map(d => `<span><i>${esc(d.tipo)}</i> ${esc(d.valor)}</span>`).join('')}</div>` : ''}</details>`
     : `<details open><summary><b>${k + 1}.</b> <span class="n mal">NO SE PUDO RESUMIR</span></summary><p>${esc(h.error)} — su texto está entero en el .txt</p></details>`).join('');
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>🕷 ${esc(titulo)}</title><style>
@@ -96,7 +98,9 @@ function informeHTML({ titulo, urls, cobertura, fin, hechos, txt }) {
   .n{font:700 11px ui-monospace,Consolas,monospace;padding:1px 6px;border-radius:6px;margin-left:6px}.n.mal{background:#5a1222;color:#ffb3c0}.n.bien{background:#14532d;color:#b8ffd2}
   .al{margin:6px 0;padding:8px 10px;border-radius:8px;font-size:14px}.al.mal{background:#2a0a12;border-left:3px solid #ff3355}.al.bien{background:#0a2a16;border-left:3px solid #3dff8a}
   q{display:block;margin-top:4px;color:#b9b3cc;font-style:italic;font-size:13px}.datos span{display:inline-block;margin:3px 6px 3px 0;padding:2px 8px;border-radius:6px;background:#1a1730;font-size:13px}.datos i{color:#c79bff;font-style:normal}
-  .pie{margin-top:30px;color:#8a85a0;font-size:13px}.pie a{color:#7fe3ff}</style></head><body><main>
+  .pie{margin-top:30px;color:#8a85a0;font-size:13px}.pie a{color:#7fe3ff}
+  a.ir{display:block;text-decoration:none;color:inherit;border-radius:6px}a.ir span{font-size:11px;color:#7fe3ff;opacity:.75}a.ir:hover{background:#ffffff10}a.ir:hover span{opacity:1}
+  @media (max-width:640px){body{font-size:14.5px}main{padding:16px 14px 40px}h1{font-size:20px}.tit{font-size:17px}section{padding:12px 13px}}</style></head><body><main>
   <div class="top">🕷 ARAÑA LECTORA DE APOLO · ${esc(new Date().toLocaleString('es'))}</div><h1>${esc(titulo)}</h1>
   <div class="urls">${urls.map(u => `<a href="${esc(u)}">${esc(u)}</a>`).join('<br>')}</div><div class="cob">✓ ${esc(cobertura)}</div>
   ${fin ? `<div class="tit">${esc(fin.titular)}</div>${caja('Resumen completo', 'res', `<p>${esc(fin.resumen)}</p>`)}${caja('Qué significa para ti', 'sig', `<p>${esc(fin.explicacion).replace(/\n+/g, '</p><p>')}</p>`)}
@@ -265,6 +269,8 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     const html = archivo.replace(/\.txt$/, '.html');
     fs.writeFileSync(html, informeHTML({ titulo: r.titulo, urls: partes.map(x => x.url), cobertura, fin, hechos, txt: archivo }), 'utf8');
     ultimo.lectora = html;
+    // en la ventana de arañas de APOLO el informe sale en su panel (misma ventana); en Chrome se abre aparte
+    if (typeof pest === 'string' && pest.startsWith('v:')) { try { await orden(pest, 'informe', { archivo: html }); ultimo.lectora = null; } catch { } }
     const chat = [`🕷 La araña lectora leyó "${r.titulo}" entero.`, `Cobertura: ${cobertura}`, ''];
     if (fin) {
       chat.push(`**${fin.titular}**`, '', fin.resumen, '', `**Qué significa para ti:** ${fin.explicacion}`);
@@ -273,7 +279,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
       if ((fin.recomendaciones || []).length) chat.push('', '**Qué hacer:**', ...fin.recomendaciones.map(x => `• ${x}`));
     }
     chat.push('', '**Parte por parte:**', ...hechos.map((h, k) => h.ok ? `${k + 1}. **${h.seccion}** — ${h.resumen}` : `${k + 1}. ⚠ no se pudo resumir (${h.error})`));
-    chat.push('', `Informe (se abrió solo): ${html}`, `Texto entero y cada punto: ${archivo}`);
+    chat.push('', `Informe (en la ventana de las arañas): ${html}`, `Texto entero y cada punto: ${archivo}`);
     return chat.join('\n');
   }
 

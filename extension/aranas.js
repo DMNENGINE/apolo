@@ -409,6 +409,22 @@
       if (url && /^https?:/.test(url)) { location.href = url; return { url }; }
       cand.click(); return { url: location.href, clic: true };
     },
+    // desde el informe: lleva la página a esa frase, la hace destellar y la araña más cercana corre hacia allí
+    ir({ frase } = {}) {
+      const f = String(frase || '').replace(/\s+/g, ' ').trim().slice(0, 60).toLowerCase();
+      if (!f) return { ok: false };
+      const b = bloquesVivos.find(x => x.el.isConnected && x.texto.replace(/\s+/g, ' ').toLowerCase().includes(f));
+      if (!b) return { ok: false, motivo: 'no encuentro esa frase en la página' };
+      let r = null;
+      try { r = rectsDeFrase(b.el, new RegExp(String(frase).slice(0, 80).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi'))[0]; } catch { }
+      r = r || rectBloque(b.el);
+      ultimaRueda = performance.now();                       // que el seguimiento automático no la mueva
+      scrollTo({ top: Math.max(0, r.y - H * .35), behavior: 'smooth' });
+      const k = caja(r.x, r.y, r.w, r.h, '#ffffff', { fuerte: true }); setTimeout(() => { const i = cajas.indexOf(k); if (i >= 0) cajas.splice(i, 1); }, 2200);
+      const a = aranas.filter(x => !x.fuera).sort((p, q) => Math.hypot(p.x - r.x, p.y - r.y) - Math.hypot(q.x - r.x, q.y - r.y))[0];
+      if (a) { a.ruta = [{ x: r.x - 12, y: r.y + Math.min(r.h, 30) / 2, vel: 900, al: ar => { ar.pausa = 1.2; ar.temblor = 1; } }]; a.pausa = 0; }
+      return { ok: true };
+    },
     estado() { return { aranas: aranas.map(a => ({ tipo: a.tipo, estado: a.estado || '', pct: Math.round(100 * a.hechos / Math.max(1, a.total)), pendiente: a.ruta.length })) }; },
     limpiar() { vivo = false; host.remove(); delete window.__apoloAranas; return { ok: true }; },
   };
