@@ -16,7 +16,7 @@ const DEICTICO = /\b(eso|esto|esta|este|esa|ese|aqu[ií]|ah[ií]|entonces|ya|lo 
 const RUIDO = /<command-|<local-command|Caveat:|\[Request interrupted|tool_result|<system-reminder|^\s*\/|<entrada>|Responde solo|Tarea autom/;
 
 function crearGenerador({ cfg, bus, dataset, ssh: sshX }) {
-  const conf = () => ({ ssh: 'root@192.168.1.102', ct: 107, usuario: 'trainer', url: 'http://192.168.1.86:11434', modelo: 'qwen3:8b', objetivo: 1200, notaMinima: 4,
+  const conf = () => ({ ssh: 'root@192.168.1.102', ct: 107, usuario: 'trainer', url: 'http://192.168.1.86:11434', modelo: 'qwen3:8b', objetivo: 600, identidad: 150, recuerdos: 2000, notaMinima: 4,
     ...(cfg.entrenamiento || {}).ssh ? { ssh: cfg.entrenamiento.ssh } : {}, ...((cfg.dataset || {}).maestro || {}) });
   const ssh = sshX || ((host, args, stdin) => new Promise((ok, mal) => {
     const p = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', host, ...args], { windowsHide: true });
@@ -45,8 +45,19 @@ function crearGenerador({ cfg, bus, dataset, ssh: sshX }) {
     }
     const preguntas = [...new Set(mensajes.filter(t => PREG.test(t) && t.length >= 15 && t.length <= 260 && !DEICTICO.test(t) && !ACCION.test(t) && !/[A-Z]:\\|https?:\/\/|```|\.(js|py|ts|json|ps1|cpp|md)\b/.test(t)))].map(t => limpiar(t));
     const estilo = [...new Set(mensajes.filter(t => t.length < 160))].sort(() => Math.random() - .5).slice(0, 80).map(t => limpiar(t).replace(/\s+/g, ' '));
-    let memorias = [];
-    try { memorias = JSON.parse(fs.readFileSync(path.join(cfg.dir, 'memoria.json'), 'utf8')).filter(m => ['proyecto', 'hecho', 'preferencia', 'perfil', 'persona', 'patron'].includes(m.tipo)).map(m => limpiar(m.texto).slice(0, 240)); } catch { }
+    let memorias = [], recuerdos = [];
+    try {
+      const todas = JSON.parse(fs.readFileSync(path.join(cfg.dir, 'memoria.json'), 'utf8'));
+      memorias = todas.filter(m => ['proyecto', 'hecho', 'preferencia', 'perfil', 'persona', 'patron'].includes(m.tipo)).map(m => limpiar(m.texto).slice(0, 240));
+      // lo que APOLO "es" y sabe de su usuario (no detalles técnicos de código): perfil, personas, preferencias y patrones primero,
+      // luego proyectos y hechos que más usa. Así esos recuerdos pasan a los pesos del modelo.
+      const TECNICO = /[\\/][\w.-]+\.(js|py|ts|json|md|ps1|cpp|h|html|css)\b|`|\b\w+\(\)|\b(commit|endpoint|api\/|v1\/|npm|pip|regex|gotcha)\b|[A-Z]:\\/i;
+      const PRIO = { perfil: 0, persona: 1, preferencia: 2, patron: 3, proyecto: 4, hecho: 5 };
+      recuerdos = todas.filter(m => m.tipo in PRIO && m.texto && m.texto.length >= 20 && m.texto.length <= 400 && !TECNICO.test(m.texto))
+        .filter(m => PRIO[m.tipo] <= 3 || (m.usos || 0) > 0)
+        .sort((a, b) => PRIO[a.tipo] - PRIO[b.tipo] || (b.usos || 0) - (a.usos || 0))
+        .slice(0, 1400).map(m => ({ t: limpiar(m.texto), tipo: m.tipo }));
+    } catch { }
     const per = path.join(cfg.dir, 'personalidad'), leer = n => { try { return fs.readFileSync(path.join(per, n), 'utf8').trim(); } catch { return ''; } };
     const alma = ['SOUL.md', 'IDENTITY.md', 'USER.md'].map(leer).filter(Boolean).join('\n\n').slice(0, 3500);
     // ejemplos reales (solo modelos abiertos) del exportador
@@ -54,7 +65,7 @@ function crearGenerador({ cfg, bus, dataset, ssh: sshX }) {
     const leerJl = n => { try { return fs.readFileSync(path.join(dataset.dir(), n), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l).messages); } catch { return []; } };
     const reales_train = leerJl('apolo-train.jsonl'), reales_val = leerJl('apolo-val.jsonl');
     const ejemplos = reales_train.filter(m => m.length === 3 && m[2].content.length < 700).map(m => [m[1].content, m[2].content]).slice(0, 40);
-    return { creado: Date.now(), system: reales_train[0]?.[0]?.content || 'Eres APOLO, el asistente personal de tu usuario.', alma, preguntas, estilo, memorias, ejemplos, reales_train, reales_val, resumenReales: r };
+    return { creado: Date.now(), system: reales_train[0]?.[0]?.content || 'Eres APOLO, el asistente personal de tu usuario.', alma, preguntas, estilo, memorias, recuerdos, ejemplos, reales_train, reales_val, resumenReales: r };
   }
 
   async function subir() {
@@ -68,7 +79,7 @@ function crearGenerador({ cfg, bus, dataset, ssh: sshX }) {
       await ssh(c.ssh, ['bash', '-c', comillas(`cat > /tmp/apolo-generar.py`)], py);
       await ssh(c.ssh, ['bash', '-c', comillas(`pct exec ${ct(c)} -- install -d -o ${c.usuario} -g ${c.usuario} ${REMOTO} && pct push ${ct(c)} /tmp/apolo-material.json ${REMOTO}/material.json --perms 0640 && pct push ${ct(c)} /tmp/apolo-generar.py ${REMOTO}/generar-dataset.py --perms 0750 && pct exec ${ct(c)} -- chown ${c.usuario}: ${REMOTO}/material.json ${REMOTO}/generar-dataset.py && rm -f /tmp/apolo-material.json /tmp/apolo-generar.py`)]);
     } finally { fs.rmSync(tmp, { force: true }); }
-    return { preguntas: m.preguntas.length, memorias: m.memorias.length, estilo: m.estilo.length, reales: m.reales_train.length + m.reales_val.length };
+    return { preguntas: m.preguntas.length, recuerdos: m.recuerdos.length, estilo: m.estilo.length, reales: m.reales_train.length + m.reales_val.length, alma: m.alma.length };
   }
 
   let cache = null, cacheT = 0;
@@ -87,7 +98,7 @@ function crearGenerador({ cfg, bus, dataset, ssh: sshX }) {
     if (e?.estado?.activo) throw new Error('ya está generando en Proxmox');
     const sub = await subir();
     objetivo = Math.max(20, Math.min(Number(objetivo) || c.objetivo, 5000));
-    const cmd = `cd ${REMOTO} && setsid nohup /usr/bin/python3 generar-dataset.py --dir ${REMOTO} --objetivo ${objetivo} --url ${comillas(c.url)} --modelo ${comillas(c.modelo)} --nota ${Number(c.notaMinima)} > generar.log 2>&1 < /dev/null &`;
+    const cmd = `cd ${REMOTO} && setsid nohup /usr/bin/python3 generar-dataset.py --dir ${REMOTO} --objetivo ${objetivo} --url ${comillas(c.url)} --modelo ${comillas(c.modelo)} --nota ${Number(c.notaMinima)} --identidad ${Number(c.identidad)} --recuerdos ${Number(c.recuerdos)} > generar.log 2>&1 < /dev/null &`;
     // en segundo plano EN EL HOST: pct exec retiene la sesión ssh mientras vive el hijo
     await ssh(c.ssh, ['bash', '-c', comillas(`nohup pct exec ${ct(c)} -- su - ${c.usuario} -c ${comillas(cmd)} > /dev/null 2>&1 < /dev/null &`)]);
     cache = null;

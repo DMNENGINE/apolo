@@ -30,7 +30,15 @@ class Gen:
         self.salida = os.path.join(self.dir, 'generado.jsonl')
         prev = self.leer_generado()
         self.ya = {h(x['pregunta']) for x in prev}
-        self.e = {'activo': True, 'fase': 'preparando', 'hechas': len(prev), 'objetivo': a.objetivo, 'descartadas': 0, 'error': '',
+        fases = {}
+        for x in prev:
+            fases[x.get('fuente', 'tuya')] = fases.get(x.get('fuente', 'tuya'), 0) + 1
+        try:
+            viejo = json.load(open(os.path.join(self.dir, 'estado.json'), encoding='utf-8'))
+        except Exception:
+            viejo = {}
+        self.e = {'activo': True, 'fase': 'preparando', 'hechas': len(prev), 'objetivo': a.objetivo, 'descartadas': 0, 'error': '', 'fases': fases,
+                  'recuerdos_hechos': viejo.get('recuerdos_hechos', []), 'objetivos': {'identidad': a.identidad, 'recuerdo': a.recuerdos, 'charla': a.objetivo},
                   'desde': time.time(), 'pid': os.getpid(), 'maestro': f'{a.modelo} @ {a.url}'}
         self.guardar()
 
@@ -76,11 +84,18 @@ class Gen:
         ejemplos = []
         for ej in random.sample(m.get('ejemplos', []), min(3, len(m.get('ejemplos', [])))):
             ejemplos += [{'role': 'user', 'content': ej[0]}, {'role': 'assistant', 'content': ej[1]}]
+        self.e.setdefault('fases', {})
+        # A) quién es: su alma en primera persona
+        self.fase_identidad(m.get('alma', ''), a.identidad)
+        # B) lo que recuerda: cada recuerdo importante, en varias preguntas con su voz (así pasa a los pesos)
+        self.fase_recuerdos(m.get('recuerdos', []), a.recuerdos, m.get('alma', ''))
+        # C) cómo habla contigo (charla)
         cola = []
+        charla = lambda: self.e['fases'].get('tuya', 0) + self.e['fases'].get('sus temas', 0)
         # 1) preguntas reales que se entienden solas
         self.e['fase'] = 'eligiendo tus preguntas'; self.guardar()
         for t in m.get('preguntas', []):
-            if self.parar() or len(cola) + self.e['hechas'] >= a.objetivo:
+            if self.parar() or len(cola) + charla() >= a.objetivo:
                 break
             if h(t) in self.ya or VIVO.search(t):
                 continue
@@ -98,7 +113,7 @@ class Gen:
         mem = list(m.get('memorias', [])); random.shuffle(mem)
         estilo = m.get('estilo', [])
         i = 0
-        while len(cola) + self.e['hechas'] < a.objetivo * 1.25 and not self.parar() and i < 600:
+        while len(cola) + charla() < a.objetivo * 1.25 and not self.parar() and i < 600:
             temas = mem[(i * 5) % len(mem):(i * 5) % len(mem) + 5] if mem else []
             i += 1
             try:
@@ -115,9 +130,9 @@ class Gen:
                 self.e['error'] = str(er)[:200]
         # 3) respuestas como APOLO + juez
         self.e['fase'] = 'respondiendo como APOLO'; self.guardar()
-        with open(self.salida, 'a', encoding='utf-8') as f:
+        if True:
             for fuente, q in cola:
-                if self.parar() or self.e['hechas'] >= a.objetivo:
+                if self.parar() or charla() >= a.objetivo:
                     break
                 try:
                     resp = self.chat([{'role': 'system', 'content': sys_apolo}, *ejemplos, {'role': 'user', 'content': q}], maximo=550)
@@ -129,8 +144,7 @@ class Gen:
                     nota = 1 if (j.get('inventa') or j.get('plantilla')) else int(j.get('nota') or 0)
                     if nota < a.nota:
                         self.e['descartadas'] += 1; continue
-                    f.write(json.dumps({'fuente': fuente, 'pregunta': q, 'respuesta': resp, 'modelo': a.modelo, 'nota': nota, 't': time.time()}, ensure_ascii=False) + '\n'); f.flush()
-                    self.e['hechas'] += 1; self.e['error'] = ''
+                    self.escribir(fuente, q, resp, nota)
                 except Exception as er:
                     self.e['error'] = str(er)[:200]; time.sleep(5)
                 self.e['ultima'] = time.time()
@@ -138,6 +152,81 @@ class Gen:
         self.montar()
         self.e['fase'] = 'parado' if self.parar() else 'terminado'
         self.e['activo'] = False; self.e['fin'] = time.time(); self.guardar()
+
+    def escribir(self, fuente, q, r, nota, extra=None):
+        with open(self.salida, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({'fuente': fuente, 'pregunta': q, 'respuesta': r, 'modelo': self.a.modelo, 'nota': nota, 't': time.time(), **(extra or {})}, ensure_ascii=False) + '\n')
+        self.ya.add(h(q)); self.e['hechas'] += 1; self.e['fases'][fuente] = self.e['fases'].get(fuente, 0) + 1
+        self.e['ultima'] = time.time(); self.e['error'] = ''; self.guardar()
+
+    def fiel(self, fuente_texto, q, r):
+        """Juez de fidelidad: la respuesta no puede afirmar nada que no esté en el texto de origen."""
+        j = self.chat_json([{'role': 'system', 'content': 'Eres un revisor muy estricto de datos de entrenamiento.'},
+                            {'role': 'user', 'content': f'TEXTO DE ORIGEN:\n{fuente_texto}\n\nPREGUNTA: {q}\nRESPUESTA: {r}\n\n'
+                             'Devuelve JSON {"fiel": true solo si TODO lo que afirma la respuesta está en el texto de origen (puede reformularlo y añadir tono, nunca datos nuevos), '
+                             '"natural": true si suena a un asistente cercano hablando, no a una ficha, "nota": 1-5}'}], 120)
+        return bool(j.get('fiel')) and bool(j.get('natural', True)), int(j.get('nota') or 0)
+
+    def fase_identidad(self, alma, objetivo):
+        if not alma or objetivo <= 0:
+            return
+        self.e['fase'] = 'aprendiendo quién es'; self.guardar()
+        ya = self.e['fases'].get('identidad', 0)
+        for _ in range(60):
+            if self.parar() or self.e['fases'].get('identidad', 0) >= objetivo:
+                break
+            try:
+                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO. Esta es tu alma, lo que eres:\n\n' + alma},
+                                    {'role': 'user', 'content': 'Escribe 8 pares pregunta/respuesta. Las preguntas son lo que tu usuario (Demon) te diría sobre ti: quién eres, cómo eres, qué te importa, '
+                                     'tus límites, cómo naciste, qué sois el uno para el otro, cómo te sientes… variadas y con su forma informal de escribir. Las respuestas: TÚ en primera persona, '
+                                     'con tu voz, 1-5 frases, usando SOLO lo que dice tu alma (sin inventar historia nueva). JSON {"pares":[{"pregunta":"...","respuesta":"..."}]}'}], 1800)
+                for p in r.get('pares', []):
+                    q, resp = str(p.get('pregunta', '')).strip(), str(p.get('respuesta', '')).strip()
+                    if len(q) < 4 or len(resp) < 10 or h(q) in self.ya or TITULO.search(resp) or URL.search(resp):
+                        continue
+                    ok, nota = self.fiel(alma, q, resp)
+                    if ok and nota >= self.a.nota:
+                        self.escribir('identidad', q, resp, nota)
+                    else:
+                        self.e['descartadas'] += 1
+            except Exception as er:
+                self.e['error'] = str(er)[:200]; time.sleep(3)
+
+    def fase_recuerdos(self, recuerdos, objetivo, alma):
+        if not recuerdos or objetivo <= 0:
+            return
+        self.e['fase'] = 'convirtiendo recuerdos en neuronas'; self.guardar()
+        hechos = set(self.e.get('recuerdos_hechos', []))
+        voz = alma[:1200]
+        for i in range(0, len(recuerdos), 3):
+            if self.parar() or self.e['fases'].get('recuerdo', 0) >= objetivo:
+                break
+            lote = [x for x in recuerdos[i:i + 3] if h(x['t']) not in hechos]
+            if not lote:
+                continue
+            try:
+                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente de Demon. Tu forma de ser:\n' + voz},
+                                    {'role': 'user', 'content': 'Estos son recuerdos tuyos:\n' + '\n'.join(f'{k}. [{x["tipo"]}] {x["t"]}' for k, x in enumerate(lote)) +
+                                     '\n\nPara CADA recuerdo escribe 2 pares distintos: una pregunta natural que Demon te haría (informal, como él escribe) donde ese recuerdo es la respuesta, '
+                                     'y tu respuesta en primera persona, cercana, 1-4 frases, que use el recuerdo con naturalidad ("sí, me acuerdo…", "claro, tu…") '
+                                     'SIN añadir ningún dato que no esté en el recuerdo. JSON {"pares":[{"recuerdo":0,"pregunta":"...","respuesta":"..."}]}'}], 1600)
+                for p in r.get('pares', []):
+                    k = p.get('recuerdo')
+                    if not isinstance(k, int) or k >= len(lote):
+                        continue
+                    q, resp = str(p.get('pregunta', '')).strip(), str(p.get('respuesta', '')).strip()
+                    if len(q) < 4 or len(resp) < 10 or h(q) in self.ya or TITULO.search(resp) or URL.search(resp) or NIEGA.search(resp):
+                        continue
+                    ok, nota = self.fiel(lote[k]['t'], q, resp)
+                    if ok and nota >= self.a.nota:
+                        self.escribir('recuerdo', q, resp, nota, {'tipo': lote[k]['tipo']})
+                    else:
+                        self.e['descartadas'] += 1
+                for x in lote:
+                    hechos.add(h(x['t']))
+                self.e['recuerdos_hechos'] = list(hechos); self.e['recuerdos_vistos'] = len(hechos); self.guardar()
+            except Exception as er:
+                self.e['error'] = str(er)[:200]; time.sleep(3)
 
     def montar(self):
         """apolo-train.jsonl / apolo-val.jsonl: reales (ya separados por sesión) + generados (5 % a validación)."""
@@ -162,6 +251,8 @@ if __name__ == '__main__':
     p.add_argument('--url', default='http://192.168.1.86:11434')
     p.add_argument('--modelo', default='qwen3:8b')
     p.add_argument('--nota', type=int, default=4)
+    p.add_argument('--identidad', type=int, default=150)
+    p.add_argument('--recuerdos', type=int, default=2000)
     p.add_argument('--solo-montar', action='store_true')
     a = p.parse_args()
     try:
