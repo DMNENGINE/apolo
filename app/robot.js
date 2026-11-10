@@ -103,6 +103,20 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   function drawEye(c, ex, ey, er, lx, ly, now, sd) {
     c.save(); c.translate(ex, ey);
     const hue = cur.hue;
+    const calma = movimientoSuave.matches;
+    if (gestoActivo('ilusionado')) {
+      const latido = calma ? 1 : 1 + .06 * Math.sin(now / 230);
+      star4(c, 0, 0, er * latido, hsl(45, 100, 74));
+      star4(c, 0, 0, er * .48 * latido, '#ffffff');
+      c.restore(); return;
+    }
+    if (gestoActivo('timido')) {
+      c.strokeStyle = hsl(hue, 85, 75); c.lineWidth = er * .15; c.lineCap = 'round';
+      c.beginPath(); c.arc(0, -er * .2, er * .65, Math.PI * .16, Math.PI * .84); c.stroke();
+      c.fillStyle = 'rgba(255,115,175,.55)';
+      c.beginPath(); c.ellipse(sd * er * .5, er * .65, er * .45, er * .16, -.15 * sd, 0, 7); c.fill();
+      c.restore(); return;
+    }
     if (gestoActivo('remolino')) {                          // mareado: espirales que giran (cada ojo en un sentido)
       c.rotate(now / 140 * sd);
       c.strokeStyle = hsl((hue + 280) % 360, 100, 72); c.lineWidth = er * .13; c.lineCap = 'round';
@@ -145,7 +159,8 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       c.stroke(); c.restore(); return;
     }
     // un gesto con ojos propios manda sobre los ojos del estado (contento ^^, error X, dormido)
-    const ojosDeGesto = ['sorpresa', 'duda', 'triste', 'pensativo', 'guino', 'mirar'].some(gestoActivo);
+    const ojosDeGesto = ['sorpresa', 'duda', 'triste', 'pensativo', 'guino', 'mirar', 'curioso', 'sospecha', 'concentrado', 'enfadado'].some(gestoActivo);
+    if (gestoActivo('curioso')) c.scale(sd < 0 ? .88 : 1.12, sd < 0 ? .88 : 1.12);
     if (gestoActivo('sorpresa')) c.scale(1.25, 1.25);
     if (gestoActivo('duda') && sd < 0) c.scale(.8, .8);       // un ojo más pequeño que el otro: ¿eh?
     if (cur.x > .5 && !ojosDeGesto) {
@@ -166,7 +181,8 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     // El iris conserva su forma: dos párpados curvos recortan la apertura.
     c.scale(cur.eye, cur.eye);
     const cierre = Math.sin(blink * Math.PI);
-    const borde = er * (1.12 - cierre * 1.12);
+    const entornado = gestoActivo('concentrado') ? .5 : gestoActivo('sospecha') ? (sd > 0 ? .65 : .25) : gestoActivo('enfadado') ? .42 : 0;
+    const borde = er * (1.12 - cierre * 1.12) * (1 - entornado);
     c.save(); c.beginPath();
     c.moveTo(-er * 1.2, -borde);
     c.quadraticCurveTo(0, -borde + cierre * borde * .32, er * 1.2, -borde);
@@ -196,6 +212,13 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     star4(c, -er * .4 + ox, -er * .05 + oy, er * .12 * t1, 'rgba(215,170,255,.95)');
     star4(c, er * .15 + ox, er * .45 + oy, er * .1 * t2, 'rgba(255,170,230,.95)');
     c.restore(); // termina el recorte de los párpados
+    if (gestoActivo('enfadado') || gestoActivo('sospecha') || gestoActivo('concentrado')) {
+      const pendiente = gestoActivo('enfadado') ? -sd * .35 : gestoActivo('sospecha') ? sd * .2 : 0;
+      c.strokeStyle = hsl(gestoActivo('enfadado') ? 15 : hue, 95, 72);
+      c.lineWidth = er * .13; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(-er * .95, -er * .85 - pendiente * er);
+      c.quadraticCurveTo(0, -er * .95, er * .95, -er * .85 + pendiente * er); c.stroke();
+    }
     if (gestoActivo('triste')) {                             // párpado caído en diagonal (más bajo hacia fuera): cara de pena
       c.fillStyle = '#070a0e'; c.beginPath();
       c.moveTo(-er * 1.3, -er * 1.3); c.lineTo(er * 1.3, -er * 1.3);
@@ -363,6 +386,9 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
         nextGestoV = now + 15000 + Math.random() * 15000;
       }
     }
+    if (gestoActivo('curioso')) { tx = Math.sin((now - gestoIni) / 700) * .65; ty = -.12; }
+    if (gestoActivo('sospecha')) { tx = .7; ty = .05; }
+    if (gestoActivo('concentrado')) { tx = -.2; ty = .22; }
     if (gestoActivo('pensativo')) { tx = .55; ty = -.6; }                       // mira arriba a un lado, pensando
     // Microsacadas solo sin un objetivo concreto; nunca durante sueño o gestos.
     microT -= step;
@@ -400,6 +426,12 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       else if (gesto === 'estornudo') { gx = f < .45 ? -.22 * (f / .45) : f < .55 ? .35 : .35 * (1 - (f - .55) / .45); if (f > .45 && f < .5) wob = Math.max(wob, .7); }
       else if (gesto === 'pensativo') gz = .1 * g;
       else if (gesto === 'navegando') { gy = Math.sin(t * 1.3) * .35 * g; gx = .08 * g + Math.sin(t * .65) * .06 * g; }   // recorre la página con la mirada
+      else if (gesto === 'curioso') { gz = -.13 * g; gy = Math.sin(t * 1.7) * .12 * g; }
+      else if (gesto === 'sospecha') { gz = .12 * g; gy = .12 * g; }
+      else if (gesto === 'concentrado') gx = .1 * g;
+      else if (gesto === 'ilusionado') { gx = -.13 * g; gpy = .035 * g; }
+      else if (gesto === 'timido') { gx = .16 * g; gz = -.1 * g; }
+      else if (gesto === 'enfadado') { gx = .08 * g; gz = Math.sin(t * 18) * .025 * g; }
       else if (gesto === 'feliz') gz = Math.sin(t * 5) * .08 * g;
     }
     // Un solo muelle absorbe los impulsos y vuelve a la forma original.
@@ -504,6 +536,8 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       const base = react > 0 ? prevState : stateName;
       if (msg !== undefined) flash(base === 'dormido' ? 'reposo' : base, msg, secs);
     },
+    // Cancela una expresión decorativa sin cambiar el estado ni el mensaje real.
+    cancelarGesto() { gesto = null; gestoHasta = 0; },
     ocupado: () => performance.now() < gestoHasta || react > 0,
     // compuerta del visor: abre el casco (las arañas salen del nido) durante secs; cerrarCasco() lo cierra ya
     abrirCasco(secs = 4) { abrirObj = 1; abrirHasta = performance.now() + secs * 1000; },

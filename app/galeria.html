@@ -14,6 +14,7 @@
   window.robot = robot;
   // mostrar(gesto|estado, etiqueta): congela la pose a mitad del gesto para la captura
   window.mostrar = (que, etiqueta, opts = {}) => {
+    robot.cancelarGesto();
     document.getElementById('t').textContent = etiqueta || que;
     if (opts.estado) robot.setState(opts.estado);
     else robot.setState('reposo');

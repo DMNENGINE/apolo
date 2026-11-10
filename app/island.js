@@ -1,5 +1,6 @@
 // Isla: sesiones de Claude Code, subagentes, permisos y tokens, con el robot como indicador.
 import { createRobot } from './robot.js';
+import { crearVidaCasco } from './vida-casco.js';
 import { createPersonaje } from './personaje.js';
 import { emit, COLORS, sound } from './fx.js';
 import { salirDelCasco, volverAlCasco } from './aranas.js';
@@ -178,6 +179,7 @@ rwrap.addEventListener('click', e => {
   const now = Date.now(); clicks = clicks.filter(t => now - t < 1500); clicks.push(now);
   const [x, y] = center();
   lastActivity = now;
+  interrumpirVidaCasco();
   if (modoGamer && bridge.salirGamer) {                                    // Modo Gamer: la isla sigue dormida; tocar = ofrecer salir
     clicks = [];
     if (now < confirmarGamerHasta) {
@@ -205,7 +207,16 @@ const GESTOS = [                                            // [peso, nombre, se
   [1, 'corazon', 2.5, '♥'], [1, 'sorpresa', 1.6, ''], [1, 'si', 1.4, ''],
   [2, 'pensativo', 4, ''], [1, 'estornudo', 2.2, '¡ACHÍS!'], [1, 'bostezo', 2.4, ''],
 ];
-function hacerGesto(nombre, secs, msg) {
+const vidaCasco = crearVidaCasco();
+const reducirMovimientoCasco = matchMedia('(prefers-reduced-motion: reduce)');
+function interrumpirVidaCasco() {
+  if (vidaCasco.cancelar()) {
+    casco.cancelarGesto(); proximoGesto = Date.now() + 20_000;
+    ajustarFps();
+  }
+}
+function hacerGesto(nombre, secs, msg, autonomo = false) {
+  if (!autonomo) interrumpirVidaCasco();
   robot.setFps(40);
   robot.gesto(nombre, secs, msg ? tr(msg) : msg);
   setTimeout(ajustarFps, secs * 1000 + 400);
@@ -213,7 +224,7 @@ function hacerGesto(nombre, secs, msg) {
 let proximoGesto = Date.now() + 20_000, ultimaHora = -1;
 
 // reacción a un evento (tarea lista, error, permiso): ojos y cabeza del gesto, a 40 fps mientras dura
-function reaccion(nombre, secs) { robot.setFps(40); robot.gesto(nombre, secs); setTimeout(ajustarFps, secs * 1000 + 400); }
+function reaccion(nombre, secs) { interrumpirVidaCasco(); robot.setFps(40); robot.gesto(nombre, secs); setTimeout(ajustarFps, secs * 1000 + 400); }
 
 // al despertarse bosteza; la primera vez del día por la mañana (5–12 h) además da los buenos días
 function despertar() {
@@ -244,6 +255,19 @@ function cercania(p) {
 }
 setInterval(() => {
   const now = Date.now(), d = new Date();
+  const libre = !modoGamer && !open && !personaje && !skinCfg.usar && !arrastrando
+    && !panicoOn && lastState === 'reposo' && now - lastActivity >= 4000 && !reducirMovimientoCasco.matches;
+  if (!libre) interrumpirVidaCasco();
+  if (panicoOn || reducirMovimientoCasco.matches) return;
+  if (libre && vidaCasco.terminarSiLista(now)) {
+    proximoGesto = now + 35_000 + Math.random() * 40_000;
+    ajustarFps(); return;
+  }
+  if (libre && now >= proximoGesto) {
+    const paso = vidaCasco.paso({ ahora: now, libre, ocupado: robot.ocupado() });
+    if (paso) hacerGesto(paso.nombre, paso.segundos, undefined, true);
+    return;
+  }
   if (modoGamer || (lastState !== 'reposo' && lastState !== 'dormido') || open || robot.ocupado() || now - lastActivity < 4000) return;
   // en punto (y a la media) enseña la hora
   const marca = d.getHours() * 2 + (d.getMinutes() >= 30 ? 1 : 0);
@@ -312,6 +336,7 @@ function permDetail(name, inp = {}) {
 
 // ---------- eventos del hook ----------
 function onEvent(ev) {
+  interrumpirVidaCasco();
   const e = ev.hook_event_name;
   const s = ses(ev);
   const inSub = ev.agent_id && s.subs.get(ev.agent_id);
@@ -699,7 +724,7 @@ rwrap.addEventListener('click', () => { if (llamada.on && llamada.cortar) llamad
 if (bridge.onSay) bridge.onSay(t => { robot.hud(tr('RESPUESTA'), 4, 'listo'); say(String(t).replace(/[`*#>_]/g, '').slice(0, 400)); });
 var modoGamer = false;                                         // Modo Gamer activo → isla dormida (evento del núcleo {tipo:'gamer'})
 if (bridge.onGamer) bridge.onGamer(v => { const antes = modoGamer; modoGamer = !!v; if (!modoGamer) { lastActivity = Date.now(); if (antes) setTimeout(mostrarResumenPerdidas, 600); } render(); });
-if (bridge.onPoke) bridge.onPoke(() => { const [x, y] = center(); robot.poke(); sound.play('poke'); emit(x, y, 14, COLORS.listo, 'burst'); lastActivity = Date.now(); render(); });
+if (bridge.onPoke) bridge.onPoke(() => { const [x, y] = center(); interrumpirVidaCasco(); robot.poke(); sound.play('poke'); emit(x, y, 14, COLORS.listo, 'burst'); lastActivity = Date.now(); render(); });
 bridge.onExpired(id => { const i = perms.findIndex(p => p.id === id); if (i >= 0) { perms.splice(i, 1); render(); } });
 
 // ---------- estado global del robot ----------
@@ -727,6 +752,7 @@ function render() {
   if (hovering) lastActivity = now;
   if (st === 'reposo' && (modoGamer || now - lastActivity > SLEEP_MS)) st = 'dormido';   // Modo Gamer: dormida a 6 fps y sin ruido
   if (st !== lastState) {
+    interrumpirVidaCasco();
     if (st === 'dormido' && !modoGamer) sound.play('bostezo');
     else if (lastState === 'dormido') despertar();
     const bad = st === 'permiso' && perms[0]?.peligro;
@@ -961,6 +987,7 @@ document.addEventListener('pointermove', e => {
 });
 function empezarArrastre() {
   if (!gesto || arrastrando) return;
+  interrumpirVidaCasco();
   clearTimeout(gesto.t); arrastrando = true; tragarClic = true;
   try { gesto.el.setPointerCapture(gesto.id); } catch { }
   document.body.classList.add('arrastrando'); ponerInteractivo(true); enviarForma();

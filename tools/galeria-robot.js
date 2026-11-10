@@ -10,6 +10,8 @@ const dirFotos = iF >= 0 ? args.splice(iF, 2)[1] : null;
 const salida = args[0] || path.join(os.tmpdir(), 'galeria-robot.png');
 // [gesto, etiqueta, opciones, ms de espera antes de capturar]
 const GESTOS = [
+  ['curioso', 'curioso', {}, 900], ['sospecha', 'sospecha', {}, 900], ['concentrado', 'concentrado', {}, 900],
+  ['ilusionado', 'ilusionado', {}, 700], ['timido', 'timido', {}, 900], ['enfadado', 'enfadado', {}, 900],
   ['nada', 'reposo', {}, 1500], ['nada', 'trabajando', { estado: 'trabajando' }, 1500], ['nada', 'dormido (Zzz)', { estado: 'dormido' }, 2500],
   ['greet', 'saludo', {}, 700], ['reloj', 'la hora', { msg: '' }, 900], ['guino', 'guiño', {}, 500], ['corazon', 'corazones', { msg: '♥' }, 700],
   ['sorpresa', 'sorpresa', {}, 600], ['feliz', 'contento', {}, 700], ['celebrar', 'celebra (tarea lista)', {}, 600],
@@ -25,7 +27,7 @@ const srv = http.createServer((q, r) => {
 const dormir = ms => new Promise(ok => setTimeout(ok, ms));
 const puerto = 9700 + Math.floor(Math.random() * 200);
 const edge = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', ['--headless=new', `--remote-debugging-port=${puerto}`,
-  `--user-data-dir=${os.tmpdir()}/robot-edge-galeria`, '--window-size=300,300', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', 'about:blank'], { stdio: 'ignore' });
+  `--user-data-dir=${os.tmpdir()}/robot-edge-galeria-${process.pid}`, '--window-size=300,300', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', 'about:blank'], { stdio: 'ignore' });
 (async () => {
   let pag; for (let i = 0; i < 40 && !pag; i++) { await dormir(250); try { pag = (await (await fetch(`http://127.0.0.1:${puerto}/json`)).json()).find(x => x.type === 'page'); } catch { } }
   const ws = new WebSocket(pag.webSocketDebuggerUrl); await new Promise(ok => ws.onopen = ok);
