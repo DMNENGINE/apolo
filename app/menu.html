@@ -5,96 +5,124 @@
 <style>
   :root { --verde:#3ddc84; --cian:#35c8f0; --tx:#e6ebf2; --mut:#8b95a5; --linea:rgba(61,220,132,.18); }
   html, body { margin:0; background:transparent; font:13px/1.35 system-ui, "Segoe UI", sans-serif; color:var(--tx); overflow:hidden; user-select:none; }
-  .caja { margin:6px; border-radius:14px; background:rgba(6,9,14,.94); border:1px solid var(--linea); box-shadow:0 12px 40px rgba(0,0,0,.6), 0 0 0 1px #000, 0 0 24px rgba(61,220,132,.12);
-    max-height:504px; display:flex; flex-direction:column; overflow:hidden; animation:entra .14s ease-out; }
-  @keyframes entra { from { opacity:0; transform:translateY(-6px) scale(.98) } }
-  @media (prefers-reduced-motion: reduce) { .caja { animation:none } }
-  .cab { display:flex; gap:10px; align-items:center; padding:10px 12px 8px; border-bottom:1px solid var(--linea); }
-  .casco { width:30px; height:30px; border-radius:50%; background:radial-gradient(circle at 50% 40%, #1d2630, #070a0e 70%); border:1px solid #2a3a33; position:relative; flex:none; box-shadow:0 0 10px rgba(61,220,132,.25) }
-  .casco::before, .casco::after { content:''; position:absolute; top:12px; width:6px; height:7px; border-radius:50%; background:var(--verde); box-shadow:0 0 6px var(--verde); animation:mira 4s infinite }
+  .caja { margin:6px; border-radius:14px; background:rgba(6,9,14,.95); border:1px solid var(--linea); box-shadow:0 12px 40px rgba(0,0,0,.6), 0 0 0 1px #000, 0 0 24px rgba(61,220,132,.12);
+    max-height:544px; display:flex; flex-direction:column; overflow:hidden; animation:entra .16s cubic-bezier(.2,.9,.3,1.2); transform-origin:top left; }
+  @keyframes entra { from { opacity:0; transform:scale(.92) } }
+  .cab { display:flex; gap:10px; align-items:center; padding:10px 12px 6px; }
+  .casco { width:30px; height:30px; border-radius:50%; background:radial-gradient(circle at 50% 40%, #1d2630, #070a0e 70%); border:1px solid #2a3a33; position:relative; flex:none; box-shadow:0 0 10px rgba(61,220,132,.25); transition:box-shadow .2s }
+  .casco::before, .casco::after { content:''; position:absolute; top:12px; width:6px; height:7px; border-radius:50%; background:var(--verde); box-shadow:0 0 6px var(--verde); animation:parpadeo 4s infinite; transition:transform .12s }
   .casco::before { left:8px } .casco::after { right:8px }
-  @keyframes mira { 0%,92%,100% { transform:scaleY(1) } 95% { transform:scaleY(.1) } }
-  .tit b { color:var(--verde); letter-spacing:.12em; font-size:12px } .tit div { color:var(--mut); font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:250px }
-  input { margin:8px 10px 4px; padding:7px 10px; border-radius:8px; border:1px solid #233; background:#0b1117; color:var(--tx); outline:none; font:inherit }
-  input:focus { border-color:var(--verde) }
+  .casco.escribe { box-shadow:0 0 16px rgba(53,200,240,.55) } .casco.escribe::before, .casco.escribe::after { background:var(--cian); box-shadow:0 0 8px var(--cian); transform:translateY(2px) }
+  @keyframes parpadeo { 0%,92%,100% { transform:scaleY(1) } 95% { transform:scaleY(.1) } }
+  .tit b { color:var(--verde); letter-spacing:.12em; font-size:12px }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px } .chip { font-size:10.5px; padding:1px 7px; border-radius:9px; background:#0f1a15; border:1px solid #1d3a2c; color:#a6f0c6 }
+  .prompt { margin:6px 10px 4px; display:flex; align-items:flex-start; gap:6px; border:1px solid #233; background:#0b1117; border-radius:10px; padding:6px 8px }
+  .prompt:focus-within { border-color:var(--cian); box-shadow:0 0 0 2px rgba(53,200,240,.15) }
+  textarea { flex:1; resize:none; border:0; outline:0; background:transparent; color:var(--tx); font:inherit; height:20px; max-height:72px; overflow:auto }
+  .enviar { color:var(--cian); font-size:16px; cursor:pointer; opacity:.5 } .enviar.on { opacity:1 }
   .lista { overflow:auto; padding:2px 6px 8px; }
   .sec { color:var(--mut); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; padding:8px 8px 3px }
-  .it { display:flex; gap:9px; align-items:center; padding:6px 8px; border-radius:8px; cursor:pointer }
-  .it .ic { width:20px; text-align:center; flex:none } .it .t { flex:1 } .it .d { color:var(--mut); font-size:11px }
+  .it { display:flex; gap:9px; align-items:center; padding:6px 8px; border-radius:8px; cursor:pointer; animation:aparece .18s both }
+  @keyframes aparece { from { opacity:0; transform:translateX(-4px) } }
+  .it .ic { width:20px; text-align:center; flex:none } .it .t { flex:1; min-width:0 } .it .d { color:var(--mut); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
   .it.sel, .it:hover { background:rgba(61,220,132,.12); outline:1px solid rgba(61,220,132,.3) }
-  .it .fl { color:var(--mut) } .sub { margin-left:22px; border-left:1px solid var(--linea); padding-left:4px }
+  .it.ia.sel, .it.ia:hover { background:rgba(53,200,240,.13); outline-color:rgba(53,200,240,.4) }
+  .it .fl, .it .x { color:var(--mut) } .it .x { visibility:hidden; padding:0 4px } .it:hover .x { visibility:visible } .it .x:hover { color:#ff6b81 }
+  .sub { margin-left:22px; border-left:1px solid var(--linea); padding-left:4px }
   .vacio { color:var(--mut); padding:14px; text-align:center }
   .pie { color:var(--mut); font-size:10.5px; padding:6px 12px; border-top:1px solid var(--linea); display:flex; justify-content:space-between }
+  @media (prefers-reduced-motion: reduce) { .caja, .it, .casco::before, .casco::after { animation:none } }
 </style></head>
 <body><div class="caja">
-  <div class="cab"><div class="casco"></div><div class="tit"><b>APOLO</b><div id="ctx">…</div></div></div>
-  <input id="q" placeholder="¿Qué hacemos? (escribe para buscar)" autocomplete="off">
+  <div class="cab"><div class="casco" id="casco"></div><div class="tit"><b>APOLO</b><div class="chips" id="chips"></div></div></div>
+  <div class="prompt"><textarea id="q" rows="1" placeholder="Pídeselo a APOLO… o busca una acción"></textarea><span class="enviar" id="env" title="Enviar a APOLO (Enter)">➤</span></div>
   <div class="lista" id="l"></div>
-  <div class="pie"><span>↑↓ Enter</span><span>Esc cierra</span></div>
+  <div class="pie"><span id="ayuda">↑↓ elige · Enter</span><span>Esc cierra</span></div>
 </div>
 <script>
 const $ = s => document.querySelector(s);
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const base = p => String(p || '').split(/[\\/]/).filter(Boolean).pop() || p;
-let items = [], sel = 0, abiertos = new Set();
+const CHIP = { video: '🎬 vídeo', imagen: '🖼 imagen', audio: '🎵 audio', codigo: '💻 código', texto: '📄 texto', carpeta: '📁 carpeta', navegador: '🌐 navegador' };
+let C = null, items = [], sel = 0, abiertos = new Set();
 
-function construir(c) {
+function construir() {
   const L = [], add = (sec, ic, t, accion, d, extra = {}) => L.push({ sec, ic, t, accion, d, ...extra });
-  const hay = c && c.objetivo && c.objetivo.length;
-  if (hay) {
-    if (c.hayMedia) add('Con esto', '🎬', 'Crear un vídeo con esto', { tipo: 'video' }, 'monta lo mejor de la selección');
-    add('Con esto', '💻', 'Crear un programa con esto', { tipo: 'programa' }, 'Claude Code lo construye');
-    if (c.texto) add('Con esto', '📖', 'Leer entero con la araña lectora', { tipo: 'arana', arana: 'lectora' }, 'resumen completo y trampas');
-    if (c.codigo) add('Con esto', '🛡', 'Revisar el código (araña de código)', { tipo: 'arana', arana: 'codigo' }, 'fallos y cómo arreglarlos');
-    add('Con esto', '📝', 'Resumir lo que hay', { tipo: 'resumir' });
-    add('Con esto', '🧠', 'Que APOLO lo aprenda', { tipo: 'aprender' }, 'lo guarda en su memoria');
-    if (c.carpeta && !c.seleccion.length) add('Con esto', '🗂', 'Proponer cómo ordenar la carpeta', { tipo: 'ordenar' });
-  }
-  add('Arañas', '🕷', 'Soltar arañas', null, c && c.navegador ? 'en la pestaña del navegador' : '', { grupo: 'aranas' });
-  for (const [k, ic, t, d] of [['lectora', '📖', 'Lectora', 'lee la página entera'], ['ia', '🤖', 'Detectora de IA', '¿lo escribió una IA?'], ['codigo', '🛡', 'De código', 'fallos de seguridad'], ['discord', '💬', 'De Discord', 'resumen de tus servidores'], ['radar', '📡', 'Radar', 'lo nuevo en GitHub y Hugging Face']])
+  const acc = C.acciones || [];
+  const recientes = acc.filter(a => a.usos > 0).sort((a, b) => b.usos - a.usos).slice(0, 3);
+  for (const a of recientes) add('Recientes', a.ic, a.t, { tipo: 'accion', id: a.id }, a.d, { propia: a.propia, id: a.id, rec: true });
+  const para = acc.filter(a => a.cuando !== 'siempre' && !recientes.includes(a));
+  for (const a of para) add(C.objetivo.length ? 'Para esto' : (C.navegador ? 'En esta página' : 'Acciones'), a.ic, a.t, { tipo: 'accion', id: a.id }, a.d, { propia: a.propia, id: a.id });
+  add('Arañas', '🕷', 'Soltar arañas', null, C.navegador ? 'en la pestaña del navegador' : (C.archivo ? 'sobre ' + base(C.archivo) : ''), { grupo: 'aranas' });
+  for (const [k, ic, t, d] of [['lectora', '📖', 'Lectora', 'lee entero, resume y marca trampas'], ['ia', '🤖', 'Detectora de IA', '¿lo escribió una IA?'], ['codigo', '🛡', 'De código', 'fallos de seguridad'], ['discord', '💬', 'De Discord', 'resumen de tus servidores'], ['radar', '📡', 'Radar', 'lo nuevo en GitHub y Hugging Face']])
     add('Arañas', ic, t, { tipo: 'arana', arana: k }, d, { padre: 'aranas' });
-  for (const [r, ic, t] of [['agentes', '🛰', 'Mission Control'], ['chat', '💭', 'Chat con APOLO'], ['revision', '✂', 'Editor de vídeos'], ['estudio-video', '🎞', 'Estudio de vídeo'], ['entrenamiento', '🧬', 'Entrenamiento (su nacimiento)'], ['turno', '🌙', 'Turno de noche'], ['reuniones', '🎙', 'Reuniones'], ['gamer', '🎮', 'Modo Gamer'], ['dashboards', '📊', 'Dashboards'], ['memoria', '🧠', 'Memoria']])
-    add('Abrir', ic, t, { tipo: 'panel', ruta: r });
-  for (const p of (c && c.plugins) || []) add('Abrir', '🧩', p.titulo, { tipo: 'panel', ruta: p.ruta }, 'plugin');
+  for (const a of acc.filter(a => a.cuando === 'siempre' && !recientes.includes(a))) add('APOLO', a.ic, a.t, { tipo: 'accion', id: a.id }, a.d, { propia: a.propia, id: a.id });
+  add('Abrir', '🗔', 'Páginas de APOLO', null, '', { grupo: 'abrir' });
+  for (const [r, ic, t] of [['agentes', '🛰', 'Mission Control'], ['chat', '💭', 'Chat'], ['revision', '✂', 'Editor de vídeos'], ['estudio-video', '🎞', 'Estudio de vídeo'], ['entrenamiento', '🧬', 'Entrenamiento'], ['turno', '🌙', 'Turno de noche'], ['reuniones', '🎙', 'Reuniones'], ['gamer', '🎮', 'Modo Gamer'], ['dashboards', '📊', 'Dashboards'], ['memoria', '🧠', 'Memoria']])
+    add('Abrir', ic, t, { tipo: 'panel', ruta: r }, '', { padre: 'abrir' });
+  for (const p of C.plugins || []) add('Abrir', '🧩', p.titulo, { tipo: 'panel', ruta: p.ruta }, 'plugin', { padre: 'abrir' });
   return L;
 }
 
+const texto = () => $('#q').value.trim();
 function visibles() {
-  const q = $('#q').value.trim().toLowerCase();
-  return items.filter(i => q ? (!i.grupo && (i.t + ' ' + (i.d || '') + ' ' + i.sec).toLowerCase().includes(q)) : (!i.padre || abiertos.has(i.padre)));
+  const q = texto().toLowerCase();
+  if (!q) return items.filter(i => !i.padre || abiertos.has(i.padre));
+  const coinciden = items.filter(i => !i.grupo && (i.t + ' ' + (i.d || '') + ' ' + i.sec).toLowerCase().includes(q));
+  const ia = { sec: 'Pedírselo a APOLO', ic: '✨', t: texto(), d: C.objetivo.length ? `con ${C.objetivo.length === 1 ? base(C.objetivo[0]) : C.objetivo.length + ' elementos'}` : (C.app ? `estás en ${C.app}` : ''), accion: { tipo: 'prompt', texto: texto() }, ia: true };
+  const guardar = { sec: 'Pedírselo a APOLO', ic: '💾', t: 'Guardar como acción', d: 'para tenerla siempre en el menú', guardar: true, ia: true };
+  return [ia, ...coinciden, guardar];
 }
 function pintar() {
   const v = visibles(); sel = Math.min(sel, Math.max(0, v.length - 1));
   let h = '', sec = '';
   v.forEach((i, k) => {
     if (i.sec !== sec && !i.padre) { sec = i.sec; h += `<div class="sec">${esc(sec)}</div>`; }
-    h += `<div class="it ${k === sel ? 'sel' : ''} ${i.padre && !$('#q').value ? 'sub' : ''}" data-k="${k}"><span class="ic">${i.ic}</span><span class="t">${esc(i.t)}${i.d ? `<div class="d">${esc(i.d)}</div>` : ''}</span>${i.grupo ? `<span class="fl">${abiertos.has(i.grupo) ? '▾' : '▸'}</span>` : ''}</div>`;
+    h += `<div class="it ${k === sel ? 'sel' : ''} ${i.ia ? 'ia' : ''} ${i.padre && !texto() ? 'sub' : ''}" data-k="${k}" style="animation-delay:${Math.min(k, 14) * 12}ms"><span class="ic">${i.ic}</span>` +
+      `<span class="t">${esc(i.ia && !i.guardar ? '«' + i.t + '»' : i.t)}${i.d ? `<div class="d">${esc(i.d)}</div>` : ''}</span>` +
+      `${i.grupo ? `<span class="fl">${abiertos.has(i.grupo) ? '▾' : '▸'}</span>` : ''}${i.propia ? `<span class="x" data-borrar="${esc(i.id)}" title="Borrar esta acción">✕</span>` : ''}</div>`;
   });
-  $('#l').innerHTML = h || '<div class="vacio">Nada con ese nombre</div>';
+  $('#l').innerHTML = h || '<div class="vacio">Nada por aquí</div>';
   const s = $('.it.sel'); s && s.scrollIntoView({ block: 'nearest' });
+  $('#env').classList.toggle('on', !!texto());
+  $('#casco').classList.toggle('escribe', !!texto());
+  $('#ayuda').textContent = texto() ? 'Enter = pedírselo a APOLO · Mayús+Enter nueva línea' : '↑↓ elige · Enter';
 }
-function activar(k) {
+async function activar(k) {
   const i = visibles()[k]; if (!i) return;
   if (i.grupo) { abiertos.has(i.grupo) ? abiertos.delete(i.grupo) : abiertos.add(i.grupo); pintar(); return; }
+  if (i.guardar) {
+    const r = await window.menuApolo.guardar({ texto: texto() });
+    C = await window.menuApolo.contexto(); items = construir(); $('#q').value = ''; sel = 0; pintar();
+    $('#ayuda').textContent = `✓ Guardada (sale cuando haya ${r.cuando === 'siempre' ? 'cualquier cosa' : r.cuando})`; return;
+  }
   if (i.accion) window.menuApolo.ejecutar(i.accion);
 }
 $('#l').addEventListener('mousemove', e => { const it = e.target.closest('.it'); if (it && +it.dataset.k !== sel) { sel = +it.dataset.k; pintar(); } });
-$('#l').addEventListener('click', e => { const it = e.target.closest('.it'); if (it) activar(+it.dataset.k); });
-$('#q').addEventListener('input', () => { sel = 0; pintar(); });
+$('#l').addEventListener('click', async e => {
+  const b = e.target.closest('[data-borrar]');
+  if (b) { await window.menuApolo.borrar(b.dataset.borrar); C = await window.menuApolo.contexto(); C.acciones = C.acciones.filter(a => a.id !== b.dataset.borrar); items = construir(); pintar(); return; }
+  const it = e.target.closest('.it'); if (it) activar(+it.dataset.k);
+});
+$('#env').addEventListener('click', () => { if (texto()) window.menuApolo.ejecutar({ tipo: 'prompt', texto: texto() }); });
+$('#q').addEventListener('input', () => { sel = 0; const t = $('#q'); t.style.height = '20px'; t.style.height = Math.min(72, t.scrollHeight) + 'px'; pintar(); });
 addEventListener('keydown', e => {
   const n = visibles().length;
   if (e.key === 'Escape') window.menuApolo.cerrar();
   else if (e.key === 'ArrowDown') { sel = (sel + 1) % n; pintar(); e.preventDefault(); }
   else if (e.key === 'ArrowUp') { sel = (sel - 1 + n) % n; pintar(); e.preventDefault(); }
-  else if (e.key === 'Enter') activar(sel);
-  else if (e.key === 'ArrowRight') { const i = visibles()[sel]; if (i && i.grupo && !abiertos.has(i.grupo)) activar(sel); }
-  else if (e.key === 'ArrowLeft') { const i = visibles()[sel]; const g = i && (i.grupo || i.padre); if (g && abiertos.has(g)) { abiertos.delete(g); pintar(); } }
+  else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); activar(sel); }
+  else if (e.key === 'ArrowRight' && !texto()) { const i = visibles()[sel]; if (i && i.grupo && !abiertos.has(i.grupo)) activar(sel); }
+  else if (e.key === 'ArrowLeft' && !texto()) { const i = visibles()[sel]; const g = i && (i.grupo || i.padre); if (g && abiertos.has(g)) { abiertos.delete(g); pintar(); } }
 });
 (async () => {
-  const c = await window.menuApolo.contexto();
-  $('#ctx').textContent = c && c.objetivo && c.objetivo.length
-    ? (c.seleccion.length ? `${c.seleccion.length === 1 ? base(c.seleccion[0]) : c.seleccion.length + ' seleccionados'} · ${base(c.carpeta)}` : `📁 ${base(c.carpeta)}`)
-    : (c && c.app ? `en ${c.app}` : 'tu caja de herramientas');
-  items = construir(c); pintar(); $('#q').focus();
+  C = await window.menuApolo.contexto() || { objetivo: [], tipos: [], acciones: [] };
+  const chips = [];
+  if (C.seleccion && C.seleccion.length) chips.push(C.seleccion.length === 1 ? '📌 ' + base(C.seleccion[0]) : `📌 ${C.seleccion.length} seleccionados`);
+  else if (C.carpeta) chips.push('📁 ' + base(C.carpeta));
+  for (const t of C.tipos || []) if (CHIP[t] && !(t === 'carpeta' && !C.seleccion.length)) chips.push(CHIP[t]);
+  if (!chips.length) chips.push(C.app ? 'en ' + C.app : 'tu caja de herramientas');
+  $('#chips').innerHTML = chips.slice(0, 4).map(c => `<span class="chip">${esc(c)}</span>`).join('');
+  items = construir(); pintar(); $('#q').focus();
 })();
 </script></body></html>

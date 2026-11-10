@@ -567,7 +567,7 @@ async function startNucleo() {
   try { conectarOjo(); } catch (e) { console.error('[ojo]', e.message); }   // nucleo.nodos lo crea iniciarDaemon
   // menú de APOLO: Ctrl + Alt + clic derecho en cualquier parte → caja de herramientas junto al cursor (main/menu-apolo.js)
   try {
-    const menuApolo = require('./main/menu-apolo').crearMenuApolo({ dir: __dirname, nucleo: () => nucleo, handleText,
+    const menuApolo = require('./main/menu-apolo').crearMenuApolo({ dir: __dirname, datos: () => app.getPath('userData'), nucleo: () => nucleo, handleText,
       panelUrl: r => { let tok = ''; try { tok = fs.readFileSync(path.join(nucleo.cfg.dir, 'token'), 'utf8').trim(); } catch { } return `http://127.0.0.1:${nucleo.cfg.puerto}/#/${r}&token=${tok}`; },
       decir: t => { if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: 'APOLO', texto: t }); } });
     menuApolo.arrancar();
