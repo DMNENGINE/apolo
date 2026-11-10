@@ -16,6 +16,9 @@ const EXT = {
 };
 
 function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, log = console.log }) {
+  // registro corto para depurar (el menú no tiene consola): %TEMP%/apolo-menu.log
+  const traza = (...a) => { try { fs.appendFileSync(path.join(require('os').tmpdir(), 'apolo-menu.log'), `${new Date().toISOString().slice(11, 23)} ${a.join(' ')}
+`); } catch { } };
   let hijo = null, ventana = null, contexto = null, reintentos = 0, apagado = false;
   const fUser = () => path.join(datos(), 'menu-acciones.json');
   const leerUser = () => { try { return JSON.parse(fs.readFileSync(fUser(), 'utf8')); } catch { return { acciones: [], usos: {} }; } };
@@ -34,7 +37,7 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, log =
         if (!l.startsWith('{')) continue;
         let j; try { j = JSON.parse(l); } catch { continue; }
         if (j.evento === 'listo') { reintentos = 0; log('[menú APOLO] listo: Ctrl+Alt+clic derecho'); }
-        else if (j.evento === 'menu') abrir(j);
+        else if (j.evento === 'menu') { traza('clic', j.app, j.clase, j.x, j.y); abrir(j); }
       }
     });
     hijo.stderr.on('data', d => log('[menú APOLO]', String(d).trim().slice(0, 300)));
@@ -73,13 +76,16 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, log =
     ventana.loadFile(path.join(dir, 'app', 'menu.html'));
     // Windows puede no darle el foco a la primera: durante el primer medio segundo perder el foco no lo cierra (y lo vuelve a pedir)
     let desde = 0;
-    ventana.once('ready-to-show', () => { ventana.show(); ventana.moveTop(); ventana.focus(); desde = Date.now(); });
+    ventana.once('ready-to-show', () => { ventana.show(); ventana.moveTop(); ventana.focus(); desde = Date.now(); traza('mostrado', x, y, 'foco', ventana.isFocused()); });
+    ventana.webContents.on('console-message', (_e, nivel, msg, linea) => traza('consola', nivel, msg, 'línea', linea));
+    ventana.webContents.on('preload-error', (_e, p, err) => traza('preload-error', p, err && err.message));
     ventana.on('blur', () => {
+      traza('blur', Date.now() - desde, 'ms');
       if (Date.now() - desde < 700) { setTimeout(() => { if (ventana && !ventana.isDestroyed()) { ventana.moveTop(); ventana.focus(); } }, 60); return; }
       cerrar();
     });
   }
-  function cerrar() { if (ventana && !ventana.isDestroyed()) ventana.destroy(); ventana = null; }
+  function cerrar() { if (ventana && !ventana.isDestroyed()) { traza('cerrar'); ventana.destroy(); } ventana = null; }
 
   // ---------- ejecutar ----------
   const lista = c => c.objetivo.map(p => `"${p}"`).join(', ') || '(nada seleccionado)';
@@ -121,6 +127,7 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, log =
   }
   function borrarAccion(id) { const u = leerUser(); u.acciones = (u.acciones || []).filter(a => a.id !== id); guardarUser(u); return { ok: true }; }
 
+  require('./ipc-seguro').permitir(path.join(dir, 'app', 'menu.html'), 'menu-apolo-');   // la página del menú solo usa sus canales
   ipcMain.handle('menu-apolo-contexto', () => contexto);
   ipcMain.handle('menu-apolo-ejecutar', (_e, a) => ejecutar(a));
   ipcMain.handle('menu-apolo-guardar', (_e, a) => { const r = guardarAccion(a); if (contexto) contexto = { ...contexto, acciones: modelo({ ...contexto }).acciones }; return r; });
