@@ -1,0 +1,22 @@
+# APOLO v3: como la v2 (que salió bien de voz) + pares que se responden LEYENDO la memoria inyectada en el system
+# (formato de memoria.contexto de APOLO) y "quién es" también sin system.
+base: /srv/entrenamiento/models/qwen3-4b
+task: sft
+data:
+  train: /srv/entrenamiento/apolo/apolo-train.jsonl
+  format: chatml
+  val_split: 0.05
+  max_length: 1024
+training:
+  epochs: 2
+  lr: 0.0001
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  gradient_checkpointing: full
+  optimizer: paged_adamw_8bit
+  lora:
+    r: 32
+    alpha: 64
+    target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  quantization: 4bit
+output: /srv/entrenamiento/output/apolo-v3
