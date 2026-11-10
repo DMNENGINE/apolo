@@ -71,8 +71,13 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, log =
       backgroundColor: '#00000000', webPreferences: { preload: path.join(dir, 'app', 'menu-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     ventana.setAlwaysOnTop(true, 'pop-up-menu');
     ventana.loadFile(path.join(dir, 'app', 'menu.html'));
-    ventana.once('ready-to-show', () => { ventana.show(); ventana.focus(); });
-    ventana.on('blur', () => cerrar());
+    // Windows puede no darle el foco a la primera: durante el primer medio segundo perder el foco no lo cierra (y lo vuelve a pedir)
+    let desde = 0;
+    ventana.once('ready-to-show', () => { ventana.show(); ventana.moveTop(); ventana.focus(); desde = Date.now(); });
+    ventana.on('blur', () => {
+      if (Date.now() - desde < 700) { setTimeout(() => { if (ventana && !ventana.isDestroyed()) { ventana.moveTop(); ventana.focus(); } }, 60); return; }
+      cerrar();
+    });
   }
   function cerrar() { if (ventana && !ventana.isDestroyed()) ventana.destroy(); ventana = null; }
 

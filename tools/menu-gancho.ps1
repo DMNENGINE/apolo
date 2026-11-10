@@ -26,6 +26,7 @@ public static class GanchoMenu {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int pid);
 
   public static BlockingCollection<string> Cola = new BlockingCollection<string>();
   static Proc proc; static bool comido;
@@ -64,6 +65,9 @@ Write-Output '{"evento":"listo"}'; [Console]::Out.Flush()
 $shell = New-Object -ComObject Shell.Application
 while ($true) {
   $l = [GanchoMenu]::Cola.Take()
+  # este proceso acaba de recibir la entrada del usuario: puede dejar que APOLO pase a primer plano (si no, Windows no le da el foco
+  # y el menú se cierra al instante por "perder el foco")
+  [void][GanchoMenu]::AllowSetForegroundWindow(-1)
   $x, $y, $h = $l.Split(',')
   $hwnd = [IntPtr][long]$h
   $cls = New-Object Text.StringBuilder 256; [void][GanchoMenu]::GetClassName($hwnd, $cls, 256)
