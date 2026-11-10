@@ -1,0 +1,30 @@
+{
+  "0.3.1": {
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3",
+      "saludo": "¡Me he actualizado! Mira todo lo que aprendí.",
+      "puntos": [
+        "Mi casco tiene vida: 100 animaciones nuevas, y algunas me desmontan y me vuelven a montar. Ahora te las enseño todas.",
+        "Arañas digitales: salen de mi casco para leer una página, detectar textos de IA, revisar código o vigilar Discord.",
+        "Ctrl + Alt + clic derecho en cualquier sitio abre mi menú con acciones para lo que tengas seleccionado.",
+        "Codex también aparece en la isla y en Mission Control, con sus permisos aquí y en el móvil.",
+        "WhatsApp programable: reglas de respuesta y mensajes programados con texto, fotos o notas de voz.",
+        "Pestaña Prompts, de un enlace a una skill, y análisis de .exe/.dll sin ejecutarlos.",
+        "Voz más rápida en GPU y en las reuniones distingo quién habla."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3",
+      "saludo": "I've been updated! Look at everything I learned.",
+      "puntos": [
+        "My helmet comes alive: 100 new animations, some take me apart and put me back together. I'll show you all of them now.",
+        "Digital spiders crawl out of my helmet to read a page, spot AI-written text, review code or watch Discord.",
+        "Ctrl + Alt + right click anywhere opens my menu with actions for whatever you selected.",
+        "Codex shows up in the island and in Mission Control, with its permissions here and on your phone.",
+        "Programmable WhatsApp: reply rules and scheduled messages with text, photos or voice notes.",
+        "Prompts tab, link-to-skill, and .exe/.dll analysis without running them.",
+        "Faster voice on the GPU, and in meetings I can tell who is speaking."
+      ]
+    }
+  }
+}

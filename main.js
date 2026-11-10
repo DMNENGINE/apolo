@@ -1046,6 +1046,16 @@ app.whenReady().then(() => {
   const enviarIdioma = forzar => { const l = idiomaApp(); if (!forzar && l === idiomaEnviado) return; idiomaEnviado = l; if (win && !win.isDestroyed()) win.webContents.send('idioma', l); };
   win.webContents.on('did-finish-load', () => enviarIdioma(true));
   setInterval(() => enviarIdioma(false), 3000);
+  // lo nuevo de esta versión (novedades.json): una vez por versión, la isla lo cuenta y el casco enseña sus animaciones
+  const novedades = require('./main/novedades').crearNovedades({ userData: app.getPath('userData'), version: app.getVersion() });
+  win.webContents.once('did-finish-load', () => setTimeout(() => {
+    const n = novedades.pendiente(); if (!n || !win || win.isDestroyed()) return;
+    win.webContents.send('novedades', n); novedades.marcar();
+  }, 7000));
+  ipcMain.on('novedades-ver', () => {                        // «Ver lo nuevo» desde la isla o la bandeja: repetir cuando quieras
+    const n = novedades.pendiente({ forzar: true });
+    if (n && win && !win.isDestroyed()) win.webContents.send('novedades', { ...n, repetir: true });
+  });
   setInterval(async () => {                                   // ☀️ resumen del día: a la hora fijada y si estás en la PC
     if (!cerebro || !cerebro.briefingDue() || Date.now() - lastMove > 10 * 60_000) return;
     runBriefing();

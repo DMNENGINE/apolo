@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('bridge', {
   onDemo: fn => ipcRenderer.on('demo', () => fn()),
   tts: text => ipcRenderer.invoke('tts', text),
   onActualizacion: fn => ipcRenderer.on('actualizacion', (_e, i) => fn(i)),
+  onNovedades: fn => ipcRenderer.on('novedades', (_e, n) => fn(n)),                 // lo nuevo de la versión: {version, es, en, repetir?}
+  verNovedades: () => ipcRenderer.send('novedades-ver'),
   actualizarAhora: () => ipcRenderer.send('upd-ahora'),
   onActualizacionProgreso: fn => ipcRenderer.on('actualizacion-progreso', (_e, p) => fn(p)),   // {fase: descargando|instalando|abriendo|error, pct?, error?, manual?}
   actualizarLuego: () => ipcRenderer.send('upd-luego'),

@@ -1,6 +1,7 @@
 // Isla: sesiones de Claude Code, subagentes, permisos y tokens, con el robot como indicador.
 import { createRobot } from './robot.js';
 import { crearVidaCasco } from './vida-casco.js';
+import { crearEspectaculo } from './novedades-show.js';
 import { createPersonaje } from './personaje.js';
 import { emit, COLORS, sound } from './fx.js';
 import { salirDelCasco, volverAlCasco } from './aranas.js';
@@ -254,6 +255,7 @@ function cercania(p) {
   } else encimaDesde = 0;
 }
 setInterval(() => {
+  if (espectaculo?.activo) { interrumpirVidaCasco(); return; }   // enseñando las novedades: nada de gestos sueltos
   const now = Date.now(), d = new Date();
   const libre = !modoGamer && !open && !personaje && !skinCfg.usar && !arrastrando
     && !panicoOn && casco.abierto() < .03 && lastState === 'reposo' && now - lastActivity >= 4000 && !reducirMovimientoCasco.matches;
@@ -587,6 +589,67 @@ if (bridge.onActualizacion) bridge.onActualizacion(i => {
   say(tr('Hay una actualización disponible. ¿Quieres instalarla?'));
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 120_000);
 });
+
+// ---------- lo nuevo tras actualizar: tarjeta + todas las animaciones del casco una tras otra ----------
+let espectaculo = null, novedadesTxt = null;
+const cascoVisible = () => !personaje && !skinCfg.usar;
+function puedeEspectaculo() {
+  return !panicoOn && !modoGamer && !arrastrando && !perms.length && casco.abierto() < .03 && (lastState === 'reposo' || lastState === 'dormido' || lastState === '');
+}
+function pintarNovedades(paso) {
+  const el = $('answer'), n = novedadesTxt; if (!n) return;
+  const total = espectaculo?.total || 0, i = paso?.i || 0;
+  let prog = '';
+  if (paso?.fin) prog = `<div class="nov-prog">${paso.completo ? '🎉 ' + tr('¡Y eso es todo! Ya viste las {n} animaciones.', { n: total }) : tr('Animaciones paradas en la {i} de {n}.', { i: paso.vistas, n: total })}</div>`;
+  else if (paso?.sinAnimar) prog = `<div class="nov-prog tenue">${esc(paso.sinAnimar)}</div>`;
+  else if (total) prog = `<div class="nov-prog">🎬 ${i}/${total} · <b>${esc(paso?.nombre || tr('preparando…'))}</b></div><div class="upd-barra"><i style="width:${Math.max(2, Math.round(i / total * 100))}%"></i></div>`;
+  const botones = espectaculo?.activo
+    ? `<button data-nov="saltar">${tr('Saltar animaciones')}</button><button data-nov="cerrar">${tr('Cerrar')}</button>`
+    : `<button data-nov="otra">${tr('Ver otra vez')}</button><button data-nov="cerrar">${tr('Cerrar')}</button>`;
+  el.innerHTML = `<b class="t">✨ ${esc(n.titulo || tr('Lo nuevo'))}</b>${prog}<div class="upd">${botones}</div><ul class="nov">${(n.puntos || []).map(p => `<li>${esc(p)}</li>`).join('')}</ul>`;
+  el.classList.add('on', 'nov-card'); clearTimeout(el._t);
+  // cualquier otra tarjeta (respuesta, actualización…) vuelve al tamaño normal
+  if (!el._novObs) { el._novObs = new MutationObserver(() => { if (!el.querySelector('ul.nov')) el.classList.remove('nov-card'); }); el._novObs.observe(el, { childList: true }); }
+}
+function empezarNovedades(info) {
+  const en = String(window.I18N?.idioma?.() || 'es').startsWith('en');
+  novedadesTxt = (en ? info.en : info.es) || info.es || info.en; if (!novedadesTxt) return;
+  espectaculo?.parar('nuevo');
+  const animaciones = (casco.animaciones?.() || []).slice();
+  espectaculo = crearEspectaculo({
+    animaciones,
+    reproducir: a => { robot.setFps(40); casco.gesto(a.id, a.segundos); },
+    cancelar: () => casco.cancelarGesto(),
+    puede: puedeEspectaculo,
+    alPaso: (a, i) => pintarNovedades({ i, nombre: tr(a.nombre) }),
+    alFin: r => { pintarNovedades({ fin: true, ...r }); ajustarFps(); if (r.completo) { say(tr('¡Y eso es todo!')); const [x, y] = center(); emit(x, y, 30, ['#3dff9a', '#7fe3ff', '#ffd25a'], 'burst'); } },
+  });
+  interrumpirVidaCasco();
+  abrirUnRato(60_000); sound.play('permiso');
+  robot.setFps(40); robot.gesto('sorpresa', 1.6, tr('¡NOVEDADES!'));
+  if (novedadesTxt.saludo) say(novedadesTxt.saludo);
+  if (!animaciones.length) return pintarNovedades({ sinAnimar: ' ' });
+  if (reducirMovimientoCasco.matches) return pintarNovedades({ sinAnimar: tr('Con «reducir movimiento» activado no hago las animaciones; puedes verlas en la galería del panel.') });
+  if (!cascoVisible()) return pintarNovedades({ sinAnimar: tr('Las animaciones son del casco: vuelve al casco en Avatar para verlas.') });
+  setTimeout(() => { espectaculo?.empezar(0); pintarNovedades({ i: 0 }); }, 2600);   // tras la sorpresa y el saludo
+  pintarNovedades({ i: 0 });
+}
+let novPausa = null;
+setInterval(() => {
+  if (!espectaculo?.activo) { novPausa = null; return; }
+  espectaculo.tick();
+  const p = !puedeEspectaculo();                            // en pausa por trabajo/permiso: la tarjeta lo dice
+  if (p !== novPausa) { novPausa = p; const prog = $('answer').querySelector('.nov-prog'); if (prog && p) prog.innerHTML = '⏸ ' + tr('En pausa mientras trabajo; sigo cuando termine.'); }
+}, 400);
+if (bridge.onNovedades) bridge.onNovedades(n => empezarNovedades(n));
+$('answer').addEventListener('click', e => {
+  const b = e.target.closest('button[data-nov]'); if (!b) return;
+  e.stopImmediatePropagation();
+  const que = b.dataset.nov;
+  if (que === 'saltar') { espectaculo?.parar('saltar'); }
+  else if (que === 'otra') { bridge.verNovedades?.(); }
+  else { espectaculo?.parar('cerrar'); $('answer').classList.remove('on'); }
+}, true);
 
 // ---------- hablarle a Claude: texto o voz ----------
 async function sendAsk(text, origin = 'isla') {
@@ -1167,11 +1230,14 @@ if (bridge.onCursor) bridge.onCursor(p => {            // cursor en toda la pant
 
 function makeStubBridge() {
   const h = {};
-  setTimeout(() => { demo(); hovering = true; render(); }, 300);   // en el navegador abre y lanza la demo
+  // en el navegador abre y lanza la demo (?sindemo: isla en reposo, para probar lo que solo ocurre sin trabajo)
+  setTimeout(() => { if (!new URLSearchParams(location.search).has('sindemo')) demo(); hovering = true; render(); }, 300);
   window.islaDemo = demo;                                          // pruebas en navegador: más sesiones de ejemplo
   return {
     onEvent: f => (h.ev = f), onExpired: f => (h.ex = f), onDemo: f => (h.demo = f),
     decide: (id, b) => console.log('decisión', id, b), interactive: () => {},
+    // pruebas en navegador: window.islaNovedades({version, es, en}) lanza «lo nuevo»
+    onNovedades: f => { window.islaNovedades = f; }, verNovedades: () => console.log('verNovedades'),
     // ?skin=<n> prueba la skin 2D con el preset n del Estudio de Avatares (capturas en navegador)
     onAvatar: f => { const n = new URLSearchParams(location.search).get('skin'); if (n !== null && window.AvatarSVG) setTimeout(() => f({ usar: true, receta: window.AvatarSVG.PRESETS[+n || 0] }), 50); },
   };

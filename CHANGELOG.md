@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-11-10
+
+### Added
+- **What's new, in the island**: the first time you open a new version, the island opens with a card telling you what changed and the helmet plays **all its animations one after another** (100, about 12 minutes), with the name of each one and a progress bar. It pauses while APOLO works or asks for permission and repeats the one it cut. «Skip animations» stops it and «See again» replays it. With reduced motion, or with a character/avatar instead of the helmet, only the card is shown. It appears once per version.
+
 ## [0.3.0] - 2026-11-10
 
 ### Added
