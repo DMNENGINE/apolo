@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Crea un canal de SOLO LECTURA en DIGITAL VOID y publica un embed ES + EN del tutorial. Se ejecuta EN LA PI.
 
-  scp discord_canal.py config.json miniatura.jpg dmn@192.168.1.127:/tmp/
-  ssh dmn@192.168.1.127 'set -a; . ~/control-commander/.env; set +a; python3 /tmp/discord_canal.py /tmp/config.json; rm -f /tmp/discord_canal.py /tmp/config.json /tmp/miniatura.jpg'
+  scp discord_canal.py config.json miniatura.jpg usuario@pi:/tmp/
+  ssh usuario@pi 'set -a; . ~/control-commander/.env; set +a; python3 /tmp/discord_canal.py /tmp/config.json; rm -f /tmp/discord_canal.py /tmp/config.json /tmp/miniatura.jpg'
 
 config.json:
- {"guild": "756289290400694392", "categoria": "1339733219184218113",   # TOOLS
+ {"guild": "<id del servidor>", "categoria": "<id de la categoría>",   # TOOLS
   "nombre": "🍒│𝐋𝐈𝐂𝐇𝐈𝐈-𝐒𝐖𝐈𝐓𝐂𝐇-𝟐", "tema": "…", "imagen": "/tmp/miniatura.jpg",
   "embeds": [{"title": "…", "url": "…", "color": 16723582, "description": "…", "image": {"url": "attachment://miniatura.jpg"}},
              {"title": "🇺🇸 …", "description": "…"}]}

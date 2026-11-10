@@ -1,5 +1,5 @@
 // Entrenamiento de modelos en Proxmox (CT107 "entrenamiento", Soup + árbitro de GPU del host). Ver y controlar desde APOLO.
-// - estado(): un script de SOLO LECTURA por ssh al host (root@192.168.1.102): GPU (nvidia-smi), árbitro (/run/lab-gpu-arbitro.json),
+// - estado(): un script de SOLO LECTURA por ssh al host (cfg.entrenamiento.ssh, p. ej. root@<host-proxmox>): GPU (nvidia-smi), árbitro (/run/lab-gpu-arbitro.json),
 //   trabajos del CT107 (/srv/entrenamiento/jobs/*/estado.json) y el log del entrenamiento lanzado por APOLO (paso/total/loss).
 //   Los tokens del árbitro NO se leen ni salen del host.
 // - iniciar/parar/continuar: SIEMPRE por la entrada gestionada (cola.py = supervisor), nunca soup_cli directo: así la GPU cede
@@ -58,7 +58,10 @@ print(json.dumps(out))
 `;
 
 function crearEntrenamiento({ cfg, bus, ssh: sshX, ahora = () => Date.now() }) {
-  const conf = () => ({ ssh: 'root@192.168.1.102', ct: 107, usuario: 'trainer', config: `${DIR}/soup-python.yaml`, ui: 'http://192.168.1.206:7860', vigilar: true, ...(cfg.entrenamiento || {}) });
+  // Sin cfg.entrenamiento.ssh la función está apagada: no se conecta a nada (cada instalación pone su propio host).
+  const conf = () => ({ ssh: '', ct: 107, usuario: 'trainer', config: `${DIR}/soup-python.yaml`, ui: '', vigilar: true, ...(cfg.entrenamiento || {}) });
+  const configurado = () => /^[\w.-]+@[\w.-]+$/.test(String(conf().ssh || ''));
+  const NO_CONF = 'El entrenamiento en Proxmox no está configurado: pon entrenamiento.ssh (usuario@host) en la configuración del núcleo.';
   const ssh = sshX || ((host, args, stdin) => new Promise((ok, mal) => {
     const p = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', host, ...args], { windowsHide: true });
     let o = '', e = '';
@@ -125,7 +128,7 @@ function crearEntrenamiento({ cfg, bus, ssh: sshX, ahora = () => Date.now() }) {
   const TEXTOS = { running: '🧠 El entrenamiento está en marcha en Proxmox.', paused: '⏸ El entrenamiento cedió la GPU a una tarea prioritaria (checkpoint guardado). Seguirá solo.',
     completed: '✅ El entrenamiento terminó.', failed: '❌ El entrenamiento falló. Mira el panel → Entrenamiento.', cancelled: '⏹ Entrenamiento parado (checkpoint guardado, puedes continuarlo).' };
   async function vigilar() {
-    if (conf().vigilar === false) return;
+    if (conf().vigilar === false || !configurado()) return;
     let siguiente = 5 * 60_000;
     try {
       const e = await estado({ fresco: true });
@@ -160,17 +163,18 @@ function crearEntrenamiento({ cfg, bus, ssh: sshX, ahora = () => Date.now() }) {
       agInicio = 0;
     }
   }
-  function empezarVigilancia() { if (!temporizador) { temporizador = setTimeout(vigilar, 15_000); temporizador.unref?.(); } }
+  function empezarVigilancia() { if (!configurado()) return; if (!temporizador) { temporizador = setTimeout(vigilar, 15_000); temporizador.unref?.(); } }
   bus?.on?.('entrenamiento', () => { clearTimeout(temporizador); temporizador = setTimeout(vigilar, 8000); temporizador.unref?.(); });
 
   async function http(M, p, b = {}) {   // /v1/entrenamiento
+    if (!configurado()) { if (M === 'GET' && !p[2]) return { configurado: false, fase: 'sin-configurar', texto: NO_CONF }; throw Object.assign(new Error(NO_CONF), { status: 409 }); }
     if (M === 'GET' && !p[2]) return await estado({ fresco: true });
     if (M === 'POST' && p[2] === 'iniciar') return await iniciar(b);
     if (M === 'POST' && p[2] === 'parar') return await parar();
     if (M === 'POST' && p[2] === 'continuar') return await continuar();
     throw Object.assign(new Error('ruta desconocida'), { status: 404 });
   }
-  return { estado, iniciar, parar, continuar, http, empezarVigilancia, conf };
+  return { estado, iniciar, parar, continuar, http, empezarVigilancia, conf, configurado };
 }
 
 // ---------- herramientas del agente ----------

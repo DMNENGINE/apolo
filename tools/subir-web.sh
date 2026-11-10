@@ -3,7 +3,7 @@
 # Uso (Git Bash, desde cualquier sitio):  bash tools/subir-web.sh
 # En la Pi: nginx sirve /var/www/apolo en 127.0.0.1:8093 y el túnel de Cloudflare "apolo" lo publica.
 set -euo pipefail
-PI="${PI:-dmn@192.168.1.124}"
+PI="${PI:?define PI=usuario@host del equipo que sirve la web}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

@@ -16,7 +16,8 @@ const DEICTICO = /\b(eso|esto|esta|este|esa|ese|aqu[ií]|ah[ií]|entonces|ya|lo 
 const RUIDO = /<command-|<local-command|Caveat:|\[Request interrupted|tool_result|<system-reminder|^\s*\/|<entrada>|Responde solo|Tarea autom/;
 
 function crearGenerador({ cfg, bus, dataset, ssh: sshX }) {
-  const conf = () => ({ ssh: 'root@192.168.1.102', ct: 107, usuario: 'trainer', url: 'http://192.168.1.86:11434', modelo: 'qwen3:8b', objetivo: 600, identidad: 150, recuerdos: 2000, notaMinima: 4,
+  // Host (cfg.entrenamiento.ssh) y Ollama maestro (cfg.dataset.maestro.url) los pone cada instalación; sin ellos no se genera.
+  const conf = () => ({ ssh: '', ct: 107, usuario: 'trainer', url: '', nombreUsuario: 'tu usuario', modelo: 'qwen3:8b', objetivo: 600, identidad: 150, recuerdos: 2000, notaMinima: 4,
     ...(cfg.entrenamiento || {}).ssh ? { ssh: cfg.entrenamiento.ssh } : {}, ...((cfg.dataset || {}).maestro || {}) });
   const ssh = sshX || ((host, args, stdin) => new Promise((ok, mal) => {
     const p = spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', host, ...args], { windowsHide: true });
@@ -94,11 +95,12 @@ function crearGenerador({ cfg, bus, dataset, ssh: sshX }) {
 
   async function generar({ objetivo } = {}) {
     const c = conf();
+    if (!/^[\w.-]+@[\w.-]+$/.test(String(c.ssh || '')) || !/^https?:\/\//.test(String(c.url || ''))) throw Object.assign(new Error('Configura entrenamiento.ssh y dataset.maestro.url para generar el dataset.'), { status: 409 });
     const e = await estadoRemoto().catch(() => null);
     if (e?.estado?.activo) throw new Error('ya está generando en Proxmox');
     const sub = await subir();
     objetivo = Math.max(20, Math.min(Number(objetivo) || c.objetivo, 5000));
-    const cmd = `cd ${REMOTO} && setsid nohup /usr/bin/python3 generar-dataset.py --dir ${REMOTO} --objetivo ${objetivo} --url ${comillas(c.url)} --modelo ${comillas(c.modelo)} --nota ${Number(c.notaMinima)} --identidad ${Number(c.identidad)} --recuerdos ${Number(c.recuerdos)} > generar.log 2>&1 < /dev/null &`;
+    const cmd = `cd ${REMOTO} && setsid nohup /usr/bin/python3 generar-dataset.py --dir ${REMOTO} --objetivo ${objetivo} --url ${comillas(c.url)} --modelo ${comillas(c.modelo)} --nota ${Number(c.notaMinima)} --identidad ${Number(c.identidad)} --recuerdos ${Number(c.recuerdos)} --usuario ${comillas(String(c.nombreUsuario).slice(0, 40))} > generar.log 2>&1 < /dev/null &`;
     // en segundo plano EN EL HOST: pct exec retiene la sesión ssh mientras vive el hijo
     await ssh(c.ssh, ['bash', '-c', comillas(`nohup pct exec ${ct(c)} -- su - ${c.usuario} -c ${comillas(cmd)} > /dev/null 2>&1 < /dev/null &`)]);
     cache = null;

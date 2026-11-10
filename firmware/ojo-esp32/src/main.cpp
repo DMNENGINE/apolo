@@ -240,7 +240,7 @@ static void configurarWiFi() {
   host = prefs.getString("host", ""); puerto = prefs.getUShort("puerto", PUERTO_POR_DEFECTO); token = prefs.getString("token", "");
   char sPuerto[8]; snprintf(sPuerto, sizeof sPuerto, "%u", puerto);
   WiFiManager wm;
-  WiFiManagerParameter pHost("host", "IP del PC con APOLO (ej. 192.168.1.31)", host.c_str(), 40);
+  WiFiManagerParameter pHost("host", "IP del PC con APOLO (ej. 192.168.1.50)", host.c_str(), 40);
   WiFiManagerParameter pPuerto("puerto", "Puerto de nodos", sPuerto, 6);
   wm.addParameter(&pHost); wm.addParameter(&pPuerto);
   wm.setConfigPortalTimeout(600);

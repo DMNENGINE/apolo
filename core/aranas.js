@@ -342,7 +342,8 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
   });
   async function discord(a) {
     const dc = conf().discord || {};
-    const host = dc.ssh || 'dmn@192.168.1.127';
+    const host = dc.ssh;   // usuario@host donde corre el bot (cfg.aranas.discord.ssh)
+    if (!/^[\w.-]+@[\w.-]+$/.test(String(host || ''))) throw new Error('La araña de Discord no está configurada: pon aranas.discord.ssh (usuario@host del equipo donde corre el bot).');
     const horas = Math.max(1, Math.min(Number(a.horas) || 24, 168));
     const args = Buffer.from(JSON.stringify({ horas, servidor: a.servidor || '', canal: a.canal || '', env: dc.env, maxCanales: dc.maxCanales || 40, maxMensajes: dc.maxMensajes || 200 })).toString('base64');
     const crudo = await (ejecutarSsh || sshPorDefecto)(host, args);

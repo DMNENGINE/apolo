@@ -60,6 +60,8 @@ class Gen:
         return os.path.exists(os.path.join(self.dir, 'parar'))
 
     def chat(self, messages, json_mode=False, maximo=500, temp=.7):
+        usuario = getattr(self.a, 'usuario', None) or 'tu usuario'
+        messages = [dict(x, content=str(x.get('content', '')).replace('{USUARIO}', usuario)) for x in messages]
         body = {'model': self.a.modelo, 'think': False, 'stream': False, 'keep_alive': '5m', 'messages': messages,
                 'options': {'num_predict': maximo, 'temperature': temp}}
         if json_mode:
@@ -169,9 +171,9 @@ class Gen:
     def fiel(self, fuente_texto, q, r, recuerdo=False):
         """Juez: fidelidad (nada fuera del texto de origen), papeles claros y, en recuerdos, que la respuesta DIGA el dato."""
         extra = ('"completa": true solo si la respuesta dice claramente el dato principal del recuerdo (no vale "es importante para ti" sin decirlo), '
-                 '"papeles": true si confunde quién es quién (el USUARIO se llama Demon; el asistente es APOLO y nunca dice que él es Demon), ') if recuerdo else ''
-        j = self.chat_json([{'role': 'system', 'content': 'Eres un revisor muy estricto de datos de entrenamiento. En estos diálogos el USUARIO es Demon y el ASISTENTE es APOLO.'},
-                            {'role': 'user', 'content': f'TEXTO DE ORIGEN:\n{fuente_texto}\n\nPREGUNTA (de Demon): {q}\nRESPUESTA (de APOLO): {r}\n\n'
+                 '"papeles": true si confunde quién es quién (el USUARIO se llama {USUARIO}; el asistente es APOLO y nunca dice que él es {USUARIO}), ') if recuerdo else ''
+        j = self.chat_json([{'role': 'system', 'content': 'Eres un revisor muy estricto de datos de entrenamiento. En estos diálogos el USUARIO es {USUARIO} y el ASISTENTE es APOLO.'},
+                            {'role': 'user', 'content': f'TEXTO DE ORIGEN:\n{fuente_texto}\n\nPREGUNTA (de {{USUARIO}}): {q}\nRESPUESTA (de APOLO): {r}\n\n'
                              'Devuelve JSON {"fiel": true solo si TODO lo que afirma la respuesta está en el texto de origen (puede reformularlo y añadir tono, nunca datos nuevos), '
                              + extra + '"natural": true si suena a un asistente cercano hablando, no a una ficha, "nota": 1-5}'}], 160)
         ok = bool(j.get('fiel')) and bool(j.get('natural', True))
@@ -189,7 +191,7 @@ class Gen:
                 break
             try:
                 r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO. Esta es tu alma, lo que eres:\n\n' + alma},
-                                    {'role': 'user', 'content': 'Escribe 8 pares pregunta/respuesta. Las preguntas son lo que tu usuario (Demon) te diría sobre ti: quién eres, cómo eres, qué te importa, '
+                                    {'role': 'user', 'content': 'Escribe 8 pares pregunta/respuesta. Las preguntas son lo que tu usuario ({USUARIO}) te diría sobre ti: quién eres, cómo eres, qué te importa, '
                                      'tus límites, cómo naciste, qué sois el uno para el otro, cómo te sientes… variadas y con su forma informal de escribir. Las respuestas: TÚ en primera persona, '
                                      'con tu voz, 1-5 frases, usando SOLO lo que dice tu alma (sin inventar historia nueva). JSON {"pares":[{"pregunta":"...","respuesta":"..."}]}'}], 1800)
                 for p in r.get('pares', []):
@@ -217,10 +219,10 @@ class Gen:
             if not lote:
                 continue
             try:
-                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente personal de tu usuario. Tu usuario se llama Demon: él te habla y tú le respondes. '
-                                     'Tú NO eres Demon. Los recuerdos son cosas que sabes DE ÉL (de su vida, su gente, sus gustos y proyectos). Tu forma de ser:\n' + voz},
-                                    {'role': 'user', 'content': 'Estos son recuerdos tuyos sobre Demon:\n' + '\n'.join(f'{k}. [{x["tipo"]}] {x["t"]}' for k, x in enumerate(lote)) +
-                                     '\n\nPara CADA recuerdo escribe 2 pares distintos: una pregunta natural que Demon te haría (informal, como él escribe, hablándote de tú) cuya respuesta sea ese recuerdo, '
+                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente personal de tu usuario. Tu usuario se llama {USUARIO}: él te habla y tú le respondes. '
+                                     'Tú NO eres {USUARIO}. Los recuerdos son cosas que sabes DE ÉL (de su vida, su gente, sus gustos y proyectos). Tu forma de ser:\n' + voz},
+                                    {'role': 'user', 'content': 'Estos son recuerdos tuyos sobre {USUARIO}:\n' + '\n'.join(f'{k}. [{x["tipo"]}] {x["t"]}' for k, x in enumerate(lote)) +
+                                     '\n\nPara CADA recuerdo escribe 2 pares distintos: una pregunta natural que {USUARIO} te haría (informal, como él escribe, hablándote de tú) cuya respuesta sea ese recuerdo, '
                                      'y tu respuesta: 1-3 frases que DIGAN EL DATO CONCRETO del recuerdo con tus palabras, hablándole a él de tú ("tu taller…", "te gusta…"). '
                                      'Empieza cada respuesta de forma distinta y directa (prohibido empezar con "Sí, me acuerdo" o "Claro") y NO termines con preguntas '
                                      'retóricas tipo "¿sabes que…?" ni comentarios inventados: el dato y, como mucho, una frase corta natural. '
@@ -245,7 +247,7 @@ class Gen:
             except Exception as er:
                 self.e['error'] = str(er)[:200]; time.sleep(3)
 
-    # v2: ejemplos que confunden quién es quién (el usuario es Demon; el asistente es APOLO): fuera al montar
+    # v2: ejemplos que confunden quién es quién (el usuario es {USUARIO}; el asistente es APOLO): fuera al montar
     CONFUNDE_Q = re.compile(r"\bdemon(io)?\b.*\b(eres|te llamas|tu nombre|c[oó]mo eres)\b|\b(eres|te llamas)\b.*\bdemon(io)?\b", re.I)
     CONFUNDE_R = re.compile(r"\b(me llamo|soy) demon\b|\bte (llaman|llamas|gusta que te llamen) ['\"«]?apolo\b|\btu nombre es ['\"«]?apolo\b", re.I)
     def confunde(self, g):
@@ -263,11 +265,11 @@ class Gen:
             if h(x['t']) in vistos:
                 continue
             try:
-                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente personal de Demon. Demon es tu USUARIO: él te escribe y tú le respondes. '
-                                     'Tú eres APOLO y NUNCA eres Demon. Tu forma de ser:\n' + voz},
-                                    {'role': 'user', 'content': f'Dato que sabes de Demon: "{x["t"]}"\n\nEscribe 4 pares DISTINTOS: una pregunta corta que Demon te haría sobre esto '
+                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente personal de {USUARIO}. {USUARIO} es tu USUARIO: él te escribe y tú le respondes. '
+                                     'Tú eres APOLO y NUNCA eres {USUARIO}. Tu forma de ser:\n' + voz},
+                                    {'role': 'user', 'content': f'Dato que sabes de {{USUARIO}}: "{x["t"]}"\n\nEscribe 4 pares DISTINTOS: una pregunta corta que {{USUARIO}} te haría sobre esto '
                                      '(informal, hablándote de tú) y tu respuesta de 1-2 frases que diga el dato con claridad, hablándole de tú ("te llamas…", "tu taller…"). '
-                                     'Las preguntas tienen que ser SOBRE ESTE DATO (no inventes temas). Menciona nombres (Demon, APOLO) SOLO si la pregunta es sobre nombres. '
+                                     'Las preguntas tienen que ser SOBRE ESTE DATO (no inventes temas). Menciona nombres ({USUARIO}, APOLO) SOLO si la pregunta es sobre nombres. '
                                      'Nada de "usted" ni "su". Sin añadir datos que no estén en el dato. JSON {"pares":[{"pregunta":"...","respuesta":"..."}]}'}], 900)
                 for p in r.get('pares', []):
                     q, resp = str(p.get('pregunta', '')).strip(), str(p.get('respuesta', '')).strip()
@@ -357,7 +359,8 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('--dir', default='/srv/entrenamiento/apolo')
     p.add_argument('--objetivo', type=int, default=1200)
-    p.add_argument('--url', default='http://192.168.1.86:11434')
+    p.add_argument('--url', required=True, help='Ollama maestro, p. ej. http://<host>:11434')
+    p.add_argument('--usuario', default='tu usuario', help='nombre con el que el usuario habla a APOLO')
     p.add_argument('--modelo', default='qwen3:8b')
     p.add_argument('--nota', type=int, default=4)
     p.add_argument('--identidad', type=int, default=150)

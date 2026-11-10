@@ -8,7 +8,8 @@ const path = require('path');
 const RAIZ = path.join(__dirname, '..', '..');
 const SALTAR = new Set(['node_modules', '.git', 'dist', 'lanzamiento', 'test', 'vendor', '.pio', 'docs']);
 const EXT = /\.(js|cjs|mjs|ts|ps1|cmd|bat|py|html|json|nsh|cpp|h)$/i;
-const PROHIBIDO = /[A-Z]:[\\/]+RobotCompanion|\\Users\\yosoy|\/Users\/yosoy/i;
+// rutas del autor y los equipos de su red (Proxmox, Pi, Ollama…): cada instalación configura los suyos
+const PROHIBIDO = /[A-Z]:[\\/]+RobotCompanion|\\Users\\yosoy|\/Users\/yosoy|\b192\.168\.1\.(102|124|127|86|206|31|84|176)\b/i;
 
 function recorrer(dir, out) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -22,7 +23,10 @@ function recorrer(dir, out) {
 
 test('sin rutas fijas de la máquina del autor en el código', () => {
   const malos = [];
-  for (const f of recorrer(RAIZ, [])) {
+  // Con git, solo lo que se publicaría (con seguimiento o nuevo no excluido): lo excluido en .git/info/exclude es local.
+  let lista = null;
+  try { lista = new Set(require('child_process').execFileSync('git', ['ls-files', '-co', '--exclude-standard'], { cwd: RAIZ, encoding: 'utf8' }).split('\n').filter(Boolean).map(x => path.join(RAIZ, x))); } catch { lista = null; }
+  for (const f of recorrer(RAIZ, []).filter(x => !lista || lista.has(x))) {
     fs.readFileSync(f, 'utf8').split('\n').forEach((l, i) => {
       if (PROHIBIDO.test(l)) malos.push(`${path.relative(RAIZ, f)}:${i + 1}`);
     });
