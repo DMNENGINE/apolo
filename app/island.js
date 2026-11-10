@@ -936,6 +936,7 @@ document.addEventListener('mousemove', e => { if (bridge.plataforma === 'linux')
 // Un clic corto sigue siendo un clic (sacudida, 3 = mareo). Main mueve la ventana con el cursor y al soltar la coloca, la guarda y la re-ancla.
 const PULSACION_MS = 280, UMBRAL_PX = 6;
 let gesto = null, arrastrando = false, tragarClic = false;
+let muestraArrastre = null;
 function zonaArrastre(t) {
   if (!t || !t.closest) return null;
   if (t.closest('.rwrap')) return 'robot';
@@ -948,6 +949,14 @@ document.addEventListener('pointerdown', e => {
   gesto = { x: e.screenX, y: e.screenY, id: e.pointerId, el: e.target, t: z === 'robot' ? setTimeout(empezarArrastre, PULSACION_MS) : null };
 });
 document.addEventListener('pointermove', e => {
+  if (arrastrando) {
+    const anterior = muestraArrastre;
+    muestraArrastre = { x: e.screenX, y: e.screenY, t: e.timeStamp };
+    if (anterior && e.timeStamp > anterior.t) {
+      const segundos = Math.max(.008, (e.timeStamp - anterior.t) / 1000);
+      casco.inercia((e.screenX - anterior.x) / segundos, (e.screenY - anterior.y) / segundos);
+    }
+  }
   if (gesto && !arrastrando && Math.hypot(e.screenX - gesto.x, e.screenY - gesto.y) > UMBRAL_PX) empezarArrastre();
 });
 function empezarArrastre() {
@@ -955,6 +964,7 @@ function empezarArrastre() {
   clearTimeout(gesto.t); arrastrando = true; tragarClic = true;
   try { gesto.el.setPointerCapture(gesto.id); } catch { }
   document.body.classList.add('arrastrando'); ponerInteractivo(true); enviarForma();
+  muestraArrastre = null;
   bridge.arrastre('inicio');
   lastActivity = Date.now(); hacerGesto('sorpresa', 0.9, '');     // "¡me levantas!"
 }
@@ -963,6 +973,7 @@ function terminarGesto() {
   clearTimeout(gesto.t); gesto = null;
   if (!arrastrando) return;
   arrastrando = false; document.body.classList.remove('arrastrando'); setTimeout(enviarForma, 50);
+  muestraArrastre = null; casco.inercia(0, 0);
   bridge.arrastre('fin'); sound.play('blip');
   setTimeout(() => { tragarClic = false; }, 80);           // el click que llega justo tras soltar no cuenta (ni sacudida ni mareo)
   if (ultimoPunto) probarRaton(ultimoPunto.x, ultimoPunto.y);

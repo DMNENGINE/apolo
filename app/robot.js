@@ -332,6 +332,9 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
 
   // ---------- bucle ----------
   let last = null, hxS = 0, hyS = 0, fps = 60, acc = 0, wob = 0, spin = 0, spinA = 0, react = 0, prevState = 'reposo', ultimoGlow = '';
+  let elasticidad = 0, velocidadElastica = 0, impulso = 0;
+  let inclinacionX = 0, inclinacionZ = 0, velocidadX = 0, velocidadZ = 0;
+  let viajeX = 0, viajeY = 0, ultimoViaje = -Infinity, respiracionT = 0;
   const col = new THREE.Color();
   function frame(now) {
     if (muerto) return;
@@ -399,6 +402,38 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       else if (gesto === 'navegando') { gy = Math.sin(t * 1.3) * .35 * g; gx = .08 * g + Math.sin(t * .65) * .06 * g; }   // recorre la página con la mirada
       else if (gesto === 'feliz') gz = Math.sin(t * 5) * .08 * g;
     }
+    // Un solo muelle absorbe los impulsos y vuelve a la forma original.
+    const suave = movimientoSuave.matches;
+    let formaObjetivo = 0;
+    if (gestoActivo('celebrar')) {
+      const t = (now - gestoIni) / 1000, f = Math.min(1, (now - gestoIni) / (gestoHasta - gestoIni));
+      formaObjetivo = (.065 * Math.sin(t * 18 - Math.PI / 2)) * Math.sin(f * Math.PI);
+    } else if (gestoActivo('saludo')) {
+      const t = (now - gestoIni) / 1000, f = Math.min(1, (now - gestoIni) / (gestoHasta - gestoIni));
+      formaObjetivo = Math.sin(t * 9) * .025 * Math.sin(f * Math.PI);
+    }
+    if (suave) {
+      gx = gy = gz = gpy = spin = spinA = wob = 0;
+      elasticidad = velocidadElastica = impulso = 0;
+      inclinacionX = inclinacionZ = velocidadX = velocidadZ = 0;
+      viajeX = viajeY = 0;
+    } else {
+      velocidadElastica += impulso; impulso = 0;
+      const reciente = now - ultimoViaje < 140;
+      for (let i = 0; i < pasos; i++) {
+        velocidadElastica += ((formaObjetivo - elasticidad) * 190 - velocidadElastica * 17) * subpaso;
+        elasticidad += velocidadElastica * subpaso;
+        velocidadX += (((reciente ? viajeY : 0) - inclinacionX) * 95 - velocidadX * 13) * subpaso;
+        velocidadZ += (((reciente ? -viajeX : 0) - inclinacionZ) * 95 - velocidadZ * 13) * subpaso;
+        inclinacionX += velocidadX * subpaso; inclinacionZ += velocidadZ * subpaso;
+      }
+    }
+    // Dos ritmos mezclados; al dormir la respiración se hace lenta y profunda.
+    respiracionT += step * (1.1 - .48 * cur.sleep);
+    const respiracion = Math.sin(respiracionT) * .78 + Math.sin(respiracionT * 1.73 + .6) * .22;
+    const deformacion = Math.max(-.09, Math.min(.09, elasticidad));
+    const escalaY = 1 + deformacion, escalaLateral = 1 / Math.sqrt(escalaY);
+    head.scale.set(escalaLateral, escalaY, escalaLateral);
     // compuerta: se abre con un golpe seco (rebote) y se cierra despacio; dentro el nido late
     if (abrirHasta && performance.now() > abrirHasta) { abrirObj = 0; abrirHasta = 0; }
     abierto += (abrirObj - abierto) * (1 - Math.pow(abrirObj > abierto ? .0008 : .02, step));
@@ -411,10 +446,11 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       for (const par of nido.userData.ojos.children) { const f = (now / 1000 + par.userData.fase) % 4; par.scale.y = f < .12 ? .15 : 1; par.position.x += Math.sin(now / 700 + par.userData.fase) * .0006; }
       if (abierto > .4) { gx += -.06 * abierto; wob = Math.max(wob, .08 * abierto); }
     }
-    head.rotation.y = hxS * .38 * (1 - cur.sleep) + spinA + gy; head.rotation.x = hyS * .22 * (1 - cur.sleep) + cur.sleep * .32 + gx;   // dormido: cabeza caída
-    head.rotation.z = Math.sin(now / 45) * .2 * wob + gz;                   // sacudida al tocarlo
-    // flota; dormido respira más lento y hondo
-    head.position.y = (cur.sleep > .5 ? Math.sin(now / 1600) * .06 : Math.sin(now / 900) * .04) + Math.abs(Math.sin(now / 90)) * .12 * wob + gpy;
+    head.rotation.y = hxS * .38 * (1 - cur.sleep) + spinA + gy; head.rotation.x = hyS * .22 * (1 - cur.sleep) + cur.sleep * .32 + gx + inclinacionX;   // dormido: cabeza caída
+    head.rotation.z = Math.sin(now / 45) * .2 * wob + gz + inclinacionZ;                   // sacudida al tocarlo
+    // La base acompaña la deformación sin añadir geometría ni otro bucle.
+    head.position.y = respiracion * (.04 + .02 * cur.sleep) * (suave ? .15 : 1)
+      + (suave ? 0 : Math.abs(Math.sin(now / 90)) * .12 * wob + gpy + deformacion * .3);
     if (Math.abs(spin) < .02) spinA *= Math.pow(.02, step);
     col.setHSL(cur.hue / 360, 1, .55);
     let lvl = cur.glow;
@@ -444,7 +480,14 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   const MSG_ESTADO = () => ({ permiso: T('¿PERMISO?'), listo: T('✓ TAREA COMPLETA'), error: T('✗ ERROR'), dormido: '' });
   return {
     lookAtClient,
-    poke() { wob = 1; flash('listo', T('¡EY!'), 1.1); },
+    // Velocidad de arrastre en píxeles/segundo; caduca sola si dejan de llegar eventos.
+    inercia(x = 0, y = 0) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      viajeX = Math.max(-.24, Math.min(.24, x / 6500));
+      viajeY = Math.max(-.18, Math.min(.18, y / 6500));
+      ultimoViaje = performance.now();
+    },
+    poke() { impulso = -.85; wob = 1; flash('listo', T('¡EY!'), 1.1); },
     hud(msg, secs = 3, st = 'trabajando') { flash(st, msg, secs); },
     // fuerza 1..3: cuantas más vueltas, más largo el mareo con ojos de remolino
     dizzy(fuerza = 1) {
@@ -467,7 +510,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     cerrarCasco() { abrirObj = 0; abrirHasta = 0; },
     abierto: () => abierto,
     // se muda de monitor: rueda en la dirección del viaje (dir = 1 derecha, -1 izquierda)
-    rodar(dir = 1) { const base = react > 0 ? prevState : stateName; spin = 1.7 * dir; wob = .35; flash(base === 'dormido' ? 'reposo' : base, '', 1.3); },
+    rodar(dir = 1) { const base = react > 0 ? prevState : stateName; spin = 1.7 * dir; wob = .35; this.inercia(dir * 1100, 0); impulso = -.45; flash(base === 'dormido' ? 'reposo' : base, '', 1.3); },
     setState(name, msg = '') {
       if (!STATES[name]) return;
       if (react > 0) { prevState = name; prevMsg = msg || MSG_ESTADO()[name] || ''; return; }
