@@ -565,6 +565,14 @@ async function startNucleo() {
   try { const d = await iniciarDaemon({ nucleo }); console.log(`[núcleo] API en :${d.puerto}${(nucleo.cfg.red?.permitidos || []).length ? ` (LAN solo: ${nucleo.cfg.red.permitidos.join(", ")})` : " (solo este equipo)"} · modelo por defecto ${nucleo.cfg.modeloPorDefecto}`); }
   catch (e) { console.error('[núcleo] sin API HTTP:', e.message); }
   try { conectarOjo(); } catch (e) { console.error('[ojo]', e.message); }   // nucleo.nodos lo crea iniciarDaemon
+  // menú de APOLO: Ctrl + Alt + clic derecho en cualquier parte → caja de herramientas junto al cursor (main/menu-apolo.js)
+  try {
+    const menuApolo = require('./main/menu-apolo').crearMenuApolo({ dir: __dirname, nucleo: () => nucleo, handleText,
+      panelUrl: r => { let tok = ''; try { tok = fs.readFileSync(path.join(nucleo.cfg.dir, 'token'), 'utf8').trim(); } catch { } return `http://127.0.0.1:${nucleo.cfg.puerto}/#/${r}&token=${tok}`; },
+      decir: t => { if (win && !win.isDestroyed()) win.webContents.send('answer', { titulo: 'APOLO', texto: t }); } });
+    menuApolo.arrancar();
+    app.on('will-quit', () => menuApolo.parar());
+  } catch (e) { console.error('[menú APOLO]', e.message); }
   const toIsland = ev => { ev._id = nextId++; ev._t = Date.now(); if (win && !win.isDestroyed()) win.webContents.send('event', ev); };
   // entrenamiento del modelo propio en Proxmox (core/entrenamiento.js): en la isla es una "terminal" más que trabaja —
   // el robot se pone a trabajar, la fila muestra paso/loss y al terminar celebra (Stop) o se pone triste (StopFailure)
