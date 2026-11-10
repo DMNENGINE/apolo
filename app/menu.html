@@ -24,6 +24,7 @@
   .sec { color:var(--mut); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; padding:8px 8px 3px }
   .it { display:flex; gap:9px; align-items:center; padding:6px 8px; border-radius:8px; cursor:pointer; animation:aparece .18s both }
   @keyframes aparece { from { opacity:0; transform:translateX(-4px) } }
+  .it.deshabilitada{opacity:.5;cursor:not-allowed}.it.deshabilitada .d{white-space:normal}
   .it .ic { width:20px; text-align:center; flex:none } .it .t { flex:1; min-width:0 } .it .d { color:var(--mut); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
   .it.sel, .it:hover { background:rgba(61,220,132,.12); outline:1px solid rgba(61,220,132,.3) }
   .it.ia.sel, .it.ia:hover { background:rgba(53,200,240,.13); outline-color:rgba(53,200,240,.4) }
@@ -50,17 +51,18 @@ function construir() {
   const L = [], add = (sec, ic, t, accion, d, extra = {}) => L.push({ sec, ic, t, accion, d, ...extra });
   const acc = C.acciones || [];
   const recientes = acc.filter(a => a.usos > 0).sort((a, b) => b.usos - a.usos).slice(0, 3);
-  for (const a of recientes) add('Recientes', a.ic, a.t, { tipo: 'accion', id: a.id }, a.d, { propia: a.propia, id: a.id, rec: true });
+  for (const a of recientes) add('Recientes', a.ic, a.t, { tipo: 'accion', id: a.id }, a.d,  { propia: a.propia, id: a.id, rec: true });
   const para = acc.filter(a => a.cuando !== 'siempre' && !recientes.includes(a));
-  for (const a of para) add(C.objetivo.length ? 'Para esto' : (C.navegador ? 'En esta página' : 'Acciones'), a.ic, a.t, { tipo: 'accion', id: a.id }, a.d, { propia: a.propia, id: a.id });
+  for (const a of para) add(C.objetivo.length ? 'Para esto' : (C.navegador ? 'En esta página' : 'Acciones'), a.ic, a.t, { tipo: 'accion', id: a.id }, a.d,  { propia: a.propia, id: a.id });
   add('Arañas', '🕷', 'Soltar arañas', null, C.navegador ? 'en la pestaña del navegador' : (C.archivo ? 'sobre ' + base(C.archivo) : ''), { grupo: 'aranas' });
-  for (const [k, ic, t, d] of [['lectora', '📖', 'Lectora', 'lee entero, resume y marca trampas'], ['ia', '🤖', 'Detectora de IA', '¿lo escribió una IA?'], ['codigo', '🛡', 'De código', 'fallos de seguridad'], ['discord', '💬', 'De Discord', 'resumen de tus servidores'], ['radar', '📡', 'Radar', 'lo nuevo en GitHub y Hugging Face']])
+  for (const [k, ic, t, d] of [['lectora', '📖', 'Lectora', 'lee entero, resume y marca trampas'], ['ia', '🤖', 'Detectora de IA', 'señales de estilo; no prueba autoría'], ['codigo', '🛡', 'De código', 'fallos de seguridad'], ['discord', '💬', 'De Discord', 'resumen de tus servidores'], ['radar', '📡', 'Radar', 'lo nuevo en GitHub y Hugging Face']])
     add('Arañas', ic, t, { tipo: 'arana', arana: k }, d, { padre: 'aranas' });
-  for (const a of acc.filter(a => a.cuando === 'siempre' && !recientes.includes(a))) add('APOLO', a.ic, a.t, { tipo: 'accion', id: a.id }, a.d, { propia: a.propia, id: a.id });
+  for (const a of acc.filter(a => a.cuando === 'siempre' && !recientes.includes(a))) add('APOLO', a.ic, a.t, { tipo: 'accion', id: a.id }, a.d,  { propia: a.propia, id: a.id });
   add('Abrir', '🗔', 'Páginas de APOLO', null, '', { grupo: 'abrir' });
   for (const [r, ic, t] of [['agentes', '🛰', 'Mission Control'], ['chat', '💭', 'Chat'], ['revision', '✂', 'Editor de vídeos'], ['estudio-video', '🎞', 'Estudio de vídeo'], ['entrenamiento', '🧬', 'Entrenamiento'], ['turno', '🌙', 'Turno de noche'], ['reuniones', '🎙', 'Reuniones'], ['gamer', '🎮', 'Modo Gamer'], ['dashboards', '📊', 'Dashboards'], ['memoria', '🧠', 'Memoria']])
     add('Abrir', ic, t, { tipo: 'panel', ruta: r }, '', { padre: 'abrir' });
   for (const p of C.plugins || []) add('Abrir', '🧩', p.titulo, { tipo: 'panel', ruta: p.ruta }, 'plugin', { padre: 'abrir' });
+  for(const i of L){const tipo=i.accion?.tipo==='arana'?i.accion.arana:(acc.find(a=>a.id===i.accion?.id)?.arana);const estado=C.aranas?.[tipo];if(estado?.disponible===false){i.d=estado.razon;i.deshabilitada=true;}}
   return L;
 }
 
@@ -78,7 +80,7 @@ function pintar() {
   let h = '', sec = '';
   v.forEach((i, k) => {
     if (i.sec !== sec && !i.padre) { sec = i.sec; h += `<div class="sec">${esc(sec)}</div>`; }
-    h += `<div class="it ${k === sel ? 'sel' : ''} ${i.ia ? 'ia' : ''} ${i.padre && !texto() ? 'sub' : ''}" data-k="${k}" style="animation-delay:${Math.min(k, 14) * 12}ms"><span class="ic">${i.ic}</span>` +
+    h += `<div class="it ${k === sel ? 'sel' : ''} ${i.ia ? 'ia' : ''} ${i.deshabilitada ? 'deshabilitada' : ''} ${i.padre && !texto() ? 'sub' : ''}" role="button" aria-disabled="${!!i.deshabilitada}" data-k="${k}" style="animation-delay:${Math.min(k, 14) * 12}ms"><span class="ic">${i.ic}</span>` +
       `<span class="t">${esc(i.ia && !i.guardar ? '«' + i.t + '»' : i.t)}${i.d ? `<div class="d">${esc(i.d)}</div>` : ''}</span>` +
       `${i.grupo ? `<span class="fl">${abiertos.has(i.grupo) ? '▾' : '▸'}</span>` : ''}${i.propia ? `<span class="x" data-borrar="${esc(i.id)}" title="Borrar esta acción">✕</span>` : ''}</div>`;
   });
@@ -89,22 +91,26 @@ function pintar() {
   $('#ayuda').textContent = texto() ? 'Enter = pedírselo a APOLO · Mayús+Enter nueva línea' : '↑↓ elige · Enter';
 }
 async function activar(k) {
+ try {
   const i = visibles()[k]; if (!i) return;
+  if(i.deshabilitada){$('#ayuda').textContent=i.d;return;}
   if (i.grupo) { abiertos.has(i.grupo) ? abiertos.delete(i.grupo) : abiertos.add(i.grupo); pintar(); return; }
   if (i.guardar) {
     const r = await window.menuApolo.guardar({ texto: texto() });
     C = await window.menuApolo.contexto(); items = construir(); $('#q').value = ''; sel = 0; pintar();
     $('#ayuda').textContent = `✓ Guardada (sale cuando haya ${r.cuando === 'siempre' ? 'cualquier cosa' : r.cuando})`; return;
   }
-  if (i.accion) window.menuApolo.ejecutar(i.accion);
+  if (i.accion) await ejecutar(i.accion);
+ } catch(e) {$('#ayuda').textContent=e.message;}
 }
-$('#l').addEventListener('mousemove', e => { const it = e.target.closest('.it'); if (it && +it.dataset.k !== sel) { sel = +it.dataset.k; pintar(); } });
+$('#l').addEventListener('mousemove', e => { const it=e.target.closest('.it');if(it&&+it.dataset.k!==sel){sel=+it.dataset.k;document.querySelectorAll('.it.sel').forEach(n=>n.classList.remove('sel'));it.classList.add('sel');} });
 $('#l').addEventListener('click', async e => {
   const b = e.target.closest('[data-borrar]');
   if (b) { await window.menuApolo.borrar(b.dataset.borrar); C = await window.menuApolo.contexto(); C.acciones = C.acciones.filter(a => a.id !== b.dataset.borrar); items = construir(); pintar(); return; }
   const it = e.target.closest('.it'); if (it) activar(+it.dataset.k);
 });
-$('#env').addEventListener('click', () => { if (texto()) window.menuApolo.ejecutar({ tipo: 'prompt', texto: texto() }); });
+async function ejecutar(accion){try{const r=await window.menuApolo.ejecutar(accion);if(r?.ok===false)$('#ayuda').textContent=r.error;}catch(e){$('#ayuda').textContent=e.message;}}
+$('#env').addEventListener('click', () => { if (texto()) ejecutar({ tipo:'prompt',texto:texto() }); });
 $('#q').addEventListener('input', () => { sel = 0; const t = $('#q'); t.style.height = '20px'; t.style.height = Math.min(72, t.scrollHeight) + 'px'; pintar(); });
 addEventListener('keydown', e => {
   const n = visibles().length;
@@ -120,7 +126,7 @@ addEventListener('keydown', e => {
   const chips = [];
   if (C.seleccion && C.seleccion.length) chips.push(C.seleccion.length === 1 ? '📌 ' + base(C.seleccion[0]) : `📌 ${C.seleccion.length} seleccionados`);
   else if (C.carpeta) chips.push('📁 ' + base(C.carpeta));
-  for (const t of C.tipos || []) if (CHIP[t] && !(t === 'carpeta' && !C.seleccion.length)) chips.push(CHIP[t]);
+  for (const t of C.tipos || []) if (CHIP[t] && !(t === 'carpeta' && !C.seleccion?.length)) chips.push(CHIP[t]);
   if (!chips.length) chips.push(C.app ? 'en ' + C.app : 'tu caja de herramientas');
   $('#chips').innerHTML = chips.slice(0, 4).map(c => `<span class="chip">${esc(c)}</span>`).join('');
   items = construir(); pintar(); $('#q').focus();

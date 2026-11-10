@@ -2,7 +2,14 @@
 # del programa) y escribe por stdout UNA línea JSON con dónde fue y el contexto (Explorador: carpeta y selección).
 # Lo arranca main/menu-apolo.js; si muere, lo relanza. Sin otros efectos: no toca ningún otro clic ni tecla.
 # Guardado con BOM (PowerShell 5.1 lee los .ps1 sin BOM como ANSI).
+param([int]$Padre = 0)
 $ErrorActionPreference = 'Stop'
+$procesoPadreMenu = $null
+if ($Padre -gt 0) {
+  $procesoPadreMenu = Get-Process -Id $Padre -ErrorAction SilentlyContinue
+  if (-not $procesoPadreMenu) { exit 0 }
+  try { [void]$procesoPadreMenu.Handle } catch { exit 0 }
+}
 Add-Type -ReferencedAssemblies System.Windows.Forms -TypeDefinition @"
 using System;
 using System.Collections.Concurrent;
@@ -15,7 +22,7 @@ public static class GanchoMenu {
   [StructLayout(LayoutKind.Sequential)] struct PT { public int x, y; }
   [StructLayout(LayoutKind.Sequential)] struct MSLL { public PT pt; public uint data, flags, time; public IntPtr extra; }
   [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr h; public uint m; public IntPtr w, l; public uint t; public PT p; }
-  [DllImport("user32.dll")] static extern IntPtr SetWindowsHookEx(int id, Proc fn, IntPtr mod, uint hilo);
+  [DllImport("user32.dll", SetLastError=true)] static extern IntPtr SetWindowsHookEx(int id, Proc fn, IntPtr mod, uint hilo);
   [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr h, int code, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] static extern int GetMessage(out MSG m, IntPtr h, uint a, uint b);
   [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
@@ -30,6 +37,8 @@ public static class GanchoMenu {
 
   public static BlockingCollection<string> Cola = new BlockingCollection<string>();
   static Proc proc; static bool comido;
+  static readonly ManualResetEvent iniciado = new ManualResetEvent(false);
+  static bool listo; static int fallo;
 
   static bool Pulsada(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
   static IntPtr Raton(int code, IntPtr w, IntPtr l) {
@@ -52,10 +61,14 @@ public static class GanchoMenu {
     var t = new Thread(() => {
       SetProcessDPIAware();
       proc = Raton;
-      SetWindowsHookEx(14, proc, GetModuleHandle(null), 0);                                // WH_MOUSE_LL
+      IntPtr gancho = SetWindowsHookEx(14, proc, GetModuleHandle(null), 0);
+      fallo = gancho == IntPtr.Zero ? Marshal.GetLastWin32Error() : 0;
+      listo = gancho != IntPtr.Zero; iniciado.Set();
+      if (!listo) return;                                // WH_MOUSE_LL
       MSG m; while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0) { }
     });
     t.IsBackground = true; t.Start();
+    if (!iniciado.WaitOne(3000) || !listo) throw new Exception("No se pudo activar Ctrl+Alt+clic derecho (Win32 " + fallo + ")");
   }
 }
 "@
@@ -64,7 +77,9 @@ public static class GanchoMenu {
 Write-Output '{"evento":"listo"}'; [Console]::Out.Flush()
 $shell = New-Object -ComObject Shell.Application
 while ($true) {
-  $l = [GanchoMenu]::Cola.Take()
+  if ($procesoPadreMenu -and $procesoPadreMenu.HasExited) { break }
+  [string]$l = ''
+  if (-not [GanchoMenu]::Cola.TryTake([ref]$l, 1000)) { continue }
   # este proceso acaba de recibir la entrada del usuario: puede dejar que APOLO pase a primer plano (si no, Windows no le da el foco
   # y el menú se cierra al instante por "perder el foco")
   [void][GanchoMenu]::AllowSetForegroundWindow(-1)
