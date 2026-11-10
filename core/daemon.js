@@ -162,6 +162,14 @@ function iniciar(opciones = {}) {
           ...(a.tipo === 'html' ? { 'content-security-policy': "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:", 'x-frame-options': 'SAMEORIGIN' } : {}) });
         return fs.createReadStream(a.ruta).pipe(res);
       }
+      // vista previa de un prompt del banco: la página va aislada (sin acceso al panel ni a su token), como las pestañas .html de plugins
+      if (M === 'GET' && p[0] === 'prompt-vista' && p[1] && !p[2] && !lanMovil) {
+        const f = n.prompts?.rutaVista(decodeURIComponent(p[1]));
+        if (!f) { res.writeHead(404); return res.end(); }
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff', 'x-frame-options': 'SAMEORIGIN',
+          'content-security-policy': "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:" });
+        return fs.createReadStream(f).pipe(res);
+      }
       if (M === 'GET' && p[0] !== 'v1') {
         const nombre = p.length ? p.join('/') + (u.pathname.endsWith('/') ? '/index.html' : '') : 'index.html';
         if (lanMovil && !MV.estaticoMovil(nombre)) { res.writeHead(403); return res.end(); }
@@ -240,7 +248,7 @@ function iniciar(opciones = {}) {
       }
       if (n.extensiones[p[1]]?.http) {                         // extensiones de la app: conectores (correo, GitHub…), telegram
         try {
-          let cuerpo = ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req, p[1] === 'mundo' ? 8e6 : 1e6) : {};   // el mundo puede venir con la imagen de referencia
+          let cuerpo = ['POST', 'PUT', 'PATCH'].includes(M) ? await leer(req, p[1] === 'mundo' ? 8e6 : p[1] === 'whatsapp' && p[2] === 'foto' ? 36e6 : 1e6) : {};   // el mundo puede venir con la imagen de referencia
           if (disp) cuerpo = p[1] === 'panico' ? { origen: `movil:${disp.nombre}` } : { texto: cuerpo.texto };   // móvil: pánico, o el encargo del turno sin carpeta ni modelo
           else if (p[1] === 'panico') cuerpo = { origen: String(cuerpo.origen || req.headers['x-cliente'] || 'panel').slice(0, 40), quien: String(cuerpo.quien || req.headers['x-cliente'] || 'panel').slice(0, 40) };
           const r = await n.extensiones[p[1]].http(M, p, cuerpo, Object.fromEntries(u.searchParams));

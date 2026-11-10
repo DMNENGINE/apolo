@@ -1501,3 +1501,7 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .rve-seg span { display: block; padding: 6px 12px; font-size: 13px; color: var(--txt-2); border-right: 1px solid var(--borde-2); }
 .rve-seg label:last-child span { border-right: 0; }
 .rve-seg input:checked + span { background: color-mix(in srgb, var(--acento) 22%, transparent); color: var(--txt); font-weight: 600; }
+
+/* WhatsApp programable */
+.wa-accion { padding: 10px; margin-bottom: 8px; }
+.wa-accion .campo { margin-bottom: 6px; }

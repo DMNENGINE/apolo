@@ -115,6 +115,11 @@ function crearNucleo(opciones = {}) {
     horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
   tareas.registrarInterna('sueno', async () => { await sueno.dormir({ motivo: 'noche' }); return ''; });   // el aviso llega a la hora del briefing
   herramientas.registrar([grafoMod.HERRAMIENTA]);
+  // WhatsApp programable: reglas de respuesta, envíos de texto/foto/voz y agenda (main.js le conecta el plugin y la voz)
+  const whatsappAuto = require('./whatsapp-auto').crearWhatsappAuto({ cfg, bus, tareas, generarJSON: generarJSONvivo, modelo: modeloCerebro,
+    panico: () => !!nucleo?.panico?.activo?.(), auditar: x => nucleo?.auditoria?.registrar?.(x) });
+  nucleo.whatsappAuto = whatsappAuto;
+  herramientas.registrar(whatsappAuto.HERRAMIENTAS);
   herramientas.registrar(require('./archive').HERRAMIENTAS);    // Internet Archive: buscar, ver, leer libros, Wayback, guardar
   // lo que el usuario hace en Claude Code → memoria + línea de tiempo + diario (tarea nocturna, core/aprender-cc.js)
   // + Codex, Gemini CLI, Qwen Code y opencode (core/conversaciones-agentes.js); los tests pasan opciones.lectoresAgentes
@@ -192,6 +197,17 @@ function crearNucleo(opciones = {}) {
   const diseno = require('./diseno').crearDiseno({ cfg, mcpRemotos, generarJSON: generarJSONvivo, memoria, tareas, bus });
   herramientas.registrar(diseno.HERRAMIENTAS);
   nucleo.diseno = diseno; nucleo.extensiones.diseno = { http: (...a) => diseno.http(...a) };
+  // laboratorio de prompts: pestaña «Prompts» del panel; banco propio en <datos>/prompts (no depende de la red)
+  const prompts = require('./prompts').crearPrompts({ cfg, bus, proveedores, generarJSON: generarJSONvivo, modelo: modeloCerebro });
+  nucleo.prompts = prompts; nucleo.extensiones.prompts = { http: (...a) => prompts.http(...a) };
+  // de una fuente (enlace, vídeo o texto) a una skill: dossier real → borrador en el taller → escáner
+  const fuenteSkill = require('./fuente-skill').crearAnalizador({ cfg, proveedores, generarJSON: generarJSONvivo, modelo: () => cfg.modeloPorDefecto, taller: skills.taller, almacen: skills.almacen,
+    charlar: async ({ system, prompt }) => {                             // modo charla de reserva: texto libre, lo limpia el analizador
+      const { api, model } = proveedores.resolver(cfg.modeloPorDefecto);
+      const r = await api.chat({ model, system, mensajes: [{ role: 'user', content: prompt }], herramientas: [], maxTokens: 4000 });
+      return (r && (r.texto ?? r.content)) || '';
+    } });
+  nucleo.fuenteSkill = fuenteSkill; nucleo.extensiones.fuente = { http: (...a) => fuenteSkill.http(...a) };
   // FASE 9: registro de auditoría encadenado + kill switch global
   const auditoria = require('./auditoria').crearAuditoria({ cfg, bus, boveda: cfg.boveda });
   permisos.ponerAuditoria(auditoria);

@@ -415,6 +415,42 @@ const HERRAMIENTAS = [
     ejecutar: async (a, ctx) => (ctx.skills ? ctx.skills.lista().map(s => `${s.activa ? '●' : '○'} ${s.slug}${s.externa ? ' [externa]' : ''} · escaneo ${s.escaneo?.nivel || 'pendiente'} · ${s.usos} usos · ${s.descripcion.slice(0, 160)}`).join('\n') || '(no hay skills instaladas)' : 'error: las skills no están disponibles aquí'),
   },
   // ---------- taller de skills (core/skills/taller.js) ----------
+  // análisis rápido de un binario PE desde el chat, con la bancada de la skill «ingenieria-inversa-pe»
+  {
+    nombre: 'analizar_binario', riesgo: 'lectura',
+    descripcion: 'Analiza un .exe/.dll de Windows SIN ejecutarlo: dice si es .NET o nativo, arquitectura, secciones, firma, y (si es .NET) tipos, métodos y referencias; también busca cadenas de interés (URL, claves, APIs como VirtualAlloc/Crypt32) y huellas de ofuscador (Costama/SmartAssembly/Themida/VMProtect/ConfuserEx…). ' +
+      'Devuelve JSON con la evidencia. Úsala antes de abrir un desensamblador y para decidir con qué herramienta seguir (ilspycmd para .NET, Ghidra/IDA/REA para nativo).',
+    parametros: {
+      type: 'object',
+      properties: {
+        ruta: { type: 'string', description: 'ruta absoluta del .exe o .dll' },
+        que: { type: 'string', enum: ['tipo', 'info', 'miembros', 'refs', 'cadenas', 'carcasa'], description: 'qué mirar (por defecto: tipo)' },
+        buscar: { type: 'string', description: 'solo para cadenas: texto a buscar (case-insensitive)' },
+      },
+      required: ['ruta'],
+    },
+    resumen: a => `${a.que || 'tipo'} · ${a.ruta}`,
+    ejecutar: async (a, ctx) => {
+      const fs = require('fs');
+      const path = require('path');
+      const { execFile } = require('child_process');
+      const base = process.env.APOLO_NUCLEO_DIR || path.join(process.env.APPDATA || '', 'robot-companion', 'nucleo');
+      const script = path.join(base, 'skills', 'ingenieria-inversa-pe', 'scripts', 'pe.py');
+      if (!fs.existsSync(script)) return `error: falta la bancada ${script} (activa la skill ingenieria-inversa-pe)`;
+      const ruta = String(a.ruta || '').replace(/^"|"$/g, '');
+      if (!fs.existsSync(ruta)) return `error: no existe ${ruta}`;
+      const que = ['tipo', 'info', 'miembros', 'refs', 'cadenas', 'carcasa'].includes(a.que) ? a.que : 'tipo';
+      const args = ['-X', 'utf8', script, que, ruta];
+      if (a.buscar) args.push(`--buscar=${a.buscar}`);
+      return new Promise(ok => {
+        execFile('python', args, { timeout: 120000, windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (e, stdout, stderr) => {
+          const salida = String(stdout || '').trim();
+          if (salida) return ok(salida.slice(0, 12000));
+          ok(`error: ${(stderr || (e && e.message) || 'sin salida').slice(0, 800)}`);
+        });
+      });
+    },
+  },
   {
     nombre: 'crear_skill', riesgo: 'escritura',
     descripcion: 'Convierte lo que habéis hecho en esta conversación en una skill reutilizable (borrador DESACTIVADO que el usuario revisa y activa). ' +

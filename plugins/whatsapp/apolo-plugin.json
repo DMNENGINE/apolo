@@ -1,6 +1,6 @@
 {
   "nombre": "whatsapp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "descripcion": "Canal de WhatsApp (vinculado como WhatsApp Web con QR, Baileys). Solo tu chat contigo mismo: hablar con APOLO, permisos 1/2/3 (los peligrosos piden CONFIRMO), tarjetas y notas de voz. Los mensajes de otras personas solo van a la app si activas avisar/auto.",
   "autor": "DMN / APOLO",
   "licencia": "MIT",

@@ -12,7 +12,7 @@ const M = require('../plugins/manifest');
 const { analizarEstatico } = require('../skills/escaner');
 
 const RAIZ = path.join(__dirname, '..', '..', 'plugins');
-const { crearWhatsapp, extraer, esMiChat, jidIgnorado } = require(path.join(RAIZ, 'whatsapp', 'wa.js'));
+const { crearWhatsapp, extraer, numeroDe, esMiChat, jidIgnorado } = require(path.join(RAIZ, 'whatsapp', 'wa.js'));
 const { crearDiscord, intentsDe } = require(path.join(RAIZ, 'discord', 'discord.js'));
 const { decidirDiscord } = require('../../shared/canales-flags');
 
@@ -62,7 +62,7 @@ test('canales2: manifests (red declarada, secretos en su espacio) y escáner est
 test('whatsapp: parseo de mensajes de Baileys (efímeros, ver una vez, pies de foto, audio) y filtro de tu chat (PN o LID)', () => {
   const yo = { pn: '34600111222@s.whatsapp.net', lid: '99887766@lid' };
   assert.deepStrictEqual(extraer({ key: { remoteJid: 'a@s.whatsapp.net', fromMe: true, id: 'X' }, message: { conversation: ' hola ' } }),
-    { id: 'X', jid: 'a@s.whatsapp.net', fromMe: true, participante: '', nombre: '', texto: 'hola', tipo: 'texto', audio: false });
+    { id: 'X', jid: 'a@s.whatsapp.net', alt: '', fromMe: true, participante: '', participanteAlt: '', nombre: '', texto: 'hola', tipo: 'texto', audio: false });
   assert.strictEqual(extraer({ key: {}, message: { ephemeralMessage: { message: { extendedTextMessage: { text: 'efímero' } } } } }).texto, 'efímero');
   assert.strictEqual(extraer({ key: {}, message: { viewOnceMessageV2: { message: { imageMessage: { caption: 'foto' } } } } }).tipo, 'imagen');
   assert.strictEqual(extraer({ key: {}, message: { documentWithCaptionMessage: { message: { documentMessage: { caption: 'pdf' } } } } }).texto, 'pdf');
@@ -83,13 +83,59 @@ function baileysFalso() {
     downloadMediaMessage: async () => Buffer.from('OggS-falso'),
     makeWASocket: opts => {
       const s = { opts, ev: new EventEmitter(), enviados: [], user: null, fuera: false,
-        sendMessage: async (jid, c) => { s.enviados.push([jid, c.text]); return { key: { id: 'out' + s.enviados.length } }; },
+        sendMessage: async (jid, c) => { s.enviados.push([jid, c.text]); (s.crudos ||= []).push([jid, c]); return { key: { id: 'out' + s.enviados.length } }; },
         sendPresenceUpdate: async () => { }, logout: async () => { s.fuera = true; }, end: () => { } };
       socks.push(s); return s;
     },
   };
   return { B, socks };
 }
+
+test('whatsapp: envíos por orden — foto y nota de voz solo desde la carpeta de salida, agenda, número real en chats LID y reglas con modo apagado', async () => {
+  const bf = baileysFalso(), alm = almacenFalso(), ev = canalFalso(alm.ruta);
+  const w = crearWhatsapp({ cargar: async () => bf.B, qr: async t => t, canal: ev.canal, almacen: alm, config: { conf: { modo: 'apagado' } } });
+  await w.vincular();
+  const s = bf.socks[0];
+  s.onWhatsApp = async n => (n === '13055551234' ? [{ exists: true, jid: '13055551234@s.whatsapp.net' }] : [{ exists: false }]);
+  s.user = { id: '34600111222:5@s.whatsapp.net', lid: '99887766:5@lid' };
+  s.ev.emit('connection.update', { connection: 'open' });
+  await hasta(() => w.estado().conectado);
+
+  const salida = path.join(alm.ruta, 'salida'); fs.mkdirSync(salida, { recursive: true });
+  const foto = path.join(salida, 'a.jpg'), voz = path.join(salida, 'a.ogg');
+  fs.writeFileSync(foto, 'jpg'); fs.writeFileSync(voz, 'ogg');
+  const JID = '13055551234@s.whatsapp.net';
+  await w.enviarOrden({ jid: JID, foto: { archivo: foto, pie: 'mira', miniatura: 'QQ==', ancho: 10, alto: 5 }, voz: { archivo: voz, segundos: 2.4, onda: [1, 2, 3] }, texto: 'hola' });
+  const [f, v, t] = s.crudos.map(x => x[1]);
+  assert.strictEqual(f.caption, 'mira'); assert.strictEqual(f.image.toString(), 'jpg'); assert.strictEqual(f.width, 10);
+  assert.strictEqual(v.ptt, true); assert.match(v.mimetype, /opus/); assert.strictEqual(v.seconds, 2); assert.deepStrictEqual([...v.waveform], [1, 2, 3]);
+  assert.strictEqual(t.text, 'hola');
+  const fuera = path.join(os.tmpdir(), 'x.jpg');
+  await assert.rejects(w.enviarOrden({ jid: JID, foto: { archivo: fuera } }), /fuera de la carpeta/);
+  await assert.rejects(w.enviarOrden({ jid: JID, foto: { archivo: path.join(salida, '..', 'creds.jpg') } }), /fuera de la carpeta/);
+  await assert.rejects(w.enviarOrden({ jid: '123-456@g.us', texto: 'x' }), /solo chats individuales/);
+
+  // agenda: el nombre guardado manda sobre el nombre de perfil; un homónimo no se elige solo
+  await assert.rejects(w.resolver({ destino: 'Mamá' }), /no tengo a/);
+  await assert.rejects(w.guardarContacto({ nombre: 'Mamá', numero: '+1 999' }), /(no tiene WhatsApp|no tengo)/);
+  await w.guardarContacto({ nombre: 'Mamá', numero: '+1 305 555 1234' });
+  assert.strictEqual((await w.resolver({ destino: 'mama' })).jid, JID);
+  s.ev.emit('contacts.upsert', [{ id: '555000111@s.whatsapp.net', notify: 'Mamá' }, { id: JID, notify: 'Otro nombre' }]);
+  assert.strictEqual((await w.resolver({ destino: 'mamá' })).jid, JID, 'gana la agenda');
+  assert.strictEqual(w.contactos({ q: 'mam' })[0].nombre, 'Mamá');
+
+  // modo apagado: nada llega a la app salvo que haya reglas activas, y entonces marcado soloReglas y con el número real del chat LID
+  const msg = (id, texto) => ({ key: { id, remoteJid: '777@lid', remoteJidAlt: '13051112222@s.whatsapp.net', fromMe: false }, pushName: 'Ana', message: { conversation: texto } });
+  s.ev.emit('messages.upsert', { type: 'notify', messages: [msg('m1', 'uno')] });
+  await dormir(20);
+  assert.strictEqual(ev.ajenos.length, 0);
+  w.ponerConfig({ reglasActivas: true });
+  s.ev.emit('messages.upsert', { type: 'notify', messages: [msg('m2', 'dos')] });
+  await hasta(() => ev.ajenos.length === 1);
+  assert.strictEqual(ev.ajenos[0].numero, '13051112222');
+  assert.strictEqual(ev.ajenos[0].soloReglas, true);
+  assert.strictEqual(numeroDe({ jid: '777@lid', alt: '' }, false), '777');
+});
 
 test('whatsapp: QR, solo tu chat contigo mismo, permisos 1/2/3 + CONFIRMO acotados, tarjetas R/D, voz, y terceros solo hacia la app', async () => {
   const bf = baileysFalso(), alm = almacenFalso(), ev = canalFalso(alm.ruta);
@@ -132,7 +178,7 @@ test('whatsapp: QR, solo tu chat contigo mismo, permisos 1/2/3 + CONFIRMO acotad
   up(a('34611000000@s.whatsapp.net', false, { conversation: 'ignorado' }));
   await hasta(() => ev.ajenos.length === 1); await dormir(30);
   assert.strictEqual(ev.ajenos.length, 1);
-  assert.deepStrictEqual({ ...ev.ajenos[0], historial: ev.ajenos[0].historial.length }, { jid: ANA, nombre: 'Ana', numero: '34999888777', texto: 'hola jefe', grupo: false, historial: 1, auto: false });
+  assert.deepStrictEqual({ ...ev.ajenos[0], historial: ev.ajenos[0].historial.length }, { jid: ANA, nombre: 'Ana', numero: '34999888777', texto: 'hola jefe', grupo: false, soloReglas: false, historial: 1, auto: false });
   assert.ok(!s.enviados.some(e => e[0] === ANA), 'nunca responde solo a terceros');
   // enviarA: solo lo pide la app, solo a quien te escribió, y el automático solo en modo auto
   await assert.rejects(w.enviarA({ jid: '34777@s.whatsapp.net', texto: 'x' }), /te escribió/);

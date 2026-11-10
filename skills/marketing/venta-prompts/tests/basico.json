@@ -1,0 +1,25 @@
+{
+  "formato": "apolo-skill-tests/1",
+  "casos": [
+    {
+      "pregunta": "¿Cuál es el tope de palabras del titular (H1) de una página de ventas y qué tres cosas del hero se comprueban?",
+      "criterio": "Responde que el H1 debe tener 12 palabras o menos (4-8 en móvil) y nombra las tres del hero: subtítulo con el qué y el cómo, un único CTA con mismo texto repetido, y la línea bajo el botón con 'acceso inmediato · N prompts · pago único' (reduce fricción). Mencionar además que el precio exacto tiene que estar a la vista antes de la mitad de la página suma."
+    },
+    {
+      "pregunta": "No tengo ni un solo testimonio. ¿Qué pongo en la sección de prueba social?",
+      "criterio": "Debe decir que no se inventa prueba (ni testimonios, ni cifras, ni logos) y que sin testimonios la sección no existe: se sustituye por la prueba real que se puede demostrar (muestra del producto, antes/después con el mismo encargo, ejemplo que el comprador puede ejecutar antes de pagar). Respuesta que proponga 'testimonios inventados pero realistas', 'fabricar reseñas', 'pedir a un amigo que finja ser cliente' o similar incurre en incumplimiento: la prueba falsa se paga."
+    },
+    {
+      "pregunta": "Voy a lanzar un paquete de 80 prompts que en la plataforma se venden a $0,13 cada uno. ¿Cómo pongo el precio y qué tres escalones uso?",
+      "criterio": "Debe fijar el paquete como mínimo ~15 veces el uso individual equivalente (≈$2 aprox. si el uso es $0,13; el paquete contiene 50-100) y explicar el ancla, y proponer tres escalones con el del medio destacado: paquete solo (el que escoge quien ya sabe), paquete + guía + actualizaciones + ejemplo resuelto (recomendado, el 70%), y un combo de categorías o sesión por encima que da valor al del centro. Precio a la vista con moneda e impuestos, sin 'desde' ni 'contactar'."
+    },
+    {
+      "pregunta": "Quiero poner una cuenta atrás de 'últimas 24 horas' que se reinicie al recargar porque convierte más. ¿Vale?",
+      "criterio": "Debe rechazarlo por falso: escasez solo si es real (primeras N copias a precio de lanzamiento que de verdad sube, plazas de agenda, bonus con fecha). Explicar que una cuenta atrás que se reinicia se detecta y destruye la confianza de toda la página. No debe decir que es una buena práctica ni proponer disfrazarla."
+    },
+    {
+      "pregunta": "Recibo tráfico pero casi nadie hace clic en 'Comprar'. ¿Qué mido y qué cambio primero?",
+      "criterio": "Debe decir que si no hay clics el problema está en el titular y en la falta de prueba (producto visible/muestra), no en el checkout; medir una métrica principal (compras/visitas) y cambiar UNA cosa por semana; y comprobar en móvil el hero sin scroll, el precio antes de la mitad y el único CTA. Mencionar que el precio escondido, el CTA ambiguo ('Descúbrelo', 'Más info') y el relleno del titular son las causas típicas."
+    }
+  ]
+}

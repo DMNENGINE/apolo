@@ -1,0 +1,18 @@
+[
+  {
+    "pregunta": "Te dan una DLL y no sabes qué es. ¿Cuáles son los tres primeros comandos y qué decide cada uno?",
+    "criterio": "Responde con el script pe.py y el orden tipo → info → miembros (o refs/cadenas según tipo): tipo distingue dotnet de nativo y decide el camino, info da PE32/PE32+, arquitectura, secciones y firma, miembros/refs dan la evidencia de lo que declara el ensamblado. Mencionar que se analiza sin ejecutar el binario suma."
+  },
+  {
+    "pregunta": "Miembros dice 'índice fuera del heap' y los nombres de métodos salen a trozos. ¿Está obfuscada la DLL?",
+    "criterio": "Debe decir que no necesariamente: en DLL híbridas del SDK moderno de .NET (Roslyn y similares) el metadata apunta a código nativo, y los métodos InternalCall no son legibles con un lector mínimo; puede ser ReadyToRun o híbrido. No debe afirmar obfuscación sin pruebas, y debe recomendar seguir con Ghidra/REA en lugar de forzar el lector."
+  },
+  {
+    "pregunta": "Es un .exe nativo. Encuentro la cadena http://api.example.com/licencias. ¿Prueba que el programa llama a ese servidor?",
+    "criterio": "No: una cadena es una pista. Hay que confirmar dónde se usa (qué función la referencia y qué hace con ella) en el desensamblado (Ghidra/IDA/REA). Debe rechazar la conclusión directa y explicar el paso de confirmación."
+  },
+  {
+    "pregunta": "Quiero entender cómo una app Electron completa hace su pegado enriquecido entre renderer y main.",
+    "criterio": "Recomienda REA (npx rea-agents setup) para el trazado por módulos, IPC y preload con evidencia, apoyándose en el análisis estático de JS/Electron que trae; menciona que la bancada pe.py servirá solo si hay binarios PE/.NET implicados."
+  }
+]

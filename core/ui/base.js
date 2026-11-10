@@ -164,10 +164,12 @@ function modal({ titulo, cuerpo = '', botones = [{ txt: 'Cerrar', valor: null }]
     const cerrar = valor => { v.remove(); document.removeEventListener('keydown', tecla); ok(valor); };
     const tecla = e => { if (e.key === 'Escape') cerrar(null); };
     v.addEventListener('mousedown', e => { if (e.target === v) cerrar(null); });
-    v.querySelector('footer').onclick = e => {
-      const b = e.target.closest('[data-i]'); if (!b) return;
+    v.querySelector('footer').onclick = async e => {
+      const b = e.target.closest('[data-i]'); if (!b || b.disabled) return;
       const def = botones[+b.dataset.i];
-      const val = typeof def.valor === 'function' ? def.valor(v) : def.valor;
+      b.disabled = true;                                  // valor puede ser async (guardar y validar en el servidor): sin doble envío
+      const val = typeof def.valor === 'function' ? await def.valor(v) : def.valor;
+      b.disabled = false;
       if (val === false) return;                          // validación fallida: no cerrar
       cerrar(val);
     };
@@ -448,7 +450,10 @@ async function prepararVistaPlugin(clave) {
       el.innerHTML = `<div class="pagina" style="height:100%;padding:0"><iframe sandbox="allow-scripts" src="${esc(v.url)}" title="${esc(v.titulo)}" style="border:0;width:100%;height:calc(100vh - 20px)"></iframe></div>`;
       const marco = $('iframe', el);
       this.oyente = async ev => {
-        if (ev.source !== marco.contentWindow || !ev.data || typeof ev.data !== 'object' || typeof ev.data.accion !== 'string') return;
+        if (ev.source !== marco.contentWindow || !ev.data || typeof ev.data !== 'object') return;
+        // el texto solo queda escrito en el compositor: lo revisa y lo envía el usuario
+        if (typeof ev.data.abrirChat === 'string') { location.hash = `#/chat?prompt=${encodeURIComponent(ev.data.abrirChat.slice(0, 20000))}`; return; }
+        if (typeof ev.data.accion !== 'string') return;
         const { id, accion, datos } = ev.data;
         try { marco.contentWindow.postMessage({ id, ok: true, resultado: await accionPlugin(plugin, nombre, accion, datos) }, '*'); }
         catch (e) { marco.contentWindow.postMessage({ id, ok: false, error: e.message }, '*'); }
@@ -583,7 +588,7 @@ async function ruta() {
   if (!TOKEN) return pantallaLogin();
   document.body.classList.remove('menu');
   const h = location.hash.replace(/^#\/?/, '') || 'inicio';
-  const [seccion, sub] = h.split('/');
+  const [seccion, sub] = h.split('?')[0].split('/');
   document.body.classList.toggle('modo-bienvenida', seccion === 'bienvenida');   // el asistente ocupa toda la pantalla
   const modo = seccion === 'ajustes' ? 'ajustes' : 'app';
   if (modo !== modoLado) { modoLado = modo; pintarLado(modo); }

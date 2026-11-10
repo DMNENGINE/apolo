@@ -13,6 +13,7 @@
 //   config        → cfg.plugins.whatsapp (solo lectura): la config de whatsapp.json de la app para migrarla la 1.ª vez
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const wa = md => String(md ?? '').replace(/\*\*([^*]+)\*\*/g, '*$1*').replace(/__([^_]+)__/g, '_$1_').slice(0, 3800);
 const coincide = (numero, n) => { const d = String(n || '').replace(/\D/g, ''); return d.length >= 6 && String(numero).endsWith(d); };
@@ -33,8 +34,15 @@ function extraer(m) {
   }
   const texto = String(msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || msg.videoMessage?.caption || msg.documentMessage?.caption || '').trim();
   const tipo = msg.audioMessage ? 'audio' : msg.imageMessage ? 'imagen' : msg.videoMessage ? 'video' : msg.documentMessage ? 'documento' : msg.stickerMessage ? 'sticker' : texto ? 'texto' : 'otro';
-  return { id: k.id || '', jid: k.remoteJid || '', fromMe: !!k.fromMe, participante: k.participant || '', nombre: m?.pushName || '', texto, tipo, audio: tipo === 'audio' };
+  return { id: k.id || '', jid: k.remoteJid || '', alt: k.remoteJidAlt || '', fromMe: !!k.fromMe, participante: k.participant || '', participanteAlt: k.participantAlt || '', nombre: m?.pushName || '', texto, tipo, audio: tipo === 'audio' };
 }
+// el número de teléfono de verdad: en los chats @lid viene en el jid alternativo (si no hay, los dígitos del LID, como antes)
+function numeroDe(x, grupo) {
+  const candidatos = grupo ? [x.participanteAlt, x.participante] : [x.jid, x.alt];
+  const pn = candidatos.find(j => /@s\.whatsapp\.net$/.test(j || ''));
+  return String(pn || (grupo ? x.participante : x.jid) || '').split(/[:@]/)[0];
+}
+const sinAcentos = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 // ¿es tu chat contigo mismo? (por número PN o por LID; sin el sufijo :dispositivo)
 const esMiChat = (jid, yo) => !!yo && !!jid && (normal(jid) === yo.pn || (!!yo.lid && normal(jid) === yo.lid));
 // jids que nunca se leen: estados, difusiones, canales
@@ -46,6 +54,19 @@ function crearWhatsapp({ cargar, qr: hacerQr, canal, almacen, config = {}, log =
   if (!conf) { const g = config.conf || {}; conf = { ...CONFIG_DEF, ...g, auto: { ...CONFIG_DEF.auto, ...(g.auto || {}) } }; almacen.guardar('config', conf); }
   const recientes = new Map(Object.entries(almacen.leer('recientes', {}) || {}));   // jid → última vez que te escribió (para responderle)
   const guardarRecientes = () => { const lim = Date.now() - DIAS_RECIENTES * 864e5; for (const [j, t] of recientes) if (t < lim) recientes.delete(j); almacen.guardar('recientes', Object.fromEntries(recientes)); };
+  // agenda: quien te escribió + lo que WhatsApp sincroniza + los que guardas tú (agenda:true, su nombre no lo pisa nadie)
+  const contactos = new Map(Object.entries(almacen.leer('contactos', {}) || {}));
+  let tGuardarContactos = null;
+  const guardarContactos = () => { clearTimeout(tGuardarContactos); tGuardarContactos = setTimeout(() => almacen.guardar('contactos', Object.fromEntries(contactos)), 500); tGuardarContactos.unref?.(); };
+  function verContacto({ jid, nombre, numero, agenda }) {
+    if (!/@(s\.whatsapp\.net|lid)$/.test(jid || '') || jidIgnorado(jid)) return;
+    const c = contactos.get(jid) || { jid, nombre: '', numero: '' };
+    if (nombre && (agenda || !c.agenda)) c.nombre = String(nombre).slice(0, 80);
+    if (numero) c.numero = String(numero);
+    if (agenda) c.agenda = true;
+    contactos.set(jid, c); guardarContactos();
+    return c;
+  }
   const historial = new Map();
   const anotar = (jid, de, texto) => { const h = historial.get(jid) || []; h.push({ de, texto: String(texto).slice(0, 500), t: Date.now() }); historial.set(jid, h.slice(-8)); };
   const autoEnviados = new Map();
@@ -99,6 +120,10 @@ function crearWhatsapp({ cargar, qr: hacerQr, canal, almacen, config = {}, log =
       if (type !== 'notify' || sock !== s) return;
       for (const m of messages || []) recibir(m).catch(e => log('[whatsapp]', e.message));
     });
+    const sincronizar = lista => { for (const c of lista || []) verContacto({ jid: c.id, nombre: c.name || c.notify || c.verifiedName, numero: /@s\.whatsapp\.net$/.test(c.id || '') ? String(c.id).split(/[:@]/)[0] : String(c.phoneNumber || '').split(/[:@]/)[0] }); };
+    s.ev.on('contacts.upsert', sincronizar);
+    s.ev.on('contacts.update', sincronizar);
+    s.ev.on('messaging-history.set', h => sincronizar(h?.contacts));
     return s;
   }
 
@@ -142,18 +167,20 @@ function crearWhatsapp({ cargar, qr: hacerQr, canal, almacen, config = {}, log =
   // ---------- mensajes de otras personas: solo con modo avisar/auto, y solo hacia la app ----------
   async function ajeno(m, x) {
     const jid = x.jid;
-    if (conf.modo === 'apagado' || jidIgnorado(jid)) return;
+    const soloReglas = conf.modo === 'apagado';                // apagado + reglas activas: se lee solo para las reglas que programaste
+    if ((soloReglas && !conf.reglasActivas) || jidIgnorado(jid)) return;
     const grupo = jid.endsWith('@g.us');
     if (grupo && !conf.grupos) return;
     const texto = x.texto || (x.audio ? '🎙 ' + ((await notaDeVoz(m)) || '(nota de voz)') : x.tipo === 'imagen' ? '📷 (foto)' : x.tipo === 'documento' ? '📄 (documento)' : '');
     if (!texto) return;
-    const numero = String((grupo ? x.participante : jid) || '').split(/[:@]/)[0];
+    const numero = numeroDe(x, grupo);
     if ((conf.ignorar || []).some(n => coincide(numero, n))) return;
     if (x.fromMe) { anotar(jid, 'yo', texto); return; }      // lo que contestas tú desde el móvil: solo contexto
-    const nombre = x.nombre || '+' + numero;
+    const c = grupo ? null : verContacto({ jid, nombre: x.nombre, numero });
+    const nombre = (c && c.agenda && c.nombre) || x.nombre || '+' + numero;
     anotar(jid, nombre, texto);
     recientes.set(jid, Date.now()); guardarRecientes();
-    await canal.ajeno({ jid, nombre, numero, texto, grupo, historial: historial.get(jid) || [], auto: puedeAuto(jid, numero) });
+    await canal.ajeno({ jid, nombre, numero, texto, grupo, soloReglas, historial: historial.get(jid) || [], auto: puedeAuto(jid, numero) });
   }
   function puedeAuto(jid, numero) {
     if (conf.modo !== 'auto' || jid.endsWith('@g.us')) return false;
@@ -169,7 +196,7 @@ function crearWhatsapp({ cargar, qr: hacerQr, canal, almacen, config = {}, log =
     if (!recientes.has(jid) || jidIgnorado(jid)) throw new Error('solo se puede responder a un chat que te escribió en los últimos días');
     if (automatico) {
       if (conf.modo !== 'auto') throw new Error('el modo automático está apagado');
-      if (!puedeAuto(jid, jid.split(/[:@]/)[0])) throw new Error('límite de respuestas automáticas alcanzado para ese contacto');
+      if (!puedeAuto(jid, contactos.get(jid)?.numero || jid.split(/[:@]/)[0])) throw new Error('límite de respuestas automáticas alcanzado para ese contacto');
     }
     const r = await sock.sendMessage(jid, { text: String(texto || '').slice(0, 3800) });
     if (r?.key?.id) enviadosIds.add(r.key.id);
@@ -177,6 +204,61 @@ function crearWhatsapp({ cargar, qr: hacerQr, canal, almacen, config = {}, log =
     if (automatico) autoEnviados.set(jid, [...(autoEnviados.get(jid) || []).filter(v => Date.now() - v < 3600_000), Date.now()]);
     return true;
   }
+
+  // ---------- envíos que ordenas tú (herramientas, reglas y envíos programados de core/whatsapp-auto.js) ----------
+  const dirSalida = path.join(almacen.ruta, 'salida');
+  function archivoDeSalida(f) {                                // la app deja aquí la foto/voz ya preparada: nada de rutas libres
+    const r = path.resolve(String(f || ''));
+    if (!r.startsWith(path.resolve(dirSalida) + path.sep)) throw new Error('archivo fuera de la carpeta de salida');
+    return r;
+  }
+  async function enviarOrden({ jid, texto, foto, voz } = {}) {
+    jid = String(jid || '');
+    if (!sock || estado !== 'conectado') throw new Error('WhatsApp no está conectado');
+    if (!/@(s\.whatsapp\.net|lid)$/.test(jid)) throw new Error('destino no válido: solo chats individuales');
+    const ids = [];
+    // el id se anota ANTES de enviar: en tu propio chat el eco no debe confundirse con una orden tuya (una nota de voz se transcribiría)
+    const mandar = async contenido => { const messageId = '3EB0' + crypto.randomBytes(9).toString('hex').toUpperCase(); enviadosIds.add(messageId); ids.push(messageId); await sock.sendMessage(jid, contenido, { messageId }); };
+    if (foto) await mandar({ image: fs.readFileSync(archivoDeSalida(foto.archivo)), ...(foto.pie ? { caption: String(foto.pie).slice(0, 1000) } : {}), ...(foto.miniatura ? { jpegThumbnail: foto.miniatura } : {}), ...(foto.ancho ? { width: +foto.ancho, height: +foto.alto } : {}) });
+    if (voz) await mandar({ audio: fs.readFileSync(archivoDeSalida(voz.archivo)), ptt: true, mimetype: 'audio/ogg; codecs=opus', ...(voz.segundos ? { seconds: Math.round(voz.segundos) } : {}), ...(Array.isArray(voz.onda) ? { waveform: Uint8Array.from(voz.onda) } : {}) });
+    if (texto) await mandar({ text: String(texto).slice(0, 3800) });
+    while (enviadosIds.size > 500) enviadosIds.delete(enviadosIds.values().next().value);
+    anotar(jid, 'yo', texto || (voz ? '🎙 (nota de voz)' : '📷 (foto)'));
+    return { ok: true, ids };
+  }
+  // destino: número con código de país, jid, o nombre (agenda primero; si hay varios o ninguno, lo dice en vez de adivinar)
+  async function resolver({ destino } = {}) {
+    const d = String(destino || '').trim();
+    if (!d) throw new Error('falta el destino');
+    if (/@(s\.whatsapp\.net|lid)$/.test(d)) return contactos.get(d) || { jid: d, nombre: '', numero: d.split(/[:@]/)[0] };
+    const digitos = d.replace(/\D/g, '');
+    if (/^[+\d\s().-]+$/.test(d) && digitos.length >= 7) {
+      if (!sock?.onWhatsApp || estado !== 'conectado') throw new Error('WhatsApp no está conectado');
+      const [r] = await sock.onWhatsApp(digitos);
+      if (!r?.exists) throw new Error(`${d} no tiene WhatsApp (recuerda el código de país)`);
+      return { nombre: [...contactos.values()].find(c => c.numero === digitos)?.nombre || '', numero: digitos, jid: r.jid };
+    }
+    const q = sinAcentos(d);
+    const dedupe = l => [...new Map(l.map(c => [c.numero || c.jid, c])).values()];
+    const todos = [...contactos.values()].filter(c => sinAcentos(c.nombre).includes(q));
+    const exactos = todos.filter(c => sinAcentos(c.nombre) === q);
+    const agenda = (exactos.length ? exactos : todos).filter(c => c.agenda);
+    const lista = dedupe(agenda.length ? agenda : (exactos.length ? exactos : todos));
+    if (lista.length === 1) return lista[0];
+    if (!lista.length) throw new Error(`no tengo a "${d}" en la agenda: dime su número con código de país, o guárdalo en la agenda`);
+    throw new Error(`hay varios "${d}": ${lista.slice(0, 8).map(c => `${c.nombre} (+${c.numero})`).join(', ')}. Dime cuál por su número`);
+  }
+  async function guardarContacto({ nombre, numero } = {}) {
+    if (!String(nombre || '').trim()) throw new Error('falta el nombre');
+    const r = await resolver({ destino: numero });
+    return verContacto({ jid: r.jid, nombre: String(nombre).trim(), numero: r.numero, agenda: true });
+  }
+  function verContactos({ q } = {}) {
+    const n = sinAcentos(q);
+    return [...contactos.values()].filter(c => c.nombre || c.numero).filter(c => !n || sinAcentos(c.nombre).includes(n) || String(c.numero).includes(n))
+      .sort((a, b) => Number(!!b.agenda) - Number(!!a.agenda) || String(a.nombre).localeCompare(String(b.nombre))).slice(0, 200);
+  }
+  function borrarContacto({ jid } = {}) { const c = contactos.delete(String(jid)); guardarContactos(); return { ok: c }; }
 
   // 1/2/3 (+ #id) · CONFIRMO id · R<id> [texto] / D<id>
   async function respuestaCorta(t) {
@@ -256,6 +338,7 @@ function crearWhatsapp({ cargar, qr: hacerQr, canal, almacen, config = {}, log =
     conf = { ...conf, ...c, auto: { ...conf.auto, ...(c.auto || {}) } };
     if (!['apagado', 'avisar', 'auto'].includes(conf.modo)) conf.modo = 'apagado';
     conf.grupos = !!conf.grupos;
+    conf.reglasActivas = !!conf.reglasActivas;
     conf.ignorar = (Array.isArray(conf.ignorar) ? conf.ignorar : []).map(String).slice(0, 200);
     conf.auto.contactos = (Array.isArray(conf.auto.contactos) ? conf.auto.contactos : []).map(String).slice(0, 200);
     conf.auto.instrucciones = String(conf.auto.instrucciones || '').slice(0, 2000);
@@ -267,10 +350,11 @@ function crearWhatsapp({ cargar, qr: hacerQr, canal, almacen, config = {}, log =
 
   return {
     arrancar, vincular, parar, desvincular, estado: estadoPublico, enviarA, config: () => conf, ponerConfig,
+    enviarOrden, resolver, guardarContacto, contactos: verContactos, borrarContacto,
     permiso, permisoResuelto, tarjeta, avisar, prueba: async () => { await enviar('🤖 *Prueba:* así te llegarán los avisos.'); return estadoPublico(); },
     recibir, get conectado() { return estado === 'conectado'; },
     _probar: { ponerYo: y => { yo = y; }, ponerSock: s => { sock = s; }, ponerEstado: setEstado },
   };
 }
 
-module.exports = { crearWhatsapp, extraer, esMiChat, jidIgnorado, wa, coincide, CONFIG_DEF, silencio };
+module.exports = { crearWhatsapp, extraer, numeroDe, esMiChat, jidIgnorado, wa, coincide, CONFIG_DEF, silencio };

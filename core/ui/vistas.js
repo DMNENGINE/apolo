@@ -67,6 +67,9 @@ VISTAS.chat = {
   sesion: null, modelo: null, cwd: null, enviando: false, ctl: null,
   async pintar(v, id) {
     desmontarRobot($('#robotChat'));
+    // #/chat?prompt=… (pestaña Prompts → «Usar en el chat»): el prompt entra en el compositor, no se envía solo
+    const pre = (location.hash.match(/[?&]prompt=([^&]+)/) || [])[1];
+    if (pre) { try { this.borrador = decodeURIComponent(pre); } catch { } history.replaceState(null, '', '#/chat'); }
     this.sesion = id ? await api('GET', `/sesiones/${id}`).catch(() => null) : null;
     if (id && !this.sesion) { aviso(tr('Esa conversación ya no existe'), true); location.hash = '#/chat'; return; }
     const s = this.sesion;
@@ -86,6 +89,7 @@ VISTAS.chat = {
           <button class="enviar" id="enviar" title="${tr('Enviar')}">${ic('enviar')}</button></div></form></div>
     </div>${insp ? '<aside class="inspector" id="insp"></aside>' : ''}</div>`;
     const entrada = $('#entrada');
+    if (this.borrador) { entrada.value = this.borrador; this.borrador = null; entrada.style.height = 'auto'; entrada.style.height = Math.min(entrada.scrollHeight, 240) + 'px'; }
     const ajustar = () => { entrada.style.height = 'auto'; entrada.style.height = Math.min(entrada.scrollHeight, 240) + 'px'; };
     entrada.oninput = () => { ajustar(); this.estadoBoton(); };
     entrada.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#comp').requestSubmit(); } };

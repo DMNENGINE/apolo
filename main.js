@@ -19,6 +19,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+// cuando la app se abre sin NUCLEO_HOME solo ve el núcleo INSTALADO (este); la copia de D: no la usa.
+// Se marca para que las herramientas del núcleo (p. ej. su bancada) resuelvan su código contra este directorio.
+process.env.APOLO_NUCLEO_DIR = process.env.NUCLEO_HOME || path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'robot-companion', 'nucleo');
 const { execFile } = require('child_process');
 const esPeligroso = require('./shared/peligro.js');
 const { decidirDiscord } = require('./shared/canales-flags');
@@ -452,6 +455,7 @@ async function whatsappComoPlugin() {
   if (!nucleo.cfg.plugins.whatsapp) nucleo.cfg.plugins.whatsapp = { conf };
   await activarNuestro('whatsapp');
   whatsapp = adaptadorWhatsappPlugin();
+  conectarWhatsappAuto();
   console.log('[whatsapp] usando el plugin del SDK (plugins/whatsapp)');
   nucleo.bus.on('evento', e => {
     if (e && e.tipo === 'plugins' && e.nombre === 'whatsapp' && e.accion === 'roto') console.error('[whatsapp] el plugin quedó roto (míralo en Panel → Plugins)');
@@ -477,8 +481,24 @@ async function migrarSesionWhatsapp(b = {}) {
 function ajenoPlugin({ plugin, datos }) {
   if (plugin !== 'whatsapp' || !datos || !datos.jid) return;
   const a = { jid: String(datos.jid), nombre: String(datos.nombre || ''), numero: String(datos.numero || ''), texto: String(datos.texto || '').slice(0, 4000), grupo: !!datos.grupo,
-    historial: Array.isArray(datos.historial) ? datos.historial.slice(-8).map(h => ({ de: String(h.de || ''), texto: String(h.texto || '').slice(0, 500), t: +h.t || 0 })) : [], auto: !!datos.auto };
-  mensajeWhatsapp(a).catch(e => console.error('[whatsapp]', e.message));
+    historial: Array.isArray(datos.historial) ? datos.historial.slice(-8).map(h => ({ de: String(h.de || ''), texto: String(h.texto || '').slice(0, 500), t: +h.t || 0 })) : [], auto: !!datos.auto, soloReglas: !!datos.soloReglas };
+  // primero las reglas que programaste; lo que ninguna atiende sigue por avisar/auto (con WhatsApp en "apagado", no pasa nada más)
+  (async () => {
+    const r = nucleo.whatsappAuto ? await nucleo.whatsappAuto.procesar(a) : { atendido: false };
+    if (!r.atendido && !a.soloReglas) await mensajeWhatsapp(a);
+  })().catch(e => console.error('[whatsapp]', e.message));
+}
+// el núcleo manda por el plugin y pone la voz de APOLO (core/whatsapp-auto.js)
+function conectarWhatsappAuto() {
+  nucleo.whatsappAuto?.conectar({
+    accion: (a, d) => whatsapp.acc(a, d),
+    ponerConfig: c => whatsapp.ponerConfig(c),
+    voz: texto => voz.generarTts(texto),
+    avisar: (aviso, autor, texto) => {
+      if (win && !win.isDestroyed()) win.webContents.send('notif', { kind: 'dm', author: `🤖 → ${autor}`, text: texto });
+      movil.sendAviso(aviso);
+    },
+  });
 }
 async function discordComoPlugin() {
   await activarNuestro('discord');
@@ -546,6 +566,10 @@ async function startNucleo() {
   // notas de voz de la app móvil (POST /v1/voz/transcribir) → Whisper
   nucleo.bus.on('transcribir-audio', ({ ruta, responder }) => {
     transcribirArchivo(ruta).then(r => responder(r && r.error && !r.text ? r.error : null, (r && r.text) || ''), e => responder(e));
+  });
+  // reuniones: separar quién habla en el audio de "ellos" (persona 1, persona 2…); segmentos null = vía de siempre
+  nucleo.bus.on('transcribir-hablantes', ({ ruta, reunion, responder }) => {
+    voz.transcribirHablantes(ruta, reunion).then(r => responder(null, (r && r.segmentos) || null), e => responder(e));
   });
   // reuniones (core/reuniones.js): REC en la isla mientras graba, tarjeta con el resumen al terminar, "enviar al móvil"
   nucleo.bus.on('reunion', e => {
@@ -962,7 +986,8 @@ app.whenReady().then(() => {
       if (p[2] === 'vocabulario' && (M === 'PUT' || M === 'POST')) return { vocabulario: voz.guardarVocabulario(b.vocabulario) };
       const e = new Error('ruta'); e.status = 404; throw e;
     } };
-    nucleo.extensiones.whatsapp = { http: async (M, p, b) => {
+    nucleo.extensiones.whatsapp = { http: async (M, p, b, q) => {
+      if (nucleo.whatsappAuto?.atiendeRuta(p[2])) return nucleo.whatsappAuto.http(M, p, b, q);
       if (M === 'POST' && p[2] === 'migrar') return migrarSesionWhatsapp(b);
       if (M === 'GET' && p[2] === 'config') return whatsapp.config();
       if (M === 'PATCH' && p[2] === 'config') return whatsapp.ponerConfig(b);

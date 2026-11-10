@@ -2,6 +2,8 @@
 // Corre en su propio proceso: solo habla con los dominios de WhatsApp declarados, la sesión vive en SU almacén y los permisos
 // que resuelve son SOLO los que la app le mostró. Los mensajes de otras personas van a la app (canal.ajeno): el plugin no
 // responde a nadie más que a ti salvo que la app se lo ordene (acción enviarA). La lógica está en wa.js.
+const fs = require('fs');
+const path = require('path');
 const { definirPlugin } = require('@apolo/sdk');
 const { crearWhatsapp } = require('./wa');
 
@@ -24,8 +26,17 @@ module.exports = definirPlugin({
         config: () => w.config(),
         ponerConfig: d => w.ponerConfig(d),
         enviarA: d => w.enviarA(d),
+        enviarOrden: d => w.enviarOrden(d),
+        resolver: d => w.resolver(d),
+        contactos: d => w.contactos(d),
+        guardarContacto: d => w.guardarContacto(d),
+        borrarContacto: d => w.borrarContacto(d),
       },
     });
+    // Baileys cifra las fotos y audios en un archivo temporal: aquí el plugin solo puede escribir en su almacén
+    const tmp = path.join(apolo.almacen.ruta, 'tmp');
+    fs.mkdirSync(tmp, { recursive: true });
+    process.env.TEMP = process.env.TMP = process.env.TMPDIR = tmp;
     w = crearWhatsapp({
       cargar: () => import('@whiskeysockets/baileys'),
       qr: texto => require('qrcode').toDataURL(texto, { margin: 1, width: 280 }),

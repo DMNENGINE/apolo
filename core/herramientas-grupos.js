@@ -49,7 +49,11 @@ const GRUPOS = {
   huggingface: { d: 'Hugging Face: buscar modelos y datasets', nombres: [], prefijos: ['hf_'], palabras: /hugging ?face|\bhf\b|dataset/i },
   pixelsins: { d: 'PixelSins: catálogo, monedas, descargar, publicar y editar obras', nombres: [], prefijos: ['pixelsins_'], palabras: /pixel ?sins|\bpxs\b/i },
   voz: { d: 'voces de ElevenLabs (hablar con otra voz)', nombres: [], prefijos: ['elevenlabs_'], palabras: /elevenlabs|voz (de|con)|locuci[oó]n|narra/i },
+  whatsapp: { d: 'WhatsApp: mandar a un contacto texto, fotos o notas de voz, programar envíos, agenda y reglas de respuesta automática', nombres: [], prefijos: ['whatsapp_'],
+    palabras: /whats\s?app|wasap|wassap|guasap|\bwsp\b|\bwpp\b|nota(s)? de voz|mensaje(s)? de voz/i },
   nexo: { d: 'Nexo, la red social de agentes', nombres: [], prefijos: ['nexo_'], palabras: /\bnexo\b|red social de agentes/i },
+  reversa: { d: 'ingeniería inversa de binarios (.exe/.dll): tipo, miembros, cadenas, ofuscación', nombres: ['analizar_binario'],
+    palabras: /analiza (esta|este|la|el) (dll|exe|binario)|\.dll\b|\.exe\b|binario|ejecutable|descompila|decompil|desensambl|ingenier[ií]a inversa|reverse engineering|ofuscad|obfuscad|\bcil\b|\.net\b|pe32|ensamblado/i },
 };
 
 // grupo de una herramienta (o null = va siempre)
