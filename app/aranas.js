@@ -33,7 +33,7 @@ export function salirDelCasco(x, y, color, n = 3, tam = 90) {
   const r = Math.max(4, Math.min(8, tam / 16));
   for (let k = 0; k < n; k++) {
     const ox = (k - (n - 1) / 2) * tam * .16, baja = tam * .45 + k * 10, [bx, by] = bordeLejos(x, y + baja, k);
-    const a = M.crear('isla', color, x + ox * .4, y, { r: r * .2, ang: Math.PI / 2, vel: 220 });
+    const a = M.crear('isla', color, x + ox * .4, y, { r: r * .2, ang: Math.PI / 2, vel: 220, sinPausas: true });
     a.ruta = [
       { x: x + ox * .4, y, espera: .5 + k * .35 },                                        // espera a que la compuerta esté abierta
       { x: x + ox, y: y + tam * .12, vel: 40, r, al: ar => { ar.hilo = { x: ar.x, y: ar.y }; } },   // asoma del nido y crece
@@ -50,11 +50,12 @@ export function volverAlCasco(x, y, color, n = 2, tam = 90) {
   const r = Math.max(4, Math.min(8, tam / 16));
   for (let k = 0; k < n; k++) {
     const [bx, by] = bordeLejos(x, y + tam * .4, k + 1), ox = (k ? 1 : -1) * tam * .12;
-    const a = M.crear('isla', color, bx, by, { r, vel: 300 });
+    const velocidadRegreso = Math.max(300, Math.hypot(x + ox - bx, y + tam * .5 - by) / 1.4);
+    const a = M.crear('isla', color, bx, by, { r, vel: velocidadRegreso, sinPausas: true });
     a.ruta = [
       { x: bx, y: by, espera: k * .4 },
-      { x: x + ox, y: y + tam * .5, vel: 300, al: ar => { ar.hilo = { x: x + ox * .4, y: y + tam * .1 }; ar.pausa = .35; } },
-      { x: x + ox * .4, y: y + tam * .1, vel: 60, colgada: true, r: r * .25 },               // trepa por el hilo y se encoge dentro
+      { x: x + ox, y: y + tam * .5, vel: velocidadRegreso, uniforme: true, al: ar => { ar.hilo = { x: x + ox * .4, y: y + tam * .1 }; ar.pausa = .35; } },
+      { x: x + ox * .4, y: y + tam * .1, vel: 80, colgada: true, r: r * .25 },               // trepa por el hilo y se encoge dentro
       { x: x, y: y, vel: 30, al: ar => { ar.hilo = null; ar.fuera = true; } },
     ];
     aranas.push(a);

@@ -1,0 +1,34 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><title>APOLO · movimiento de las arañas</title>
+<style>body{margin:0;background:#0e151d;color:#e0f4ee;font:15px system-ui}header{padding:16px 28px}h1{font-size:22px;margin:0 0 8px}p{color:#aac1bc;margin:0}button{margin:10px 8px 0 0;background:#243a40;color:#e0f4ee;border:1px solid #648a85;border-radius:8px;padding:9px 14px;cursor:pointer}canvas{display:block}</style>
+<header><h1>Las arañas de APOLO</h1><p>Caminar, girar, descender, trepar, alertarse, celebrar, escanear y moverse con suavidad.</p><button id="salir">Salida del casco</button><button id="volver">Regreso al casco</button></header>
+<canvas id="escenas" width="1120" height="650"></canvas>
+<script src="../extension/arana-motor.js"></script>
+<script type="module">
+import {salirDelCasco,volverAlCasco} from './aranas.js';
+const M=globalThis.AranaMotor,c=document.querySelector('#escenas').getContext('2d');
+const casos=[['Caminar','lectora'],['Girar','codigo'],['Descender por el hilo','isla'],['Trepar de regreso','isla'],['Alerta','codigo'],['Contenta','lectora'],['Escaneo','ia'],['Movimiento reducido','lectora']];
+const estados=casos.map(([nombre,tipo],i)=>{
+ const a=M.crear(tipo,['#3df2ff','#4dff88','#ba99ff','#ffbe6b'][i%4],0,0,{r:16,vel:65,sinPausas:true,reducido:i===7});
+ a.semilla=1.2;a.alpha=1;
+ if(i===2||i===3){a.ang=i===3?-Math.PI/2:Math.PI/2;a.hilo={x:0,y:-100};a.ruta=[{x:0,y:i===3?-150:150,colgada:true}];}
+ else a.ruta=[{x:i===1?-200:300,y:i===1?150:0}];
+ if(i===4){a.animo='agresiva';a.pausa=3;a.temblor=1;}
+ if(i===5)a.animo='contenta';if(i===6)a.haz=true;
+ for(let k=0;k<36;k++)M.mover(a,1/60);
+ return {a,nombre};
+});
+window.estadosAranas=estados;
+function pintar(){
+ c.fillStyle='#0e151d';c.fillRect(0,0,1120,650);
+ estados.forEach(({a,nombre},i)=>{
+  const x=(i%4)*280,y=Math.floor(i/4)*320;
+  c.fillStyle='#17232f';c.fillRect(x+8,y+8,264,300);
+  c.save();c.beginPath();c.rect(x+8,y+8,264,300);c.clip();
+  M.dibujar(c,a,a.x-(x+140),a.y-(y+155),{W:1120,H:650});c.restore();
+  c.fillStyle='#d9fff1';c.font='600 16px system-ui';c.textAlign='center';c.fillText(nombre,x+140,y+278);c.textAlign='left';
+ });
+}
+pintar();window.pintarAranas=pintar;
+document.querySelector('#salir').onclick=()=>salirDelCasco(560,145,'#3df2ff',3,140);
+document.querySelector('#volver').onclick=()=>volverAlCasco(560,145,'#3df2ff',2,140);
+</script></html>

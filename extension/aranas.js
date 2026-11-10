@@ -165,6 +165,9 @@
     let cand = busca(110, 260);
     if (!cand.length) cand = busca(500, 2000);
     if (!cand.length) { const resto = palabras.filter(w => !w.leida && w.y > a.y - 25 && w.x + w.w / 2 > a.banda[0] && w.x + w.w / 2 < a.banda[1]); cand = resto.slice(0, 40); }
+    // Si la entrada queda bajo el texto (o cambia el scroll), vuelve a lo pendiente de arriba.
+    if (!cand.length) cand = palabras.filter(w => !w.leida && w.x + w.w / 2 > a.banda[0] && w.x + w.w / 2 < a.banda[1])
+      .sort((p, q) => p.y - q.y || p.x - q.x).slice(0, 40);
     if (!cand.length) { a.trabajo = false; a.estado = 'leído ✓'; a.vagar = { x: a.x, y: a.y }; return; }
     let mejor = null, ms = Infinity;
     for (const w of cand) {
