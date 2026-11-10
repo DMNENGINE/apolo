@@ -19,7 +19,8 @@ Habla y escribe comentarios en **español**. El usuario es Demon.
 
 ## El casco (robot 3D)
 **Fuente única: `app/robot.js`** (three.js). Copias GENERADAS, no las edites a mano:
-- `core/ui/robot3d.js` (panel) y `web/robot3d.js` (landing) → `node tools/derivar-robot3d.js` después de cada cambio en `app/robot.js` (solo cambian los imports).
+- `core/ui/robot3d.js` (panel) → `node tools/derivar-robot3d.js` después de cada cambio en `app/robot.js` (solo cambian los imports).
+- `web/robot3d.js` (landing) → copia de `core/ui/robot3d.js` cuando haya que actualizar la web.
 
 Modelo:
 - `app/casco.glb` (= `core/ui/casco.glb` = `web/casco.glb`, mismo archivo). Fuente: `casco_robot.blend` (Blender **3.6.5**).
