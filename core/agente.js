@@ -56,6 +56,14 @@ function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior
   ].filter(Boolean).join('\n');
 }
 
+// system del modelo propio (ligero): el MISMO con el que se entrenó (core/remoto/generar-dataset.py → montar) + la memoria en su formato
+function sistemaLigero(recuerdos, resumen, s) {
+  return ['Eres APOLO, el asistente personal de tu usuario en su PC. Respondes en español, directo, con su mismo tono, y usas tus herramientas cuando hace falta.',
+    recuerdos ? `\nLO QUE SABES DEL USUARIO (memoria):\n${recuerdos}` : '',
+    s.llamada && Date.now() - s.llamada < 10 * 60_000 ? `\n${LLAMADA}` : '',
+    resumen ? `\nRESUMEN DE LA PARTE ANTERIOR DE ESTA CONVERSACIÓN:\n${resumen}` : ''].filter(Boolean).join('\n');
+}
+
 // llamada de voz desde la isla (s.llamada, no se guarda en disco): todo lo que escribe se oye
 const LLAMADA = 'ESTÁS EN UNA LLAMADA DE VOZ con el usuario: todo lo que escribas se lee en voz alta al momento. Habla como una persona en una conversación, ' +
   'natural y cercano. Respuestas cortas (1-3 frases) salvo que pida algo largo (una historia, una explicación). Sin markdown, listas, emojis, enlaces ni código. ' +
@@ -235,10 +243,13 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           catch (e) { if (ctl.signal.aborted) throw e; ev('aviso', { texto: `no pude compactar la conversación: ${e.message}` }); }
         }
         const v = vista(s.mensajes);
-        const sys = sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento);
+        // modelo propio pequeño (proveedor con "ligero": true, p. ej. apolo-v4 del Proxmox): se entrenó con un system corto + memoria y
+        // sin herramientas; el system completo (4-6k tokens con skills y herramientas) lo desbarata → mismo formato que en su entrenamiento
+        const ligero = !!cfg.proveedores?.[String(modeloReal).split('/')[0]]?.ligero;
+        const sys = ligero ? sistemaLigero(recuerdos, v.resumen, s) : sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento);
         let historial = conImagenes(v.mensajes, s.sinVision || (s.visionNoAdmitida?.modelo === modeloReal && s.visionNoAdmitida?.hasta > Date.now()));
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
-        const herramientas = paraEnviar();
+        const herramientas = ligero ? [] : paraEnviar();
         // tope duro de seguridad, no de uso normal: el tamaño lo controla la compactación (cfg.compactar.umbral)
         const limite = cfg.contexto?.porModelo?.[modeloReal] || cfg.contexto?.maxTokens || 128000;
         const contexto = ensamblar({ system: sys, mensajes: historial, herramientas, limite, reserva: Math.max(cfg.contexto?.reserva ?? 2048, maxSalida) });
@@ -275,7 +286,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         sesiones.agregar(s, { role: 'assistant', content: r.texto, toolCalls: r.toolCalls.length ? r.toolCalls : undefined, procedencia: externa ? 'externa' : 'agente', t: Date.now() });
         if (r.texto) { final = r.texto; ev('texto', { texto: r.texto }); }
         if (!r.toolCalls.length) {
-          if (r.texto && !nacimiento && !turno.herramientas && PROMESA.test(r.texto) && empujones < 2 && paso < cfg.maxPasos - 1 && !ctl.signal.aborted) {
+          if (r.texto && !ligero && !nacimiento && !turno.herramientas && PROMESA.test(r.texto) && empujones < 2 && paso < cfg.maxPasos - 1 && !ctl.signal.aborted) {
             empujones++; empujon = true;
             ev('aviso', { texto: 'el modelo prometió hacerlo sin usar herramientas: le pido que lo haga de verdad' });
             continue;
