@@ -250,8 +250,25 @@ class Gen:
         val_gen = set(random.sample(range(len(gen)), max(1, len(gen) // 20))) if gen else set()
         def ej(q, r):
             return json.dumps({'messages': [{'role': 'system', 'content': sysmsg}, {'role': 'user', 'content': q}, {'role': 'assistant', 'content': r}]}, ensure_ascii=False)
-        train = [json.dumps({'messages': x}, ensure_ascii=False) for x in self.m.get('reales_train', [])] + [ej(g['pregunta'], g['respuesta']) for k, g in enumerate(gen) if k not in val_gen]
-        val = [json.dumps({'messages': x}, ensure_ascii=False) for x in self.m.get('reales_val', [])] + [ej(g['pregunta'], g['respuesta']) for k, g in enumerate(gen) if k in val_gen]
+        # conversaciones reales: en trozos que quepan en max_length (~2.800 caracteres ≈ 800 tokens); si un mensaje del usuario
+        # es enorme se recorta SU parte, nunca la respuesta (si no, Soup rechaza el ejemplo: "no causal-loss target")
+        def trozos(msgs, maxc=2800):
+            sysm = msgs[0] if msgs and msgs[0]['role'] == 'system' else {'role': 'system', 'content': sysmsg}
+            pares = [(msgs[i], msgs[i + 1]) for i in range(1 if msgs[0]['role'] == 'system' else 0, len(msgs) - 1, 2)
+                     if msgs[i]['role'] == 'user' and msgs[i + 1]['role'] == 'assistant']
+            out, cur, n = [], [], 0
+            for u, r in pares:
+                r = {'role': 'assistant', 'content': r['content'][:1600]}
+                u = {'role': 'user', 'content': u['content'] if len(u['content']) + len(r['content']) <= maxc else u['content'][:max(300, maxc - len(r['content']))] + '…'}
+                t = len(u['content']) + len(r['content'])
+                if cur and n + t > maxc:
+                    out.append([sysm] + cur); cur, n = [], 0
+                cur += [u, r]; n += t
+            if cur:
+                out.append([sysm] + cur)
+            return [json.dumps({'messages': x}, ensure_ascii=False) for x in out]
+        train = [t for x in self.m.get('reales_train', []) for t in trozos(x)] + [ej(g['pregunta'], g['respuesta']) for k, g in enumerate(gen) if k not in val_gen]
+        val = [t for x in self.m.get('reales_val', []) for t in trozos(x)] + [ej(g['pregunta'], g['respuesta']) for k, g in enumerate(gen) if k in val_gen]
         random.shuffle(train)
         open(os.path.join(self.dir, 'apolo-train.jsonl'), 'w', encoding='utf-8').write('\n'.join(train) + '\n')
         open(os.path.join(self.dir, 'apolo-val.jsonl'), 'w', encoding='utf-8').write('\n'.join(val) + '\n')
