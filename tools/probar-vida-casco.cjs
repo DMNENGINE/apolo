@@ -20,5 +20,22 @@ const assert = require('node:assert/strict');
   assert.equal(vida.cancelar(), true, 'Interrumpe una rutina activa');
   assert.equal(vida.cancelar(), false, 'Cancelar dos veces no pisa otro gesto');
   assert.equal(paso(11000).nombre, 'mirar', 'Tras cancelar empieza una rutina nueva');
+  const rara = crearVidaCasco(() => 0);
+  let reloj = 0;
+  function rutinaCompleta() {
+    const nombres = [];
+    for (let i = 0; i < 5; i++) {
+      if (rara.terminarSiLista(reloj)) return nombres;
+      const accion = rara.paso({ahora:reloj, libre:true, ocupado:false});
+      assert(accion); nombres.push(accion.nombre);
+      reloj += accion.segundos * 1000 + 600;
+    }
+    assert.fail('La rutina no termina');
+  }
+  for (let i = 0; i < 3; i++) assert(!rutinaCompleta().includes('revision'));
+  assert.equal(rutinaCompleta()[0], 'revision', 'La primera escena requiere tres rutinas normales');
+  for (let i = 0; i < 6; i++) assert(!['revision','montaje','estornudo_explosivo'].includes(rutinaCompleta()[0]), 'Respeta el intervalo m?nimo entre escenas');
+  reloj += 240000;
+  assert.equal(rutinaCompleta()[0], 'estornudo_explosivo', 'No repite la escena anterior');
   console.log('OK: prioridades, pausas, secuencias, variedad e interrupción');
 })().catch(error => { console.error(error); process.exitCode = 1; });

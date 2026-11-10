@@ -94,7 +94,15 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   // ---------- gestos: ojos especiales y movimientos de cabeza durante unos segundos ----------
   // ojos: remolino | guino | corazon | sorpresa | reloj (la hora en el visor)   cabeza: saludo | si | no | mirar
   let gesto = null, gestoHasta = 0, gestoIni = 0;
-  const gestoActivo = n => gesto === n && performance.now() < gestoHasta;
+  const ESCENAS = new Set(['revision', 'estornudo_explosivo', 'montaje']);
+  const gestoActivo = n => {
+    if (performance.now() >= gestoHasta) return false;
+    if (gesto === n) return true;
+    const f = (performance.now() - gestoIni) / (gestoHasta - gestoIni);
+    const cara = gesto === 'revision' ? 'concentrado' : gesto === 'montaje' ? (f > .4 && f < .8 ? 'duda' : 'curioso')
+      : gesto === 'estornudo_explosivo' ? (f < .28 ? 'pensativo' : f < .48 ? 'estornudo' : 'sorpresa') : null;
+    return n === cara;
+  };
   function corazon(c, s, col) {
     c.fillStyle = col; c.beginPath();
     c.moveTo(0, s * .35);
@@ -315,6 +323,12 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   const hudMat = new THREE.MeshBasicMaterial({ map: hudTex, color: 0xd0d0d0 });
 
   const head = new THREE.Group(); scene.add(head);
+  const piezas = [];
+  const suave01 = v => { const x = Math.max(0, Math.min(1, v)); return x * x * (3 - 2 * x); };
+  const ventana = (f, a, b, c, d) => suave01((f - a) / (b - a)) * (1 - suave01((f - c) / (d - c)));
+  function restaurarPiezas() {
+    for (const p of piezas) { p.grupo.position.copy(p.base); p.grupo.rotation.set(0, 0, 0); }
+  }
   // ---------- compuerta del visor (arañas): el visor se abre hacia arriba por una bisagra y deja ver el nido ----------
   const bisagra = new THREE.Group(); bisagra.position.set(0, .5, .32);
   let abierto = 0, abrirObj = 0, abrirHasta = 0;
@@ -350,6 +364,22 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     });
     head.add(g.scene);
     g.scene.updateMatrixWorld(true);
+    // Agrupa cada pieza con sus luces; cada pivote queda en el centro de la pieza.
+    for (const [nombre, patron, direccion] of [
+      ['placa', /^PlacaSuperior$/, [0, .22, -.08]],
+      ['izquierda', /^(Auricular_I|LedAuricular_I)$/, [-.4, .06, .05]],
+      ['derecha', /^(Auricular_D|LedAuricular_D)$/, [.4, .06, .05]],
+      ['menton', /^(Menton|Ventila|Lamina_\d+|Voz_\d+|LuzMenton_.*)$/, [0, -.3, .15]],
+    ]) {
+      const objetos = []; g.scene.traverse(o => { if (patron.test(o.name) && !patron.test(o.parent?.name || '')) objetos.push(o); });
+      if (!objetos.length) continue;
+      const grupo = new THREE.Group(), caja = new THREE.Box3();
+      for (const o of objetos) caja.union(new THREE.Box3().setFromObject(o));
+      grupo.position.copy(g.scene.worldToLocal(caja.getCenter(new THREE.Vector3())));
+      g.scene.add(grupo); grupo.updateMatrixWorld(true);
+      for (const o of objetos) grupo.attach(o);
+      piezas.push({ nombre, grupo, base: grupo.position.clone(), direccion: new THREE.Vector3(...direccion) });
+    }
     const visor = []; g.scene.traverse(o => { if (o.isMesh && /^(MarcoVisor|Pantalla)/.test(o.name + '|' + (o.parent?.name || '')) && !visor.includes(o)) visor.push(o); });
     for (const o of visor) bisagra.attach(o);                    // la bisagra conserva su posición: solo gira al abrir
   }, undefined, e => console.error('casco.glb', e));
@@ -424,6 +454,11 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       else if (gesto === 'triste') { gx = .26 * g; gy = Math.sin(t * 7) * .12 * g; }   // cabeza gacha y niega despacio
       else if (gesto === 'duda') gz = -.2 * g;                                 // ladea la cabeza: ¿?
       else if (gesto === 'bostezo') { gx = -.3 * Math.sin(Math.min(1, f * 1.4) * Math.PI); gz = .06 * g; }   // echa la cabeza atrás
+      else if (gesto === 'revision') { gx = -.08 * g; gy = Math.sin(t * 1.5) * .08 * g; }
+      else if (gesto === 'montaje') gz = -.17 * Math.sin(f * Math.PI);
+      else if (gesto === 'estornudo_explosivo') {
+        gx = f < .28 ? -.18 * suave01(f / .28) : f < .37 ? -.18 + .46 * suave01((f - .28) / .09) : .28 * (1 - suave01((f - .37) / .35));
+      }
       else if (gesto === 'estornudo') { gx = f < .45 ? -.22 * (f / .45) : f < .55 ? .35 : .35 * (1 - (f - .55) / .45); if (f > .45 && f < .5) wob = Math.max(wob, .7); }
       else if (gesto === 'pensativo') gz = .1 * g;
       else if (gesto === 'navegando') { gy = Math.sin(t * 1.3) * .35 * g; gx = .08 * g + Math.sin(t * .65) * .06 * g; }   // recorre la página con la mirada
@@ -467,15 +502,36 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     const deformacion = Math.max(-.09, Math.min(.09, elasticidad));
     const escalaY = 1 + deformacion, escalaLateral = 1 / Math.sqrt(escalaY);
     head.scale.set(escalaLateral, escalaY, escalaLateral);
+    // Las escenas no cambian la geometría: separan piezas y las devuelven a su transformación original.
+    restaurarPiezas();
+    let aperturaEscena = 0;
+    const faseEscena = Math.max(0, Math.min(1, (now - gestoIni) / Math.max(1, gestoHasta - gestoIni)));
+    if (ESCENAS.has(gesto) && now < gestoHasta && !suave && !abrirObj && abierto < .03) {
+      const f = faseEscena;
+      const separacion = gesto === 'revision' ? ventana(f, .04, .25, .65, .96)
+        : gesto === 'estornudo_explosivo' ? ventana(f, .28, .37, .44, .84) : ventana(f, .04, .24, .5, .82);
+      aperturaEscena = gesto === 'revision' ? separacion * .55 : 0;
+      for (const p of piezas) {
+        const tardio = p.nombre === 'derecha' && gesto !== 'revision';
+        const amplitud = tardio ? ventana(f, gesto === 'montaje' ? .04 : .28, gesto === 'montaje' ? .24 : .37, .7, .98) : separacion;
+        p.grupo.position.addScaledVector(p.direccion, amplitud);
+        if (p.nombre === 'placa') p.grupo.rotation.x = -.18 * amplitud;
+        if (p.nombre === 'menton') p.grupo.rotation.x = .12 * amplitud;
+        if (tardio && gesto === 'montaje') p.grupo.rotation.z = Math.PI * ventana(f, .24, .4, .69, .95);
+        if (tardio && gesto === 'estornudo_explosivo') p.grupo.rotation.z = Math.sin(f * 24) * .18 * amplitud;
+      }
+      bisagra.position.set(0, .5, .32 + (gesto === 'revision' ? 0 : separacion * .22));
+    } else bisagra.position.set(0, .5, .32);
     // compuerta: se abre con un golpe seco (rebote) y se cierra despacio; dentro el nido late
     if (abrirHasta && performance.now() > abrirHasta) { abrirObj = 0; abrirHasta = 0; }
     abierto += (abrirObj - abierto) * (1 - Math.pow(abrirObj > abierto ? .0008 : .02, step));
     const temblor = abrirObj > abierto + .05 ? Math.sin(now / 18) * .03 : 0;
-    bisagra.rotation.x = -1.5 * abierto + temblor;
-    nido.visible = abierto > .03;
+    bisagra.rotation.x = -1.5 * Math.max(abierto, aperturaEscena) + temblor;
+    const aperturaVisual = Math.max(abierto, aperturaEscena);
+    nido.visible = aperturaVisual > .03;
     if (nido.visible) {
       const pulso = .5 + .5 * Math.sin(now / 260);
-      nido.userData.halo.material.opacity = (.35 + .4 * pulso) * abierto; nido.userData.luz.intensity = 2.2 * abierto * (.6 + .4 * pulso);
+      nido.userData.halo.material.opacity = (.35 + .4 * pulso) * aperturaVisual; nido.userData.luz.intensity = 2.2 * aperturaVisual * (.6 + .4 * pulso);
       for (const par of nido.userData.ojos.children) { const f = (now / 1000 + par.userData.fase) % 4; par.scale.y = f < .12 ? .15 : 1; par.position.x += Math.sin(now / 700 + par.userData.fase) * .0006; }
       if (abierto > .4) { gx += -.06 * abierto; wob = Math.max(wob, .08 * abierto); }
     }
@@ -533,21 +589,24 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     // gestos: ojos remolino|guino|corazon|sorpresa|reloj|feliz|triste|duda|bostezo|estornudo|pensativo
     //         cabeza saludo|si|no|mirar|celebrar (y la de cada gesto de ojos). msg !== undefined = cara despierta + ese texto
     gesto(nombre, secs = 3, msg) {
+      if (ESCENAS.has(nombre) && (abrirObj || abierto > .03)) return;
+      restaurarPiezas();
       gesto = nombre; gestoIni = performance.now(); gestoHasta = gestoIni + secs * 1000;
       const base = react > 0 ? prevState : stateName;
       if (msg !== undefined) flash(base === 'dormido' ? 'reposo' : base, msg, secs);
     },
     // Cancela una expresión decorativa sin cambiar el estado ni el mensaje real.
-    cancelarGesto() { gesto = null; gestoHasta = 0; },
+    cancelarGesto() { gesto = null; gestoHasta = 0; restaurarPiezas(); bisagra.position.set(0, .5, .32); },
     ocupado: () => performance.now() < gestoHasta || react > 0,
     // compuerta del visor: abre el casco (las arañas salen del nido) durante secs; cerrarCasco() lo cierra ya
-    abrirCasco(secs = 4) { abrirObj = 1; abrirHasta = performance.now() + secs * 1000; },
+    abrirCasco(secs = 4) { if (ESCENAS.has(gesto)) this.cancelarGesto(); abrirObj = 1; abrirHasta = performance.now() + secs * 1000; },
     cerrarCasco() { abrirObj = 0; abrirHasta = 0; },
     abierto: () => abierto,
     // se muda de monitor: rueda en la dirección del viaje (dir = 1 derecha, -1 izquierda)
     rodar(dir = 1) { const base = react > 0 ? prevState : stateName; spin = 1.7 * dir; wob = .35; this.inercia(dir * 1100, 0); impulso = -.45; flash(base === 'dormido' ? 'reposo' : base, '', 1.3); },
     setState(name, msg = '') {
       if (!STATES[name]) return;
+      if (name !== 'reposo' && ESCENAS.has(gesto)) this.cancelarGesto();
       if (react > 0) { prevState = name; prevMsg = msg || MSG_ESTADO()[name] || ''; return; }
       stateName = name; target = STATES[name];
       message = msg || MSG_ESTADO()[name] || '';

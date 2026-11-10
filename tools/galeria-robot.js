@@ -10,6 +10,8 @@ const dirFotos = iF >= 0 ? args.splice(iF, 2)[1] : null;
 const salida = args[0] || path.join(os.tmpdir(), 'galeria-robot.png');
 // [gesto, etiqueta, opciones, ms de espera antes de capturar]
 const GESTOS = [
+  ['revision', 'revision interna', { secs: 7 }, 2800], ['estornudo_explosivo', 'estornudo explosivo', { secs: 5.5 }, 2200],
+  ['montaje', 'montaje equivocado', { secs: 7 }, 3300],
   ['curioso', 'curioso', {}, 900], ['sospecha', 'sospecha', {}, 900], ['concentrado', 'concentrado', {}, 900],
   ['ilusionado', 'ilusionado', {}, 700], ['timido', 'timido', {}, 900], ['enfadado', 'enfadado', {}, 900],
   ['nada', 'reposo', {}, 1500], ['nada', 'trabajando', { estado: 'trabajando' }, 1500], ['nada', 'dormido (Zzz)', { estado: 'dormido' }, 2500],

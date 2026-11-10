@@ -256,7 +256,7 @@ function cercania(p) {
 setInterval(() => {
   const now = Date.now(), d = new Date();
   const libre = !modoGamer && !open && !personaje && !skinCfg.usar && !arrastrando
-    && !panicoOn && lastState === 'reposo' && now - lastActivity >= 4000 && !reducirMovimientoCasco.matches;
+    && !panicoOn && casco.abierto() < .03 && lastState === 'reposo' && now - lastActivity >= 4000 && !reducirMovimientoCasco.matches;
   if (!libre) interrumpirVidaCasco();
   if (panicoOn || reducirMovimientoCasco.matches) return;
   if (libre && vidaCasco.terminarSiLista(now)) {
