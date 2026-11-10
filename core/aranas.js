@@ -11,6 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
+const { fileURLToPath } = require('node:url');
+const { extraerArchivo } = require('./aranas-archivos');
 
 const TIPOS = {
   lectora: { color: '#3df2ff', nombre: 'Lectora', web: true },
@@ -58,17 +60,23 @@ for g in api('/users/@me/guilds') or []:
     if can: canales = [c for c in canales if can == c['id'] or can in c['name'].lower()]
     gc = []
     for c in canales[:a.get('maxCanales', 40)]:
-        msgs, desde = [], after
-        while len(msgs) < a.get('maxMensajes', 200):
-            lote = api('/channels/%s/messages?limit=100&after=%d' % (c['id'], desde))
+        msgs, antes = [], None
+        limite = a.get('maxMensajes', 200)
+        while len(msgs) < limite:
+            peticion = min(100, limite - len(msgs))
+            ruta = '/channels/%s/messages?limit=%d' % (c['id'], peticion)
+            if antes: ruta += '&before=%s' % antes
+            lote = api(ruta)
             if not lote: break
-            lote.sort(key=lambda m: int(m['id']))
-            for m in lote:
+            lote.sort(key=lambda m: int(m['id']), reverse=True)
+            recientes = [m for m in lote if int(m['id']) > after]
+            for m in recientes:
                 au = m.get('author') or {}
                 msgs.append({'a': au.get('global_name') or au.get('username') or '?', 'bot': bool(au.get('bot')), 't': (m.get('timestamp') or '')[:16].replace('T', ' '),
-                             'c': (m.get('content') or '')[:700], 'adj': len(m.get('attachments') or []), 'emb': [e.get('title') for e in (m.get('embeds') or []) if e.get('title')][:2]})
-            desde = int(lote[-1]['id'])
-            if len(lote) < 100: break
+                             'c': m.get('content') or '', 'adj': len(m.get('attachments') or []), 'emb': [e.get('title') for e in (m.get('embeds') or []) if e.get('title')][:2]})
+            antes = lote[-1]['id']
+            if len(recientes) < len(lote) or len(lote) < peticion: break
+        msgs.reverse()
         if msgs: gc.append({'id': c['id'], 'nombre': c['name'], 'mensajes': msgs})
     out.append({'id': g['id'], 'nombre': g['name'], 'canales': gc})
 print(json.dumps({'servidores': out, 'errores': errores[:20]}, ensure_ascii=False))
@@ -110,6 +118,7 @@ function informeHTML({ titulo, urls, cobertura, fin, hechos, txt }) {
 }
 
 function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secreto = () => null, fetch: fetchX = globalThis.fetch, ejecutarSsh }) {
+  const locales = new Map(); let siguienteLocal = 0;
   let visor = null;   // ventana de arañas de APOLO (main.js → ponerVisor): escanea sin depender de la extensión
   const conf = () => cfg.aranas || {};
   const dirDatos = () => { const d = path.join(cfg.dir, 'aranas'); fs.mkdirSync(d, { recursive: true }); return d; };
@@ -119,10 +128,11 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
   const corriendo = new Map();   // tipo -> { desde, detalle }
 
   function guardarInforme(tipo, titulo, texto, extra = {}) {
-    const archivo = path.join(dirInformes(), `${ahoraTxt()} ${tipo} ${limpio(titulo) || tipo}.txt`);
+    const id = require('node:crypto').randomUUID();
+    const archivo = path.join(dirInformes(), `${ahoraTxt()} ${tipo} ${limpio(titulo) || tipo} ${id.slice(0,8)}.txt`);
     fs.writeFileSync(archivo, texto, 'utf8');
     const ind = leerIndice();
-    ind.unshift({ id: `${Date.now().toString(36)}`, tipo, titulo, archivo, fecha: Date.now(), ...extra });
+    ind.unshift({ id, tipo, titulo, archivo, fecha: Date.now(), ...extra });
     fs.writeFileSync(indiceRuta(), JSON.stringify(ind.slice(0, 80), null, 1));
     ultimo[tipo] = archivo;
     return archivo;
@@ -132,10 +142,18 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
   const vuelven = (tipo, resumen) => bus.emit('aranas', { fase: 'vuelven', tipo, color: TIPOS[tipo].color, nombre: TIPOS[tipo].nombre, resumen });
 
   // ---------- arañas de página (extensión) ----------
-  async function pestanaObjetivo(id) {
+  async function pestanaObjetivo(id, tituloObjetivo) {
     const tabs = await navegador.orden('pestanas');
-    const t = (id != null && tabs.find(x => x.id === Number(id))) || tabs.find(x => x.activa) || tabs[0];
+    const normal = x => String(x || '').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
+    let t = id != null ? tabs.find(x => x.id === Number(id)) : tabs.find(x => x.activa) || tabs[0];
+    if (id == null && tituloObjetivo) {
+      const candidatas = tabs.filter(x=>x.titulo && normal(tituloObjetivo).includes(normal(x.titulo)));
+      if (candidatas.length===1) t=candidatas[0];
+      else throw new Error(candidatas.length ? 'Varias pestañas coinciden con la ventana; elige una pestaña explícita' : 'La ventana del menú no coincide con ninguna pestaña de la extensión');
+    }
+    if (id != null && !t) throw new Error('La pestaña elegida ya no existe; no se usará otra en su lugar');
     if (!t) throw new Error('no hay ninguna pestaña abierta');
+    if (tituloObjetivo && t.titulo && !normal(tituloObjetivo).includes(normal(t.titulo))) throw new Error('La pestaña activa no coincide con la ventana donde abriste el menú; actívala y vuelve a intentarlo');
     if (!/^https?:|^file:/.test(t.url || '')) throw new Error(`la pestaña activa (${t.url || 'vacía'}) es interna del navegador: abre la página que quieres escanear`);
     const prot = navegador.protegido(t.url, t.titulo);
     if (prot) throw new Error(`"${dominio(t.url)}" es un sitio protegido (banco, contraseñas…): ahí no suelto arañas`);
@@ -152,9 +170,20 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     s._sitios.add(dom);
   }
   // pestana numérica = pestaña de Chrome (extensión); 'v:…' = ventana de arañas de APOLO
-  const orden = (pestana, accion, args = {}, ms = 30_000) => (typeof pestana === 'string' && pestana.startsWith('v:'))
-    ? Promise.race([visor.accion(pestana, accion, args), new Promise((_, mal) => { const t = setTimeout(() => mal(new Error(`la ventana de arañas no respondió a "${accion}"`)), ms); t.unref?.(); })])
-    : navegador.orden('aranas', { pestana, accion, ...args }, ms);
+  const orden = async (pestana, accion, args = {}, ms = 30_000) => {
+    if (String(pestana).startsWith('local:')) {
+      if (accion === 'soltar') { const datos = locales.get(pestana); if (!datos) throw new Error('El archivo ya no está disponible'); return datos; }
+      return { ok:true, url:null, local:true };
+    }
+    let temporizador;
+    try {
+      const respuesta = typeof pestana === 'string' && pestana.startsWith('v:')
+        ? await Promise.race([visor.accion(pestana,accion,args),new Promise((_,mal)=>{temporizador=setTimeout(()=>mal(new Error('La ventana de arañas no respondió')),ms);temporizador.unref?.();})])
+        : await navegador.orden('aranas',{pestana,accion,...args},ms);
+      if (respuesta?.error) throw new Error(respuesta.error);
+      return respuesta;
+    } finally { if (temporizador) clearTimeout(temporizador); }
+  };
   // las arañas de la PÁGINA se quedan vigilando sus marcas (agresivas en las trampas, contentas en lo bueno); a la isla vuelven las suyas
   const recogerLuego = (pestana, tipo, ms = 9000) => { const t = setTimeout(() => { if (conf().recoger) orden(pestana, 'recoger', { tipo }).catch(() => { }); vuelven(tipo); }, ms); t.unref?.(); };
   const ultimo = {};   // tipo -> informe a abrir al terminar
@@ -199,7 +228,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
         'Devuelve: seccion (título de lo que trata este trozo), resumen (detallado y explicado, 5-12 frases, con TODAS las condiciones importantes), puntos (cada regla/obligación/derecho concreto, uno por línea), alertas (trampas: lo que puede perjudicar o sorprender, con su frase literal), buenas (lo que le favorece o le interesa, con su frase literal) y datos (cifras, plazos, importes, fechas, edades, correos, direcciones).';
       let ultimoError = '';
       for (let intento = 0; intento < 2; intento++) {
-        try { return { ok: true, ...(await JSONm(SIS_TROZO, prompt, ESQ_TROZO)) }; }
+        try { const datos = await JSONm(SIS_TROZO, prompt, ESQ_TROZO); if (!datos?.resumen || !Array.isArray(datos.puntos)) throw new Error('Respuesta de resumen incompleta'); return { ok:true,...datos }; }
         catch (e) { ultimoError = e.message; }
       }
       return { ok: false, error: ultimoError };
@@ -223,18 +252,26 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
 
   async function lectora(t, a, s) {
     const paginas = Math.max(1, Math.min(Number(a.paginas) || 1, 20));
-    const partes = [];
+    const partes = [], visitadas = new Set();
     let r, pest = t.id;
     for (let p = 0; p < paginas; p++) {
       r = await orden(pest, 'soltar', { tipo: 'lectora', color: TIPOS.lectora.color });
+      const huella = String(r.url) + ':' + require('node:crypto').createHash('sha256').update(String(r.completo || r.bloques.map(b=>b.texto).join('\n'))).digest('hex');
+      if (visitadas.has(huella)) break;visitadas.add(huella);
       partes.push({ titulo: r.titulo, url: r.url, texto: r.completo || r.bloques.map(b => b.texto).join('\n\n'), pagina: r.caracteresPagina, de: r.de || 'página', bloques: r.bloques });
       if (p + 1 >= paginas) break;
       await new Promise(ok => setTimeout(ok, Math.min(30_000, 2500 + r.bloques.length * 120)));
       const sig = await orden(pest, 'siguiente').catch(() => ({ url: null }));
       if (!sig.url) break;
-      await new Promise(ok => setTimeout(ok, 1500)); await orden(pest, 'esperar', {}, 20_000).catch(() => { });
+      if (navegador?.protegido?.(sig.url,'')) throw new Error('La página siguiente está protegida');
+      await permisoSitio(s,sig.url);
+      await new Promise(ok => setTimeout(ok,1500));
+      const cargada = await orden(pest,'esperar',{},20000);
+      if (cargada?.url && navegador?.protegido?.(cargada.url,cargada.titulo || '')) throw new Error('La página siguiente redirigió a un sitio protegido');
+      if (cargada?.url) await permisoSitio(s,cargada.url);
     }
     const textoTodo = partes.map(x => partes.length > 1 ? `===== ${x.titulo} — ${x.url} =====\n\n${x.texto}` : x.texto).join('\n\n');
+    if (!textoTodo.trim()) throw new Error('La página no contiene texto extraíble; no se ha leído ni resumido');
     const caracteres = textoTodo.length;
     const { trozos, hechos, fin } = await resumirDetallado(textoTodo, { titulo: r.titulo, url: r.url, consulta: a.consulta });
     const okN = hechos.filter(h => h.ok).length;
@@ -283,52 +320,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     return chat.join('\n');
   }
 
-  async function ia(t, a) {
-    const r = await orden(t.id, 'soltar', { tipo: 'ia', color: TIPOS.ia.color });
-    const parr = r.bloques.filter(b => b.t === 'texto' && b.texto.length >= 120).slice(0, 40);
-    if (!parr.length) { recogerLuego(t.id, 'ia', 3000); return `🕷 La detectora de IA no encontró párrafos largos que analizar en "${r.titulo}".`; }
-    const d = await JSONm('Eres la araña detectora de texto generado por IA de APOLO. Estimas, párrafo a párrafo, la probabilidad (0-100) de que lo haya escrito un modelo de lenguaje. ' +
-      'Señales: frases genéricas y equilibradas, muletillas típicas ("en resumen", "es importante destacar", "sumérgete", "delve", "en el mundo actual"), listas de tres, cero errores ni opiniones concretas, tono de folleto, ausencia de datos verificables o vivencias. ' +
-      'Señales humanas: detalles personales, erratas, humor, opiniones fuertes, datos específicos, ritmo irregular. Sé prudente: es una ESTIMACIÓN, nunca una prueba.',
-      `PÁGINA: ${r.titulo} (${r.url})\n\nPÁRRAFOS:\n${recorte(lista(parr), 26000)}\n\nDevuelve la probabilidad de cada párrafo (i), las señales que viste (cortas) y un veredicto global.`,
-      { type: 'object', properties: { veredicto: { type: 'string' }, global: { type: 'integer' },
-        parrafos: { type: 'array', items: { type: 'object', properties: { i: { type: 'integer' }, prob: { type: 'integer' }, senales: { type: 'array', items: { type: 'string' } } }, required: ['i', 'prob'] } } }, required: ['veredicto', 'parrafos'] });
-    const ps = (d.parrafos || []).filter(p => parr.some(b => b.i === p.i));
-    const marcas = ps.filter(p => p.prob >= 40).map(p => ({ i: p.i, etiqueta: `${p.prob >= 60 ? 'IA' : '¿IA?'} ${p.prob}%`, color: p.prob >= 60 ? TIPOS.ia.color : '#ffb020', animo: p.prob >= 60 ? 'agresiva' : null }));
-    await orden(t.id, 'marcar', { tipo: 'ia', marcas }).catch(() => { });
-    recogerLuego(t.id, 'ia');
-    const global = Number.isFinite(d.global) ? d.global : Math.round(ps.reduce((s, p) => s + p.prob, 0) / Math.max(1, ps.length));
-    const informe = [`ARAÑA DETECTORA DE IA · ${r.titulo}`, r.url, new Date().toLocaleString('es'), '', `PROBABILIDAD GLOBAL: ${global}% (estimación, no prueba)`, d.veredicto, '',
-      ...ps.map(p => { const b = parr.find(x => x.i === p.i); return `[${p.prob}%] ${(p.senales || []).join(' · ')}\n   «${b.texto.replace(/\s+/g, ' ').slice(0, 220)}…»`; })].join('\n');
-    const archivo = guardarInforme('ia', r.titulo, informe, { url: r.url, global });
-    return `🕷 Detectora de IA en "${r.titulo}": ${global}% de probabilidad global de texto generado por IA (es una estimación, no una prueba).\n${d.veredicto}\n` +
-      `${marcas.filter(m => m.etiqueta.startsWith('IA')).length} de ${parr.length} párrafos marcados en magenta en la página.\nInforme: ${archivo}`;
-  }
-
-  async function codigo(t, a) {
-    const r = await orden(t.id, 'soltar', { tipo: 'codigo', color: TIPOS.codigo.color });
-    const bl = r.bloques.filter(b => b.t === 'codigo').slice(0, 14);
-    if (!bl.length) { recogerLuego(t.id, 'codigo', 3000); return `🕷 La araña de código no encontró bloques de código en "${r.titulo}".`; }
-    const d = await JSONm('Eres la araña de código de APOLO: revisas código para encontrar fallos de SEGURIDAD y bugs graves (defensivo: explicas el riesgo y cómo arreglarlo, nunca escribes exploits). ' +
-      'Mira: inyección SQL/comandos, XSS, eval/exec con datos externos, deserialización insegura, secretos o claves en el código, criptografía débil, rutas sin validar (path traversal), SSRF, CORS abierto, falta de autenticación, condiciones de carrera, dependencias peligrosas.' +
-      ' No inventes: si el código está bien, dilo.',
-      `PÁGINA: ${r.titulo} (${r.url})\n${a.consulta ? `FOCO: ${a.consulta}\n` : ''}\nBLOQUES DE CÓDIGO:\n${recorte(bl.map(b => `[${b.i}]\n${b.texto.slice(0, 6000)}`), 30000)}\n\n` +
-      'Devuelve el lenguaje, un resumen y los hallazgos (i del bloque, severidad critica|alta|media|baja, tipo corto, frase exacta del código donde está, explicación y arreglo).',
-      { type: 'object', properties: { lenguaje: { type: 'string' }, resumen: { type: 'string' },
-        hallazgos: { type: 'array', items: { type: 'object', properties: { i: { type: 'integer' }, severidad: { type: 'string', enum: ['critica', 'alta', 'media', 'baja'] }, tipo: { type: 'string' },
-          frase: { type: 'string' }, explicacion: { type: 'string' }, arreglo: { type: 'string' } }, required: ['i', 'severidad', 'tipo', 'explicacion'] } } }, required: ['resumen', 'hallazgos'] });
-    const hs = (d.hallazgos || []).filter(h => bl.some(b => b.i === h.i));
-    await orden(t.id, 'marcar', { tipo: 'codigo', marcas: hs.map(h => ({ i: h.i, frase: h.frase, color: SEV[h.severidad] || SEV.media, animo: ['critica', 'alta'].includes(h.severidad) ? 'agresiva' : null, etiqueta: `${h.severidad.toUpperCase()} · ${String(h.tipo).slice(0, 22)}` })) }).catch(() => { });
-    recogerLuego(t.id, 'codigo', 12_000);
-    const orden2 = ['critica', 'alta', 'media', 'baja'];
-    hs.sort((x, y) => orden2.indexOf(x.severidad) - orden2.indexOf(y.severidad));
-    const informe = [`ARAÑA DE CÓDIGO · ${r.titulo}`, r.url, new Date().toLocaleString('es'), `Lenguaje: ${d.lenguaje || '?'} · ${bl.length} bloques`, '', d.resumen, '',
-      ...hs.map(h => `[${h.severidad.toUpperCase()}] ${h.tipo}\n   Dónde: ${h.frase || `bloque ${h.i}`}\n   Riesgo: ${h.explicacion}\n   Arreglo: ${h.arreglo || '-'}\n`)].join('\n');
-    const archivo = guardarInforme('codigo', r.titulo, informe, { url: r.url, hallazgos: hs.length });
-    const cuenta = orden2.map(s => [s, hs.filter(h => h.severidad === s).length]).filter(([, n]) => n).map(([s, n]) => `${n} ${s}`).join(', ');
-    return `🕷 Araña de código en "${r.titulo}" (${d.lenguaje || 'código'}, ${bl.length} bloques): ${hs.length ? cuenta : 'sin fallos claros'}.\n${d.resumen}\n` +
-      hs.slice(0, 5).map(h => `• [${h.severidad}] ${h.tipo}: ${h.explicacion}`).join('\n') + `\nInforme con los arreglos: ${archivo}`;
-  }
+  const { ia, codigo } = require('./aranas-pagina').crearAnalisisPagina({ JSONm, orden, recogerLuego, guardarInforme, TIPOS, SEV });
 
   // ---------- araña de Discord (bot CONTROL-COMANDER en la Pi) ----------
   const sshPorDefecto = (host, args) => new Promise((ok, mal) => {
@@ -357,29 +349,20 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
       volcado.push(`\n######## ${g.nombre} (${n} mensajes, últimas ${horas} h)`);
       for (const c of g.canales) { volcado.push(`\n## #${c.nombre}`); for (const m of c.mensajes) volcado.push(`[${m.t}] ${m.a}${m.bot ? ' (bot)' : ''}: ${m.c}${m.adj ? ` [${m.adj} adjunto(s)]` : ''}${m.emb.length ? ` [embed: ${m.emb.join(' / ')}]` : ''}`); }
       if (!n) { informes.push({ g, d: null, n }); continue; }
-      const lineas = []; for (const c of g.canales) for (const m of c.mensajes.slice(-60)) if (!m.bot || m.c) lineas.push(`#${c.nombre} [${m.t.slice(11)}] ${m.a}: ${m.c.replace(/\s+/g, ' ').slice(0, 300)}`);
-      let d = null;
-      try {
-        d = await JSONm('Eres la araña de Discord de APOLO: resumes la actividad reciente de un servidor de Discord para su dueño, en español. Sin inventar: solo lo que está en los mensajes.',
-          `SERVIDOR: ${g.nombre}\n${a.consulta ? `LO QUE BUSCA EL USUARIO: ${a.consulta}\n` : ''}MENSAJES (últimas ${horas} h, de más viejo a más nuevo):\n${recorte(lineas.slice(-500).reverse(), 22000).split('\n').reverse().join('\n')}\n\n` +
-          'Devuelve: resumen, temas, pendientes (preguntas o pedidos SIN respuesta, quién y en qué canal), destacados (lo importante o lo que encaja con lo que busca) y enlaces útiles.',
-          { type: 'object', properties: { resumen: { type: 'string' }, temas: { type: 'array', items: { type: 'string' } },
-            pendientes: { type: 'array', items: { type: 'object', properties: { canal: { type: 'string' }, quien: { type: 'string' }, que: { type: 'string' } }, required: ['que'] } },
-            destacados: { type: 'array', items: { type: 'object', properties: { canal: { type: 'string' }, quien: { type: 'string' }, texto: { type: 'string' } }, required: ['texto'] } },
-            enlaces: { type: 'array', items: { type: 'string' } } }, required: ['resumen'] });
-      } catch (e) { d = { resumen: `(no pude resumir: ${e.message})` }; }
+      const d = await require('./aranas-discord').resumirServidor(g,{JSONm,consulta:a.consulta,horas});
       informes.push({ g, d, n });
     }
     const txt = [`ARAÑA DE DISCORD · ${new Date().toLocaleString('es')} · últimas ${horas} h${a.consulta ? ` · busca: ${a.consulta}` : ''}`,
-      ...informes.map(({ g, d, n }) => [`\n==== ${g.nombre} · ${n} mensajes ====`, d ? d.resumen : '(sin actividad)', ...(d?.temas || []).map(x => `• tema: ${x}`),
-        ...(d?.pendientes || []).map(p => `⚠ pendiente ${p.canal ? `#${p.canal.replace(/^#/, '')} ` : ''}${p.quien ? `(${p.quien}) ` : ''}${p.que}`),
+      ...informes.map(({ g, d, n }) => [`\n==== ${g.nombre} · ${n} mensajes ====`, d ? `COBERTURA: ${d.analizados} de ${d.total} mensajes resumidos` : '', ...(d?.avisos || []).map(x => `AVISO: ${x}`), d ? d.resumen : '(sin actividad)', ...(d?.temas || []).map(x => `• tema: ${x}`),
+        ...(d?.pendientes || []).map(p => `⚠ posible pendiente ${p.canal ? `#${p.canal.replace(/^#/, '')} ` : ''}${p.quien ? `(${p.quien}) ` : ''}${p.que}`),
         ...(d?.destacados || []).map(p => `★ ${p.canal ? `#${p.canal.replace(/^#/, '')} ` : ''}${p.quien ? `${p.quien}: ` : ''}${p.texto}`), ...(d?.enlaces || []).map(x => `🔗 ${x}`)].join('\n')),
       ...(j.errores?.length ? ['\nSin acceso (permisos del bot): ' + j.errores.join(', ')] : []), '\n' + '='.repeat(60), 'MENSAJES', ...volcado].join('\n');
     const total = informes.reduce((s, x) => s + x.n, 0);
+    if (!total && j.errores?.length) throw new Error('Discord no permitió leer los canales: ' + j.errores.join(', '));
     const archivo = guardarInforme('discord', a.servidor || `${srvs.length} servidores`, txt, { mensajes: total });
     return `🕷 La araña de Discord recorrió ${srvs.length} servidor(es) · ${total} mensajes de las últimas ${horas} h.\n` +
-      informes.filter(x => x.d).map(({ g, d }) => `\n**${g.nombre}**: ${d.resumen}${(d.pendientes || []).length ? `\n  ⚠ ${d.pendientes.length} sin responder: ${d.pendientes.slice(0, 3).map(p => p.que).join(' · ')}` : ''}`).join('') +
-      `\n\nInforme completo: ${archivo}`;
+      informes.filter(x => x.d).map(({ g, d }) => `\n**${g.nombre}**: ${d.resumen}${(d.pendientes || []).length ? `\n  ⚠ ${d.pendientes.length} posibles pendientes: ${d.pendientes.slice(0, 3).map(p => p.que).join(' · ')}` : ''}`).join('') +
+      `\n\nLímite de captura: ${dc.maxCanales || 40} canales por servidor y ${dc.maxMensajes || 200} mensajes recientes por canal.\n` + informes.filter(x=>x.d).map(x=>`Resumen ${x.g.nombre}: ${x.d.analizados}/${x.d.total} mensajes${x.d.avisos.length ? ' (con errores)' : ''}`).join('\n') + `\nInforme completo: ${archivo}`;
   }
 
   // ---------- araña radar (GitHub + Hugging Face) ----------
@@ -419,13 +402,13 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     // solo lo nuevo de verdad: lo que ya enseñó otra vuelta se marca como visto
     const vistoRuta = path.join(dirDatos(), 'radar-visto.json');
     let visto = {}; try { visto = JSON.parse(fs.readFileSync(vistoRuta, 'utf8')); } catch { }
-    const unicos = [...new Map(items.map(x => [x.id, x])).values()];
+    const unicos = [...new Map(items.filter(x => x.nombre && x.id && !String(x.id).includes('undefined') && typeof x.url === 'string' && x.url.startsWith('https://')).map(x => [x.id, x])).values()];
     for (const x of unicos) { x.nuevo = !visto[x.id]; if (!visto[x.id]) visto[x.id] = Date.now(); }
     const corte = Date.now() - 90 * 864e5; for (const k of Object.keys(visto)) if (visto[k] < corte) delete visto[k];
-    fs.writeFileSync(vistoRuta, JSON.stringify(visto));
     if (!unicos.length) throw new Error(`no pude traer nada (${avisos.join(' · ')})`);
     const nuevos = unicos.filter(x => x.nuevo);
-    const candidatos = (nuevos.length >= 8 ? nuevos : unicos).slice(0, 140);
+    if (!nuevos.length) return `🕷 Radar: sin novedades desde la última vuelta (${unicos.length} elementos ya vistos).${avisos.length ? '\nAvisos: '+avisos.join(' · ') : ''}`;
+    const candidatos = nuevos.slice(0, 140);
     let d = { titular: '', top: [], tendencias: [] };
     try {
       d = await JSONm('Eres la araña radar de APOLO: cada día revisas lo nuevo de GitHub y Hugging Face y eliges lo que de verdad le sirve al usuario. Español, directo, sin hype. No inventes repos: solo de la lista.',
@@ -435,14 +418,16 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
         { type: 'object', properties: { titular: { type: 'string' }, tendencias: { type: 'array', items: { type: 'string' } },
           top: { type: 'array', items: { type: 'object', properties: { nombre: { type: 'string' }, url: { type: 'string' }, porque: { type: 'string' }, categoria: { type: 'string' } }, required: ['nombre', 'porque'] } } }, required: ['titular', 'top'] });
     } catch (e) { d.titular = `(no pude elegir: ${e.message})`; }
-    const top = (d.top || []).map(t => ({ ...t, x: unicos.find(u => u.nombre === t.nombre || u.url === t.url) })).filter(t => t.x).slice(0, 10);
+    const top = (d.top || []).map(t => ({ ...t, x: candidatos.find(u => u.nombre === t.nombre && (!t.url || u.url === t.url)) })).filter(t => t.x).slice(0, 10);
+    if (!top.length) for (const x of candidatos.slice(0,10)) top.push({x,porque:'Elemento nuevo en '+x.fuente,categoria:x.etiqueta});
     const grupos = {}; for (const x of unicos) (grupos[x.fuente] ||= []).push(x);
     const txt = [`ARAÑA RADAR · ${new Date().toLocaleString('es')} · últimos ${dias} días · ${unicos.length} cosas (${nuevos.length} nuevas desde la última vuelta)`, '', d.titular, '',
       'TOP PARA TI', ...top.map((t, k) => `${k + 1}. ${t.x.nombre} (${t.x.fuente}, ${t.x.n}${t.x.unidad})${t.categoria ? ` [${t.categoria}]` : ''}\n   ${t.porque}\n   ${t.x.url}`),
       '', 'TENDENCIAS', ...(d.tendencias || []).map(x => `• ${x}`), ...(avisos.length ? ['', 'AVISOS', ...avisos] : []),
       ...Object.entries(grupos).flatMap(([f, xs]) => ['', `==== ${f} ====`, ...xs.sort((p, q) => q.n - p.n).map(x => `${x.nuevo ? '🆕 ' : '   '}${x.nombre} · ${x.n}${x.unidad}${x.etiqueta ? ` · ${x.etiqueta}` : ''}\n      ${x.desc.slice(0, 200)}\n      ${x.url}`)])].join('\n');
     const archivo = guardarInforme('radar', `${dias} dias`, txt, { cosas: unicos.length, nuevas: nuevos.length });
-    return `🕷 Radar (GitHub + Hugging Face, últimos ${dias} días): ${unicos.length} cosas, ${nuevos.length} nuevas desde la última vuelta.\n${d.titular}\n\n` +
+    fs.writeFileSync(vistoRuta, JSON.stringify(visto));
+    return `🕷 Radar (GitHub nuevo en ${dias} días + tendencias actuales de Hugging Face): ${unicos.length} cosas, ${nuevos.length} nuevas desde la última vuelta.\n${d.titular}\n\n` +
       top.map((t, k) => `${k + 1}. ${t.x.nombre} (${t.x.n}${t.x.unidad}) — ${t.porque}\n   ${t.x.url}`).join('\n') +
       ((d.tendencias || []).length ? `\n\nTendencias: ${d.tendencias.join(' · ')}` : '') + (avisos.length ? `\n(avisos: ${avisos.slice(0, 3).join(' · ')})` : '') + `\n\nInforme completo: ${archivo}`;
   }
@@ -451,10 +436,20 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
 
   // ---------- soltar ----------
   async function soltar(a = {}, s = null) {
-    const tipo = TIPOS[a.tipo] ? a.tipo : 'lectora';
+    const tipo = a.tipo || 'lectora';
+    if (!TIPOS[tipo]) throw new Error('Tipo de araña desconocido: ' + tipo);
     if (corriendo.has(tipo)) throw new Error(`la araña ${TIPOS[tipo].nombre} ya está trabajando`);
     corriendo.set(tipo, { desde: Date.now() });
+    delete ultimo[tipo];
     try {
+      const archivoLocal = a.archivo || (a.url && /^file:/i.test(a.url) && !/\.html?(?:[?#]|$)/i.test(a.url) ? fileURLToPath(a.url) : null);
+      if (archivoLocal && TIPOS[tipo].web) {
+        const datos = extraerArchivo(archivoLocal,tipo), id = 'local:' + (++siguienteLocal);
+        await permisoSitio(s,datos.url); locales.set(id,datos); salen(tipo,datos.titulo);
+        try { const resultado=await ({lectora,ia,codigo})[tipo]({id,url:datos.url,titulo:datos.titulo},a,s); abrirInforme(tipo); return resultado; }
+        catch(e) { vuelven(tipo); throw e; }
+        finally { locales.delete(id); }
+      }
       if (TIPOS[tipo].web) {
         const conExt = !!navegador?.conectado?.();
         // con enlace: la ventana de arañas de APOLO (no depende de la extensión); cfg.aranas.motor = 'extension' fuerza Chrome
@@ -464,6 +459,8 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
           if (navegador?.protegido?.(url, '')) throw new Error(`"${dominio(url)}" es un sitio protegido: ahí no suelto arañas`);
           await permisoSitio(s, url);
           const v = await visor.abrir(url);
+          if (navegador?.protegido?.(v.url,v.titulo)) throw new Error('La página redirigió a un sitio protegido');
+          await permisoSitio(s,v.url);
           salen(tipo, dominio(v.url) || 'archivo');
           const t = { id: v.id, url: v.url, titulo: v.titulo };
           try { const res = await ({ lectora, ia, codigo })[tipo](t, a, s); abrirInforme(tipo); return res; }
@@ -479,7 +476,7 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
           a = { ...a, pestana: nt.id };
           await new Promise(ok => setTimeout(ok, 1200));
         }
-        const t = await pestanaObjetivo(a.pestana);
+        const t = await pestanaObjetivo(a.pestana, a.tituloObjetivo);
         await permisoSitio(s, t.url);
         salen(tipo, dominio(t.url));
         try { const res = await ({ lectora, ia, codigo })[tipo](t, a, s); abrirInforme(tipo); return res; }

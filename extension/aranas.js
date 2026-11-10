@@ -53,6 +53,16 @@
     for (let n; (n = w.nextNode());) out.push(n);
     return out;
   }
+  function textoVisibleSeguro(el) {
+    const partes=[];let anterior=null;
+    for(const n of nodosTexto(el)) {
+      if(!visible(n.parentElement)||!n.parentElement.getClientRects().length)continue;
+      const bloque=n.parentElement.closest(BLOQUES)||n.parentElement;
+      if(anterior&&anterior!==bloque)partes.push('\n\n');
+      partes.push(n.data);anterior=bloque;
+    }
+    return partes.join('');
+  }
   function lineasDe(el) {
     const rr = [], r = document.createRange();
     for (const n of nodosTexto(el)) { r.selectNodeContents(n); for (const x of r.getClientRects()) if (x.width > 2 && x.height > 4) rr.push(x); }
@@ -78,7 +88,8 @@
   // texto COMPLETO de la zona, en orden y sin el menú; si la zona se queda corta frente a la página entera, la página entera
   function textoCompleto(zona) {
     const limpio = t => String(t || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-    const z = limpio(zona.innerText), b = limpio(document.body.innerText);
+    const seguro = textoVisibleSeguro;
+    const z = limpio(seguro(zona)), b = limpio(seguro(document.body));
     return z.length >= b.length * .6 ? { texto: z, de: zona === document.body ? 'página' : 'contenido principal', pagina: b.length } : { texto: b, de: 'página', pagina: b.length };
   }
   function bloquesDe(tipo, zona) {
@@ -89,7 +100,7 @@
       for (const el of document.querySelectorAll('pre, code, .blob-code-inner, .highlight, [class*="language-"]')) {
         if (el.closest('pre') && el.tagName !== 'PRE') continue;
         if ([...vistos].some(v => v.contains(el))) continue;
-        const t = el.innerText || ''; if (t.trim().length < 25 || !visible(el)) continue;
+        const t = textoVisibleSeguro(el); if (t.trim().length < 25 || !visible(el)) continue;
         vistos.add(el); res.push({ el, texto: t, t: 'codigo' });
       }
       return res;
@@ -98,7 +109,7 @@
       if (el.closest(SALTAR) || el.closest('nav,[role=navigation],.mw-editsection') || (tipo === 'ia' && el.closest('footer,header,aside,.navbox,.reflist'))) continue;
       if ([...vistos].some(v => v.contains(el))) continue;
       if (el.querySelector(BLOQUES.replace(/,?(article|section)>div/g, ''))) continue;
-      const t = (el.innerText || '').replace(/\s+\n/g, '\n').trim();
+      const t = textoVisibleSeguro(el).replace(/\s+\n/g, '\n').trim();
       if (t.length < (tipo === 'ia' ? 120 : 3) || !visible(el)) continue;
       vistos.add(el); res.push({ el, texto: t, t: el.tagName === 'PRE' ? 'codigo' : 'texto' });
     }
@@ -112,6 +123,7 @@
     return k;
   }
   // palabras de la página (coordenadas de documento) agrupadas por filas de 40 px para buscar vecinas rápido
+  const trabajos = new Map();
   let palabras = [], filas = new Map(), leidas = 0;
   const FILA = 40;
   function palabrasDe(lista) {
@@ -135,20 +147,20 @@
     for (const w of out) { const k = Math.floor(w.y / FILA); (filas.get(k) || filas.set(k, []).get(k)).push(w); }
     return out;
   }
-  function cerca(y1, y2) { const out = []; for (let k = Math.floor(y1 / FILA); k <= Math.floor(y2 / FILA); k++) { const f = filas.get(k); if (f) out.push(...f); } return out; }
+  function cerca(y1, y2, lectura) { const indice = lectura?.filas || filas; const out = []; for (let k = Math.floor(y1 / FILA); k <= Math.floor(y2 / FILA); k++) { const f = indice.get(k); if (f) out.push(...f); } return out; }
   function leer(w, color, fuerte) {
     if (w.leida) return false;
-    w.leida = true; leidas++;
+    w.leida = true; leidas++; if(w.lectura)w.lectura.leidas++;
     caja(w.x, w.y, w.w, w.h, color, { tenue: !fuerte, retraso: fuerte ? 0 : 60 + Math.random() * 350 });
     return true;
   }
   // la araña muerde una palabra: se para, la palabra se enciende, las de alrededor se van iluminando y las letras vuelan a su boca
   function morder(a, w, color, pistas) {
-    leer(w, color, true);
+    const principal = leer(w, color, true) ? 1 : 0;
     const cx = w.x + w.w / 2, cy = w.y + w.h / 2, R = 95 + Math.random() * 55;
     let n = 0;
-    for (const v of cerca(cy - R, cy + R)) if (Math.hypot(v.x + v.w / 2 - cx, v.y + v.h / 2 - cy) < R && leer(v, color, false)) n++;
-    a.hechos += n + 1;
+    for (const v of cerca(cy - R, cy + R, a.lectura)) if (Math.hypot(v.x + v.w / 2 - cx, v.y + v.h / 2 - cy) < R && leer(v, color, false)) n++;
+    a.hechos += n + principal;
     const txt = w.txt || '';
     for (let i = 0; i < Math.min(8, 2 + txt.length); i++) chispas.push({ x: w.x + Math.random() * w.w, y: cy, a, color, ch: txt[i] || GLIFOS[Math.random() * GLIFOS.length | 0], t: 0, v: .7 + Math.random() * .7 });
     if (txt) tickerObj = (tickerObj + ' ' + txt).slice(-400);
@@ -161,7 +173,8 @@
   }
   // siguiente presa: una palabra sin leer un poco más abajo, cerca y dentro de su franja (zigzag natural hacia abajo)
   function siguientePaso(a) {
-    const busca = (abajo, ancho) => cerca(a.y - 25, a.y + abajo).filter(w => !w.leida && w.x + w.w / 2 > a.banda[0] && w.x + w.w / 2 < a.banda[1] && Math.abs(w.x + w.w / 2 - a.x) < ancho);
+    const palabras = a.lectura?.palabras || [];
+    const busca = (abajo, ancho) => cerca(a.y - 25, a.y + abajo, a.lectura).filter(w => !w.leida && w.x + w.w / 2 > a.banda[0] && w.x + w.w / 2 < a.banda[1] && Math.abs(w.x + w.w / 2 - a.x) < ancho);
     let cand = busca(110, 260);
     if (!cand.length) cand = busca(500, 2000);
     if (!cand.length) { const resto = palabras.filter(w => !w.leida && w.y > a.y - 25 && w.x + w.w / 2 > a.banda[0] && w.x + w.w / 2 < a.banda[1]); cand = resto.slice(0, 40); }
@@ -285,10 +298,11 @@
     const filas = new Map();
     for (const a of aranas) if (!a.fuera) filas.set(a.tipo, a);
     hud.innerHTML = [...filas.values()].map(a => {
-      const pct = Math.round(100 * Math.min(1, a.hechos / Math.max(1, a.total)));
+      const pct = Math.round(100 * Math.min(1, a.lectura ? a.lectura.leidas / Math.max(1,a.lectura.palabras.length) : a.hechos / Math.max(1,a.total)));
       return `<div class="f"><span style="color:${a.color}">● ${NOMBRES[a.tipo] || a.tipo}</span><span class="p">${a.estado || pct + '%'}</span></div><div class="bar"><i style="width:${pct}%;background:${a.color}"></i></div>`;
     }).join('') || '<div class="p">Escaneo terminado. Las marcas se quedan hasta que pulses Limpiar.</div>';
-    nEl.textContent = total ? `✓ texto capturado entero: ${total.toLocaleString()} caracteres · las arañas han recorrido ${leidas.toLocaleString()} de ${palabras.length.toLocaleString()} palabras` : '';
+    const lecturas=[...trabajos.values()], recorridas=lecturas.reduce((s,l)=>s+l.leidas,0), cuenta=lecturas.reduce((s,l)=>s+l.palabras.length,0);
+    nEl.textContent = total ? `✓ texto capturado entero: ${total.toLocaleString()} caracteres · las arañas han recorrido ${recorridas.toLocaleString()} de ${cuenta.toLocaleString()} palabras` : '';
     if (ticker.length < tickerObj.length || !tickerObj.startsWith(ticker)) ticker = tickerObj.startsWith(ticker) ? tickerObj.slice(0, ticker.length + 6) : tickerObj.slice(0, 6);
     tk.textContent = '> ' + ticker.slice(-110) + (Math.floor(performance.now() / 400) % 2 ? '▌' : '');
   }
@@ -328,18 +342,22 @@
       vivo = true; host.style.display = '';
       color = color || COLORES[tipo] || '#7fe3ff';
       const zona = zonaPrincipal();
-      const lista = bloquesDe(tipo, zona);
+      const lista = bloquesDe(tipo,zona).filter(b=>tipo!=='ia'||b.t==='texto');
       const base = bloquesVivos.length;
       lista.forEach((b, i) => { b.i = base + i; });
       bloquesVivos.push(...lista);
       const comp = textoCompleto(zona);
       total += comp.texto.length;
-      palabras = palabrasDe(lista);
+      for(const anterior of aranas.filter(a=>a.tipo===tipo&&!a.fuera)){anterior.fuera=true;anterior.trabajo=false;anterior.ruta=[];anterior.vagar=null;anterior.guardias=null;}
+      const lectura = {palabras:palabrasDe(lista),filas,leidas:0};
+      lectura.palabras.forEach(w=>{w.lectura=lectura});trabajos.set(tipo,lectura);
+      palabras=lectura.palabras;
       const n = Math.max(1, Math.min(4, cuantas || (tipo === 'lectora' ? 3 : 2)));
       const zr = zona.getBoundingClientRect(), z0 = Math.max(0, zr.left) + scrollX, z1 = Math.min(W, zr.right) + scrollX, cx = scrollX + W / 2, cy = scrollY + H / 2;
       for (let k = 0; k < n; k++) {
         const a = M.crear(tipo, color, cx + (k - (n - 1) / 2) * 30, scrollY - 20, { r: 12 });
         aranas.push(a);
+        a.lectura = lectura;
         a.banda = [z0 + (z1 - z0) * k / n - 40, z0 + (z1 - z0) * (k + 1) / n + 40];
         a.total = Math.max(1, Math.round(palabras.length / n));
         a.ruta = [
@@ -349,7 +367,7 @@
         ];
         a.hilo = { x: a.x, y: scrollY - 400 };
       }
-      if (!palabras.length) for (const a of aranas) { a.estado = 'nada que leer'; a.vagar = { x: cx, y: cy }; }
+      if (!palabras.length) for (const a of aranas.filter(x=>x.tipo===tipo&&!x.fuera)) { a.estado = 'nada que leer'; a.vagar = { x: cx, y: cy }; }
       const sumaBloques = lista.reduce((s, b) => s + b.texto.length, 0);
       return { titulo: document.title, url: location.href, bloques: lista.map(b => ({ i: b.i, t: b.t, texto: b.texto.slice(0, 20000) })), total: lista.length,
         completo: comp.texto, de: comp.de, caracteresPagina: comp.pagina, caracteresBloques: sumaBloques };
@@ -428,7 +446,7 @@
       if (a) { a.ruta = [{ x: r.x - 12, y: r.y + Math.min(r.h, 30) / 2, vel: 900, al: ar => { ar.pausa = 1.2; ar.temblor = 1; } }]; a.pausa = 0; }
       return { ok: true };
     },
-    estado() { return { aranas: aranas.map(a => ({ tipo: a.tipo, estado: a.estado || '', pct: Math.round(100 * a.hechos / Math.max(1, a.total)), pendiente: a.ruta.length })) }; },
+    estado() { return { lecturas: Object.fromEntries([...trabajos].map(([tipo,l])=>[tipo,{leidas:l.leidas,total:l.palabras.length}])), aranas: aranas.map(a => ({ tipo: a.tipo, estado: a.estado || '', pct: Math.round(100 * Math.min(1,a.lectura ? a.lectura.leidas / Math.max(1,a.lectura.palabras.length) : a.hechos / Math.max(1,a.total))), pendiente: a.ruta.length })) }; },
     limpiar() { vivo = false; host.remove(); delete window.__apoloAranas; return { ok: true }; },
   };
   raiz.getElementById('x').addEventListener('click', () => window.__apoloAranas.limpiar());

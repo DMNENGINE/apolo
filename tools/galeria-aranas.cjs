@@ -52,9 +52,12 @@ const edge = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
   }
   if(!args.includes('--antes')) {
     await evaluar("document.body.innerHTML='<main style=\"max-width:850px;margin:40px auto\"><h1>Documento local de prueba</h1><p>'+('Las arañas de APOLO recorren palabras y señalan el texto leído. Esta prueba usa contenido local sin abrir páginas externas. ').repeat(12)+'</p></main>'");
+    await evaluar("const oculto=document.createElement('span');oculto.contentEditable='true';oculto.textContent='CAMPO_PRIVADO_DE_PRUEBA';document.querySelector('p').append(oculto);const pre=document.createElement('pre');pre.textContent='function ejemplo(entrada){ return String(entrada); }';document.querySelector('main').append(pre)");
     await cdp('Runtime.evaluate',{expression:fs.readFileSync(path.join(RAIZ,'extension','aranas.js'),'utf8')});
     const lectura=await evaluar("__apoloAranas.soltar({tipo:'lectora',cuantas:1})");
     require('assert/strict')(lectura.total>0 && lectura.completo.includes('Documento local de prueba'));
+    require('assert/strict')(!lectura.completo.includes('CAMPO_PRIVADO_DE_PRUEBA'));
+    require('assert/strict')(!lectura.bloques.some(b=>b.texto.includes('CAMPO_PRIVADO_DE_PRUEBA')));
     let progreso;
     for(let i=0;i<40;i++) {
       await dormir(250);progreso=(await evaluar('__apoloAranas.estado()')).aranas[0];
@@ -64,6 +67,12 @@ const edge = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
     require('assert/strict')(progreso?.pct>0,'Debe recorrer palabras aunque la entrada quede debajo del texto');
     fs.writeFileSync(salida.replace('.png','-lectora.png'),Buffer.from((await cdp('Page.captureScreenshot',{format:'png'})).result.data,'base64'));
     require('assert/strict').equal((await evaluar('__apoloAranas.estado()')).aranas.length,1);
+    const antes=await evaluar('__apoloAranas.estado().lecturas.lectora');
+    await evaluar("__apoloAranas.soltar({tipo:'ia',cuantas:1});__apoloAranas.soltar({tipo:'codigo',cuantas:1})");
+    const lecturas=await evaluar('__apoloAranas.estado().lecturas');
+    require('assert/strict').equal(lecturas.lectora.total,antes.total);
+    require('assert/strict')(lecturas.lectora.leidas>=antes.leidas&&lecturas.ia.total>0&&lecturas.codigo.total>0);
+    require('assert/strict')(lecturas.codigo.total<lecturas.lectora.total,'C?digo recorre solo el c?digo');
     require('assert/strict').equal((await evaluar('__apoloAranas.recoger({})')).ok,true);
     console.log('OK: extensión sobre texto local, extracción y recogida');
   }
