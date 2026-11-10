@@ -75,6 +75,9 @@ async function run() {
     process.exit(0);
   }
 
+  // Codex CLI (hooks en ~/.codex/hooks.json) manda el mismo formato que Claude Code y entiende la misma respuesta de permisos:
+  // basta con marcar de qué motor viene (isla, Mission Control y espejo lo distinguen por _motor)
+  if (motor !== 'claude') data._motor = motor;
   // para encontrar la ventana de la terminal: claude.exe (CLAUDE_PID, vive toda la sesión); process.ppid es un shell que muere al momento
   data._ppid = +process.env.CLAUDE_PID || process.ppid;
   // Linux/mac: dónde escribirle luego (panel de tmux; ventana X11 de la terminal)

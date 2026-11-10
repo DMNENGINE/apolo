@@ -56,7 +56,7 @@ function crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar }) 
   });
 
   // motores externos (Claude Code, Gemini CLI, opencode): sus hooks llegan como 'motor-hook' y se ven en Mission Control como agentes más
-  const MOTOR = { claude: ['Claude Code', 'claudecode/cli'], gemini: ['Gemini CLI', 'gemini/cli'], opencode: ['opencode', 'opencode/cli'] };
+  const MOTOR = { claude: ['Claude Code', 'claudecode/cli'], gemini: ['Gemini CLI', 'gemini/cli'], opencode: ['opencode', 'opencode/cli'], codex: ['Codex', 'codex/cli'] };
   const detalle = i => { i = i || {}; return String(i.url || i.query || i.command || i.file_path || i.pattern || i.path || i.prompt || i.description || '').replace(/\s+/g, ' '); };
   bus.on('motor-hook', ev => {
     if (!ev || !ev.session_id) return;

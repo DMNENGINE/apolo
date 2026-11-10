@@ -18,6 +18,10 @@ const HOOK_EVENTS = [
   ['PostToolUseFailure', 10], ['PermissionRequest', 120], ['Notification', 10], ['Stop', 10], ['StopFailure', 10],
   ['SubagentStart', 10], ['SubagentStop', 10],
 ];
+const CODEX_HOOKS = path.join(os.homedir(), '.codex', 'hooks.json');
+// [evento, timeout en s, ¿lleva matcher de herramienta?]  (SessionEnd: Codex permite como mucho 3 s)
+const CODEX_EVENTS = [['SessionStart', 10], ['UserPromptSubmit', 10], ['PreToolUse', 10, true], ['PermissionRequest', 120, true], ['PostToolUse', 10, true],
+  ['Stop', 10], ['SubagentStart', 10], ['SubagentStop', 10], ['SessionEnd', 3]];
 const GEMINI_EVENTS = [['SessionStart', 10000], ['SessionEnd', 10000], ['BeforeAgent', 10000], ['AfterAgent', 10000], ['BeforeTool', 120000], ['AfterTool', 10000], ['Notification', 10000]];   // ms
 
 const tieneCLI = n => { try { require('child_process').execSync(process.platform === 'win32' ? `where ${n}` : `command -v ${n}`, { stdio: 'ignore', windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/sh' }); return true; } catch { return false; } };
@@ -98,6 +102,23 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     marcar('opencode', instalar ? 'auto' : 'quitado');
     if (!callado) mensaje({ message: tr(instalar ? 'Plugin de opencode instalado.' : 'Plugin de opencode quitado.'), detail: instalar ? `${OPENCODE_PLUGIN}\n${tr('Abre opencode de nuevo: sus permisos saldrán en la isla, el Stream Deck y el móvil.')}` : OPENCODE_PLUGIN });
   }
+  // Codex CLI (≥ 0.124: hooks estables): ~/.codex/hooks.json con el mismo formato y la misma respuesta de permisos que Claude Code.
+  // Codex pide revisar y "confiar" los hooks una vez (/hooks dentro de Codex) y otra vez si cambia el comando.
+  function codex(instalar, { callado } = {}) {
+    const b = copia(CODEX_HOOKS);
+    const s = stripOurs(leerJSON(CODEX_HOOKS));
+    if (instalar) {
+      s.hooks = s.hooks || {};
+      for (const [ev, timeout, herramienta] of CODEX_EVENTS) {
+        const cmd = `${HOOK_EJEC()} ${ev} --motor=codex`;
+        (s.hooks[ev] = s.hooks[ev] || []).push({ ...(herramienta ? { matcher: '.*' } : {}), hooks: [{ type: 'command', command: cmd, commandWindows: cmd, timeout, statusMessage: 'APOLO' }] });
+      }
+    }
+    fs.mkdirSync(path.dirname(CODEX_HOOKS), { recursive: true });
+    fs.writeFileSync(CODEX_HOOKS, JSON.stringify(s, null, 2));
+    marcar('codex', instalar ? 'auto' : 'quitado');
+    if (!callado) mensaje({ message: tr(instalar ? 'Hooks de Codex instalados.' : 'Hooks de Codex quitados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había hooks.json)')}${instalar ? '\n' + tr('En Codex escribe /hooks y confía en los de APOLO (una sola vez).') : ''}` });
+  }
   // si ya está instalado y la app trae una versión nueva del plugin, se cambia sin preguntar
   function opencodeAlDia() {
     const nuevo = leer(OPENCODE_FUENTE), actual = leer(OPENCODE_PLUGIN);
@@ -112,10 +133,12 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     intentar('claude', () => (fs.existsSync(CLAUDE_DIR) || hay('claude')) && !ES_HOOK.test(JSON.stringify(leerJSON(SETTINGS))), () => instalar({ callado: true }));
     intentar('gemini', () => hay('gemini') && !ES_HOOK.test(JSON.stringify(leerJSON(GEMINI_SETTINGS))), () => gemini(true, { callado: true }));
     intentar('opencode', () => hay('opencode') && !fs.existsSync(OPENCODE_PLUGIN), () => opencode(true, { callado: true }));
+    intentar('codex', () => hay('codex') && !ES_HOOK.test(JSON.stringify(leerJSON(CODEX_HOOKS))), () => codex(true, { callado: true }));
     return hechos;
   }
   return {
-    instalar, quitar, gemini, opencode, opencodeAlDia, conectarTodo,
+    instalar, quitar, gemini, opencode, codex, opencodeAlDia, conectarTodo,
+    codexInstalados: () => ES_HOOK.test(JSON.stringify(leerJSON(CODEX_HOOKS))),
     opencodeInstalado: () => fs.existsSync(OPENCODE_PLUGIN),
     instalados: () => ES_HOOK.test(JSON.stringify(leerJSON(SETTINGS))),
     geminiInstalados: () => ES_HOOK.test(JSON.stringify(leerJSON(GEMINI_SETTINGS))),
