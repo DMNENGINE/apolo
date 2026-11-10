@@ -18,6 +18,7 @@ let GESTOS;
 
 const srv = http.createServer((q, r) => {
   const f = path.join(RAIZ, decodeURIComponent(q.url.split('?')[0]));
+  if(f.startsWith(path.join(RAIZ,'core','ui')+path.sep))r.setHeader('Content-Security-Policy',"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob: data:");
   if (!f.startsWith(RAIZ)) { r.writeHead(403); return r.end(); }
   fs.readFile(f, (e, d) => { if (e) { r.writeHead(404); return r.end(); } r.writeHead(200, { 'content-type': TIPOS[path.extname(f)] || 'application/octet-stream' }); if (f.endsWith('app' + path.sep + 'robot.js')) {
  let codigo = d.toString().replace('evaluarAnimacionCasco(receta, (now - gestoIni) / Math.max(1, gestoHasta - gestoIni),', 'evaluarAnimacionCasco(receta, window.__fasePrueba ?? (now - gestoIni) / Math.max(1, gestoHasta - gestoIni),');
@@ -86,7 +87,8 @@ const edge = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
   if(errores.length)throw new Error(errores.join('\n'));
   // Prueba los controles de la galería interactiva real.
   await cdp('Emulation.setDeviceMetricsOverride',{width:1200,height:900,deviceScaleFactor:1,mobile:false});
-  await cdp('Page.navigate',{url:`http://127.0.0.1:${srv.address().port}/app/galeria-100.html`});await dormir(2500);
+  for(const pagina of ['app/galeria-100.html','core/ui/galeria-casco.html']) {
+  await cdp('Page.navigate',{url:`http://127.0.0.1:${srv.address().port}/${pagina}`});await dormir(2500);
   const botones=(await cdp('Runtime.evaluate',{expression:"document.querySelectorAll('[data-id]').length",returnByValue:true})).result.result.value;
   assert.equal(botones,100);
   await cdp('Runtime.evaluate',{expression:"document.querySelector('[data-id=forma_nave]').click()"});await dormir(400);
@@ -94,8 +96,9 @@ const edge = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
   assert.equal(titulo,'Forma de nave');
   await cdp('Runtime.evaluate',{expression:"document.querySelector('#parar').click()"});await dormir(200);
   assert.equal((await cdp('Runtime.evaluate',{expression:'robot.ocupado()',returnByValue:true})).result.result.value,false);
-  fs.writeFileSync(path.join(carpeta,'galeria-interactiva.png'),Buffer.from((await cdp('Page.captureScreenshot',{format:'png'})).result.data,'base64'));
+  fs.writeFileSync(path.join(carpeta,pagina.startsWith('core')?'galeria-panel.png':'galeria-interactiva.png'),Buffer.from((await cdp('Page.captureScreenshot',{format:'png'})).result.data,'base64'));
   if(errores.length)throw new Error(errores.join('\n'));
+  }
   console.log('ok', carpeta, `(${GESTOS.length} gestos)`, '\nerrores JS:', errores.length ? errores.join('\n') : 'ninguno');
   ws.close(); edge.kill(); srv.close(); process.exit(0);
 })().catch(e => { console.error(e); edge.kill(); process.exit(1); });

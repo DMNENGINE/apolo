@@ -21,5 +21,7 @@ fs.writeFileSync(path.join(raiz, 'core', 'ui', 'ojos-catalogo.js'), '// GENERADO
 
 const galeria = fs.readFileSync(path.join(raiz, 'app', 'galeria-100.html'), 'utf8')
   .replace(/<script type="importmap">[\s\S]*?<\/script>/, '')
-  .replace("from './robot.js'", "from './robot3d.js'");
+  .replace('src="./galeria-100.js"', 'src="./galeria-casco.js"');
 fs.writeFileSync(path.join(raiz, 'core', 'ui', 'galeria-casco.html'), '<!-- GENERADO desde app/galeria-100.html; no editar. -->\n' + galeria);
+
+fs.writeFileSync(path.join(raiz, 'core', 'ui', 'galeria-casco.js'), '// GENERADO desde app/galeria-100.js; no editar.\n' + fs.readFileSync(path.join(raiz, 'app', 'galeria-100.js'), 'utf8').replace("from './robot.js'", "from './robot3d.js'"));
