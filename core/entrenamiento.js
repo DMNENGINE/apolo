@@ -135,10 +135,30 @@ function crearEntrenamiento({ cfg, bus, ssh: sshX, ahora = () => Date.now() }) {
         bus?.emit('aviso-externo', { texto: TEXTOS[fase] + extra, urgente: fase === 'failed' || fase === 'completed', origen: 'Entrenamiento' });
       }
       faseAntes = fase;
-      if (e.procesos > 0) siguiente = 60_000;
-      bus?.emit('evento', { tipo: 'entrenamiento', resumen: e.resumen });
+      const activo = e.procesos > 0;
+      if (activo) siguiente = 30_000;
+      const nacimiento = (e.jobs || [])[0]?.arguments?.some?.(x => /apolo\.yaml$/.test(String(x)));
+      bus?.emit('evento', { tipo: 'entrenamiento', resumen: e.resumen, activo, fase, nacimiento, ok: fase === 'completed' });
+      publicarAgente(e, activo, fase, nacimiento);
     } catch { siguiente = 10 * 60_000; }
     temporizador = setTimeout(vigilar, siguiente); temporizador.unref?.();
+  }
+  // en Mission Control como un subagente más (va al taller de Leonardo), con el progreso como "herramienta" en curso
+  let agInicio = 0;
+  function publicarAgente(e, activo, fase, nacimiento) {
+    const r = e.resumen, nombre = nacimiento ? '🧠 Nacimiento de APOLO' : '🧠 Entrenamiento';
+    const pct = r.paso != null && r.total ? Math.round(100 * r.paso / r.total) : null;
+    const que = { waiting: 'en cola, esperando la GPU', loading: 'cargando el modelo', checkpointing: 'guardando checkpoint', paused: 'cedió la GPU (sigue luego)' }[fase] ||
+      `paso ${r.paso ?? '?'}${r.total ? `/${r.total}` : ''}${pct != null ? ` (${pct} %)` : ''}${r.loss != null ? ` · loss ${r.loss.toFixed(3)}` : ''}`;
+    if (activo) {
+      if (!agInicio) agInicio = Date.now();
+      bus?.emit('agente-externo', { id: 'entrenamiento', padre: 'proxmox', nombre, modelo: 'soup/qwen3-4b', canal: 'entrenamiento', estado: 'trabajando', inicio: agInicio, fin: 0,
+        pasos: r.paso || 0, herramienta: { nombre: 'entrenando', resumen: que, desde: Date.now() }, ultimo: que, progreso: pct });
+    } else if (agInicio) {
+      bus?.emit('agente-externo', { id: 'entrenamiento', estado: fase === 'completed' ? 'listo' : fase === 'cancelled' ? 'cancelado' : 'error', fin: Date.now(), herramienta: null,
+        ultimo: fase === 'completed' ? 'Entrenamiento terminado' : `Entrenamiento ${fase}` });
+      agInicio = 0;
+    }
   }
   function empezarVigilancia() { if (!temporizador) { temporizador = setTimeout(vigilar, 15_000); temporizador.unref?.(); } }
   bus?.on?.('entrenamiento', () => { clearTimeout(temporizador); temporizador = setTimeout(vigilar, 8000); temporizador.unref?.(); });

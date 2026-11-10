@@ -566,6 +566,25 @@ async function startNucleo() {
   catch (e) { console.error('[núcleo] sin API HTTP:', e.message); }
   try { conectarOjo(); } catch (e) { console.error('[ojo]', e.message); }   // nucleo.nodos lo crea iniciarDaemon
   const toIsland = ev => { ev._id = nextId++; ev._t = Date.now(); if (win && !win.isDestroyed()) win.webContents.send('event', ev); };
+  // entrenamiento del modelo propio en Proxmox (core/entrenamiento.js): en la isla es una "terminal" más que trabaja —
+  // el robot se pone a trabajar, la fila muestra paso/loss y al terminar celebra (Stop) o se pone triste (StopFailure)
+  let entrenandoIsla = false;
+  nucleo.bus.on('evento', e => {
+    if (!e || e.tipo !== 'entrenamiento' || !e.resumen) return;
+    const r = e.resumen, base = { session_id: 'entrenamiento', cwd: 'Proxmox · CT107', _nucleo: 'soup/qwen3-4b' };
+    const nombre = e.nacimiento ? 'Nacimiento de APOLO' : 'Entrenamiento';
+    const pct = r.paso != null && r.total ? Math.round(100 * r.paso / r.total) : null;
+    const que = { waiting: 'en cola, esperando la GPU', loading: 'cargando el modelo', checkpointing: 'guardando checkpoint', paused: 'cedió la GPU, sigue luego' }[e.fase] ||
+      `${pct != null ? pct + ' % · ' : ''}paso ${r.paso ?? '?'}${r.total ? '/' + r.total : ''}${r.loss != null ? ' · loss ' + r.loss.toFixed(3) : ''}`;
+    if (e.activo) {
+      if (!entrenandoIsla) toIsland({ ...base, hook_event_name: 'UserPromptSubmit', prompt: `🧠 ${nombre}` });
+      entrenandoIsla = true;
+      toIsland({ ...base, hook_event_name: 'PreToolUse', tool_name: nombre, tool_input: { description: que } });
+    } else if (entrenandoIsla) {
+      entrenandoIsla = false;
+      toIsland({ ...base, hook_event_name: e.ok ? 'Stop' : 'StopFailure', last_assistant_message: e.ok ? `${nombre}: terminado.` : `${nombre}: se ha parado (${e.fase}).` });
+    }
+  });
   puente = createPuente({
     nucleo, dataDir: app.getPath('userData'), toIsland,
     onPermiso: (nid, ev) => {

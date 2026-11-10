@@ -47,6 +47,14 @@ function crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar }) 
   bus.on('permiso', p => { const r = p.sesion && runs.get(p.sesion); if (r) { r.esperando = p.id; emitir(r); } });
   bus.on('permiso-resuelto', p => { for (const r of runs.values()) if (r.esperando === p.id) { r.esperando = undefined; emitir(r); } });
 
+  // trabajos de fuera del núcleo que deben verse como agentes (p. ej. el entrenamiento del modelo propio en Proxmox):
+  // bus 'agente-externo' {id, nombre, padre?, modelo, estado, herramienta, inicio, fin…} → se registra/actualiza y sale a Mission Control
+  bus.on('agente-externo', x => {
+    if (!x || !x.id) return;
+    const r = runs.get(x.id) || { pasos: 0, ultimo: '', uso: { entrada: 0, salida: 0 }, inicio: Date.now(), fin: 0 };
+    Object.assign(r, x); runs.set(x.id, r); emitir(r);
+  });
+
   // motores externos (Claude Code, Gemini CLI, opencode): sus hooks llegan como 'motor-hook' y se ven en Mission Control como agentes más
   const MOTOR = { claude: ['Claude Code', 'claudecode/cli'], gemini: ['Gemini CLI', 'gemini/cli'], opencode: ['opencode', 'opencode/cli'] };
   const detalle = i => { i = i || {}; return String(i.url || i.query || i.command || i.file_path || i.pattern || i.path || i.prompt || i.description || '').replace(/\s+/g, ' '); };
