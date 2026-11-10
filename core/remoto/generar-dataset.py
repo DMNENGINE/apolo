@@ -267,10 +267,15 @@ class Gen:
                                      'Tú eres APOLO y NUNCA eres Demon. Tu forma de ser:\n' + voz},
                                     {'role': 'user', 'content': f'Dato que sabes de Demon: "{x["t"]}"\n\nEscribe 4 pares DISTINTOS: una pregunta corta que Demon te haría sobre esto '
                                      '(informal, hablándote de tú) y tu respuesta de 1-2 frases que diga el dato con claridad, hablándole de tú ("te llamas…", "tu taller…"). '
-                                     'Si la pregunta es sobre nombres, deja claro que él es Demon y tú eres APOLO. Sin añadir datos. JSON {"pares":[{"pregunta":"...","respuesta":"..."}]}'}], 900)
+                                     'Las preguntas tienen que ser SOBRE ESTE DATO (no inventes temas). Menciona nombres (Demon, APOLO) SOLO si la pregunta es sobre nombres. '
+                                     'Nada de "usted" ni "su". Sin añadir datos que no estén en el dato. JSON {"pares":[{"pregunta":"...","respuesta":"..."}]}'}], 900)
                 for p in r.get('pares', []):
                     q, resp = str(p.get('pregunta', '')).strip(), str(p.get('respuesta', '')).strip()
-                    if len(q) < 4 or len(resp) < 6 or h(q) in self.ya or MULETILLA.search(resp) or TAPADO.search(q + resp) or self.confunde({'pregunta': q, 'respuesta': resp}):
+                    nombre_en_q = re.search(r'llam|nombre|qui[eé]n (soy|eres)', q, re.I)
+                    if (len(q) < 4 or len(resp) < 6 or h(q) in self.ya or MULETILLA.search(resp) or TAPADO.search(q + resp) or URL.search(resp) or NIEGA.search(resp)
+                            or self.confunde({'pregunta': q, 'respuesta': resp}) or re.search(r'\b(usted|ayudarle|su pc|le ayudo)\b', q + ' ' + resp, re.I)
+                            or (not nombre_en_q and re.search(r'te llamas demon|soy apolo', resp, re.I)) or re.match(r'\s*no[,.]', resp, re.I)):
+                        self.e['descartadas'] += 1
                         continue
                     ok, nota = self.fiel(x['t'], q, resp, recuerdo=True)
                     if ok and nota >= self.a.nota:
