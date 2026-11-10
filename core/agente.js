@@ -59,6 +59,7 @@ function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior
 // system del modelo propio (ligero): el MISMO con el que se entrenó (core/remoto/generar-dataset.py → montar) + la memoria en su formato
 function sistemaLigero(recuerdos, resumen, s) {
   return ['Eres APOLO, el asistente personal de tu usuario en su PC. Respondes en español, directo, con su mismo tono, y usas tus herramientas cuando hace falta.',
+    'Tú eres APOLO. Tu usuario es la persona que te escribe: la memoria de abajo habla de ÉL, no de ti (si se llama de otra forma, ese es SU nombre, no el tuyo).',
     recuerdos ? `\nLO QUE SABES DEL USUARIO (memoria):\n${recuerdos}` : '',
     s.llamada && Date.now() - s.llamada < 10 * 60_000 ? `\n${LLAMADA}` : '',
     resumen ? `\nRESUMEN DE LA PARTE ANTERIOR DE ESTA CONVERSACIÓN:\n${resumen}` : ''].filter(Boolean).join('\n');
@@ -172,7 +173,9 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       if (s.titulo === 'Nueva sesión') s.titulo = texto.slice(0, 60);
       ev('inicio', { modelo: s.modelo });
       const alcanceMemoria = { proyecto: s.cwd, usuario: s.usuario };
-      let recuerdos = ''; try { recuerdos = memoria ? await memoria.contexto(texto, alcanceMemoria) : ''; } catch { }
+      // modelo propio ligero: menos memoria (se entrenó con ~8 recuerdos; con todo el perfil se cree que él es el usuario)
+      const ligeroTurno = !!cfg.proveedores?.[String(modeloElegido).split('/')[0]]?.ligero;
+      let recuerdos = ''; try { recuerdos = memoria ? await memoria.contexto(texto, ligeroTurno ? { ...alcanceMemoria, maxChars: 1200 } : alcanceMemoria) : ''; } catch { }
       let memoriaLeida = recuerdos;
       let pers = ''; try { pers = personalidad ? personalidad.prompt() : ''; } catch { }
       let sk = ''; try { sk = skills ? (await skills.seccion({ sesion: s, mensaje: texto })).texto : ''; } catch { }   // índice + sugeridas (o la skill ya cargada)
@@ -249,6 +252,8 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         const sys = ligero ? sistemaLigero(recuerdos, v.resumen, s) : sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento);
         let historial = conImagenes(v.mensajes, s.sinVision || (s.visionNoAdmitida?.modelo === modeloReal && s.visionNoAdmitida?.hasta > Date.now()));
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
+        // ligero: los turnos con manos (otro modelo) le llegan como charla normal, sin llamadas ni resultados de herramientas
+        if (ligero) historial = historial.filter(m => m.role !== 'tool').map(m => (m.toolCalls ? { ...m, toolCalls: undefined } : m)).filter(m => m.role !== 'assistant' || m.content);
         const herramientas = ligero ? [] : paraEnviar();
         // tope duro de seguridad, no de uso normal: el tamaño lo controla la compactación (cfg.compactar.umbral)
         const limite = cfg.contexto?.porModelo?.[modeloReal] || cfg.contexto?.maxTokens || 128000;
