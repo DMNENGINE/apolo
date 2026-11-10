@@ -96,8 +96,8 @@ class Gen:
             j = json.load(r)
         return re.sub(r"<think>[\s\S]*?</think>", '', j.get('message', {}).get('content', '')).strip()
 
-    def chat_json(self, messages, maximo=900):
-        t = self.chat(messages, True, maximo, .5)
+    def chat_json(self, messages, maximo=900, temp=.5):
+        t = self.chat(messages, True, maximo, temp)
         try:
             return json.loads(t)
         except Exception:
@@ -125,6 +125,8 @@ class Gen:
         self.fase_contexto(m.get('recuerdos', []), getattr(a, 'contexto', 0), m.get('alma', '')[:1200])
         # v4: su NOMBRE (la v3 decía "Soy Demon": casi ningún ejemplo de identidad decía "APOLO")
         self.fase_nombre(getattr(a, 'nombre', 0), m.get('alma', '')[:1200])
+        # v5: si el dato no está en la memoria, decirlo (no inventar)
+        self.fase_nosabe(getattr(a, 'nosabe', 0))
         # C) cómo habla contigo (charla)
         cola = []
         charla = lambda: self.e['fases'].get('tuya', 0) + self.e['fases'].get('sus temas', 0)
@@ -363,15 +365,21 @@ class Gen:
         self.e['fase'] = 'aprendiendo su nombre'; self.guardar()
         tipos = ['quién eres y cómo te llamas', 'si eres Demon (no: Demon es el usuario, tú eres APOLO)', 'cómo se llama él (Demon) y cómo te llamas tú',
                  'si eres Qwen, ChatGPT u otro modelo (eres APOLO, nacido y entrenado en el Proxmox de Demon)', 'qué sois el uno para el otro (él es Demon, tú APOLO)',
-                 'preséntate a alguien nuevo', 'confusiones de nombre ("oye Demon…" dicho a ti: le corriges con cariño)']
-        for i in range(80):
+                 'preséntate a alguien nuevo', 'confusiones de nombre ("oye Demon…" dicho a ti: le corriges con cariño)',
+                 # v5: "¿quién eres?" a secas lo confundía con una pregunta sobre el usuario
+                 'preguntas cortísimas y sueltas sobre ti ("¿quién eres?", "¿y tú?", "¿qué eres?", "preséntate", "¿con quién hablo?")',
+                 'preguntas con faltas o jerga, escritas rápido ("kien eres", "q eres tu", "como te yamas")']
+        hechas = [g['pregunta'] for g in self.leer_generado() if g.get('fuente') == 'nombre']
+        for i in range(300):
             if self.parar() or self.e['fases'].get('nombre', 0) >= objetivo:
                 break
             tema = tipos[i % len(tipos)]
+            evita = ('\nNO repitas ninguna de estas (ya están): ' + ' | '.join(hechas[-25:])) if hechas else ''
             try:
                 r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente personal de Demon. Te llamas APOLO. Demon es tu USUARIO (el humano que te habla), no tú. Tu forma de ser:\n' + voz},
                                     {'role': 'user', 'content': f'Escribe 6 pares pregunta/respuesta distintos sobre: {tema}. Las preguntas las escribe Demon, informal, de tú. '
-                                     'Tus respuestas: 1-2 frases, primera persona, diciendo tu nombre APOLO de forma natural. JSON {"pares":[{"pregunta":"...","respuesta":"..."}]}'}], 900)
+                                     'Tus respuestas: 1-2 frases, primera persona, diciendo tu nombre APOLO completo (A-P-O-L-O) de forma natural. '
+                                     'JSON {"pares":[{"pregunta":"...","respuesta":"..."}]}' + evita}], 900, temp=.9)
                 ps, pend = [], None
                 for p in r.get('pares', []):   # a veces el maestro parte cada par en {"pregunta"} + {"respuesta"}: se juntan
                     if not isinstance(p, dict):
@@ -387,9 +395,39 @@ class Gen:
                     if (len(q) < 3 or len(resp) < 8 or h(q) in self.ya or 'APOLO' not in resp.upper() or self.confunde({'pregunta': '', 'respuesta': resp})
                             or re.search(r'\b(soy|me llamo|yo soy)\s+(demon|dmn)|\bme llaman demon', resp, re.I) or URL.search(resp) or MULETILLA.search(resp)):
                         self.e['descartadas'] += 1; continue
-                    self.escribir('nombre', q, resp, 5)
+                    self.escribir('nombre', q, resp, 5); hechas.append(q)
             except Exception as er:
                 self.e['error'] = str(er)[:200]; time.sleep(3)
+
+    def fase_nosabe(self, objetivo):
+        """v5: la pregunta de un par de 'contexto', pero al montar su recuerdo NO va en la memoria → APOLO dice que no lo tiene apuntado (no inventa)."""
+        if objetivo <= 0:
+            return
+        self.e['fase'] = 'aprendiendo a decir "no lo sé"'; self.guardar()
+        base = [g for g in self.leer_generado() if g.get('fuente') == 'contexto']
+        random.Random(17).shuffle(base)
+        hechas = {h(g['pregunta']) for g in self.leer_generado() if g.get('fuente') == 'nosabe'}
+        for g in base:
+            if self.parar() or self.e['fases'].get('nosabe', 0) >= objetivo:
+                break
+            if h(g['pregunta']) in hechas:
+                continue
+            try:
+                resp = self.chat([{'role': 'system', 'content': 'Eres APOLO, el asistente personal de Demon. Hablas de tú, español, cercano y directo.'},
+                                  {'role': 'user', 'content': f'Demon te pregunta: "{g["pregunta"]}"\nNO tienes ese dato apuntado en tu memoria. Respóndele en 1-2 frases: '
+                                   'dile con naturalidad que eso no lo tienes apuntado (o no lo sabes) y pídele que te lo cuente para recordarlo. '
+                                   'PROHIBIDO dar ningún dato, nombre, cifra o suposición. Solo la respuesta, sin comillas.'}], maximo=120, temp=.8)
+            except Exception as er:
+                self.e['error'] = str(er)[:200]; time.sleep(3); continue
+            resp = resp.strip().strip('"«»')
+            q_norm = _norm(g['pregunta'])
+            inventa = any(_norm(t).strip(".,'\"«»") not in q_norm for t in re.findall(r"[A-ZÁÉÍÓÚÑ][\w\-\.]+|\w*\d[\w\.,%]*", resp)
+                          if _norm(t).strip(".,'\"«»") not in COMUNES | {'no', 'eso', 'esa', 'ese', 'lo', 'pues', 'oye', 'uf', 'vaya', 'perdona', 'cuentame', 'me', 'ahora', 'ni', 'mmm', 'hmm', 'que', 'dime', 'ese', 'sabes'})
+            if (len(resp) < 10 or len(resp) > 260 or inventa or MULETILLA.search(resp) or URL.search(resp)
+                    or not re.search(r'\bno (lo |la |los |las |me )?(tengo|s[eé]|recuerdo|consta|aparece|apunt)|\bni idea\b|no tengo (ese|esa|eso)', resp, re.I)):
+                self.e['descartadas'] += 1; continue
+            self.escribir('nosabe', g['pregunta'], resp, 5, {'origen': g['origen'], 'tipo': g.get('tipo', 'hecho'), 'sin_origen': True})
+            hechas.add(h(g['pregunta']))
 
     def fase_general(self, objetivo):
         """v2: charla general escrita por la PROPIA base (preguntas y respuestas) para que el entrenamiento no le haga olvidar lo que sabía."""
@@ -428,6 +466,8 @@ class Gen:
     def montar(self):
         """apolo-train.jsonl / apolo-val.jsonl: reales (ya separados por sesión) + generados (5 % a validación)."""
         sysmsg = self.m.get('system', 'Eres APOLO, el asistente personal de tu usuario.')
+        if getattr(self.a, 'ligero', False):   # v5: IGUAL que sistemaLigero() de core/agente.js (si cambia allí, cambiar aquí)
+            sysmsg += '\nTú eres APOLO. Tu usuario es la persona que te escribe: la memoria de abajo habla de ÉL, no de ti (si se llama de otra forma, ese es SU nombre, no el tuyo).'
         gen = [g for g in self.leer_generado() if not self.confunde(g)]
         if getattr(self.a, 'contexto', 0):   # v3: fuera los pares con papeles cruzados ("mi GPU…", "me llamo DMNENGINE") salvo si hablan de APOLO
             gen = [g for g in gen if g.get('fuente') not in ('recuerdo', 'basico', 'contexto') or 'APOLO' in g['respuesta'] + g.get('origen', '')
@@ -442,7 +482,11 @@ class Gen:
         def memoria(g):
             # como memoria.contexto() de APOLO: unos cuantos de perfil + el recuerdo de origen entre otros de relleno
             otros = rnd.sample(perfil, min(3, len(perfil))) + rnd.sample(recs, min(4, len(recs)))
-            lineas = [x for x in otros if x['t'] != g['origen']] + [{'t': g['origen'], 'tipo': g.get('tipo', 'hecho')}]
+            po = set(re.findall(r'\w{5,}', _norm(g['origen'])))
+            parecido = lambda t: len(po & set(re.findall(r'\w{5,}', _norm(t)))) >= max(2, len(po) // 3)   # v5: en "no lo sé" no puede colarse el dato por otro recuerdo
+            lineas = [x for x in otros if x['t'] != g['origen'] and not (g.get('sin_origen') and parecido(x['t']))]
+            if not g.get('sin_origen'):
+                lineas.append({'t': g['origen'], 'tipo': g.get('tipo', 'hecho')})
             rnd.shuffle(lineas)
             return '\n\nLO QUE SABES DEL USUARIO (memoria):\n' + '\n'.join(f'- [{rnd.randrange(16**4):04x}·{x.get("tipo", "hecho")}] {x["t"][:300]}' for x in lineas)
         def ej(q, r, g=None):
@@ -490,6 +534,8 @@ if __name__ == '__main__':
     p.add_argument('--basico', type=int, default=0, help='v2: pares de lo básico (perfil/personas)')
     p.add_argument('--general', type=int, default=0, help='v2: charla general escrita por la base')
     p.add_argument('--modelo-general', default='qwen3:4b-instruct-2507-q4_K_M')
+    p.add_argument('--nosabe', type=int, default=0, help='v5: "no lo tengo apuntado" cuando el dato no está en la memoria')
+    p.add_argument('--ligero', action='store_true', help='v5: system igual al del modo ligero de APOLO (agente.js sistemaLigero)')
     p.add_argument('--nombre', type=int, default=0, help='v4: pares de quién es quién (APOLO ≠ Demon)')
     p.add_argument('--contexto', type=int, default=0, help='v3: pares que se responden leyendo la memoria inyectada en el system')
     p.add_argument('--solo-montar', action='store_true')
