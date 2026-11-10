@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-10
+
+### Added
+- **The helmet comes alive**: 6 new expressions (curious, suspicious, focused, excited, shy, angry), autonomous routines while idle and **100 animations in 10 families** (emotions, curiosity, rest, games, visor, maintenance, transformations, space, music, magic). 33 of them are mechanical scenes where the helmet comes apart and puts itself back together. Softer eyes and eyelids, elasticity and inertia when it moves. An **interactive gallery** in the panel lets you play each one. Interactions, tasks, permissions, reduced motion, Gamer mode and panic always interrupt them.
+- **Digital spiders**: they crawl out of the helmet to read a page word by word, detect AI-written text, review code, watch Discord or scan GitHub/Hugging Face, with a report panel that points to each sentence.
+- **APOLO menu**: Ctrl+Alt+right click anywhere opens a toolbox next to the cursor with actions for what you selected (video, image, audio, code, text, folder, browser), a free prompt and your own saved actions.
+- **Codex CLI** sessions and permissions in the island, Mission Control, Stream Deck and phone (hooks, same format as Claude Code).
+- **WhatsApp you can program**: reply rules, scheduled messages with text, photos or voice notes in APOLO's voice, and an agenda.
+- **Prompts lab** tab with your prompt bank and an isolated live preview.
+- **From a source to a skill**: give APOLO a link, a video or a text and it drafts a skill in the workshop, scanned like any other.
+- **Binary analysis** tool (`analizar_binario`) and the *ingenieria-inversa-pe* skill: inspect a Windows .exe/.dll without running it. New *venta-prompts* skill.
+- **Voice**: Whisper runs on the GPU when there is room, end-of-turn detection (Smart Turn) and an optional local voice. Meetings tell speakers apart. Optional memory reranker.
+- **Video editor**: upload any video from your PC, «Editar ya» jumps the queue, silent videos get an audio track.
+- Optional **model training** on your own Proxmox server and a dataset generator built from your conversations with open models.
+
+### Changed
+- Training, the dataset generator and the Discord spider stay **off until you configure them** (`entrenamiento.ssh`, `dataset.maestro.url`, `aranas.discord.ssh`); APOLO no longer tries to reach any host by default.
+- The installer retries the Electron download without cache, falls back to the official zip and tells you when an antivirus quarantined it.
+
+### Fixed
+- The APOLO menu no longer closes the moment it opens.
+
 ## [0.2.9] - 2026-10-15
 
 ### Added
