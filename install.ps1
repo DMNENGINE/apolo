@@ -84,12 +84,47 @@ try {
   $env:NODE_ENV = ''                                   # que no se salte nada
   & $npm install --no-audit --no-fund --loglevel=error
   if ($LASTEXITCODE -ne 0) { throw "npm install fallo (codigo $LASTEXITCODE)" }
-  $electron = Join-Path $Dir 'node_modules\electron\dist\electron.exe'
+  $eDir     = Join-Path $Dir 'node_modules\electron'
+  $eDist    = Join-Path $eDir 'dist'
+  $electron = Join-Path $eDist 'electron.exe'
   if (-not (Test-Path $electron)) {                     # a veces la descarga del binario falla: reintentar
+    if ($env:ELECTRON_SKIP_BINARY_DOWNLOAD) { Aviso 'ELECTRON_SKIP_BINARY_DOWNLOAD estaba puesto: lo quito para esta instalacion'; $env:ELECTRON_SKIP_BINARY_DOWNLOAD = '' }
+    # 1) reintento con install.js de electron, sin cache (un zip a medias en la cache hace que "termine bien" sin binario)
     Aviso 'el binario de Electron no se descargo, reintentando...'
-    & node (Join-Path $Dir 'node_modules\electron\install.js')
+    Remove-Item $eDist, (Join-Path $eDir 'path.txt') -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $env:LOCALAPPDATA 'electron\Cache') -Recurse -Force -ErrorAction SilentlyContinue
+    $env:force_no_cache = 'true'
+    & node (Join-Path $eDir 'install.js')
+    $env:force_no_cache = ''
   }
-  if (-not (Test-Path $electron)) { throw 'No se pudo descargar Electron. Revisa tu conexion o antivirus y vuelve a ejecutar.' }
+  if (-not (Test-Path $electron)) {
+    # 2) descarga directa del zip oficial desde GitHub Releases (sin @electron/get)
+    $ver  = (Get-Content (Join-Path $eDir 'package.json') -Raw | ConvertFrom-Json).version
+    $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+    $url  = "https://github.com/electron/electron/releases/download/v$ver/electron-v$ver-win32-$arch.zip"
+    Aviso "descarga directa de Electron v$ver ($arch)..."
+    $ezip = Join-Path $env:TEMP "electron-v$ver-win32-$arch.zip"
+    # curl.exe + tar.exe (de serie en Win10 1803+): Invoke-WebRequest/Expand-Archive fallaban en algunos PCs
+    try {
+      Remove-Item $ezip -Force -ErrorAction SilentlyContinue
+      if (Tiene 'curl.exe') { & curl.exe -L --fail -s -S -o $ezip $url } else { Invoke-WebRequest $url -OutFile $ezip -UseBasicParsing }
+      if (-not (Test-Path $ezip)) { throw 'no se descargo el zip' }
+      Remove-Item $eDist -Recurse -Force -ErrorAction SilentlyContinue
+      New-Item -ItemType Directory -Force $eDist | Out-Null
+      if (Tiene 'tar.exe') { & tar.exe -xf $ezip -C $eDist } else { Expand-Archive $ezip -DestinationPath $eDist -Force }
+      [IO.File]::WriteAllText((Join-Path $eDir 'path.txt'), 'electron.exe')
+    } catch { Aviso "la descarga directa fallo: $($_.Exception.Message)" }
+    Remove-Item $ezip -Force -ErrorAction SilentlyContinue
+  }
+  if (-not (Test-Path $electron)) {
+    # se descomprimio pero electron.exe no esta: casi siempre es el antivirus que lo puso en cuarentena
+    $resto = Test-Path (Join-Path $eDist 'resources')
+    if ($resto) {
+      throw ("El antivirus borro electron.exe (el resto de Electron si se descargo). Restauralo desde la cuarentena " +
+             "o agrega una exclusion para la carpeta $Dir y vuelve a ejecutar el mismo comando.")
+    }
+    throw 'No se pudo descargar Electron. Revisa tu conexion (o VPN/proxy/firewall) y vuelve a ejecutar.'
+  }
   Info 'Electron OK'
 } finally { Pop-Location }
 

@@ -9,3 +9,8 @@ __pycache__/
 docs/media/banner.html
 instalado.json
 /dist/
+
+# artefactos locales de trabajo
+*.antes-*
+/repair-backups/
+/video-studio-stage/
