@@ -4,13 +4,15 @@
 // El análisis lo hace el núcleo (core/aranas.js); aquí se recoge el texto COMPLETO, se anima y se pintan las marcas.
 // Nunca lee campos de contraseña ni formularios.
 (() => {
-  if (window.__apoloAranas) return;
+  const VERSION = '2026-11-10-contexto-2';
+  if (window.__apoloAranas?.version === VERSION) return;
+  window.__apoloAranas?.limpiar?.();
   const M = globalThis.AranaMotor;
 
   const NOMBRES = { lectora: 'LECTORA', ia: 'DETECTORA IA', codigo: 'CÓDIGO' };
   const COLORES = { lectora: '#3df2ff', ia: '#ff3df2', codigo: '#4dff88' };
   const BLOQUES = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,td,th,dd,dt,figcaption,caption,summary,pre,article>div,section>div';
-  const SALTAR = 'script,style,noscript,svg,canvas,input,textarea,select,button,[contenteditable],[aria-hidden="true"],#apolo-aranas';
+  const SALTAR = 'script,style,noscript,svg,canvas,input,textarea,select,button,[aria-hidden="true"],#apolo-aranas';
   const PISTAS = {
     lectora: [[/\b97[89][-\s]?\d{1,5}[-\s]?\d{1,7}[-\s]?\d{1,7}[-\s]?\d\b/g, 'ISBN'], [/\b10\.\d{4,9}\/[^\s"<>]{3,60}/g, 'DOI'], [/\bPMID:?\s?\d{6,9}\b/g, 'PMID'],
       [/\bhttps?:\/\/[^\s"<>]{6,60}/g, 'URL'], [/\b\d{1,3}\s?(d[ií]as|days|meses|months|a[ñn]os|years|horas)\b/gi, 'PLAZO'], [/(\d[\d.,]*\s?(€|\$|USD|EUR)|(€|\$)\s?\d[\d.,]*)/g, 'DINERO'], [/\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/g, 'EMAIL']],
@@ -48,16 +50,26 @@
 
   // ---------- texto de la página ----------
   const visible = el => { const s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0.05; };
+  const padreTexto = n => n.parentElement || n.getRootNode()?.host;
+  function visibleTexto(n) {
+    const el=padreTexto(n);if(!el||!visible(el)||el.isContentEditable)return false;
+    const r=document.createRange();r.selectNodeContents(n);
+    return [...r.getClientRects()].some(x=>x.width>0&&x.height>0);
+  }
   function nodosTexto(el) {
-    const out = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: n => (n.data.trim() && !n.parentElement.closest(SALTAR)) ? 1 : 2 });
-    for (let n; (n = w.nextNode());) out.push(n);
+    const out=[],w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,{acceptNode:n=>{
+      const p=padreTexto(n);return n.data.length&&p&&!p.closest(SALTAR)&&!p.isContentEditable?1:2;
+    }});
+    for(let n;(n=w.nextNode());)out.push(n);
+    const hosts=[...(el.querySelectorAll?.('*')||[])];if(el.shadowRoot)hosts.unshift(el);
+    for(const h of hosts)if(h.shadowRoot&&!h.closest(SALTAR)&&!h.isContentEditable)out.push(...nodosTexto(h.shadowRoot));
     return out;
   }
   function textoVisibleSeguro(el) {
     const partes=[];let anterior=null;
     for(const n of nodosTexto(el)) {
-      if(!visible(n.parentElement)||!n.parentElement.getClientRects().length)continue;
-      const bloque=n.parentElement.closest(BLOQUES)||n.parentElement;
+      if(!visibleTexto(n))continue;
+      const p=padreTexto(n),bloque=p.closest(BLOQUES)||p;
       if(anterior&&anterior!==bloque)partes.push('\n\n');
       partes.push(n.data);anterior=bloque;
     }
@@ -100,19 +112,30 @@
       for (const el of document.querySelectorAll('pre, code, .blob-code-inner, .highlight, [class*="language-"]')) {
         if (el.closest('pre') && el.tagName !== 'PRE') continue;
         if ([...vistos].some(v => v.contains(el))) continue;
-        const t = textoVisibleSeguro(el); if (t.trim().length < 25 || !visible(el)) continue;
+        const t = textoVisibleSeguro(el); if (t.trim().length < 1 || !visible(el)) continue;
         vistos.add(el); res.push({ el, texto: t, t: 'codigo' });
       }
       return res;
     }
     for (const el of zona.querySelectorAll(BLOQUES)) {
-      if (el.closest(SALTAR) || el.closest('nav,[role=navigation],.mw-editsection') || (tipo === 'ia' && el.closest('footer,header,aside,.navbox,.reflist'))) continue;
+      if (el.isContentEditable || el.closest(SALTAR) || el.closest('nav,[role=navigation],.mw-editsection') || (tipo === 'ia' && el.closest('footer,header,aside,.navbox,.reflist'))) continue;
       if ([...vistos].some(v => v.contains(el))) continue;
       if (el.querySelector(BLOQUES.replace(/,?(article|section)>div/g, ''))) continue;
       const t = textoVisibleSeguro(el).replace(/\s+\n/g, '\n').trim();
-      if (t.length < (tipo === 'ia' ? 120 : 3) || !visible(el)) continue;
+      if (t.length < 1 || !visible(el)) continue;
       vistos.add(el); res.push({ el, texto: t, t: el.tagName === 'PRE' ? 'codigo' : 'texto' });
     }
+    // Las aplicaciones modernas suelen usar div/span o componentes, sin p ni article.
+    const grupos=new Map();
+    for(const n of nodosTexto(zona)) {
+      if(!visibleTexto(n)||res.some(b=>b.el.contains(n)))continue;
+      let el=padreTexto(n);
+      while(el&&el!==document.body&&['inline','contents'].includes(getComputedStyle(el).display))el=el.parentElement||el.getRootNode()?.host;
+      if(!el||el.closest('nav,[role=navigation]'))continue;
+      let grupo=grupos.get(el);if(!grupo){grupo={el,texto:'',t:'texto',nodos:[]};grupos.set(el,grupo);}
+      grupo.texto+=(grupo.texto?' ':'')+n.data;grupo.nodos.push(n);
+    }
+    for(const b of grupos.values())if(b.texto.trim())res.push(b);
     return res;
   }
 
@@ -129,7 +152,7 @@
   function palabrasDe(lista) {
     const r = document.createRange(), out = [];
     for (const b of lista) {
-      for (const n of nodosTexto(b.el)) {
+      for (const n of (b.nodos || nodosTexto(b.el))) {
         const re = /\S{2,}/g; let m;
         while ((m = re.exec(n.data)) && out.length < 20000) {
           r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length);
@@ -337,16 +360,24 @@
   const entrada = () => ({ x: scrollX + W - 40, y: scrollY - 30 });   // bajan desde arriba a la derecha
   // ---------- API (sw.js o la ventana de arañas de APOLO) ----------
   let bloquesVivos = [];
+  function extraer(tipo) {
+    const zona=zonaPrincipal(),comp=textoCompleto(zona),lista=bloquesDe(tipo,zona).filter(b=>tipo!=='ia'||b.t==='texto');
+    return {zona,comp,lista};
+  }
+  const diagnostico = comp => ({caracteres:comp.texto.length,marcos:document.querySelectorAll('iframe').length,lienzos:document.querySelectorAll('canvas:not(#apolo-aranas canvas)').length,estado:document.readyState});
   window.__apoloAranas = {
+    version:VERSION,
+    extraer({tipo='lectora'}={}) {
+      const {comp,lista}=extraer(tipo);
+      return {titulo:document.title,url:location.href,completo:comp.texto,bloques:lista.map((b,i)=>({i,t:b.t,texto:b.texto})),caracteresPagina:comp.pagina,de:comp.de,diagnostico:diagnostico(comp)};
+    },
     soltar({ tipo = 'lectora', color, cuantas } = {}) {
       vivo = true; host.style.display = '';
       color = color || COLORES[tipo] || '#7fe3ff';
-      const zona = zonaPrincipal();
-      const lista = bloquesDe(tipo,zona).filter(b=>tipo!=='ia'||b.t==='texto');
+      const {zona,comp,lista}=extraer(tipo);
       const base = bloquesVivos.length;
       lista.forEach((b, i) => { b.i = base + i; });
       bloquesVivos.push(...lista);
-      const comp = textoCompleto(zona);
       total += comp.texto.length;
       for(const anterior of aranas.filter(a=>a.tipo===tipo&&!a.fuera)){anterior.fuera=true;anterior.trabajo=false;anterior.ruta=[];anterior.vagar=null;anterior.guardias=null;}
       const lectura = {palabras:palabrasDe(lista),filas,leidas:0};
@@ -370,7 +401,7 @@
       if (!palabras.length) for (const a of aranas.filter(x=>x.tipo===tipo&&!x.fuera)) { a.estado = 'nada que leer'; a.vagar = { x: cx, y: cy }; }
       const sumaBloques = lista.reduce((s, b) => s + b.texto.length, 0);
       return { titulo: document.title, url: location.href, bloques: lista.map(b => ({ i: b.i, t: b.t, texto: b.texto.slice(0, 20000) })), total: lista.length,
-        completo: comp.texto, de: comp.de, caracteresPagina: comp.pagina, caracteresBloques: sumaBloques };
+        completo: comp.texto, de: comp.de, caracteresPagina: comp.pagina, caracteresBloques: sumaBloques, version:VERSION, diagnostico:diagnostico(comp) };
     },
     marcar({ tipo, marcas = [], color } = {}) {
       color = color || COLORES[tipo] || '#ff3df2';

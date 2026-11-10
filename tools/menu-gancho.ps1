@@ -104,7 +104,7 @@ while ($true) {
       $carpeta = [Environment]::GetFolderPath('Desktop')
     }
   } catch { }
-  $o = [ordered]@{ evento = 'menu'; x = [int]$x; y = [int]$y; app = $app; clase = $clase; titulo = $tit.ToString(); carpeta = $carpeta; seleccion = $sel }
+  $o = [ordered]@{ evento = 'menu'; hwnd = $h; x = [int]$x; y = [int]$y; app = $app; clase = $clase; titulo = $tit.ToString(); carpeta = $carpeta; seleccion = $sel }
   Write-Output ($o | ConvertTo-Json -Compress -Depth 3)
   [Console]::Out.Flush()
 }

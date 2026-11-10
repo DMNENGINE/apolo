@@ -65,3 +65,14 @@ La calidad de las respuestas del modelo no se certifica con estas pruebas.
 
 Para usar la nueva l?gica en una extensi?n de Chrome ya cargada, recarga la
 extensi?n y la p?gina donde estaban las ara?as.
+
+
+## Contexto del atajo y texto visible (2026-11-10)
+
+Ctrl+Alt+clic derecho conserva el identificador de ventana y las coordenadas del clic. La selección de archivo sigue teniendo prioridad. En navegadores conectados se busca la pestaña de esa ventana; si el DOM no entrega texto, se intenta leer el texto accesible de esa misma ventana. En otras aplicaciones se usa directamente Windows UI Automation, sin portapapeles ni URL. Discord y radar conservan sus destinos propios.
+
+La extracción web admite bloques div/span, contenteditable=false, display:contents y Shadow DOM abierto. Excluye campos editables. Reintenta brevemente cuando la página aún está vacía y actualiza las inyecciones antiguas. IA reconoce fragmentos cortos sumados, pero distingue texto insuficiente para estimar estilo de ausencia de texto.
+
+Límites: la captura nativa depende de los proveedores TextPattern de cada aplicación y representa selección o contenido visible, nunca el documento completo. No hay OCR para imágenes/canvas; tampoco acceso DOM a Shadow DOM cerrado. Los errores no se convierten en informes exitosos vacíos. La captura nativa compila y tiene pruebas del flujo con dobles; queda pendiente comprobarla de extremo a extremo sobre aplicaciones reales. No se capturaron ventanas privadas del usuario durante estas pruebas.
+
+Validación: 549 pruebas del núcleo aprobadas; cuatro escenarios reales de Edge headless, exclusión de campos editables y reinyección de versión antigua. Prueba reproducible: `node tools/probar-extraccion-aranas.cjs salida.png`. Capturas de esta sesión en `repair-backups/aranas-contexto/`.

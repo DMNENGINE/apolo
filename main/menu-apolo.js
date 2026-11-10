@@ -16,7 +16,7 @@ const EXT = {
   texto: /\.(txt|md|html?|csv|log|json|xml|rtf|pdf|docx?)$/i,
 };
 
-function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, log = console.log }) {
+function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, capturarTexto, log = console.log }) {
   // registro corto para depurar (el menú no tiene consola): %TEMP%/apolo-menu.log
   const traza = (...a) => { try { fs.appendFileSync(path.join(require('os').tmpdir(), 'apolo-menu.log'), `${new Date().toISOString().slice(11, 23)} ${a.join(' ')}
 `); } catch { } };
@@ -63,7 +63,7 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, log =
     const acciones = todas.filter(a => tipos.has(a.cuando || 'siempre')).map(a => ({ id: a.id, arana: a.arana, ic: a.ic || '⭐', t: a.t, d: a.d || '', cuando: a.cuando, propia: !!a.propia, usos: u.usos?.[a.id] || 0 }));
     let plugins = []; try { plugins = (nucleo()?.plugins?.vistas?.() || []).map(v => ({ ruta: `p/${v.plugin}/${v.nombre}`, titulo: v.titulo })); } catch { }
     const unico = objetivo.length === 1 && !esDir(objetivo[0]) ? objetivo[0] : null;
-    const resultado = { app:c.app,titulo:c.titulo,carpeta:c.carpeta,seleccion:sel,objetivo,tipos:[...tipos],navegador,archivo:unico,acciones,plugins };
+    const resultado = { app:c.app,titulo:c.titulo,hwnd:c.hwnd,x:c.x,y:c.y,carpeta:c.carpeta,seleccion:sel,objetivo,tipos:[...tipos],navegador,archivo:unico,acciones,plugins };
     resultado.aranas = disponibilidadAranas(resultado,nucleo());
     return resultado;
   }
@@ -100,10 +100,18 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, log =
   const contextoTexto = c => c.objetivo.length ? `\n\n(Seleccionado en el Explorador: ${lista(c)})` : c.app ? `\n\n(Estoy en ${c.app}${c.titulo ? `: "${c.titulo}"` : ''})` : '';
   function contar(id) { const u = leerUser(); u.usos = u.usos || {}; u.usos[id] = (u.usos[id] || 0) + 1; guardarUser(u); }
 
-  async function arana(tipo, c) {
-    const n=nucleo(), destino=destinoArana(tipo,c,n);
-    decir?.(`🕷 Suelto la araña ${tipo}…`);
-    const resultado=await n.aranas.soltar(destino,null);
+  async function arana(tipo,c) {
+    const n=nucleo(),destino=destinoArana(tipo,c,n);
+    const deVentana=async()=>{
+      const datos=await (capturarTexto||((ctx)=>require('./menu-captura').capturarVentana(dir,ctx)))(c);
+      if(!datos.texto?.trim())throw new Error('No se pudo extraer texto visible de la ventana pulsada');
+      return n.aranas.soltar({tipo,contexto:{texto:datos.texto,titulo:c.titulo||c.app,app:c.app,fuente:datos.fuente||'texto visible de ventana'}},null);
+    };
+    decir?.(`🕷 Analizando ${c.archivo || c.titulo || c.app || 'el contexto elegido'}…`);
+    let resultado;
+    if(destino.ventana)resultado=await deVentana();
+    else try {resultado=await n.aranas.soltar(destino,null);}
+    catch(e){if(e.code==='SIN_TEXTO_DOM'&&c.hwnd)resultado=await deVentana();else throw e;}
     decir?.(String(resultado));return resultado;
   }
   async function ejecutar(a) {

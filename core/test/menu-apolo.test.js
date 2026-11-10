@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{EventEmitter}=require('node:events');
 const {destinoArana}=require('../../main/menu-aranas');
-function montar(t,{soltar=async()=> 'Informe de prueba'}={}){
+function montar(t,{soltar=async()=> 'Informe de prueba',capturarTexto}={}){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'apolo-menu-test-'));
  t.after(()=>{if(path.dirname(dir)===os.tmpdir()&&path.basename(dir).startsWith('apolo-menu-test-'))fs.rmSync(dir,{recursive:true,force:true});});
  const handlers=new Map(),on=new Map(),ventanas=[],mensajes=[],pedidos=[];
@@ -13,7 +13,7 @@ function montar(t,{soltar=async()=> 'Informe de prueba'}={}){
  const modulo={exports:{}},n={cfg:{},aranas:{soltar:async a=>{pedidos.push(a);return soltar(a)}},navegador:{conectado:()=>true}};
  const requireFalso=id=>id==='electron'?electron:id==='./ipc-seguro'?{permitir(){}}:id.startsWith('./')?require(path.resolve(__dirname,'../../main',id)):require(id);
  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../main/menu-apolo.js'),'utf8'),{module:modulo,exports:modulo.exports,require:requireFalso,process,console,setTimeout,clearTimeout});
- const menu=modulo.exports.crearMenuApolo({dir:path.resolve(__dirname,'../..'),datos:()=>dir,nucleo:()=>n,handleText:async texto=>{mensajes.push(texto);return{ok:true}},panelUrl:r=>'http://localhost/#/'+r,decir:t=>mensajes.push(t),log:()=>{}});
+ const menu=modulo.exports.crearMenuApolo({dir:path.resolve(__dirname,'../..'),datos:()=>dir,nucleo:()=>n,capturarTexto,handleText:async texto=>{mensajes.push(texto);return{ok:true}},panelUrl:r=>'http://localhost/#/'+r,decir:t=>mensajes.push(t),log:()=>{}});
  const abrir=c=>{menu.abrir({x:1200,y:680,app:'explorer',seleccion:[],...c});return ventanas.at(-1)};
  const invocar=(canal,a,v=ventanas.at(-1))=>handlers.get('menu-apolo-'+canal)({sender:v.webContents},a);
  t.after(()=>menu.parar());return{dir,n,menu,abrir,invocar,ventanas,mensajes,pedidos};
@@ -50,4 +50,18 @@ test('guardar y borrar una acción actualiza el contexto del menú',t=>{
 test('prompt vacío no se envía y la ventana queda dentro del monitor',t=>{
  const{abrir,invocar,mensajes}=montar(t);const v=abrir({});const r=invocar('ejecutar',{tipo:'prompt',texto:'  '});
  return Promise.resolve(r).then(r=>{assert.equal(r.ok,false);assert.equal(mensajes.length,0);assert(!v.muerta);assert(v.opciones.x+v.opciones.width<=1280);assert(v.opciones.y+v.opciones.height<=720)});
+});
+
+test('el atajo identifica una aplicación por su ventana sin pedir URL',async t=>{
+ let objetivo;
+ const{abrir,invocar,pedidos}=montar(t,{capturarTexto:async c=>{objetivo=c;return{texto:'Texto de la aplicación seleccionada',fuente:'texto visible'};}});
+ abrir({app:'notepad',titulo:'Documento sin guardar',hwnd:'12345',x:220,y:230});
+ await invocar('ejecutar',{tipo:'arana',arana:'lectora'});
+ assert.equal(objetivo.hwnd,'12345');assert.equal(objetivo.x,220);assert(pedidos[0].contexto.texto.includes('aplicación seleccionada'));assert.equal(pedidos[0].url,undefined);
+});
+ test('si falla el DOM del navegador usa solo la ventana del atajo',async t=>{
+ let n=0,capturas=0;
+ const{abrir,invocar,pedidos}=montar(t,{soltar:async()=>{if(n++===0){const e=new Error('No pude extraer el DOM');e.code='SIN_TEXTO_DOM';throw e;}return 'Analizado';},capturarTexto:async()=>{capturas++;return{texto:'Texto accesible de la pestaña'};}});
+ abrir({app:'chrome',titulo:'Documento - Chrome',hwnd:'9876'});await invocar('ejecutar',{tipo:'arana',arana:'lectora'});
+ assert.equal(capturas,1);assert.equal(pedidos.length,2);assert(pedidos[1].contexto.texto.includes('Texto accesible'));
 });

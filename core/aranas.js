@@ -177,10 +177,22 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     }
     let temporizador;
     try {
-      const respuesta = typeof pestana === 'string' && pestana.startsWith('v:')
+      let respuesta = typeof pestana === 'string' && pestana.startsWith('v:')
         ? await Promise.race([visor.accion(pestana,accion,args),new Promise((_,mal)=>{temporizador=setTimeout(()=>mal(new Error('La ventana de arañas no respondió')),ms);temporizador.unref?.();})])
         : await navegador.orden('aranas',{pestana,accion,...args},ms);
       if (respuesta?.error) throw new Error(respuesta.error);
+      const tieneTexto = r => !!(String(r?.completo||'').trim() || r?.bloques?.some(b=>String(b.texto||'').trim()));
+      if(accion==='soltar'&&!tieneTexto(respuesta)&&!args._reintentado) {
+        for(let i=0;i<6;i++) {
+          await new Promise(ok=>setTimeout(ok,250));
+          let nueva;try {nueva=await orden(pestana,'extraer',{tipo:args.tipo},ms);}catch{break;}
+          if(tieneTexto(nueva)){respuesta=await orden(pestana,'soltar',{...args,_reintentado:true},ms);break;}
+        }
+      }
+      if(accion==='soltar'&&!tieneTexto(respuesta)) {
+        const d=respuesta?.diagnostico||{},error=new Error('No pude extraer texto del DOM de esa página'+(d.marcos?' (contiene marcos)':d.lienzos?' (contiene un visor o lienzo)':''));
+        error.code='SIN_TEXTO_DOM';throw error;
+      }
       return respuesta;
     } finally { if (temporizador) clearTimeout(temporizador); }
   };
@@ -442,6 +454,14 @@ function crearAranas({ cfg, bus, navegador, permisos, generarJSON, modelo, secre
     corriendo.set(tipo, { desde: Date.now() });
     delete ultimo[tipo];
     try {
+      if(a.contexto && TIPOS[tipo].web) {
+        const texto=String(a.contexto.texto||'');if(!texto.trim())throw new Error('La ventana no devolvió texto');
+        const id='local:'+(++siguienteLocal),titulo=String(a.contexto.titulo||'Ventana elegida');
+        locales.set(id,{titulo,url:'',completo:texto,caracteresPagina:texto.length,de:a.contexto.fuente||'texto visible de ventana',bloques:[{i:0,t:tipo==='codigo'?'codigo':'texto',texto}]});
+        salen(tipo,titulo);
+        try {const r=await ({lectora,ia,codigo})[tipo]({id,titulo,url:''},a,s);abrirInforme(tipo);return r;}
+        catch(e){vuelven(tipo);throw e;}finally{locales.delete(id);}
+      }
       const archivoLocal = a.archivo || (a.url && /^file:/i.test(a.url) && !/\.html?(?:[?#]|$)/i.test(a.url) ? fileURLToPath(a.url) : null);
       if (archivoLocal && TIPOS[tipo].web) {
         const datos = extraerArchivo(archivoLocal,tipo), id = 'local:' + (++siguienteLocal);

@@ -10,8 +10,10 @@ function crearAnalisisPagina({ JSONm, orden, recogerLuego, guardarInforme, TIPOS
   const entrada = lote => lote.map(u => `[${u.ref}]\n${u.texto}`).join('\n\n');
 
   async function ia(t, a) {
-    const r = await pedir(t, 'ia'), bloques = r.bloques.filter(b => b.t === 'texto' && b.texto.length >= 120);
+    const r = await pedir(t, 'ia'), bloques = r.bloques.filter(b => b.t === 'texto' && b.texto.trim());
     if (!bloques.length) { recogerLuego(t.id, 'ia', 3000); return `🕷 No hay párrafos largos analizables en «${r.titulo}».`; }
+    const longitud=bloques.reduce((s,b)=>s+b.texto.length,0);
+    if(longitud<120){recogerLuego(t.id,'ia',3000);return `🕷 Hay texto visible (${longitud} caracteres), pero es demasiado breve para estimar estilo de IA. La lectora sí puede analizarlo.`;}
     const lotes = lotesDeBloques(bloques), resultados = [], avisos = [], veredictos = [];
     let analizado = 0;
     for (const [k, lote] of lotes.entries()) {
@@ -49,7 +51,7 @@ function crearAnalisisPagina({ JSONm, orden, recogerLuego, guardarInforme, TIPOS
 
   async function codigo(t, a) {
     const r = await pedir(t, 'codigo'), bloques = r.bloques.filter(b => b.t === 'codigo' && b.texto.trim());
-    if (!bloques.length) { recogerLuego(t.id, 'codigo', 3000); return `🕷 No hay bloques de código analizables en «${r.titulo}».`; }
+    if (!bloques.length) { recogerLuego(t.id, 'codigo', 3000); return `🕷 Hay texto visible, pero no bloques de código analizables en «${r.titulo}».`; }
     const lotes = lotesDeBloques(bloques), hs = [], avisos = [], resumenes = [], vistos = new Set();
     let analizado = 0, descartados = 0;
     for (const [k,lote] of lotes.entries()) {

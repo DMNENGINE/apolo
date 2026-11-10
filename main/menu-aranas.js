@@ -14,9 +14,9 @@ function destinoArana(tipo, contexto, nucleo) {
     if (!admiteArchivo(contexto.archivo,tipo)) throw new Error('Formato no compatible con esta araña. Elige texto o código; para HTML, abre la página en el navegador');
     return {tipo,archivo:contexto.archivo};
   }
-  if (!contexto.navegador) throw new Error('Abre el menú sobre el navegador o selecciona un archivo compatible');
-  if (!nucleo.navegador?.conectado?.()) throw new Error('Conecta la extensión de ese navegador para analizar su pestaña');
-  return {tipo,tituloObjetivo:contexto.titulo || ''};
+  if (contexto.navegador && nucleo.navegador?.conectado?.()) return {tipo,tituloObjetivo:contexto.titulo || ''};
+  if (/^\d+$/.test(String(contexto.hwnd || ''))) return {tipo,ventana:true};
+  throw new Error('No se identificó la ventana del atajo; vuelve a abrir el menú sobre el contenido');
 }
 function disponibilidadAranas(contexto,nucleo) {
   return Object.fromEntries(TIPOS.map(tipo=>{

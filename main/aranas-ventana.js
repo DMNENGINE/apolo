@@ -84,7 +84,7 @@ function crearVentanaAranas({ dir }) {
     const v = ventana(id), wc = v.pagina.webContents, js = c => wc.executeJavaScript(c, true);
     if (acc === 'esperar') { await esperarCarga(wc); return { url: wc.getURL(), titulo: wc.getTitle() }; }
     if (acc === 'informe') return mostrarInforme(v, args.archivo);
-    if (acc === 'soltar' && !(await js('!!window.__apoloAranas'))) await js(codigo());
+    if (acc === 'soltar') await js(codigo());
     const r = await js(`window.__apoloAranas ? window.__apoloAranas[${JSON.stringify(acc)}](${JSON.stringify(args)}) : { error: 'las arañas ya no están en esta página' }`);
     if (r && r.error) throw new Error(r.error);
     return r;

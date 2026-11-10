@@ -30,7 +30,7 @@ test('el menú puede exigir que la pestaña coincida con la ventana original',as
  const{R}=montar(t);await assert.rejects(R.soltar({tipo:'lectora',tituloObjetivo:'Otra página - Chrome'}),/no coincide/);
 });
 test('la lectora no declara éxito sobre una página sin texto',async t=>{
- const{R,prompts}=montar(t);await assert.rejects(R.soltar({tipo:'lectora'}),/no contiene texto/);assert.equal(prompts.length,0);
+ const{R,prompts}=montar(t);await assert.rejects(R.soltar({tipo:'lectora'}),{code:'SIN_TEXTO_DOM'});assert.equal(prompts.length,0);
 });
 test('los lotes conservan completo el inicio y el final de los bloques largos',()=>{
  const texto='A'.repeat(14000)+'FINAL';const unidades=lotesDeBloques([{i:6,texto}]).flat();
@@ -105,4 +105,15 @@ test('el menú encuentra la pestaña de la ventana pulsada aunque otra figure ac
  const{R,pedidos}=montar(t,{tabs:[{id:7,activa:true,titulo:'Otra',url:'https://ejemplo.test/otra'},{id:8,activa:false,titulo:'Documento',url:'https://ejemplo.test/doc'}],bloques:[{i:0,t:'texto',texto:'Texto local de prueba.'}]});
  await R.soltar({tipo:'lectora',tituloObjetivo:'Documento - Chrome'});
  assert.equal(pedidos.find(p=>p.op==='aranas').args.pestana,8);
+});
+
+test('el contexto de una aplicación se analiza sin enlace ni navegador',async t=>{
+ const{R,prompts,pedidos}=montar(t,{conectado:false});
+ const r=await R.soltar({tipo:'lectora',contexto:{texto:'Texto visible del documento de prueba.',titulo:'Editor',fuente:'texto visible de ventana'}});
+ assert.equal(pedidos.length,0);assert(prompts.some(x=>x.prompt.includes('Texto visible del documento de prueba.')));assert(r.includes('Editor'));
+});
+ test('IA reconoce texto distribuido en fragmentos cortos',async t=>{
+ const bloques=Array.from({length:20},(_,i)=>({i,t:'texto',texto:'Fragmento visible '+i}));
+ const{R}=montar(t,{bloques,generar:({prompt})=>({veredicto:'Estimaci?n',parrafos:refs(prompt).map(i=>({i,prob:30,senales:[]}))})});
+ assert.match(await R.soltar({tipo:'ia'}),/20 párrafos/);
 });
