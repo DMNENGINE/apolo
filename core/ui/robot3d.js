@@ -19,6 +19,9 @@ const hsl = (h, s, l, a = 1) => `hsla(${h},${s}%,${l}%,${a})`;
 
 export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   const vitrina = opts.animacion === 'vitrina';
+  const movimientoSuave = matchMedia('(prefers-reduced-motion: reduce)');
+  const temaOscuro = matchMedia('(prefers-color-scheme: dark)');
+  let pupila = .52, microT = 0, microX = 0, microY = 0, vx = 0, vy = 0;
   let raf = 0, muerto = false, nextSpin = performance.now() + 7000, nextGestoV = performance.now() + 9000;
   let cur = { ...STATES.reposo }, target = STATES.reposo, stateName = 'reposo', message = '';
   const log = opts.log || ['> robot listo', 'esperando a Claude Code…'];
@@ -161,8 +164,16 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       c.beginPath(); c.arc(0, -er * .15, er * .6, Math.PI * .15, Math.PI * .85); c.stroke();
       c.restore(); return;
     }
-    const lid = Math.max(.06, 1 - Math.sin(blink * Math.PI));
-    c.scale(cur.eye, cur.eye * lid);
+    // El iris conserva su forma: dos párpados curvos recortan la apertura.
+    c.scale(cur.eye, cur.eye);
+    const cierre = Math.sin(blink * Math.PI);
+    const borde = er * (1.12 - cierre * 1.12);
+    c.save(); c.beginPath();
+    c.moveTo(-er * 1.2, -borde);
+    c.quadraticCurveTo(0, -borde + cierre * borde * .32, er * 1.2, -borde);
+    c.lineTo(er * 1.2, borde);
+    c.quadraticCurveTo(0, borde - cierre * borde * .2, -er * 1.2, borde);
+    c.closePath(); c.clip();
     c.strokeStyle = 'rgba(225,200,235,.6)'; c.lineWidth = er * .12;
     c.beginPath(); c.arc(0, 0, er * 1.04, 0, 7); c.stroke();
     c.save(); c.beginPath(); c.arc(0, 0, er, 0, 7); c.clip();
@@ -170,7 +181,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     const ig = c.createLinearGradient(0, -er + oy, 0, er + oy);
     ig.addColorStop(0, '#07081a'); ig.addColorStop(.45, '#121838'); ig.addColorStop(.72, 'rgba(70,215,190,1)'); ig.addColorStop(1, 'rgba(245,125,175,1)');
     c.fillStyle = ig; c.fillRect(-er, -er, er * 2, er * 2);
-    c.fillStyle = 'rgba(3,3,12,.88)'; c.beginPath(); c.arc(ox, oy - er * .05, er * .52, 0, 7); c.fill();
+    c.fillStyle = 'rgba(3,3,12,.88)'; c.beginPath(); c.arc(ox, oy - er * .05, er * pupila, 0, 7); c.fill();
     c.globalCompositeOperation = 'lighter';
     for (const g of GLIT) {
       const tw = .5 + .5 * Math.sin(now / 300 * g.s + g.p);
@@ -185,6 +196,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     const t1 = .6 + .4 * Math.sin(now / 250 + sd), t2 = .6 + .4 * Math.sin(now / 330 + sd * 2);
     star4(c, -er * .4 + ox, -er * .05 + oy, er * .12 * t1, 'rgba(215,170,255,.95)');
     star4(c, er * .15 + ox, er * .45 + oy, er * .1 * t2, 'rgba(255,170,230,.95)');
+    c.restore(); // termina el recorte de los párpados
     if (gestoActivo('triste')) {                             // párpado caído en diagonal (más bajo hacia fuera): cara de pena
       c.fillStyle = '#070a0e'; c.beginPath();
       c.moveTo(-er * 1.3, -er * 1.3); c.lineTo(er * 1.3, -er * 1.3);
@@ -327,8 +339,9 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     raf = requestAnimationFrame(frame);
     if (last === null) last = now;
     const dt = Math.max(0, Math.min(.05, (now - last) / 1000));
+    last = now;
     acc += dt; if (acc < 1 / fps) return;             // limitar fps cuando está pequeño
-    const step = acc; acc = 0; last = now;
+    const step = acc; acc = 0;
     const k = 1 - Math.pow(.02, step);
     for (const p in target) cur[p] += (target[p] - cur[p]) * (p === 'hue' ? 1 - Math.pow(.0003, step) : k);
     scroll += step * cur.speed;
@@ -349,8 +362,24 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       }
     }
     if (gestoActivo('pensativo')) { tx = .55; ty = -.6; }                       // mira arriba a un lado, pensando
-    const kk = 1 - Math.pow(.004, step);
-    hxS += (tx - hxS) * kk; hyS += (ty - hyS) * kk;
+    // Microsacadas solo sin un objetivo concreto; nunca durante sueño o gestos.
+    microT -= step;
+    const libre = !vitrina && stateName === 'reposo' && now - lastMove > 1800 && now >= gestoHasta;
+    if (microT <= 0) {
+      microT = .4 + Math.random() * 1.6;
+      microX = (Math.random() - .5) * .3; microY = (Math.random() - .5) * .2;
+    }
+    if (libre && !movimientoSuave.matches) { tx += microX; ty += microY; }
+    // Integración en pasos pequeños: el muelle sigue estable también a 6 fps.
+    const pasos = Math.ceil(step / .008), subpaso = step / pasos;
+    for (let i = 0; i < pasos; i++) {
+      const freno = movimientoSuave.matches ? 24 : 15;
+      vx += ((tx - hxS) * 120 - vx * freno) * subpaso;
+      vy += ((ty - hyS) * 120 - vy * freno) * subpaso;
+      hxS += vx * subpaso; hyS += vy * subpaso;
+    }
+    const dilatacion = stateName === 'error' ? .32 : gestoActivo('sorpresa') ? .68 : temaOscuro.matches ? .61 : .48;
+    pupila += (dilatacion - pupila) * (1 - Math.exp(-step * 4));
     wob *= Math.pow(.03, step); spin *= Math.pow(.25, step); spinA += spin * step * 14;
     if (react > 0) { react -= step; if (react <= 0) { stateName = prevState; target = STATES[prevState]; message = prevMsg; } }
     // movimientos de cabeza de los gestos (se suman a mirar el ratón); g = 0→1→0 a lo largo del gesto
@@ -398,7 +427,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     circuitU.uTime.value = now / 1000; circuitU.uSpeed.value = cur.pspeed;
     vozMat.emissive.copy(col);
     vozMat.emissiveIntensity = .3 + cur.talk * 3 * Math.abs(Math.sin(now / 90));
-    drawHUD(now, reading ? -.6 + .3 * Math.sin(now / 400) : vitrina || gestoActivo('pensativo') ? hxS * 1.4 : mx, reading ? -.3 : vitrina || gestoActivo('pensativo') ? hyS * 1.4 : my);
+    drawHUD(now, hxS * 1.4, hyS * 1.4);
     renderer.render(scene, camera);
     // solo si cambia de verdad (redondeado): reescribir el estilo en cada fotograma obliga a recalcular el drop-shadow
     const glow = `hsla(${Math.round(cur.hue)},100%,55%,${(.35 + .35 * Math.min(1, lvl)).toFixed(2)})`;
