@@ -91,6 +91,9 @@ class Gen:
         self.fase_identidad(m.get('alma', ''), a.identidad)
         # B) lo que recuerda: cada recuerdo importante, en varias preguntas con su voz (así pasa a los pesos)
         self.fase_recuerdos(m.get('recuerdos', []), a.recuerdos, m.get('alma', ''))
+        # v2: lo básico (quién es quién, sus datos de perfil) muy repetido + charla general de la propia base
+        self.fase_basico([x for x in m.get('recuerdos', []) if x.get('tipo') in ('perfil', 'persona')], a.basico, m.get('alma', '')[:1200])
+        self.fase_general(a.general)
         # C) cómo habla contigo (charla)
         cola = []
         charla = lambda: self.e['fases'].get('tuya', 0) + self.e['fases'].get('sus temas', 0)
@@ -242,10 +245,80 @@ class Gen:
             except Exception as er:
                 self.e['error'] = str(er)[:200]; time.sleep(3)
 
+    # v2: ejemplos que confunden quién es quién (el usuario es Demon; el asistente es APOLO): fuera al montar
+    CONFUNDE_Q = re.compile(r"\bdemon(io)?\b.*\b(eres|te llamas|tu nombre|c[oó]mo eres)\b|\b(eres|te llamas)\b.*\bdemon(io)?\b", re.I)
+    CONFUNDE_R = re.compile(r"\b(me llamo|soy) demon\b|\bte (llaman|llamas|gusta que te llamen) ['\"«]?apolo\b|\btu nombre es ['\"«]?apolo\b", re.I)
+    def confunde(self, g):
+        return bool(self.CONFUNDE_Q.search(g.get('pregunta', '')) and g.get('fuente') == 'identidad') or bool(self.CONFUNDE_R.search(g.get('respuesta', '')))
+
+    def fase_basico(self, hechos, objetivo, voz):
+        """v2: lo básico, muy repetido y con papeles claros (sale de sus recuerdos de perfil/personas; respuestas del maestro)."""
+        if not hechos or objetivo <= 0:
+            return
+        self.e['fase'] = 'reforzando lo básico'; self.guardar()
+        vistos = set(self.e.get('basico_hechos', []))
+        for x in hechos:
+            if self.parar() or self.e['fases'].get('basico', 0) >= objetivo:
+                break
+            if h(x['t']) in vistos:
+                continue
+            try:
+                r = self.chat_json([{'role': 'system', 'content': 'Eres APOLO, el asistente personal de Demon. Demon es tu USUARIO: él te escribe y tú le respondes. '
+                                     'Tú eres APOLO y NUNCA eres Demon. Tu forma de ser:\n' + voz},
+                                    {'role': 'user', 'content': f'Dato que sabes de Demon: "{x["t"]}"\n\nEscribe 4 pares DISTINTOS: una pregunta corta que Demon te haría sobre esto '
+                                     '(informal, hablándote de tú) y tu respuesta de 1-2 frases que diga el dato con claridad, hablándole de tú ("te llamas…", "tu taller…"). '
+                                     'Si la pregunta es sobre nombres, deja claro que él es Demon y tú eres APOLO. Sin añadir datos. JSON {"pares":[{"pregunta":"...","respuesta":"..."}]}'}], 900)
+                for p in r.get('pares', []):
+                    q, resp = str(p.get('pregunta', '')).strip(), str(p.get('respuesta', '')).strip()
+                    if len(q) < 4 or len(resp) < 6 or h(q) in self.ya or MULETILLA.search(resp) or TAPADO.search(q + resp) or self.confunde({'pregunta': q, 'respuesta': resp}):
+                        continue
+                    ok, nota = self.fiel(x['t'], q, resp, recuerdo=True)
+                    if ok and nota >= self.a.nota:
+                        self.escribir('basico', q, resp, nota)
+                    else:
+                        self.e['descartadas'] += 1
+            except Exception as er:
+                self.e['error'] = str(er)[:200]; time.sleep(3)
+            vistos.add(h(x['t'])); self.e['basico_hechos'] = list(vistos); self.guardar()
+
+    def fase_general(self, objetivo):
+        """v2: charla general escrita por la PROPIA base (preguntas y respuestas) para que el entrenamiento no le haga olvidar lo que sabía."""
+        if objetivo <= 0:
+            return
+        self.e['fase'] = 'conservando lo que ya sabía'; self.guardar()
+        modelo_ant = self.a.modelo; self.a.modelo = self.a.modelo_general
+        temas = ['ciencia', 'historia', 'tecnología y ordenadores', 'consejos prácticos del día a día', 'cocina', 'salud y deporte (general)', 'matemáticas sencillas',
+                 'idiomas y palabras', 'geografía', 'música y cine', 'motor y mecánica', 'videojuegos', 'dinero y ahorro', 'escritura y redacción', 'lógica y acertijos']
+        try:
+            for i in range(200):
+                if self.parar() or self.e['fases'].get('general', 0) >= objetivo:
+                    break
+                tema = temas[i % len(temas)]
+                try:
+                    qs = self.chat_json([{'role': 'user', 'content': f'Escribe 12 preguntas distintas y variadas en español sobre {tema}, como las haría una persona normal a un asistente '
+                                          '(algunas cortas, algunas pidiendo explicación o una lista breve). JSON {"preguntas":["...", ...]}'}], 900).get('preguntas', [])
+                except Exception as er:
+                    self.e['error'] = str(er)[:200]; time.sleep(3); continue
+                for q in qs:
+                    if self.parar() or self.e['fases'].get('general', 0) >= objetivo:
+                        break
+                    q = str(q).strip()
+                    if len(q) < 6 or h(q) in self.ya:
+                        continue
+                    try:
+                        resp = self.chat([{'role': 'system', 'content': 'Responde en español, claro y breve (2-6 frases o una lista corta). Sin títulos.'}, {'role': 'user', 'content': q}], maximo=380, temp=.6)
+                    except Exception as er:
+                        self.e['error'] = str(er)[:200]; continue
+                    if len(resp) < 15 or MALA.search(resp) or TITULO.search(resp) or URL.search(resp):
+                        self.e['descartadas'] += 1; continue
+                    self.escribir('general', q, resp, 4)
+        finally:
+            self.a.modelo = modelo_ant
+
     def montar(self):
         """apolo-train.jsonl / apolo-val.jsonl: reales (ya separados por sesión) + generados (5 % a validación)."""
         sysmsg = self.m.get('system', 'Eres APOLO, el asistente personal de tu usuario.')
-        gen = self.leer_generado()
+        gen = [g for g in self.leer_generado() if not self.confunde(g)]
         random.seed(7)
         val_gen = set(random.sample(range(len(gen)), max(1, len(gen) // 20))) if gen else set()
         def ej(q, r):
@@ -285,6 +358,9 @@ if __name__ == '__main__':
     p.add_argument('--identidad', type=int, default=150)
     p.add_argument('--recuerdos', type=int, default=2000)
     p.add_argument('--tuyas', action='store_true', help='usar también sus preguntas reales en la charla')
+    p.add_argument('--basico', type=int, default=0, help='v2: pares de lo básico (perfil/personas)')
+    p.add_argument('--general', type=int, default=0, help='v2: charla general escrita por la base')
+    p.add_argument('--modelo-general', default='qwen3:4b-instruct-2507-q4_K_M')
     p.add_argument('--solo-montar', action='store_true')
     a = p.parse_args()
     try:

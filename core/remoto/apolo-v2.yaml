@@ -1,0 +1,22 @@
+# APOLO v2: la v1 memorizó de más (train 0,34 vs val 1,60: repeticiones, confundía quién es quién).
+# Más suave: 2 épocas, lr a la mitad; el dataset lleva además "lo básico" reforzado y charla general de la propia base.
+base: /srv/entrenamiento/models/qwen3-4b
+task: sft
+data:
+  train: /srv/entrenamiento/apolo/apolo-train.jsonl
+  format: chatml
+  val_split: 0.05
+  max_length: 1024
+training:
+  epochs: 2
+  lr: 0.0001
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  gradient_checkpointing: full
+  optimizer: paged_adamw_8bit
+  lora:
+    r: 32
+    alpha: 64
+    target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  quantization: 4bit
+output: /srv/entrenamiento/output/apolo-v2
