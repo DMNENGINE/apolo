@@ -96,7 +96,9 @@ class Gen:
         charla = lambda: self.e['fases'].get('tuya', 0) + self.e['fases'].get('sus temas', 0)
         # 1) preguntas reales que se entienden solas
         self.e['fase'] = 'eligiendo tus preguntas'; self.guardar()
-        for t in m.get('preguntas', []):
+        # sus preguntas reales casi siempre dependen de la conversación en que las hizo (el filtro SI/NO del 8B no basta):
+        # apagadas por defecto; su forma de hablar real ya entra por sus conversaciones reales
+        for t in (m.get('preguntas', []) if a.tuyas else []):
             if self.parar() or len(cola) + charla() >= a.objetivo:
                 break
             if h(t) in self.ya or VIVO.search(t):
@@ -265,6 +267,7 @@ if __name__ == '__main__':
     p.add_argument('--nota', type=int, default=4)
     p.add_argument('--identidad', type=int, default=150)
     p.add_argument('--recuerdos', type=int, default=2000)
+    p.add_argument('--tuyas', action='store_true', help='usar también sus preguntas reales en la charla')
     p.add_argument('--solo-montar', action='store_true')
     a = p.parse_args()
     try:
