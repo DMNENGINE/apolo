@@ -416,7 +416,7 @@ for (const ev of ['focus', 'blur']) window.addEventListener(ev, () => avisarFoco
 document.addEventListener('visibilitychange', () => avisarFoco());
 
 // ---------- barra lateral ----------
-const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['turno', 'Turno de noche', 'luna'], ['auto', 'Automatizaciones', 'reloj'], ['skills', 'Skills', 'pieza'], ['memoria', 'Memoria', 'cerebro'], ['wrapped', 'Wrapped', 'chispa'], ['uso', 'Uso', 'grafica']];
+const NAV_APP = [['inicio', 'Inicio', 'inicio'], ['chat', 'Chat', 'chat'], ['agentes', 'Mission Control', 'robot'], ['turno', 'Turno de noche', 'luna'], ['auto', 'Automatizaciones', 'reloj'], ['skills', 'Skills', 'pieza'], ['prompts', 'Prompts', 'chispa'], ['memoria', 'Memoria', 'cerebro'], ['wrapped', 'Wrapped', 'chispa'], ['uso', 'Uso', 'grafica']];
 // pestañas que aportan los plugins activos (aporta.vistas), justo después de Mission Control
 let NAV_PLUGINS = [];
 // una entrada puede llevar un 4.º elemento: función que dice si se enseña (p. ej. Revisión solo si hay fuente de clips)
