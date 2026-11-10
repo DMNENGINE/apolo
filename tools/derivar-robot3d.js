@@ -13,3 +13,13 @@ if (/from 'three/.test(s)) throw new Error('queda algún import de three sin con
 s = `// ⚠️ GENERADO desde app/robot.js por tools/derivar-robot3d.js — no lo edites aquí.\n${s}`;
 fs.writeFileSync(path.join(raiz, 'core', 'ui', 'robot3d.js'), s);
 console.log('ok core/ui/robot3d.js', s.length, 'bytes');
+
+// El catálogo y su evaluador son compartidos, con app/ como fuente.
+fs.writeFileSync(path.join(raiz, 'core', 'ui', 'animaciones-casco.js'), '// GENERADO desde app/animaciones-casco.js; no editar.\n' + fs.readFileSync(path.join(raiz, 'app', 'animaciones-casco.js'), 'utf8'));
+
+fs.writeFileSync(path.join(raiz, 'core', 'ui', 'ojos-catalogo.js'), '// GENERADO desde app/ojos-catalogo.js; no editar.\n' + fs.readFileSync(path.join(raiz, 'app', 'ojos-catalogo.js'), 'utf8'));
+
+const galeria = fs.readFileSync(path.join(raiz, 'app', 'galeria-100.html'), 'utf8')
+  .replace(/<script type="importmap">[\s\S]*?<\/script>/, '')
+  .replace("from './robot.js'", "from './robot3d.js'");
+fs.writeFileSync(path.join(raiz, 'core', 'ui', 'galeria-casco.html'), '<!-- GENERADO desde app/galeria-100.html; no editar. -->\n' + galeria);

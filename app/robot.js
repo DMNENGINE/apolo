@@ -4,6 +4,8 @@
 // FUENTE ÚNICA: core/ui/robot3d.js se genera desde aquí con `node tools/derivar-robot3d.js` (solo cambian los imports).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { ANIMACIONES_CASCO, buscarAnimacionCasco, evaluarAnimacionCasco } from './animaciones-casco.js';
+import { dibujarOjoCatalogo } from './ojos-catalogo.js';
 
 const STATES = {
   reposo:     { hue:145, speed:.4, glow:.5,  pspeed:1.2, eye:1,   happy:0, x:0, talk:0 },
@@ -92,12 +94,13 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
   };
   // ---------- gestos: ojos especiales y movimientos de cabeza durante unos segundos ----------
   // ojos: remolino | guino | corazon | sorpresa | reloj (la hora en el visor)   cabeza: saludo | si | no | mirar
-  let gesto = null, gestoHasta = 0, gestoIni = 0;
-  const ESCENAS = new Set(['revision', 'estornudo_explosivo', 'montaje']);
+  let gesto = null, gestoHasta = 0, gestoIni = 0, receta = null, poseAnimada = null;
+  const ESCENAS = new Set(['revision', 'estornudo_explosivo', 'montaje', ...ANIMACIONES_CASCO.filter(a => a.escena).map(a => a.id)]);
   const gestoActivo = n => {
     if (performance.now() >= gestoHasta) return false;
     if (gesto === n) return true;
     const f = (performance.now() - gestoIni) / (gestoHasta - gestoIni);
+    if (receta) return n === receta.ojos;
     const cara = gesto === 'revision' ? 'concentrado' : gesto === 'montaje' ? (f > .4 && f < .8 ? 'duda' : 'curioso')
       : gesto === 'estornudo_explosivo' ? (f < .28 ? 'pensativo' : f < .48 ? 'estornudo' : 'sorpresa') : null;
     return n === cara;
@@ -112,6 +115,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     c.save(); c.translate(ex, ey);
     const hue = cur.hue;
     const calma = movimientoSuave.matches;
+    if (poseAnimada && dibujarOjoCatalogo(c, er, poseAnimada.ojos, now, calma, blink)) { c.restore(); return; }
     if (gestoActivo('ilusionado')) {
       const latido = calma ? 1 : 1 + .06 * Math.sin(now / 230);
       star4(c, 0, 0, er * latido, hsl(45, 100, 74));
@@ -397,6 +401,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     last = now;
     acc += dt; if (acc < 1 / fps) return;             // limitar fps cuando está pequeño
     const step = acc; acc = 0;
+    poseAnimada = receta && now < gestoHasta ? evaluarAnimacionCasco(receta, (now - gestoIni) / Math.max(1, gestoHasta - gestoIni), movimientoSuave.matches) : null;
     const k = 1 - Math.pow(.02, step);
     for (const p in target) cur[p] += (target[p] - cur[p]) * (p === 'hue' ? 1 - Math.pow(.0003, step) : k);
     scroll += step * cur.speed;
@@ -420,6 +425,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     if (gestoActivo('sospecha')) { tx = .7; ty = .05; }
     if (gestoActivo('concentrado')) { tx = -.2; ty = .22; }
     if (gestoActivo('pensativo')) { tx = .55; ty = -.6; }                       // mira arriba a un lado, pensando
+    if (poseAnimada) { tx = poseAnimada.mirada[0]; ty = poseAnimada.mirada[1]; }
     // Microsacadas solo sin un objetivo concreto; nunca durante sueño o gestos.
     microT -= step;
     const libre = !vitrina && stateName === 'reposo' && now - lastMove > 1800 && now >= gestoHasta;
@@ -469,6 +475,7 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       else if (gesto === 'enfadado') { gx = .08 * g; gz = Math.sin(t * 18) * .025 * g; }
       else if (gesto === 'feliz') gz = Math.sin(t * 5) * .08 * g;
     }
+    if (poseAnimada) { gx += poseAnimada.cabeza[0]; gy += poseAnimada.cabeza[1]; gz += poseAnimada.cabeza[2]; gpy += poseAnimada.altura; }
     // Un solo muelle absorbe los impulsos y vuelve a la forma original.
     const suave = movimientoSuave.matches;
     let formaObjetivo = 0;
@@ -500,12 +507,13 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     const respiracion = Math.sin(respiracionT) * .78 + Math.sin(respiracionT * 1.73 + .6) * .22;
     const deformacion = Math.max(-.09, Math.min(.09, elasticidad));
     const escalaY = 1 + deformacion, escalaLateral = 1 / Math.sqrt(escalaY);
-    head.scale.set(escalaLateral, escalaY, escalaLateral);
+    const escalaCatalogo = poseAnimada?.escala || 1;
+    head.scale.set(escalaLateral * escalaCatalogo, escalaY * escalaCatalogo, escalaLateral * escalaCatalogo);
     // Las escenas no cambian la geometría: separan piezas y las devuelven a su transformación original.
     restaurarPiezas();
     let aperturaEscena = 0;
     const faseEscena = Math.max(0, Math.min(1, (now - gestoIni) / Math.max(1, gestoHasta - gestoIni)));
-    if (ESCENAS.has(gesto) && now < gestoHasta && !suave && !abrirObj && abierto < .03) {
+    if (!receta && ESCENAS.has(gesto) && now < gestoHasta && !suave && !abrirObj && abierto < .03) {
       const f = faseEscena;
       const separacion = gesto === 'revision' ? ventana(f, .04, .25, .65, .96)
         : gesto === 'estornudo_explosivo' ? ventana(f, .28, .37, .44, .84) : ventana(f, .04, .24, .5, .82);
@@ -521,6 +529,15 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       }
       bisagra.position.set(0, .5, .32 + (gesto === 'revision' ? 0 : separacion * .22));
     } else bisagra.position.set(0, .5, .32);
+    if (poseAnimada && !suave && !abrirObj && abierto < .03) {
+      aperturaEscena = poseAnimada.apertura;
+      for (const p of piezas) {
+        const v = poseAnimada.piezas[p.nombre];
+        p.grupo.position.set(p.base.x + v[0], p.base.y + v[1], p.base.z + v[2]);
+        p.grupo.rotation.set(v[3], v[4], v[5]);
+      }
+      bisagra.position.set(poseAnimada.visor[0], .5 + poseAnimada.visor[1], .32 + poseAnimada.visor[2]);
+    }
     // compuerta: se abre con un golpe seco (rebote) y se cierra despacio; dentro el nido late
     if (abrirHasta && performance.now() > abrirHasta) { abrirObj = 0; abrirHasta = 0; }
     abierto += (abrirObj - abierto) * (1 - Math.pow(abrirObj > abierto ? .0008 : .02, step));
@@ -575,10 +592,11 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
       viajeY = Math.max(-.18, Math.min(.18, y / 6500));
       ultimoViaje = performance.now();
     },
-    poke() { impulso = -.85; wob = 1; flash('listo', T('¡EY!'), 1.1); },
+    poke() { if (receta || ESCENAS.has(gesto)) this.cancelarGesto(); impulso = -.85; wob = 1; flash('listo', T('¡EY!'), 1.1); },
     hud(msg, secs = 3, st = 'trabajando') { flash(st, msg, secs); },
     // fuerza 1..3: cuantas más vueltas, más largo el mareo con ojos de remolino
     dizzy(fuerza = 1) {
+      this.cancelarGesto();
       spin = Math.min(2.2, .9 + fuerza * .45); wob = .6;
       const secs = 2.6 + fuerza * 1.1;
       gesto = 'remolino'; gestoIni = performance.now(); gestoHasta = gestoIni + secs * 1000;
@@ -587,25 +605,28 @@ export function createRobot(canvas, glbUrl = 'casco.glb', opts = {}) {
     greet(msg = T('¡HOLA! 👋')) { wob = .8; this.gesto('saludo', 2.4); flash('listo', msg, 2.8); },
     // gestos: ojos remolino|guino|corazon|sorpresa|reloj|feliz|triste|duda|bostezo|estornudo|pensativo
     //         cabeza saludo|si|no|mirar|celebrar (y la de cada gesto de ojos). msg !== undefined = cara despierta + ese texto
-    gesto(nombre, secs = 3, msg) {
-      if (ESCENAS.has(nombre) && (abrirObj || abierto > .03)) return;
-      restaurarPiezas();
+    gesto(nombre, secs, msg) {
+      const nueva = buscarAnimacionCasco(nombre);
+      secs = secs ?? nueva?.segundos ?? 3;
+      if ((nueva || ESCENAS.has(nombre)) && (abrirObj || abierto > .03)) return;
+      restaurarPiezas(); receta = nueva; poseAnimada = null;
       gesto = nombre; gestoIni = performance.now(); gestoHasta = gestoIni + secs * 1000;
       const base = react > 0 ? prevState : stateName;
       if (msg !== undefined) flash(base === 'dormido' ? 'reposo' : base, msg, secs);
     },
     // Cancela una expresión decorativa sin cambiar el estado ni el mensaje real.
-    cancelarGesto() { gesto = null; gestoHasta = 0; restaurarPiezas(); bisagra.position.set(0, .5, .32); },
+    cancelarGesto() { gesto = null; receta = poseAnimada = null; gestoHasta = 0; restaurarPiezas(); bisagra.position.set(0, .5, .32); },
+    animaciones: () => ANIMACIONES_CASCO,
     ocupado: () => performance.now() < gestoHasta || react > 0,
     // compuerta del visor: abre el casco (las arañas salen del nido) durante secs; cerrarCasco() lo cierra ya
-    abrirCasco(secs = 4) { if (ESCENAS.has(gesto)) this.cancelarGesto(); abrirObj = 1; abrirHasta = performance.now() + secs * 1000; },
+    abrirCasco(secs = 4) { if (receta || ESCENAS.has(gesto)) this.cancelarGesto(); abrirObj = 1; abrirHasta = performance.now() + secs * 1000; },
     cerrarCasco() { abrirObj = 0; abrirHasta = 0; },
     abierto: () => abierto,
     // se muda de monitor: rueda en la dirección del viaje (dir = 1 derecha, -1 izquierda)
-    rodar(dir = 1) { const base = react > 0 ? prevState : stateName; spin = 1.7 * dir; wob = .35; this.inercia(dir * 1100, 0); impulso = -.45; flash(base === 'dormido' ? 'reposo' : base, '', 1.3); },
+    rodar(dir = 1) { this.cancelarGesto(); const base = react > 0 ? prevState : stateName; spin = 1.7 * dir; wob = .35; this.inercia(dir * 1100, 0); impulso = -.45; flash(base === 'dormido' ? 'reposo' : base, '', 1.3); },
     setState(name, msg = '') {
       if (!STATES[name]) return;
-      if (name !== 'reposo' && ESCENAS.has(gesto)) this.cancelarGesto();
+      if (name !== 'reposo' && (receta || ESCENAS.has(gesto))) this.cancelarGesto();
       if (react > 0) { prevState = name; prevMsg = msg || MSG_ESTADO()[name] || ''; return; }
       stateName = name; target = STATES[name];
       message = msg || MSG_ESTADO()[name] || '';

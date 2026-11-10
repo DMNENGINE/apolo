@@ -1,0 +1,41 @@
+<!-- GENERADO desde app/galeria-100.html; no editar. -->
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>APOLO · 100 animaciones</title>
+
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0e141b;color:#e4f3ed;font:15px system-ui}main{max-width:1250px;margin:auto;padding:24px;display:grid;grid-template-columns:330px 1fr;gap:28px}aside{position:sticky;top:20px;align-self:start;background:#17222c;border:1px solid #31464a;border-radius:20px;padding:16px}canvas{width:100%;height:310px;display:block}h1{font-size:24px;margin:0 0 14px}h2{font-size:18px;color:#97eccb;margin:24px 0 10px}p{color:#a9bfb9;line-height:1.5}button,select{font:inherit;color:inherit;background:#1a2b34;border:1px solid #36525a;padding:10px;border-radius:10px;cursor:pointer}button:hover,button[aria-pressed=true]{background:#234a43;border-color:#8be7c1}button:focus-visible,select:focus-visible{outline:2px solid #b8ffdf;outline-offset:3px}.lista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.lista button{text-align:left;min-height:46px}.acciones{display:flex;gap:8px;flex-wrap:wrap}small{display:block;color:#91b4ac;margin-top:8px}#nombre{min-height:50px}a{color:#9ff4d1}@media(max-width:740px){main{grid-template-columns:1fr;padding:12px}aside{position:relative;top:0}canvas{height:260px}.lista{grid-template-columns:1fr 1fr}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style></head><body><main><aside>
+<h1>El casco tiene vida</h1><canvas id="c" aria-label="Vista animada del casco de APOLO"></canvas>
+<h2 id="nombre" aria-live="polite">Elige una animación</h2><p id="detalle">100 escenas en diez familias. Pulsa cualquier botón para verla.</p>
+<div class="acciones"><button id="repetir">Repetir</button><button id="siguiente">Siguiente</button><button id="azar">Al azar</button><button id="parar">Parar</button></div>
+<p><label><input id="sucesion" type="checkbox"> Reproducir el catálogo en orden</label></p>
+<small>Con movimiento reducido se conserva la expresión y se desactivan giros, aperturas y desplazamientos.</small>
+</aside><section><h1>100 animaciones para APOLO</h1><p>Emociones, juegos, mecanismos y pequeñas transformaciones. Al terminar siempre vuelve al casco.</p><div id="familias"></div></section></main>
+<script type="module">
+import { createRobot } from './robot3d.js';
+import { ANIMACIONES_CASCO as catalogo } from './animaciones-casco.js';
+const robot = createRobot(document.querySelector('canvas'));robot.setFps(24);
+let indice=0,temporizador=0;
+window.robot=robot;window.catalogo=catalogo;
+function reproducir(i){
+ clearTimeout(temporizador);indice=(i+catalogo.length)%catalogo.length;const a=catalogo[indice];
+ robot.cancelarGesto();robot.setState('reposo');robot.gesto(a.id,a.segundos);
+ document.querySelector('#nombre').textContent=a.nombre;
+ document.querySelector('#detalle').textContent=`${indice+1}/100 · ${a.familia} · ${a.segundos} segundos`;
+ document.querySelectorAll('[data-id]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===a.id)));
+ if(document.querySelector('#sucesion').checked)temporizador=setTimeout(()=>reproducir(indice+1),(a.segundos+1)*1000);
+}
+for(const familia of new Set(catalogo.map(a=>a.familia))){
+ const h=document.createElement('h2');h.textContent=familia[0].toUpperCase()+familia.slice(1);document.querySelector('#familias').append(h);
+ const lista=document.createElement('div');lista.className='lista';
+ catalogo.forEach((a,i)=>{if(a.familia!==familia)return;const b=document.createElement('button');b.dataset.id=a.id;b.textContent=a.nombre;b.setAttribute('aria-pressed','false');b.onclick=()=>reproducir(i);lista.append(b)});
+ document.querySelector('#familias').append(lista);
+}
+document.querySelector('#repetir').onclick=()=>reproducir(indice);
+document.querySelector('#siguiente').onclick=()=>reproducir(indice+1);
+document.querySelector('#azar').onclick=()=>reproducir(Math.floor(Math.random()*100));
+document.querySelector('#parar').onclick=()=>{clearTimeout(temporizador);document.querySelector('#sucesion').checked=false;robot.cancelarGesto()};
+document.querySelector('#sucesion').onchange=()=>{if(document.querySelector('#sucesion').checked)reproducir(indice);else clearTimeout(temporizador)};
+addEventListener('pagehide',()=>{clearTimeout(temporizador);robot.destruir()});
+</script></body></html>
