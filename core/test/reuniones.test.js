@@ -154,3 +154,31 @@ test('regla "siempre en Meet" y herramientas del agente', async t => {
   assert.strictEqual(R.plataformaDe('https://teams.microsoft.com/v2/'), 'teams');
   assert.ok(R.fechaTarea('mañana por la tarde', new Date(2026, 9, 3, 12).getTime()) === new Date(2026, 9, 4, 9).getTime());
 });
+
+test('audio: con separación de hablantes, "ellos" se parte en persona 1/2 con su tiempo; sin ella, la vía de siempre', async t => {
+  const transcribir = async ruta => `texto de ${path.basename(ruta).replace('.wav', '')}`;
+  for (const disponible of [true, false]) {
+    let g;
+    const n = nucleo(t, { lanzarGrabadora: () => (g = grabadoraFalsa()), transcribirReunion: transcribir });
+    n.reuniones.configurar({ trozoSeg: 30 });
+    n.generarJSON = generarFalso([]);
+    const pedidos = [];
+    n.bus.on('transcribir-hablantes', ({ ruta, reunion, responder }) => {
+      pedidos.push({ ruta, reunion });
+      setImmediate(() => responder(null, disponible ? [{ ini: 0.5, fin: 4, hablante: 'persona 1', texto: 'hola, soy Ana' }, { ini: 5, fin: 9, hablante: 'persona 2', texto: 'y yo Luis' }, { ini: 10, fin: 11, hablante: 'persona 1', texto: 'Gracias por ver.' }] : null));
+    });
+    const r = await n.reuniones.empezar({ fuente: 'audio', titulo: 'Llamada' });
+    const trozo = (fuente, n_) => g.emitir({ evento: 'trozo', fuente, ruta: path.join(os.tmpdir(), `h-${fuente}-${n_}.wav`), n: n_, inicioMs: (n_ - 1) * 30_000, durMs: 30_000, rms: 0.05, pico: 0.2 });
+    trozo('mic', 1); trozo('sistema', 2); trozo('sistema', 3);
+    const fin = await n.reuniones.parar({ motivo: 'test', resumir: false });
+    if (disponible) {
+      assert.strictEqual(pedidos.length, 2, 'cada trozo de "ellos" pide la separación');
+      assert.strictEqual(pedidos[0].reunion, r.id);
+      assert.deepStrictEqual(fin.segmentos.map(s => [s.hablante, s.t]), [['yo', 0], ['persona 1', 30_500], ['persona 2', 35_000], ['persona 1', 60_500], ['persona 2', 65_000]]);
+      assert.ok(!fin.segmentos.some(s => /Gracias por ver/.test(s.texto)), 'las alucinaciones también se filtran por tramo');
+    } else {
+      assert.strictEqual(pedidos.length, 1, 'si no está disponible no se vuelve a pedir en esa reunión');
+      assert.deepStrictEqual(fin.segmentos.map(s => s.hablante), ['yo', 'ellos', 'ellos']);
+    }
+  }
+});

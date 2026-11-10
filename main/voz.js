@@ -1,6 +1,7 @@
 // Voz del robot (proceso principal):
-// - TTS: 1) Fish Audio (si hay key y voz en %APPDATA%\robot-companion\voz.json) 2) voz neural de Edge (main/edge-tts.js,
-//   sin Python; si falla, el paquete Python edge-tts) 3) null → la isla usa la voz de Windows. Todo en mp3 con caché por texto.
+// - TTS: 1) Fish Audio (si hay key y voz en %APPDATA%\robot-companion\voz.json) 2) voz local OmniVoice en la GPU
+//   (tools/tts_srv.py, si existe <datos>/tts/venv y hay VRAM libre) 3) voz neural de Edge (main/edge-tts.js, sin Python;
+//   si falla, el paquete Python edge-tts) 4) null → la isla usa la voz de Windows. Todo en mp3 con caché por texto.
 // - Oído: 1) Whisper en Python (servidor persistente, bajo demanda) si está instalado 2) whisper.cpp (main/whisper-cpp.js,
 //   sin Python: se descarga solo) 3) el reconocedor de Windows (listen.ps1).
 const fs = require('fs');
@@ -43,6 +44,82 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
     p.on('error', () => { clearTimeout(t); ok(null); });
     p.on('exit', c => { clearTimeout(t); ok(c === 0 && fs.existsSync(f) ? f : null); });
   });
+  // ---------- Voz local: OmniVoice (k2-fsa, Apache-2.0) en la GPU, sin internet (tools/tts_srv.py) ----------
+  // Usa el venv <datos>/tts/venv (con --system-site-packages: reutiliza el torch global sin tocarlo). Pensada para no
+  // estorbar a Ollama/ComfyUI: solo arranca con ≥ 4,5 GB de VRAM libres (pico real ~4 GB), la 1.ª frase (mientras carga, ~15 s) sale por
+  // edge-tts, cada frase tiene 8 s o va por edge-tts, 2 lentas seguidas = se apaga 5 min, y se descarga tras 5 min sin uso.
+  // La voz es fija: <datos>/tts/voz-apolo.wav (+ .txt); para cambiarla, pon ahí otro wav de 3-10 s. voz.json "vozLocal": false la apaga.
+  const TTS_DIR = () => path.join(dirDatos(), 'tts');
+  const ttsPython = () => path.join(TTS_DIR(), 'venv', process.platform === 'win32' ? 'Scripts\\python.exe' : 'bin/python');
+  const MODELO_LOCAL_CACHE = path.join(process.env.HF_HOME || path.join(os.homedir(), '.cache', 'huggingface'), 'hub', 'models--k2-fsa--OmniVoice');
+  let local = null, localListo = false, localBuf = '', localId = 0, localApagar = null, localFalloHasta = 0, localLentas = 0;
+  const localEsperas = new Map();
+  const localDisponible = () => VOZ_CFG().vozLocal !== false && fs.existsSync(ttsPython());
+  const vramLibre = () => new Promise(ok => execFile('nvidia-smi', ['--query-gpu=memory.free', '--format=csv,noheader,nounits'], { windowsHide: true, timeout: 5000 },
+    (e, out) => ok(e ? 0 : parseInt(String(out).trim().split(/\r?\n/)[0], 10) || 0)));
+  // GPU trabajando para otro (ComfyUI generando ≈ 95 %): la voz local tardaría 6-7 s → edge-tts directo. Se mira como
+  // mucho cada 15 s y solo cuando NO estamos generando nosotros (si no, el 85 % sería nuestro).
+  let gpuMirada = 0, gpuOcupadaUlt = false;
+  const gpuOcupada = () => {
+    if (Date.now() - gpuMirada < 15_000 || localEsperas.size) return Promise.resolve(gpuOcupadaUlt);
+    gpuMirada = Date.now();
+    return new Promise(ok => execFile('nvidia-smi', ['--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], { windowsHide: true, timeout: 3000 },
+      (e, out) => ok(gpuOcupadaUlt = !e && (parseInt(String(out).trim().split(/\r?\n/)[0], 10) || 0) >= 85)));
+  };
+  function apagarLocal(motivo, pausaMs = 0) {
+    if (pausaMs) localFalloHasta = Date.now() + pausaMs;
+    if (local) { console.log('[voz] voz local descargada:', motivo); try { local.kill(); } catch { } }
+  }
+  function apagarLocalLuego() { clearTimeout(localApagar); localApagar = setTimeout(() => apagarLocal('5 min sin uso'), 300_000); localApagar.unref?.(); }
+  let arrancando = false;
+  async function arrancarLocal() {
+    if (local || arrancando || !localDisponible() || Date.now() < localFalloHasta) return;
+    arrancando = true;
+    try {
+      const libre = await vramLibre();
+      if (libre < 4500) { localFalloHasta = Date.now() + 60_000; console.log(`[voz] GPU con ${libre} MB libres: voz local en pausa`); return; }
+      const env = { ...process.env, PYTHONIOENCODING: 'utf-8', HF_HUB_DISABLE_SYMLINKS_WARNING: '1', ROBOT_TTS_DIR: TTS_DIR() };
+      if (fs.existsSync(MODELO_LOCAL_CACHE)) env.HF_HUB_OFFLINE = '1';          // ya descargado: sin consultar internet al cargar
+      const p = local = spawn(ttsPython(), [fuera(path.join(RAIZ, 'tools', 'tts_srv.py'))], { windowsHide: true, env });
+      localBuf = '';
+      p.stdout.setEncoding('utf8');
+      p.stdout.on('data', d => {
+        localBuf += d; let i;
+        while ((i = localBuf.indexOf('\n')) >= 0) {
+          const line = localBuf.slice(0, i).trim(); localBuf = localBuf.slice(i + 1);
+          let j; try { j = JSON.parse(line); } catch { continue; }
+          if (j.ready) { localListo = true; console.log('[voz] voz local lista (OmniVoice)'); apagarLocalLuego(); continue; }
+          const w = localEsperas.get(j.id); if (w) { localEsperas.delete(j.id); w(j); }
+        }
+      });
+      p.stderr.on('data', () => { });                                         // barras de progreso de transformers
+      const fin = () => {
+        if (local !== p) return;
+        if (!localListo) localFalloHasta = Date.now() + 300_000;              // no arrancó: 5 min con edge-tts
+        local = null; localListo = false;
+        for (const w of localEsperas.values()) w({ ok: false }); localEsperas.clear();
+      };
+      p.on('error', fin); p.on('exit', fin);
+    } finally { arrancando = false; }
+  }
+  async function ttsLocal(text, f) {
+    if (!localDisponible()) return false;
+    if (!localListo) { arrancarLocal(); return false; }                       // esta frase por edge-tts; la siguiente ya en local
+    apagarLocalLuego();
+    if (await gpuOcupada()) return false;                                    // GPU ocupada por otro: no esperar, edge-tts
+    return new Promise(ok => {
+      const id = ++localId;
+      const t = setTimeout(() => {
+        localEsperas.delete(id); console.error('[voz] voz local tardó > 8 s (¿GPU ocupada?): edge-tts');
+        if (++localLentas >= 2) { localLentas = 0; apagarLocal('GPU ocupada', 300_000); }
+        ok(false);
+      }, 8000);
+      localEsperas.set(id, r => { clearTimeout(t); if (r.ok) localLentas = 0; ok(!!r.ok && fs.existsSync(f)); });
+      try { local.stdin.write(JSON.stringify({ id, texto: text, salida: f, idioma: idioma() || 'es' }) + '\n'); }
+      catch { localEsperas.delete(id); clearTimeout(t); ok(false); }
+    });
+  }
+
   async function generarTts(text) {
     text = String(text || '').slice(0, 600); if (!text.trim()) return null;
     const dir = path.join(os.tmpdir(), 'robot-tts'); try { fs.mkdirSync(dir, { recursive: true }); } catch { }
@@ -52,6 +129,12 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
     const f = path.join(dir, crypto.createHash('sha1').update(firma + text).digest('hex').slice(0, 16) + '.mp3');
     if (fs.existsSync(f)) return f;
     if (await ttsFish(vc, text, f)) return f;
+    if (localDisponible()) {                                            // voz local (misma voz siempre; caché propia)
+      let refMs = 0; try { refMs = fs.statSync(path.join(TTS_DIR(), 'voz-apolo.wav')).mtimeMs; } catch { }
+      const fl = path.join(dir, crypto.createHash('sha1').update('omnivoice' + refMs + (idioma() || 'es') + text).digest('hex').slice(0, 16) + '.mp3');
+      if (fs.existsSync(fl)) return fl;
+      if (await ttsLocal(text, fl)) return fl;
+    }
     const fe = path.join(dir, crypto.createHash('sha1').update(VOZ_TTS.voz + VOZ_TTS.rate + VOZ_TTS.pitch + text).digest('hex').slice(0, 16) + '.mp3');
     if (fs.existsSync(fe)) return fe;
     return edgeTts(text, fe, VOZ_TTS);
@@ -117,6 +200,21 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
     colaWhisper = tarea.catch(() => { });
     return tarea;
   }
+  // reuniones: trozo de audio de "ellos" → [{ini, fin, hablante: 'persona N', texto}] (misma cola que las notas de voz).
+  // {segmentos: null} si no hay Whisper de Python o faltan los modelos de hablantes: core/reuniones usa la vía de siempre.
+  function transcribirHablantes(ruta, reunion) {
+    const tarea = colaWhisper.then(async () => {
+      if (!await whisperListo(60_000)) return { segmentos: null, error: 'Whisper de Python no disponible' };
+      apagarWhisperLuego();
+      while (whisperWait) await new Promise(ok => setTimeout(ok, 200));
+      return new Promise(ok => {
+        whisperWait = ok; whisper.stdin.write('hablantes ' + JSON.stringify({ ruta, reunion: String(reunion || '') }) + '\n');
+        setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ segmentos: null, error: 'tiempo agotado' }); } }, 120_000);
+      });
+    });
+    colaWhisper = tarea.catch(() => { });
+    return tarea;
+  }
   const listenWhisper = modo =>
     new Promise(ok => { whisperWait = ok; whisper.stdin.write(modo === 'llamada' ? 'listen rapido\n' : 'listen\n'); setTimeout(() => { if (whisperWait === ok) { whisperWait = null; ok({ text: '', conf: 0 }); } }, 30000); });
   const listenWindows = () => (process.platform !== 'win32' ? Promise.resolve({ text: '', conf: 0, error: 'sin Whisper: bandeja → Instalar voz y micrófono' }) : new Promise(ok => execFile('powershell.exe',
@@ -125,6 +223,7 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
   // micrófono de la isla: Whisper de Python si carga; si no whisper.cpp; mientras se descarga (o sin él), el reconocedor de Windows
   // modo 'llamada' (llamada de la isla): corta tras menos silencio y transcribe con beam 1 (≈2× más rápido)
   async function escuchar(modo) {
+    arrancarLocal();                                              // mientras hablas, se carga la voz local para la respuesta
     const ok = await whisperListo(); apagarWhisperLuego();
     if (ok && !whisperWait) return listenWhisper(modo);
     if (wcpp.disponible && wcpp.listo()) return wcpp.escuchar();
@@ -147,9 +246,9 @@ function crearVoz({ dirDatos, idioma, nombre = () => 'APOLO' }) {
   }
 
   return {
-    generarTts, transcribirArchivo, escuchar, leerVocabulario, guardarVocabulario,
+    generarTts, transcribirArchivo, transcribirHablantes, escuchar, leerVocabulario, guardarVocabulario,
     whisperCargado: () => whisperReady || (sinPython && wcpp.listo()),
-    cerrar() { try { whisper && whisper.kill(); } catch { } wcpp.cerrar(); },
+    cerrar() { try { whisper && whisper.kill(); } catch { } apagarLocal('cierre'); wcpp.cerrar(); },
   };
 }
 

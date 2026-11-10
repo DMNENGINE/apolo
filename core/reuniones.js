@@ -117,17 +117,38 @@ function crearReuniones({ cfg, bus, navegador, generarJSON, modelo, tareas, memo
     if (a.procesando) return;
     a.procesando = true;
     try {
+      const meter = s => {
+        const segs = a.r.segmentos; let i = segs.length; while (i > 0 && (segs[i - 1].t > s.t || (segs[i - 1].t === s.t && s.fuente === 'mic' && segs[i - 1].fuente !== 'mic'))) i--;
+        segs.splice(i, 0, s);
+        emitir('segmento', a.r, { segmento: s }); guardarLuego();
+      };
       while (a.cola.length) {
         const t = a.cola.shift();
+        // audio de "ellos": ¿quién habla? (persona 1, persona 2… estables en toda la reunión; main.js → whisper_srv con
+        // sherpa-onnx). null = no disponible (sin modelos/app) → vía de siempre. Si tarda > 20 s dos veces (PC cargada),
+        // el resto de la reunión va por la vía de siempre para no quedarse atrás.
+        if (t.fuente !== 'mic' && !a.sinHablantes && bus.listenerCount('transcribir-hablantes')) {
+          const t0 = ahora();
+          const hs = await new Promise(ok => bus.emit('transcribir-hablantes', { ruta: t.ruta, reunion: a.r.id, responder: (e, s) => ok(e ? null : s) }));
+          if (ahora() - t0 > 20_000 && (a.lentos = (a.lentos || 0) + 1) >= 2) a.sinHablantes = true;
+          if (Array.isArray(hs)) {
+            if (!conf().guardarAudio) fs.rm(t.ruta, { force: true }, () => { });
+            for (const h of hs) {
+              const texto = String(h.texto || '').trim();
+              if (!texto || ALUCINACION.test(texto)) continue;
+              meter({ t: t.inicioMs + Math.round((h.ini || 0) * 1000), tFin: t.inicioMs + Math.round((h.fin || 0) * 1000), hablante: String(h.hablante || 'ellos').slice(0, 40), texto, fuente: t.fuente });
+            }
+            a.r.trozos = (a.r.trozos || 0) + 1;
+            continue;
+          }
+          a.sinHablantes = true;                                   // no disponible: no volver a intentarlo en esta reunión
+        }
         let texto = '';
         try { texto = String(await transcriptor(t.ruta) || '').trim(); } catch (e) { a.r.avisos.push(`whisper: ${e.message}`.slice(0, 200)); }
         if (!conf().guardarAudio) fs.rm(t.ruta, { force: true }, () => { });
         if (!texto || ALUCINACION.test(texto)) continue;
-        const s = { t: t.inicioMs, tFin: t.inicioMs + (t.durMs || 0), hablante: t.fuente === 'mic' ? 'yo' : 'ellos', texto, fuente: t.fuente };
-        const segs = a.r.segmentos; let i = segs.length; while (i > 0 && (segs[i - 1].t > s.t || (segs[i - 1].t === s.t && s.fuente === 'mic' && segs[i - 1].fuente !== 'mic'))) i--;
-        segs.splice(i, 0, s);
+        meter({ t: t.inicioMs, tFin: t.inicioMs + (t.durMs || 0), hablante: t.fuente === 'mic' ? 'yo' : 'ellos', texto, fuente: t.fuente });
         a.r.trozos = (a.r.trozos || 0) + 1;
-        emitir('segmento', a.r, { segmento: s }); guardarLuego();
       }
     } finally { a.procesando = false; a.alVaciar?.splice(0).forEach(f => f()); }
   }
@@ -245,7 +266,7 @@ function crearReuniones({ cfg, bus, navegador, generarJSON, modelo, tareas, memo
     // el resumen es para el usuario: en SU idioma (cfg.idioma; español por defecto), aunque la reunión fuera en otro
     const idioma = { es: 'español', en: 'English', pt: 'português', fr: 'français', it: 'italiano', de: 'Deutsch' }[String(cfg.idioma || 'es').slice(0, 2).toLowerCase()] || cfg.idioma;
     const system = `Eres quien toma las notas de una reunión. Escribe TODO (resumen, decisiones, tareas, preguntas y temas) en ${idioma}, aunque la reunión sea en otro idioma, sin inventar nada. ` +
-      '"yo" es el usuario (dueño del asistente); "ellos" son los demás participantes cuando no hay nombres. ' +
+      '"yo" es el usuario (dueño del asistente); "ellos" son los demás participantes cuando no hay nombres; "persona 1", "persona 2"… son participantes distintos reconocidos por la voz (la misma etiqueta = la misma persona en toda la reunión). ' +
       'tareas: solo compromisos concretos (quien = persona o "yo"; cuando = fecha ISO YYYY-MM-DD o YYYY-MM-DDTHH:MM si se dijo, si no omítelo). ' +
       'decisiones: lo que quedó acordado. preguntasAbiertas: lo que quedó sin resolver. temas: 3-8 etiquetas cortas.';
     const prompt = `Reunión "${r.titulo}" del ${fecha.toISOString().slice(0, 16).replace('T', ' ')} (hoy es ${new Date(ahora()).toISOString().slice(0, 10)}).\nTRANSCRIPCIÓN:\n${transcripcion(r)}`;

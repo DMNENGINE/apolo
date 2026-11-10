@@ -35,6 +35,9 @@ function crearMemoria({ cfg, embedder = null }) {
   const sync = () => { try { const m = fs.statSync(f).mtimeMs; if (m !== mtime) { lista = JSON.parse(fs.readFileSync(f, 'utf8')); mtime = m; } } catch { } };
   const guardar = () => { require('./persistencia').escribirAtomico(f, JSON.stringify(lista, null, 2)); try { mtime = fs.statSync(f).mtimeMs; } catch { } };
   sync();
+  // reranker (Qwen3-Reranker-0.6B en GPU, bajo demanda; null si cfg.memoria.reranker === false): solo con embeddings
+  let reranker = null;
+  if (embedder) try { reranker = require('./reranker').crearReranker(cfg); } catch { }
 
   // vectores: { modelo, v: { id: { h: hash del texto, e: base64 Float32 } } }; si cambia el modelo se rehacen
   let vecs = { modelo: embedder?.id, v: {} };
@@ -128,11 +131,22 @@ function crearMemoria({ cfg, embedder = null }) {
     if (lista.some(m => vecs.v[m.id]?.h !== hash(m.texto))) await indexar().catch(() => { });
     const docs = candidatos(excluirPerfil, alcance), lex = lexico(consulta, docs);
     const maxLex = Math.max(0, ...lex) || 1;
-    return docs.map((m, i) => {
+    const orden = docs.map((m, i) => {
       const v = vector(m.id), sem = v ? coseno(qv, v) : 0;
       if (sem < UMBRAL_SEM && lex[i] === 0) return null;
       return { m, s: (sem + 0.3 * lex[i] / maxLex) * bonus(m) };
-    }).filter(Boolean).sort((a, b) => b.s - a.s).slice(0, limite).map(x => x.m);
+    }).filter(Boolean).sort((a, b) => b.s - a.s);
+    // reranker: relee los ~24 mejores con la consulta y reordena. Sus probabilidades absolutas suelen ser bajas (un
+    // recuerdo claramente útil puede dar 0,04), así que se normalizan contra el mejor de ESTA búsqueda: 60 % su juicio,
+    // 40 % la híbrida; quita los que ve 20× peores que el mejor mientras queden 3. Si no está listo o tarda > 900 ms,
+    // el orden híbrido de siempre.
+    const cand = orden.slice(0, Math.max(limite * 3, 24));
+    const rr = reranker && cand.length > 1 ? await reranker.reordenar(consulta, cand.map(x => x.m.texto)) : null;
+    if (!rr) return orden.slice(0, limite).map(x => x.m);
+    const maxS = cand[0].s || 1, maxR = Math.max(...rr) || 1;
+    const re = cand.map((x, i) => ({ m: x.m, r: rr[i] / maxR, s: 0.6 * rr[i] / maxR + 0.4 * x.s / maxS })).sort((a, b) => b.s - a.s);
+    const utiles = re.filter(x => x.r >= 0.05);
+    return (utiles.length >= 3 ? utiles : re.slice(0, 3)).slice(0, limite).map(x => x.m);
   }
 
   // uso en vivo (para ver en el grafo cómo el modelo toca la memoria): alUsar(fn(accion, ids)); usar('leer'|'escribir', ids)
