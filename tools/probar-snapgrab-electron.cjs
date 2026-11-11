@@ -81,6 +81,28 @@ app.whenReady().then(async()=>{
   assert.deepEqual(nativeImage.createFromPath(guardado).getSize(),{width:120,height:90});
   await assert.rejects(js("window.snapgrab.accion({tipo:'guardar-imagen',recorte:{x:-1,y:0,width:10,height:10}})"),/recorte/);
   console.log('OK: Windows identifica la dirección sin extensión; descarga PNG y recorta la ventana sin URL');
+  w.close();
+  const album=url.replace('video-prueba.mp4','galeria.html'),senalada=url.replace('video-prueba.mp4','foto-dos.png');
+  await abrirSnapGrab({dir:raiz,navegador:{conectado:()=>false},contexto:{...c,titulo:'Galería de prueba'},leerNativo:async()=>({...nativo,url:album,imagenUrl:senalada,tipoCaptura:'imagen'})});
+  w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);e=await estadoListo();assert(!e.error,e.error);
+  await esperar(150);assert(await js("document.querySelector('#foto-visible-texto').textContent.includes('esta foto')"));
+  await js("window.snapgrab.accion({tipo:'galeria'})");e=await estadoListo();assert(!e.error,e.error);
+  assert.equal(e.galeria.fotos.length,3);assert.equal(e.galeria.fotos.filter(f=>f.senalada).length,1);assert(e.galeria.fotos[0].senalada===true);
+  assert(e.galeria.fotos.every(f=>f.miniatura.startsWith('data:image/jpeg;base64,')&&!f.url));
+  await esperar(200);assert.equal(await js("document.querySelectorAll('#fotos input:checked').length"),1);
+  await js("document.querySelector('#marcar-todas').click()");assert.equal(await js("document.querySelectorAll('#fotos input:checked').length"),3);
+  await js("document.querySelector('#marcar-todas').click()");assert(await js("document.querySelector('#guardar-fotos').disabled"));
+  await js("document.querySelectorAll('#fotos input')[0].click();document.querySelectorAll('#fotos input')[2].click();document.querySelector('#galeria').scrollIntoView({block:'start'})");
+  await capturar('snapgrab-galeria.png');
+  const revision=e.galeria.revision;
+  await js("document.querySelector('#guardar-fotos').click()");
+  for(let i=0;i<100;i++){e=await js("window.snapgrab.accion({tipo:'estado'})");if(!e.ocupado&&e.archivos.length===2)break;await esperar(100);}
+  assert(!e.error,e.error);assert.equal(e.archivos.length,2);
+  for(const [i,nombre] of ['dos','tres'].entries())assert(fs.readFileSync(e.archivos[i]).equals(fs.readFileSync(path.join(salida,`foto-${nombre}.png`))),'Solo se guardan los originales elegidos');
+  await js("window.snapgrab.accion({tipo:'galeria'})");await assert.rejects(js(`window.snapgrab.accion({tipo:'guardar-fotos',revision:${JSON.stringify(revision)},ids:['foto-0']})`),/galería cambió/);
+  const parcial=await require('../main/snapgrab-motor').iniciarTrabajo({dir:raiz,url:album,accion:'guardar-fotos',imagenes:[senalada,url.replace('video-prueba.mp4','no-existe.png')],carpeta:fs.mkdtempSync(path.join(salida,'parcial-'))}).promesa;
+  assert.equal(parcial.archivos.length,1);assert.equal(parcial.fallos,1);assert(parcial.advertencia);
+  console.log('OK: galería con miniaturas, foto señalada, selección de dos originales y rechazo de una revisión antigua');
  } finally {p.kill();}
  assert.equal(errores.length,0,errores.join('\n'));console.log('OK: ventana real, análisis, descarga MP4 y extracción MP3; capturas guardadas');clearTimeout(limite);app.exit(0);
 }).catch(e=>{console.error(e);clearTimeout(limite);app.exit(1);});

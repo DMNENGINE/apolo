@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {EventEmitter}=require('node:events'),{PassThrough}=require('node:stream');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {paginaObjetivo,urlPublicacion,iniciarTrabajo}=require('../../main/snapgrab-motor');
+const {paginaObjetivo,urlPublicacion,iniciarTrabajo,seleccionarFotos}=require('../../main/snapgrab-motor');
 test('SnapGrab usa la ventana del clic aunque otra pestaña figure activa',async()=>{
  const n={conectado:()=>true,orden:async()=>[{titulo:'Otra',url:'https://otra.test',activa:true},{titulo:'Reel elegido',url:'https://ejemplo.test/reel/123'}]};
  const r=await paginaObjetivo(n,{titulo:'Reel elegido - Google Chrome'});assert.equal(r.url,'https://ejemplo.test/reel/123');
@@ -40,4 +40,14 @@ test('SnapGrab rechaza éxito falso, archivos fuera del destino y modos desconoc
 test('SnapGrab propaga errores reales del motor y permite cancelar',async()=>{
  const p=procesoFalso();const j=iniciarTrabajo({dir:__dirname,url:'https://ejemplo.test/',accion:'analizar',lanzar:()=>p});p.stdout.write('{"evento":"error","error":"Requiere sesión"}\n');p.emit('close',1);await assert.rejects(j.promesa,/Requiere sesión/);
  const c=procesoFalso();const k=iniciarTrabajo({dir:__dirname,url:'https://ejemplo.test/',accion:'analizar',lanzar:()=>c});k.cancelar();await assert.rejects(k.promesa,/cancelada/);
+});
+test('la galería conserva la página original al señalar una foto',async()=>{
+ const r=await paginaObjetivo(undefined,{hwnd:'123',titulo:'Álbum'},async()=>({url:'https://ejemplo.test/album',imagenUrl:'https://cdn.test/foto.png'}));
+ assert.equal(r.url,'https://cdn.test/foto.png');assert.equal(r.paginaUrl,'https://ejemplo.test/album');
+});
+test('la selección de galería rechaza revisiones antiguas y fotos ajenas',()=>{
+ const g={revision:'actual',fotos:[{id:'foto-0',url:'https://imagenes.test/uno.png'},{id:'foto-1',url:'https://imagenes.test/dos.png'}]};
+ assert.deepEqual(seleccionarFotos(g,'actual',['foto-1']),['https://imagenes.test/dos.png']);
+ assert.throws(()=>seleccionarFotos(g,'antigua',['foto-0']),/galería cambió/);
+ for(const ids of [[],['foto-0','foto-0'],['inventada'],[{url:'https://otra.test'}]])assert.throws(()=>seleccionarFotos(g,'actual',ids));
 });

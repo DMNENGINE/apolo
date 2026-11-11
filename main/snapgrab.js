@@ -1,21 +1,27 @@
 // Ventana de descargas integrada en la estética del menú de APOLO.
 const {BrowserWindow,ipcMain,shell,app,nativeImage}=require('electron');
 const fs=require('node:fs'),path=require('node:path');
-const {paginaObjetivo,iniciarTrabajo}=require('./snapgrab-motor');
-let ventana=null,estado=null,trabajo=null,registrado=false,captura=null;
+const {paginaObjetivo,iniciarTrabajo,seleccionarFotos,urlPublicacion}=require('./snapgrab-motor');
+let ventana=null,estado=null,trabajo=null,registrado=false,captura=null,galeriaPrivada=null;
 function publicar(){if(ventana&&!ventana.isDestroyed())ventana.webContents.send('snapgrab-estado',estado);}
-async function operacion(dir,accion,modo){
+async function operacion(dir,accion,modo,extra={}){
   if(trabajo)throw new Error('Espera a que termine la operación actual');
   const w=ventana;
-  const carpeta=accion==='descargar'?fs.mkdtempSync(path.join(estado.carpeta,'descarga-')):estado.carpeta;
-  const actual=iniciarTrabajo({dir,url:estado.url,accion,modo,carpeta,evento:e=>{
+  const carpeta=['descargar','guardar-fotos'].includes(accion)?fs.mkdtempSync(path.join(estado.carpeta,'descarga-')):estado.carpeta;
+  const url=['galeria','guardar-fotos'].includes(accion)?(estado.paginaUrl||estado.url):estado.url;
+  const actual=iniciarTrabajo({dir,url,accion,modo,carpeta,...extra,evento:e=>{
     if(ventana!==w)return;
     estado={...estado,progreso:e.porcentaje??null,mensaje:e.texto||'Descargando…'};publicar();
   }});
-  trabajo=actual;estado={...estado,ocupado:true,progreso:null,error:'',mensaje:accion==='analizar'?'Analizando esta publicación…':'Descargando…'};publicar();
+  const mensajes={analizar:'Analizando esta publicación…',galeria:'Buscando fotos de esta página…','guardar-fotos':'Guardando las fotos elegidas…'};
+  trabajo=actual;estado={...estado,ocupado:true,progreso:null,error:'',mensaje:mensajes[accion]||'Descargando…'};publicar();
   try{
     const r=await actual.promesa;if(ventana!==w)return;
-    estado=accion==='analizar'?{...estado,info:r,mensaje:'Elige qué quieres guardar'}:{...estado,archivos:r.archivos,mensaje:`Guardados ${r.archivos.length} archivo(s)`,progreso:100};
+    if(accion==='galeria'){
+      const fotos=(Array.isArray(r.fotos)?r.fotos:[]).slice(0,24).map((f,i)=>({...f,id:'foto-'+i,url:urlPublicacion(f.url)}));
+      galeriaPrivada={revision:require('node:crypto').randomUUID(),fotos};
+      estado={...estado,galeria:{revision:galeriaPrivada.revision,fotos:fotos.map(f=>({id:f.id,titulo:String(f.titulo||'Foto').slice(0,120),miniatura:/^data:image\/(jpeg|png|webp|gif|avif|bmp);base64,/.test(f.miniatura||'')?f.miniatura:'',senalada:f.url===estado.imagenUrl||f.url===estado.url&&!!estado.info?.fotos})),aviso:r.aviso||''},mensaje:fotos.length?'Marca las fotos que quieres guardar':'No se encontraron originales accesibles. Puedes guardar un recorte visible.'};
+    }else estado=accion==='analizar'?{...estado,info:r,mensaje:'Elige qué quieres guardar'}:{...estado,archivos:r.archivos,mensaje:`Guardados ${r.archivos.length} archivo(s)${r.advertencia?' · '+r.advertencia:''}`,progreso:100};
   }catch(e){if(ventana===w)estado={...estado,error:e.message,mensaje:''};}
   finally{if(trabajo===actual)trabajo=null;if(ventana===w){estado={...estado,ocupado:false};publicar();}}
 }
@@ -30,7 +36,8 @@ async function abrirSnapGrab({dir,navegador,contexto,leerNativo}){
   const {captura:imagen,...meta}=pagina;
   captura=imagen?nativeImage.createFromBuffer(Buffer.from(imagen,'base64')):null;
   if(captura?.isEmpty())captura=null;
-  estado={...meta,hwnd:contexto.hwnd,tieneCaptura:!!captura,carpeta,ocupado:false,info:null,archivos:[],mensaje:pagina.url?'Preparando SnapGrab…':'Selecciona la foto que quieres guardar de esta ventana.',error:'',progreso:null};
+  galeriaPrivada=null;
+  estado={...meta,hwnd:contexto.hwnd,tieneCaptura:!!captura,carpeta,ocupado:false,info:null,galeria:null,archivos:[],mensaje:pagina.url?'Preparando SnapGrab…':'Selecciona la foto que quieres guardar de esta ventana.',error:'',progreso:null};
   if(!registrado){
     registrado=true;require('./ipc-seguro').permitir(path.join(dir,'app','snapgrab.html'),'snapgrab-');
     ipcMain.handle('snapgrab-accion',async(e,a)=>{
@@ -39,6 +46,8 @@ async function abrirSnapGrab({dir,navegador,contexto,leerNativo}){
       if(a?.tipo==='cerrar'){ventana.close();return;}
       if(a?.tipo==='cancelar'){trabajo?.cancelar();return;}
       if(a?.tipo==='carpeta')return shell.openPath(estado.carpeta);
+      if(a?.tipo==='galeria')return operacion(dir,'galeria',null,{seleccionada:estado.imagenUrl});
+      if(a?.tipo==='guardar-fotos')return operacion(dir,'guardar-fotos',null,{imagenes:seleccionarFotos(galeriaPrivada,a.revision,a.ids)});
       if(a?.tipo==='captura'){
         if(!captura)throw new Error('Windows no permitió capturar esta ventana');
         return {imagen:captura.toDataURL(),...captura.getSize(),tipo:estado.tipoCaptura};
@@ -61,7 +70,7 @@ async function abrirSnapGrab({dir,navegador,contexto,leerNativo}){
   const w=ventana=new BrowserWindow({width:640,height:590,minWidth:520,minHeight:460,frame:false,transparent:true,show:false,resizable:true,title:'APOLO · SnapGrab',webPreferences:{preload:path.join(dir,'app','snapgrab-preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   w.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   w.webContents.on('will-navigate',e=>e.preventDefault());
-  w.on('closed',()=>{if(ventana===w){trabajo?.cancelar();trabajo=null;ventana=null;estado=null;captura=null;}});
+  w.on('closed',()=>{if(ventana===w){trabajo?.cancelar();trabajo=null;ventana=null;estado=null;captura=null;galeriaPrivada=null;}});
   w.once('ready-to-show',()=>{if(ventana!==w||w.isDestroyed())return;w.show();if(!estado.url){publicar();return;}operacion(dir,'analizar').catch(e=>{if(ventana===w){estado={...estado,error:e.message,ocupado:false};publicar();}});});
   await w.loadFile(path.join(dir,'app','snapgrab.html'));return {ok:true};
 }

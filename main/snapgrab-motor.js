@@ -14,8 +14,8 @@ async function paginaObjetivo(navegador, contexto, leerNativo) {
   const elegido=nativo.imagenUrl||nativo.url;
   if(elegido){
     const url=urlPublicacion(elegido);
-    if(navegador?.protegido?.(url,contexto.titulo))throw new Error('Esta página está protegida y no se enviará al descargador');
-    return {...nativo,titulo:contexto.titulo||contexto.app,url};
+    if(navegador?.protegido?.(url,contexto.titulo)||nativo.url&&navegador?.protegido?.(nativo.url,contexto.titulo))throw new Error('Esta página está protegida y no se enviará al descargador');
+    return {...nativo,titulo:contexto.titulo||contexto.app,url,paginaUrl:nativo.url?urlPublicacion(nativo.url):url};
   }
   if(!navegador?.conectado?.()){
     if(nativo.captura)return {...nativo,titulo:contexto.titulo||contexto.app,url:''};
@@ -30,22 +30,22 @@ async function paginaObjetivo(navegador, contexto, leerNativo) {
   if(candidatas.length!==1)throw new Error(candidatas.length?'Varias pestañas tienen ese título; cierra las duplicadas y vuelve a abrir el menú':'La página del clic no coincide con las pestañas conectadas a APOLO');
   const t=candidatas[0];
   if(navegador.protegido?.(t.url,t.titulo))throw new Error('Esta página está protegida y no se enviará al descargador');
-  return {...nativo,titulo:t.titulo,url:urlPublicacion(t.url)};
+  return {...nativo,titulo:t.titulo,url:urlPublicacion(t.url),paginaUrl:urlPublicacion(t.url)};
   }catch(e){
     if(/protegida/.test(e.message))throw e;
     if(nativo.captura)return {...nativo,titulo:contexto.titulo||contexto.app,url:'',aviso:'No se pudo leer la dirección. Puedes guardar una imagen de esta ventana.'};
     throw e;
   }
 }
-function iniciarTrabajo({dir,url,accion,modo,carpeta,evento=()=>{},lanzar=spawn,limiteMs}) {
+function iniciarTrabajo({dir,url,accion,modo,carpeta,imagenes,seleccionada,evento=()=>{},lanzar=spawn,limiteMs}) {
   url=urlPublicacion(url);
-  if(!['analizar','descargar'].includes(accion)||accion==='descargar'&&!MODOS.includes(modo))throw new Error('Operación de SnapGrab no válida');
+  if(!['analizar','descargar','galeria','guardar-fotos'].includes(accion)||accion==='descargar'&&!MODOS.includes(modo))throw new Error('Operación de SnapGrab no válida');
   // Argumentos separados: ni URL ni nombres de archivo pasan por una consola.
   const hijo=lanzar('python',['-u',path.join(dir,'tools','snapgrab','puente.py')],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONIOENCODING:'utf-8',PYTHONDONTWRITEBYTECODE:'1'}});
   let cancelado=false,finalizado=false,buf='',resultado,error,temporizador;
   const promesa=new Promise((resolver,rechazar)=>{
     const fin=e=>{if(finalizado)return;finalizado=true;clearTimeout(temporizador);e?rechazar(e):resolver(resultado);};
-    temporizador=setTimeout(()=>{error=new Error('SnapGrab superó el tiempo de espera');matar();},limiteMs??(accion==='analizar'?90000:1800000));
+    temporizador=setTimeout(()=>{error=new Error('SnapGrab superó el tiempo de espera');matar();},limiteMs??(['analizar','galeria'].includes(accion)?90000:1800000));
     const recibir=d=>{
       buf+=d;
       if(buf.length>1024*1024){error=new Error('SnapGrab devolvió una respuesta demasiado grande');matar();return;}
@@ -64,7 +64,7 @@ function iniciarTrabajo({dir,url,accion,modo,carpeta,evento=()=>{},lanzar=spawn,
       if(cancelado)return fin(new Error('Descarga cancelada'));
       if(error)return fin(error);
       if(codigo!==0||!resultado)return fin(new Error('SnapGrab no pudo completar la operación; comprueba Python y yt-dlp'));
-      if(accion==='descargar'){
+      if(['descargar','guardar-fotos'].includes(accion)){
         const raiz=path.resolve(carpeta);
         if(!Array.isArray(resultado.archivos)||!resultado.archivos.length||resultado.archivos.some(f=>{
           if(typeof f!=='string')return true;const r=path.relative(raiz,path.resolve(f));return r.startsWith('..')||path.isAbsolute(r)||!fs.existsSync(f);
@@ -72,7 +72,7 @@ function iniciarTrabajo({dir,url,accion,modo,carpeta,evento=()=>{},lanzar=spawn,
       }
       fin();
     });
-    hijo.stdin.end(JSON.stringify({url,accion,modo,carpeta})+'\n');
+    hijo.stdin.end(JSON.stringify({url,accion,modo,carpeta,imagenes,seleccionada})+'\n');
   });
   function matar(){
     if(finalizado)return;
@@ -82,4 +82,9 @@ function iniciarTrabajo({dir,url,accion,modo,carpeta,evento=()=>{},lanzar=spawn,
   }
   return {promesa,cancelar(){if(!finalizado){cancelado=true;matar();}}};
 }
-module.exports={urlPublicacion,paginaObjetivo,iniciarTrabajo,MODOS};
+function seleccionarFotos(galeria,revision,ids){
+  if(!galeria||revision!==galeria.revision)throw new Error('La galería cambió. Selecciona de nuevo las fotos');
+  if(!Array.isArray(ids)||!ids.length||ids.length>24||new Set(ids).size!==ids.length)throw new Error('Selecciona entre una y 24 fotos distintas');
+  return ids.map(id=>{const f=galeria.fotos.find(f=>f.id===id);if(!f)throw new Error('Esa foto no pertenece a la galería actual');return urlPublicacion(f.url);});
+}
+module.exports={urlPublicacion,paginaObjetivo,iniciarTrabajo,seleccionarFotos,MODOS};

@@ -15,6 +15,13 @@ def emitir(datos):
 
 
 def ejecutar(pedido):
+    if pedido.get('accion') in ('galeria', 'guardar-fotos'):
+        from galeria import analizar, guardar
+        if pedido['accion'] == 'galeria':
+            emitir(analizar(pedido['url'], pedido.get('seleccionada')))
+        else:
+            guardar(pedido, emitir)
+        return
     from fotos import foto_directa
     if pedido.get('accion') in ('analizar', 'descargar') and str(pedido.get('url', '')).startswith(('http://', 'https://')):
         if foto_directa(pedido, emitir):

@@ -10,12 +10,15 @@ UA = 'Mozilla/5.0 SnapGrab/APOLO'
 
 def foto_directa(pedido, emitir):
     url = pedido['url']
+    headers = {'User-Agent': UA}
+    if pedido.get('referer'):
+        headers['Referer'] = pedido['referer']
     host = (urlparse(url).hostname or '').lower()
     # Las páginas de estas plataformas deben ir a sus extractores específicos.
     if any(host == h or host.endswith('.' + h) for h in ('youtube.com', 'youtu.be', 'instagram.com', 'tiktok.com', 'facebook.com', 'x.com', 'twitter.com', 'vimeo.com')):
         return False
     try:
-        with urlopen(Request(url, method='HEAD', headers={'User-Agent': UA}), timeout=5) as r:
+        with urlopen(Request(url, method='HEAD', headers=headers), timeout=5) as r:
             tipo = r.headers.get_content_type()
     except Exception:
         tipo = None
@@ -23,7 +26,7 @@ def foto_directa(pedido, emitir):
         # Algunos servidores no permiten HEAD aunque sí dejan descargar la foto.
         if Path(urlparse(url).path).suffix.lower() not in TIPOS.values():
             return False
-        with urlopen(Request(url, headers={'User-Agent': UA}), timeout=15) as r:
+        with urlopen(Request(url, headers=headers), timeout=15) as r:
             tipo = r.headers.get_content_type()
         if tipo not in TIPOS:
             return False
@@ -37,7 +40,7 @@ def foto_directa(pedido, emitir):
     carpeta.mkdir(parents=True, exist_ok=True)
     destino = carpeta / ('imagen' + TIPOS[tipo])
     try:
-        with urlopen(Request(url, headers={'User-Agent': UA}), timeout=30) as r, destino.open('wb') as f:
+        with urlopen(Request(url, headers=headers), timeout=30) as r, destino.open('wb') as f:
             if r.headers.get_content_type() not in TIPOS:
                 raise ValueError('El servidor ya no está devolviendo una imagen')
             n = 0
