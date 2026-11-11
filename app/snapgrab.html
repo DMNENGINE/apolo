@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>APOLO · SnapGrab</title>
+<style>
+:root{color-scheme:dark;--verde:#3ddc84;--cian:#35c8f0;--mut:#8b95a5;--linea:rgba(61,220,132,.18)}
+*{box-sizing:border-box}body{margin:0;padding:8px;background:transparent;color:#e6ebf2;font:13px/1.4 system-ui,"Segoe UI",sans-serif;height:100vh}
+.caja{height:100%;border-radius:14px;background:rgba(6,9,14,.97);border:1px solid var(--linea);box-shadow:0 0 20px #3ddc8415;display:flex;flex-direction:column;overflow:hidden}
+header{padding:18px 20px;display:flex;gap:12px;align-items:center;border-bottom:1px solid var(--linea);-webkit-app-region:drag}
+.casco{width:32px;height:32px;border-radius:50%;border:1px solid #2a3a33;background:radial-gradient(circle at 50% 40%,#1d2630,#070a0e 70%);box-shadow:0 0 10px #3ddc8440;position:relative}
+.casco::before,.casco::after{content:'';position:absolute;top:12px;width:6px;height:7px;border-radius:50%;background:var(--verde);box-shadow:0 0 6px var(--verde)}.casco::before{left:7px}.casco::after{right:7px}
+.marca{color:var(--verde);letter-spacing:.12em;font-size:11px}.nombre{font-size:18px;font-weight:600}.cerrar{margin-left:auto;-webkit-app-region:no-drag}
+button{font:inherit;color:inherit;border:1px solid #233b31;border-radius:9px;background:#0f1a15;padding:9px 12px;cursor:pointer}button:hover{border-color:var(--verde);background:#16271e}button:focus-visible{outline:2px solid var(--cian);outline-offset:2px}button:disabled{opacity:.4;cursor:default}
+main{padding:20px;overflow:auto;flex:1}.etiqueta{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.14em}.titulo{margin:6px 0;font-size:16px;overflow-wrap:anywhere}.url{color:var(--mut);font-size:11px;overflow-wrap:anywhere;margin-bottom:14px;user-select:text}
+.chip{display:inline-block;color:#a6f0c6;background:#0f1a15;border:1px solid #1d3a2c;border-radius:9px;padding:2px 9px;font-size:11px;margin-bottom:18px}
+.modos{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:9px 0 18px}.modos button{text-align:left;padding:12px}.modos small{display:block;color:var(--mut);font-size:11px;margin:3px 0 0}.modos button:first-child{border-color:#287d53}
+.estado{min-height:26px;color:var(--cian)}.estado.error{color:#ff879a}progress{width:100%;height:5px;accent-color:var(--verde);margin:6px 0 12px}progress[hidden]{display:none}
+footer{display:flex;gap:8px;align-items:center;padding:12px 20px;border-top:1px solid var(--linea)}footer span{flex:1;color:var(--mut);font-size:11px}.ruta{font-size:11px;color:var(--mut);overflow-wrap:anywhere;margin-top:10px;user-select:text}
+</style></head><body><div class="caja">
+<header><div class="casco"></div><div><div class="marca">APOLO</div><div class="nombre">SnapGrab</div></div><button class="cerrar" id="cerrar" aria-label="Cerrar">✕</button></header>
+<main><div class="etiqueta">La página donde hiciste clic</div><h1 class="titulo" id="titulo">Identificando contenido…</h1><div class="url" id="url"></div><div class="chip" id="detalle">Preparando análisis</div>
+<div class="etiqueta">Qué quieres guardar</div><div class="modos">
+<button data-modo="video" disabled>↓ Vídeo / Reel<small>Mejor calidad disponible</small></button>
+<button data-modo="fotos" disabled>▧ Fotos / carrusel<small>Las imágenes de la publicación</small></button>
+<button data-modo="audio" disabled>♫ Solo audio<small>Guardar como MP3</small></button>
+<button data-modo="todo" disabled>↓ Todo<small>Fotos y vídeo disponibles</small></button></div>
+<div class="estado" id="estado" role="status" aria-live="polite"></div><progress id="progreso" max="100" hidden></progress><div class="ruta" id="ruta"></div>
+</main><footer><span id="resultado">Listo para esta página</span><button id="reintentar">Analizar de nuevo</button><button id="cancelar" hidden>Cancelar</button><button id="carpeta">Abrir carpeta</button></footer>
+</div><script src="snapgrab.js"></script></body></html>

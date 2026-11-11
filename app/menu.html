@@ -50,6 +50,7 @@ let C = null, items = [], sel = 0, abiertos = new Set();
 function construir() {
   const L = [], add = (sec, ic, t, accion, d, extra = {}) => L.push({ sec, ic, t, accion, d, ...extra });
   const acc = C.acciones || [];
+  if (C.navegador) add('En esta página', '↓', 'SnapGrab', { tipo: 'snapgrab' }, 'Vídeo, fotos y audio de esta página');
   const recientes = acc.filter(a => a.usos > 0).sort((a, b) => b.usos - a.usos).slice(0, 3);
   for (const a of recientes) add('Recientes', a.ic, a.t, { tipo: 'accion', id: a.id }, a.d,  { propia: a.propia, id: a.id, rec: true });
   const para = acc.filter(a => a.cuando !== 'siempre' && !recientes.includes(a));

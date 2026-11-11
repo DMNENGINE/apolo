@@ -118,11 +118,13 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, captu
     const c = contexto || { objetivo: [] };
     if (!a || typeof a !== 'object') return {ok:false,error:'Acción no válida'};
     if (a.tipo === 'prompt' && !String(a.texto || '').trim()) return {ok:false,error:'Escribe una petición'};
-    if (!['prompt','panel','arana','accion'].includes(a.tipo)) return {ok:false,error:'Acción desconocida'};
+    if (!['prompt','panel','arana','accion','snapgrab'].includes(a.tipo)) return {ok:false,error:'Acción desconocida'};
+    if (a.tipo==='snapgrab' && !c.navegador) return {ok:false,error:'Abre SnapGrab sobre la página del navegador que quieres descargar'};
     if (a.tipo==='panel' && (!/^[a-z0-9][a-z0-9/_.-]*$/i.test(a.ruta || '') || a.ruta.includes('..'))) return {ok:false,error:'Página no válida'};
     if (a.tipo==='accion' && !c.acciones?.some(x=>x.id===a.id)) return {ok:false,error:'Esa acción no corresponde a la selección actual'};
     cerrar();
     try {
+      if (a.tipo === 'snapgrab') return await require('./snapgrab').abrirSnapGrab({dir,navegador:nucleo()?.navegador,contexto:c});
       if (a.tipo === 'prompt') { contar('prompt'); return await handleText(String(a.texto).trim() + contextoTexto(c), 'isla'); }
       if (a.tipo === 'panel') { contar('panel:' + a.ruta); return await shell.openExternal(panelUrl(a.ruta)); }
       if (a.tipo === 'arana') { contar('arana:' + a.arana); return await arana(a.arana, c); }
