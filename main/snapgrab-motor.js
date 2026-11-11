@@ -8,8 +8,20 @@ function urlPublicacion(valor) {
   if (!['http:','https:'].includes(u.protocol) || u.username || u.password) throw new Error('SnapGrab necesita una página web http(s)');
   return u.href;
 }
-async function paginaObjetivo(navegador, contexto) {
-  if (!navegador?.conectado?.()) throw new Error('Conecta la extensión de APOLO en este navegador para identificar su página');
+async function paginaObjetivo(navegador, contexto, leerNativo) {
+  let nativo={},falloNativo;
+  if(leerNativo&&contexto.hwnd)try {nativo=await leerNativo(contexto);}catch(e){falloNativo=e;}
+  const elegido=nativo.imagenUrl||nativo.url;
+  if(elegido){
+    const url=urlPublicacion(elegido);
+    if(navegador?.protegido?.(url,contexto.titulo))throw new Error('Esta página está protegida y no se enviará al descargador');
+    return {...nativo,titulo:contexto.titulo||contexto.app,url};
+  }
+  if(!navegador?.conectado?.()){
+    if(nativo.captura)return {...nativo,titulo:contexto.titulo||contexto.app,url:''};
+    throw falloNativo||new Error('Windows no pudo obtener la dirección ni la imagen de esa ventana');
+  }
+  try {
   const tabs=await navegador.orden('pestanas');
   const normal=t=>String(t||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase();
   const titulo=normal(contexto.titulo);
@@ -18,7 +30,12 @@ async function paginaObjetivo(navegador, contexto) {
   if(candidatas.length!==1)throw new Error(candidatas.length?'Varias pestañas tienen ese título; cierra las duplicadas y vuelve a abrir el menú':'La página del clic no coincide con las pestañas conectadas a APOLO');
   const t=candidatas[0];
   if(navegador.protegido?.(t.url,t.titulo))throw new Error('Esta página está protegida y no se enviará al descargador');
-  return {titulo:t.titulo,url:urlPublicacion(t.url)};
+  return {...nativo,titulo:t.titulo,url:urlPublicacion(t.url)};
+  }catch(e){
+    if(/protegida/.test(e.message))throw e;
+    if(nativo.captura)return {...nativo,titulo:contexto.titulo||contexto.app,url:'',aviso:'No se pudo leer la dirección. Puedes guardar una imagen de esta ventana.'};
+    throw e;
+  }
 }
 function iniciarTrabajo({dir,url,accion,modo,carpeta,evento=()=>{},lanzar=spawn,limiteMs}) {
   url=urlPublicacion(url);

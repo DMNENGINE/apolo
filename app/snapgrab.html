@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:">
 <title>APOLO · SnapGrab</title>
 <style>
 :root{color-scheme:dark;--verde:#3ddc84;--cian:#35c8f0;--mut:#8b95a5;--linea:rgba(61,220,132,.18)}
@@ -15,10 +15,13 @@ main{padding:20px;overflow:auto;flex:1}.etiqueta{color:var(--mut);font-size:10px
 .chip{display:inline-block;color:#a6f0c6;background:#0f1a15;border:1px solid #1d3a2c;border-radius:9px;padding:2px 9px;font-size:11px;margin-bottom:18px}
 .modos{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:9px 0 18px}.modos button{text-align:left;padding:12px}.modos small{display:block;color:var(--mut);font-size:11px;margin:3px 0 0}.modos button:first-child{border-color:#287d53}
 .estado{min-height:26px;color:var(--cian)}.estado.error{color:#ff879a}progress{width:100%;height:5px;accent-color:var(--verde);margin:6px 0 12px}progress[hidden]{display:none}
+.foto-visible{width:100%;text-align:left;margin-bottom:14px;border-color:#287d53}.foto-visible small{display:block;color:var(--mut);margin-top:3px}.recorte{margin-bottom:16px}.recorte[hidden]{display:none}.recorte canvas{display:block;width:100%;height:auto;border:1px solid #233b31;border-radius:8px;cursor:crosshair;touch-action:none}.recorte p{color:var(--mut);font-size:11px}.recorte button{margin-top:8px}
 footer{display:flex;gap:8px;align-items:center;padding:12px 20px;border-top:1px solid var(--linea)}footer span{flex:1;color:var(--mut);font-size:11px}.ruta{font-size:11px;color:var(--mut);overflow-wrap:anywhere;margin-top:10px;user-select:text}
 </style></head><body><div class="caja">
 <header><div class="casco"></div><div><div class="marca">APOLO</div><div class="nombre">SnapGrab</div></div><button class="cerrar" id="cerrar" aria-label="Cerrar">✕</button></header>
-<main><div class="etiqueta">La página donde hiciste clic</div><h1 class="titulo" id="titulo">Identificando contenido…</h1><div class="url" id="url"></div><div class="chip" id="detalle">Preparando análisis</div>
+<main><div class="etiqueta">Donde hiciste clic</div><h1 class="titulo" id="titulo">Identificando contenido…</h1><div class="url" id="url"></div><div class="chip" id="detalle">Preparando análisis</div>
+<button class="foto-visible" id="foto-visible" hidden>✂ Guardar una imagen visible<small>Sin extensión · selecciona la foto dentro de esta ventana</small></button>
+<div class="recorte" id="recorte" hidden><p id="instruccion">Arrastra sobre la foto para seleccionar qué guardar.</p><canvas id="vista" aria-label="Vista de la ventana para recortar una imagen"></canvas><button id="guardar-recorte" disabled>Guardar recorte</button><button id="cerrar-recorte">Cerrar vista</button><p id="recorte-estado" role="status"></p></div>
 <div class="etiqueta">Qué quieres guardar</div><div class="modos">
 <button data-modo="video" disabled>↓ Vídeo / Reel<small>Mejor calidad disponible</small></button>
 <button data-modo="fotos" disabled>▧ Fotos / carrusel<small>Las imágenes de la publicación</small></button>

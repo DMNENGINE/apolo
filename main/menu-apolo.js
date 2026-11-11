@@ -119,7 +119,7 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, captu
     if (!a || typeof a !== 'object') return {ok:false,error:'Acción no válida'};
     if (a.tipo === 'prompt' && !String(a.texto || '').trim()) return {ok:false,error:'Escribe una petición'};
     if (!['prompt','panel','arana','accion','snapgrab'].includes(a.tipo)) return {ok:false,error:'Acción desconocida'};
-    if (a.tipo==='snapgrab' && !c.navegador) return {ok:false,error:'Abre SnapGrab sobre la página del navegador que quieres descargar'};
+    if (a.tipo==='snapgrab' && !c.navegador && !c.hwnd) return {ok:false,error:'No se identificó la ventana del clic'};
     if (a.tipo==='panel' && (!/^[a-z0-9][a-z0-9/_.-]*$/i.test(a.ruta || '') || a.ruta.includes('..'))) return {ok:false,error:'Página no válida'};
     if (a.tipo==='accion' && !c.acciones?.some(x=>x.id===a.id)) return {ok:false,error:'Esa acción no corresponde a la selección actual'};
     cerrar();

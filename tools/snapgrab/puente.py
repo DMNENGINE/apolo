@@ -15,6 +15,10 @@ def emitir(datos):
 
 
 def ejecutar(pedido):
+    from fotos import foto_directa
+    if pedido.get('accion') in ('analizar', 'descargar') and str(pedido.get('url', '')).startswith(('http://', 'https://')):
+        if foto_directa(pedido, emitir):
+            return
     # La salida del motor queda fuera del protocolo JSON.
     with contextlib.redirect_stdout(sys.stderr):
         import grab

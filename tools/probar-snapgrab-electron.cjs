@@ -1,11 +1,13 @@
 // Verificación real de ventana + IPC + Python + archivos con un vídeo local ficticio.
-const {app,BrowserWindow}=require('electron');
+const {app,BrowserWindow,nativeImage}=require('electron');
+const {spawn}=require('node:child_process');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const raiz=path.resolve(__dirname,'..'),salida=process.env.APOLO_SNAPGRAB_PRUEBA;
 if(!salida)throw new Error('Este script necesita el lanzador probar-snapgrab.cjs');
 app.setPath('userData',path.join(salida,'perfil-electron'));
 app.setPath('downloads',salida);
 app.disableHardwareAcceleration();
+app.on('window-all-closed',()=>{});
 // Se renderiza para capturarla sin mostrar ventanas de prueba en el escritorio.
 BrowserWindow.prototype.show=function(){};
 const esperar=ms=>new Promise(r=>setTimeout(r,ms));
@@ -14,14 +16,14 @@ app.whenReady().then(async()=>{
  const {abrirSnapGrab}=require('../main/snapgrab');
  const url=process.env.APOLO_SNAPGRAB_URL;
  await abrirSnapGrab({dir:raiz,contexto:{titulo:'Vídeo de prueba - Chrome'},navegador:{conectado:()=>true,orden:async()=>[{titulo:'Vídeo de prueba',url}]}});
- const w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);const errores=[];w.webContents.on('console-message',(_e,n,m)=>{if(n===3)errores.push(m)});
+ let w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);const errores=[];w.webContents.on('console-message',(_e,n,m)=>{if(n===3)errores.push(m)});
  const js=code=>w.webContents.executeJavaScript(code);
  async function capturar(nombre){
   // La primera captura despierta el compositor de la ventana oculta.
   await w.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});await esperar(250);
   fs.writeFileSync(path.join(salida,nombre),(await w.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());
  }
- async function estadoListo(){for(let i=0;i<300;i++){const e=await js("window.snapgrab.accion({tipo:'estado'})");if(!e.ocupado&&(e.info||e.error))return e;await esperar(200);}throw new Error('No terminó el análisis');}
+ async function estadoListo(){for(let i=0;i<300;i++){const e=await js("window.snapgrab.accion({tipo:'estado'})");if(!e.ocupado&&(e.info||e.error||e.tieneCaptura&&!e.url))return e;await esperar(200);}throw new Error('No terminó el análisis');}
  let e=await estadoListo();assert(!e.error,e.error);assert(e.info.video);assert(!e.info.fotos);
  await esperar(300);assert(await js("document.querySelector('#estado').textContent.includes('Elige')"));await capturar('snapgrab.png');
  // Mismo menú e IPC que usa Ctrl+Alt+clic derecho, con contexto ficticio.
@@ -45,5 +47,40 @@ app.whenReady().then(async()=>{
  // Una cancelación termina también el Python hijo; la ventana vuelve a estar disponible.
  const inicio=js("window.snapgrab.accion({tipo:'analizar'})");await esperar(20);await js("window.snapgrab.accion({tipo:'cancelar'})");await inicio;
  e=await estadoListo();assert.match(e.error,/cancelada/);
+ console.log('OK: MP4, MP3 y cancelación; comprobando captura nativa sin extensión');
+ w.close();
+ const fotoUrl=url.replace('video-prueba.mp4','foto-prueba.png');
+ const p=spawn('powershell.exe',['-NoProfile','-STA','-File',path.join(__dirname,'probar-snapgrab-nativo.ps1'),'-Url',fotoUrl],{windowsHide:true,stdio:['ignore','pipe','pipe']});
+ try {
+  const hwnd=await new Promise((resolve,reject)=>{let b='';p.stdout.setEncoding('utf8');p.stdout.on('data',d=>{b+=d;const l=b.split('\n').find(x=>x.trim().startsWith('{'));if(l)try{resolve(JSON.parse(l).hwnd)}catch{}});p.on('error',reject);p.on('close',()=>reject(new Error('La ventana ficticia no arrancó')));});
+  const c={hwnd,x:50,y:50,app:'navegador-desconocido',titulo:'Foto en otro navegador'};
+  const nativo=await require('../main/snapgrab-contexto').capturarContexto(raiz,c);
+  fs.writeFileSync(path.join(salida,'resultado-nativo.json'),JSON.stringify({...nativo,captura:nativo.captura?'PNG omitido':''},null,2));
+  assert.equal(nativo.url,fotoUrl,'Windows obtiene la dirección sin extensión');assert(nativo.captura,'Windows devuelve la ventana elegida');
+  fs.writeFileSync(path.join(salida,'captura-nativa.png'),Buffer.from(nativo.captura,'base64'));
+  await abrirSnapGrab({dir:raiz,navegador:{conectado:()=>false},contexto:c});w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);
+  e=await estadoListo();assert(!e.error,e.error);assert(e.info.fotos);assert(!e.info.video);assert(e.tieneCaptura);
+  await js("window.snapgrab.accion({tipo:'descargar',modo:'fotos'})");e=await estadoListo();assert(!e.error,e.error);assert.equal(path.extname(e.archivos[0]),'.png');assert(fs.statSync(e.archivos[0]).size>50);
+  await esperar(350);await capturar('snapgrab-foto-sin-extension.png');w.close();
+  // Incluso sin dirección se puede seleccionar y guardar la foto visible.
+  await abrirSnapGrab({dir:raiz,navegador:{conectado:()=>false},contexto:{...c,titulo:'Sin dirección accesible'},leerNativo:async()=>({...nativo,url:'',imagenUrl:''})});
+  w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);e=await estadoListo();assert(!e.error,e.error);assert(e.tieneCaptura);assert.equal(e.url,'');
+  await js("document.querySelector('#foto-visible').click()");for(let i=0;i<30;i++){if(await js("!document.querySelector('#recorte').hidden"))break;await esperar(100);}
+  await esperar(250);await capturar('snapgrab-recorte.png');
+  const puntos=await js("(()=>{const c=document.querySelector('#vista'),r=c.getBoundingClientRect();return{x:r.x+20*r.width/c.width,y:r.y+20*r.height/c.height,dx:120*r.width/c.width,dy:90*r.height/c.height}})()");
+  w.webContents.debugger.attach('1.3');
+  await w.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mousePressed',x:puntos.x,y:puntos.y,button:'left',buttons:1,clickCount:1});
+  await w.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseMoved',x:puntos.x+puntos.dx,y:puntos.y+puntos.dy,button:'left',buttons:1});
+  await w.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseReleased',x:puntos.x+puntos.dx,y:puntos.y+puntos.dy,button:'left',buttons:0,clickCount:1});
+  w.webContents.debugger.detach();
+  assert(await js("!document.querySelector('#guardar-recorte').disabled"),'Arrastrar habilita Guardar recorte');
+  await js("document.querySelector('#guardar-recorte').click()");
+  for(let i=0;i<30;i++){if(await js("document.querySelector('#recorte-estado').textContent.startsWith('Guardada:')"))break;await esperar(100);}
+  assert(await js("document.querySelector('#recorte-estado').textContent.startsWith('Guardada:')"));
+  const guardado=(await js("window.snapgrab.accion({tipo:'estado'})")).archivos[0];
+  assert.deepEqual(nativeImage.createFromPath(guardado).getSize(),{width:120,height:90});
+  await assert.rejects(js("window.snapgrab.accion({tipo:'guardar-imagen',recorte:{x:-1,y:0,width:10,height:10}})"),/recorte/);
+  console.log('OK: Windows identifica la dirección sin extensión; descarga PNG y recorta la ventana sin URL');
+ } finally {p.kill();}
  assert.equal(errores.length,0,errores.join('\n'));console.log('OK: ventana real, análisis, descarga MP4 y extracción MP3; capturas guardadas');clearTimeout(limite);app.exit(0);
 }).catch(e=>{console.error(e);clearTimeout(limite);app.exit(1);});
