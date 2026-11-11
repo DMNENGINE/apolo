@@ -1,0 +1,21 @@
+# APOLO-MANOS v1: usar las herramientas de APOLO (12 seguras) — dataset de generar-manos.py (maestro abierto, validado sin juez humano)
+base: /srv/entrenamiento/models/qwen3-4b
+task: sft
+data:
+  train: /srv/entrenamiento/apolo/manos/manos-train.jsonl
+  format: tool-calling
+  val_split: 0.05
+  max_length: 2048
+training:
+  epochs: 2
+  lr: 0.0001
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  gradient_checkpointing: full
+  optimizer: paged_adamw_8bit
+  lora:
+    r: 32
+    alpha: 64
+    target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  quantization: 4bit
+output: /srv/entrenamiento/output/apolo-manos

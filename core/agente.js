@@ -4,6 +4,7 @@ const fs = require('fs');
 const registroBase = require('./herramientas');
 const { validar } = require('./estructurado');
 const grupos = require('./herramientas-grupos');
+const manos = require('./manos');
 const { vista } = require('./compactar');
 const { esCorreccion } = require('./skills/taller');
 const { redactar, redactarParcial } = require('./seguridad');
@@ -249,12 +250,14 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         // modelo propio pequeño (proveedor con "ligero": true, p. ej. apolo-v4 del Proxmox): se entrenó con un system corto + memoria y
         // sin herramientas; el system completo (4-6k tokens con skills y herramientas) lo desbarata → mismo formato que en su entrenamiento
         const ligero = !!cfg.proveedores?.[String(modeloReal).split('/')[0]]?.ligero;
-        const sys = ligero ? sistemaLigero(recuerdos, v.resumen, s) : sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento);
+        // APOLO-MANOS (proveedor con "manosLigero": true): su system corto + solo sus 12 herramientas, compactas como en su entrenamiento (core/manos.js)
+        const manosL = !ligero && !!cfg.proveedores?.[String(modeloReal).split('/')[0]]?.manosLigero;
+        const sys = ligero ? sistemaLigero(recuerdos, v.resumen, s) : manosL ? manos.sistemaManos() : sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento);
         let historial = conImagenes(v.mensajes, s.sinVision || (s.visionNoAdmitida?.modelo === modeloReal && s.visionNoAdmitida?.hasta > Date.now()));
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
         // ligero: los turnos con manos (otro modelo) le llegan como charla normal, sin llamadas ni resultados de herramientas
         if (ligero) historial = historial.filter(m => m.role !== 'tool').map(m => (m.toolCalls ? { ...m, toolCalls: undefined } : m)).filter(m => m.role !== 'assistant' || m.content);
-        const herramientas = ligero ? [] : paraEnviar();
+        const herramientas = ligero ? [] : manosL ? todas.filter(h => manos.HERRAMIENTAS_MANOS.includes(h.nombre)).map(manos.compacta) : paraEnviar();
         // tope duro de seguridad, no de uso normal: el tamaño lo controla la compactación (cfg.compactar.umbral)
         const limite = cfg.contexto?.porModelo?.[modeloReal] || cfg.contexto?.maxTokens || 128000;
         const contexto = ensamblar({ system: sys, mensajes: historial, herramientas, limite, reserva: Math.max(cfg.contexto?.reserva ?? 2048, maxSalida) });

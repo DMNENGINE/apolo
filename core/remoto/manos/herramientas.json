@@ -1,0 +1,263 @@
+[
+ {
+  "type": "function",
+  "function": {
+   "name": "listar",
+   "description": "Lista el contenido de una carpeta.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "ruta": {
+      "type": "string"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "leer_archivo",
+   "description": "Lee un archivo de texto.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "ruta": {
+      "type": "string"
+     },
+     "desde": {
+      "type": "number"
+     },
+     "lineas": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "ruta"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "shell",
+   "description": "Ejecuta un comando en PowerShell y devuelve la salida.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "comando": {
+      "type": "string"
+     },
+     "timeoutSeg": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "comando"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "web",
+   "description": "Descarga una página web y devuelve su texto.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "url": {
+      "type": "string"
+     },
+     "metodo": {
+      "type": "string",
+      "enum": [
+       "GET",
+       "POST",
+       "PUT",
+       "PATCH",
+       "DELETE"
+      ]
+     },
+     "cuerpo": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "url"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "buscar_memoria",
+   "description": "Busca en la memoria permanente datos guardados sobre el usuario.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "consulta": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "consulta"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "recordar",
+   "description": "Guarda en la memoria permanente un dato útil sobre el usuario para futuras conversaciones (con cualquier modelo o canal).",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "texto": {
+      "type": "string"
+     },
+     "tipo": {
+      "type": "string",
+      "enum": [
+       "perfil",
+       "preferencia",
+       "proyecto",
+       "persona",
+       "hecho"
+      ]
+     },
+     "reemplaza": {
+      "type": "string",
+      "description": "id del recuerdo a corregir (opcional)"
+     }
+    },
+    "required": [
+     "texto"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "buscar_historial",
+   "description": "Busca en las conversaciones pasadas (últimos 30 días) lo que se habló sobre algo.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "consulta": {
+      "type": "string"
+     },
+     "dias": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "consulta"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "programar_tarea",
+   "description": "Programa un recordatorio (tipo aviso) o una tarea que hará un agente (tipo agente).",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "nombre": {
+      "type": "string",
+      "description": "nombre corto"
+     },
+     "tipo": {
+      "type": "string",
+      "enum": [
+       "aviso",
+       "agente"
+      ]
+     },
+     "texto": {
+      "type": "string",
+      "description": "aviso: el mensaje a recordar."
+     },
+     "en": {
+      "type": "string"
+     },
+     "cron": {
+      "type": "string"
+     },
+     "cadaMin": {
+      "type": "number"
+     },
+     "soloSiHayAlgo": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "tipo",
+     "texto"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "ver_tareas",
+   "description": "Lista las tareas y recordatorios programados.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "navegador_abrir",
+   "description": "Abre una dirección en el navegador del usuario (por defecto en una pestaña nueva de tu grupo).",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "url": {
+      "type": "string"
+     },
+     "nueva": {
+      "type": "boolean",
+      "description": "false = en la última pestaña que usaste"
+     }
+    },
+    "required": [
+     "url"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "navegador_pestanas",
+   "description": "Lista las pestañas abiertas en el navegador del usuario (id, título, url).",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "ver_skills",
+   "description": "Lista las skills instaladas (activas y desactivadas) con su descripción y el resultado del escaneo.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ }
+]
