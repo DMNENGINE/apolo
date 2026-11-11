@@ -67,16 +67,30 @@ def ejecutar(pedido):
     if accion == 'analizar':
         # No trasladar las URL firmadas ni los datos internos del extractor a la UI.
         tipos = [i.get('kind') for i in datos.get('items', [])]
+        spotify = datos.get('platform') == 'spotify'
+        if spotify and not tipos:
+            raise ValueError('No se encontraron pistas públicas en esta página de Spotify')
         emitir({'evento': 'resultado', 'titulo': datos.get('title') or 'Contenido',
                 'plataforma': datos.get('platform') or grab.detect_platform(url),
                 'cantidad': datos.get('count', len(tipos)),
-                'video': 'video' in tipos, 'fotos': 'foto' in tipos})
+                'video': 'video' in tipos, 'fotos': 'foto' in tipos,
+                'audio': 'audio' in tipos or 'video' in tipos,
+                'origenAudio': 'YouTube' if spotify else None,
+                'avisoAudio': 'Busca una coincidencia en YouTube y la convierte a MP3; puede ser otra versión de la canción.' if spotify else '',
+                'pistas': [str(i.get('title') or 'Pista')[:180] for i in datos['items'][:20]] if spotify else [],
+                'limitePistas': 20 if spotify else None})
         return
     carpeta = Path(pedido['carpeta'])
     carpeta.mkdir(parents=True, exist_ok=True)
     plataforma = grab.detect_platform(url)
+    informe_spotify = {}
     with contextlib.redirect_stdout(sys.stderr):
-        if plataforma in ('instagram', 'x'):
+        if plataforma == 'spotify':
+            if not grab.FFMPEG:
+                raise ValueError('Se necesita ffmpeg para convertir las canciones a MP3')
+            import spotify
+            archivos = spotify.descargar(url, carpeta, modo, limite=20, datos=datos, progreso=emitir, informe=informe_spotify)
+        elif plataforma in ('instagram', 'x'):
             modulo = __import__('instagram' if plataforma == 'instagram' else 'twitter')
             archivos = modulo.descargar(url, carpeta, modo)
         elif modo in ('fotos', 'todo') and datos.get('kind') == 'playlist':
@@ -113,7 +127,13 @@ def ejecutar(pedido):
             guardados.append(str(p.resolve()))
     if not guardados:
         raise ValueError('SnapGrab no guardó ningún archivo. La publicación puede requerir sesión o no ofrecer ese formato.')
-    emitir({'evento': 'resultado', 'archivos': guardados})
+    avisos = []
+    if informe_spotify.get('fallos'):
+        avisos.append(f"{informe_spotify['fallos']} pista(s) no se pudieron guardar")
+    if informe_spotify.get('limitadas'):
+        avisos.append('Se procesaron las primeras 20 pistas accesibles')
+    emitir({'evento': 'resultado', 'archivos': guardados, 'advertencia': ' · '.join(avisos),
+            'fallos': informe_spotify.get('fallos', 0), 'origenAudio': 'YouTube' if plataforma == 'spotify' else None})
 
 
 if __name__ == '__main__':

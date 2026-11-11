@@ -24,6 +24,8 @@ public class ContextoSnapApolo {
   public int ancho,alto;
   static string Url(string s) {
     if(String.IsNullOrWhiteSpace(s))return "";s=s.Trim();Uri u;
+    var spotify=System.Text.RegularExpressions.Regex.Match(s,@"^spotify:(track|album|playlist|artist):([A-Za-z0-9]+)$",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    if(spotify.Success)s="https://open.spotify.com/"+spotify.Groups[1].Value.ToLowerInvariant()+"/"+spotify.Groups[2].Value;
     if(!s.Contains("://")&&System.Text.RegularExpressions.Regex.IsMatch(s,@"^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?(/|$)"))s="https://"+s;
     return Uri.TryCreate(s,UriKind.Absolute,out u)&&(u.Scheme=="http"||u.Scheme=="https")&&String.IsNullOrEmpty(u.UserInfo)?u.AbsoluteUri:"";
   }

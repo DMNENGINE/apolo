@@ -4,6 +4,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const MODOS = ['video','fotos','todo','audio'];
 function urlPublicacion(valor) {
+  const spotify=/^spotify:(track|album|playlist|artist):([a-z0-9]+)$/i.exec(String(valor||'').trim());
+  if(spotify)valor=`https://open.spotify.com/${spotify[1].toLowerCase()}/${spotify[2]}`;
   let u;try {u=new URL(valor);}catch {throw new Error('No se pudo identificar la dirección de esta página');}
   if (!['http:','https:'].includes(u.protocol) || u.username || u.password) throw new Error('SnapGrab necesita una página web http(s)');
   return u.href;

@@ -51,3 +51,8 @@ test('la selección de galería rechaza revisiones antiguas y fotos ajenas',()=>
  assert.throws(()=>seleccionarFotos(g,'antigua',['foto-0']),/galería cambió/);
  for(const ids of [[],['foto-0','foto-0'],['inventada'],[{url:'https://otra.test'}]])assert.throws(()=>seleccionarFotos(g,'actual',ids));
 });
+test('normaliza referencias Spotify sin permitir otros protocolos',()=>{
+ assert.equal(urlPublicacion('spotify:track:Ab123'),'https://open.spotify.com/track/Ab123');
+ assert.equal(urlPublicacion('spotify:playlist:Lista123'),'https://open.spotify.com/playlist/Lista123');
+ assert.throws(()=>urlPublicacion('spotify:track:../../archivo'));
+});

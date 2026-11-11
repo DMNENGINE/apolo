@@ -15,7 +15,7 @@ def foto_directa(pedido, emitir):
         headers['Referer'] = pedido['referer']
     host = (urlparse(url).hostname or '').lower()
     # Las páginas de estas plataformas deben ir a sus extractores específicos.
-    if any(host == h or host.endswith('.' + h) for h in ('youtube.com', 'youtu.be', 'instagram.com', 'tiktok.com', 'facebook.com', 'x.com', 'twitter.com', 'vimeo.com')):
+    if any(host == h or host.endswith('.' + h) for h in ('youtube.com', 'youtu.be', 'instagram.com', 'tiktok.com', 'facebook.com', 'x.com', 'twitter.com', 'vimeo.com', 'open.spotify.com')):
         return False
     try:
         with urlopen(Request(url, method='HEAD', headers=headers), timeout=5) as r:

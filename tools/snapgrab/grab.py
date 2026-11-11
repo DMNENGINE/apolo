@@ -83,6 +83,9 @@ def is_url(txt: str) -> bool:
 
 
 def detect_platform(url: str) -> str:
+    from spotify import es_spotify
+    if es_spotify(url):
+        return "spotify"
     u = url.lower()
     if "youtube.com" in u or "youtu.be" in u:
         return "youtube"
@@ -396,6 +399,10 @@ def analizar_url(url: str, cookies: str | None = None) -> dict:
     X/Twitter  -> twitter.py    (syndication, fotos y videos sin cookies)
     resto      -> yt-dlp
     """
+    from spotify import es_spotify
+    if es_spotify(url):
+        import spotify
+        return spotify.analizar(url)
     if "instagram.com" in url.lower():
         try:
             import instagram
@@ -608,7 +615,10 @@ def auto_descargar(url: str, folder: Path, cookies: str | None = None,
 
     resultados: list[str] = []
 
-    if plat == "instagram":
+    if plat == "spotify":
+        import spotify
+        resultados = spotify.descargar(url, folder, modo)
+    elif plat == "instagram":
         # Instagram va por instagram.py
         try:
             import instagram

@@ -13,6 +13,12 @@ BrowserWindow.prototype.show=function(){};
 const esperar=ms=>new Promise(r=>setTimeout(r,ms));
 const limite=setTimeout(()=>{console.error('Tiempo agotado en la prueba de SnapGrab');app.exit(1);},100000);
 app.whenReady().then(async()=>{
+ // Solo el ensayo redirige las búsquedas de Spotify a nuestro vídeo sintético.
+ const procesos=require('node:child_process'),lanzarReal=procesos.spawn;
+ procesos.spawn=(programa,args,opciones)=>{
+  if(programa==='python'&&args[1]===path.join(raiz,'tools','snapgrab','puente.py'))args=[args[0],path.join(__dirname,'probar-spotify-puente.py'),...args.slice(2)];
+  return lanzarReal(programa,args,opciones);
+ };
  const {abrirSnapGrab}=require('../main/snapgrab');
  const url=process.env.APOLO_SNAPGRAB_URL;
  await abrirSnapGrab({dir:raiz,contexto:{titulo:'Vídeo de prueba - Chrome'},navegador:{conectado:()=>true,orden:async()=>[{titulo:'Vídeo de prueba',url}]}});
@@ -103,6 +109,17 @@ app.whenReady().then(async()=>{
   const parcial=await require('../main/snapgrab-motor').iniciarTrabajo({dir:raiz,url:album,accion:'guardar-fotos',imagenes:[senalada,url.replace('video-prueba.mp4','no-existe.png')],carpeta:fs.mkdtempSync(path.join(salida,'parcial-'))}).promesa;
   assert.equal(parcial.archivos.length,1);assert.equal(parcial.fallos,1);assert(parcial.advertencia);
   console.log('OK: galería con miniaturas, foto señalada, selección de dos originales y rechazo de una revisión antigua');
+  for(const [tipo,cantidad,guardadas] of [['track',1,1],['album',2,2],['playlist',3,2]]){
+   w.close();
+   await abrirSnapGrab({dir:raiz,navegador:{conectado:()=>false},contexto:{...c,titulo:'Spotify de prueba '+tipo},leerNativo:async()=>({...nativo,url:`https://open.spotify.com/${tipo}/Prueba123`,imagenUrl:''})});
+   w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);e=await estadoListo();assert(!e.error,e.error);assert(e.info.audio);assert.equal(e.info.plataforma,'spotify');assert.equal(e.info.cantidad,cantidad);assert.equal(e.info.origenAudio,'YouTube');
+   await esperar(200);assert(await js("!document.querySelector('[data-modo=audio]').disabled"));assert(await js("document.querySelector('[data-modo=video]').hidden"));assert(await js("document.querySelector('#musica').textContent.includes('YouTube')"));assert.equal(await js("document.querySelectorAll('#pistas li').length"),cantidad);
+   if(tipo==='album')await capturar('snapgrab-spotify.png');
+   await js(`window.snapgrab.accion({tipo:'descargar',modo:'${tipo==='track'?'audio':'todo'}'})`);e=await estadoListo();assert(!e.error,e.error);assert.equal(e.archivos.length,guardadas);assert.equal(new Set(e.archivos).size,guardadas);
+   for(const f of e.archivos){assert.equal(path.extname(f),'.mp3');assert(fs.statSync(f).size>100);}
+   if(tipo==='playlist')assert(e.mensaje.includes('1 pista(s) no se pudieron guardar'));
+  }
+  console.log('OK: Spotify canción, álbum y lista; MP3 real con búsqueda local de prueba y aviso de pista fallida');
  } finally {p.kill();}
  assert.equal(errores.length,0,errores.join('\n'));console.log('OK: ventana real, análisis, descarga MP4 y extracción MP3; capturas guardadas');clearTimeout(limite);app.exit(0);
 }).catch(e=>{console.error(e);clearTimeout(limite);app.exit(1);});

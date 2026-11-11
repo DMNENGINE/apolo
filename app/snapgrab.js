@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-let galeria=null,marcadas=new Set(),ocupado=false;
+let galeria=null,marcadas=new Set(),ocupado=false,pistasMostradas='';
 function actualizarSeleccion(){
   const n=marcadas.size;$('#cuenta-fotos').textContent=n?`${n} foto(s) marcada(s)`:'Ninguna marcada';
   $('#guardar-fotos').textContent=n?`Guardar ${n} foto(s)`:'Guardar selección';$('#guardar-fotos').disabled=ocupado||!n;
@@ -24,19 +24,30 @@ function pintarGaleria(g){
 }
 function pintar(e){
   ocupado=!!e.ocupado;
+  const spotify=e.info?.plataforma==='spotify';
+  const opciones=$('#opciones-descarga'),referencia=spotify?$('#foto-visible'):$('#estado');
+  if(opciones.nextElementSibling!==referencia)referencia.before(opciones);
+  $('#musica').hidden=!spotify;
+  if(spotify){
+    $('#aviso-musica').textContent=e.info.avisoAudio;
+    $('#limite-musica').textContent=`${e.info.cantidad} pista(s) accesible(s) · hasta ${e.info.limitePistas} por trabajo`;
+    const clave=JSON.stringify(e.info.pistas||[]);if(clave!==pistasMostradas){pistasMostradas=clave;$('#pistas').replaceChildren();for(const p of e.info.pistas||[]){const li=document.createElement('li');li.textContent=p;$('#pistas').append(li);}}
+  }
+  $('#titulo-audio').textContent=spotify?'♫ Guardar MP3':'♫ Solo audio';$('#ayuda-audio').textContent=spotify?'Buscar en YouTube y convertir':'Guardar como MP3';
+  $('#titulo-todo').textContent=spotify?'♫ Audio del álbum / lista':'↓ Todo';$('#ayuda-todo').textContent=spotify?'Hasta 20 pistas por trabajo':'Fotos y vídeo disponibles';
   $('#titulo').textContent=e.info?.titulo||e.titulo||'Contenido';$('#url').textContent=e.url||'';
   $('#detalle').textContent=e.info?`${e.info.plataforma} · ${e.info.cantidad} elemento(s)`:e.url?'Análisis de la publicación':'Imagen de la ventana · sin extensión';
   $('#foto-visible').hidden=!e.tieneCaptura;
   const fotoSenalada=e.tipoCaptura==='imagen';
   $('#foto-visible-texto').textContent=fotoSenalada?'▧ Guardar esta foto visible':'✂ Guardar una imagen visible';
   $('#foto-visible-ayuda').textContent=fotoSenalada?'Foto detectada bajo el clic · puedes ajustar sus bordes':'Sin extensión · selecciona la foto dentro de esta ventana';
-  const recomendacion=fotoSenalada?'Foto señalada: su copia visible está lista para guardar.':e.info?.video&&!e.info.fotos?'Vídeo reconocido: puedes guardar el vídeo o extraer su audio.':e.info?.fotos&&!e.info.video?'Foto reconocida: puedes guardar el original o elegir en la galería.':'';
+  const recomendacion=spotify?'Spotify reconocido: revisa las pistas antes de guardar el audio.':fotoSenalada?'Foto señalada: su copia visible está lista para guardar.':e.info?.video&&!e.info.fotos?'Vídeo reconocido: puedes guardar el vídeo o extraer su audio.':e.info?.fotos&&!e.info.video?'Foto reconocida: puedes guardar el original o elegir en la galería.':'';
   $('#recomendacion').textContent=recomendacion;$('#recomendacion').hidden=!recomendacion;
   $('#abrir-galeria').disabled=ocupado||!(e.paginaUrl||e.url);$('#abrir-galeria').textContent=e.galeria?'↻ Actualizar fotos de esta página':'▧ Ver fotos de esta página';
   $('#estado').textContent=e.error||e.mensaje||'';$('#estado').classList.toggle('error',!!e.error);
   const p=$('#progreso');p.hidden=!e.ocupado;if(e.progreso==null)p.removeAttribute('value');else p.value=e.progreso;
   $('#cancelar').hidden=!e.ocupado;$('#reintentar').disabled=!!e.ocupado||!e.url;
-  for(const b of document.querySelectorAll('[data-modo]')){b.disabled=!!e.ocupado||!e.info||(b.dataset.modo==='fotos'&&!e.info.fotos)||(['video','audio'].includes(b.dataset.modo)&&!e.info.video);b.classList.toggle('recomendada',b.dataset.modo==='video'&&!!e.info?.video&&!e.info?.fotos||b.dataset.modo==='fotos'&&!!e.info?.fotos&&!e.info?.video);}
+  for(const b of document.querySelectorAll('[data-modo]')){const m=b.dataset.modo;b.hidden=spotify&&(['video','fotos'].includes(m)||m==='todo'&&e.info.cantidad===1);b.disabled=ocupado||!e.info||(m==='fotos'&&!e.info.fotos)||(m==='video'&&!e.info.video)||(m==='audio'&&!e.info.video&&!e.info.audio);b.classList.toggle('recomendada',spotify?m==='audio':m==='video'&&!!e.info?.video&&!e.info?.fotos||m==='fotos'&&!!e.info?.fotos&&!e.info?.video);}
   pintarGaleria(e.galeria);
   $('#ruta').textContent=e.carpeta?`Se guarda en ${e.carpeta}`:'';
   $('#resultado').textContent=e.archivos?.length?`${e.archivos.length} archivo(s) guardados`:e.ocupado?'Trabajando…':'Listo para esta página';
