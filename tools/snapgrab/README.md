@@ -54,3 +54,11 @@ El motor obtiene metadatos públicos de Spotify y busca coincidencias en YouTube
 Se verificaron metadatos públicos reales de una canción (título e intérprete), un álbum de diez pistas y una lista de cincuenta pistas. Referencia de la API pública utilizada: [Spotify oEmbed](https://developer.spotify.com/documentation/embeds/reference/oembed). La extracción de listas desde HTML embed procede del módulo externo y depende de la estructura que Spotify exponga; las listas privadas o no disponibles pueden fallar.
 
 Validación: 20 pruebas dirigidas y 560 generales aprobadas. El ensayo Electron usa metadatos ficticios de canción, álbum y lista, y redirige las búsquedas a un vídeo sintético servido en localhost; yt-dlp y ffmpeg generan MP3 reales y se comprueban nombres separados y un fallo parcial. El desvío solo vive en `tools/probar-spotify-puente.py`, no se instala en APOLO. Además se verificó una búsqueda real de título/intérprete: YouTube devolvió el vídeo oficial y 48 formatos, sin descargar la canción. La conversión MP3 se probó con el vídeo sintético. Captura: `repair-backups/snapgrab-spotify/snapgrab-spotify.png`.
+
+## Pegar un enlace (2026-11-11)
+
+El menú Ctrl+Alt+clic derecho muestra un campo independiente **Enlace para SnapGrab** con botón **Abrir**. Admite pegar con Ctrl+V y enviar con Enter, sin pasar por el prompt libre de APOLO. No hace falta que la ventana del clic sea un navegador ni que exponga una dirección. Un enlace inválido mantiene el menú abierto y muestra el motivo.
+
+La propia ventana de SnapGrab incorpora arriba otro campo con **Analizar**. Cambiar el enlace limpia la captura, las fotos seleccionadas y los resultados de la página anterior. Durante una operación es necesario terminarla o cancelarla antes de cambiar de enlace. Se conserva la detección automática del contexto como opción independiente. No se lee automáticamente el portapapeles.
+
+Validación: 22 pruebas dirigidas y 562 generales aprobadas. El ensayo real pega un enlace en el menú y pulsa Enter mediante CDP; después cambia desde Spotify a una foto usando el formulario de SnapGrab y comprueba que desaparezcan los datos anteriores. Capturas revisadas: `repair-backups/snapgrab-enlace/menu-enlace.png` y `snapgrab-enlace.png`.

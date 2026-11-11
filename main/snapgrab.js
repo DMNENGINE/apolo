@@ -25,8 +25,11 @@ async function operacion(dir,accion,modo,extra={}){
   }catch(e){if(ventana===w)estado={...estado,error:e.message,mensaje:''};}
   finally{if(trabajo===actual)trabajo=null;if(ventana===w){estado={...estado,ocupado:false};publicar();}}
 }
-async function abrirSnapGrab({dir,navegador,contexto,leerNativo}){
-  const pagina=await paginaObjetivo(navegador,contexto,leerNativo||((c)=>require('./snapgrab-contexto').capturarContexto(dir,c)));
+async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url}){
+  const manual=url!==undefined;
+  const enlace=manual?urlPublicacion(url):null;
+  if(manual&&navegador?.protegido?.(enlace,''))throw new Error('Esta página está protegida y no se enviará al descargador');
+  const pagina=manual?{url:enlace,paginaUrl:enlace,titulo:'Enlace pegado'}:await paginaObjetivo(navegador,contexto,leerNativo||((c)=>require('./snapgrab-contexto').capturarContexto(dir,c)));
   if(ventana&&!ventana.isDestroyed()){
     if(estado.url===pagina.url&&estado.hwnd===contexto.hwnd){ventana.show();ventana.focus();return {ok:true};}
     if(trabajo){ventana.show();ventana.focus();throw new Error('SnapGrab está trabajando sobre otra página. Termina o cancela esa operación antes de cambiar de objetivo');}
@@ -46,6 +49,14 @@ async function abrirSnapGrab({dir,navegador,contexto,leerNativo}){
       if(a?.tipo==='cerrar'){ventana.close();return;}
       if(a?.tipo==='cancelar'){trabajo?.cancelar();return;}
       if(a?.tipo==='carpeta')return shell.openPath(estado.carpeta);
+      if(a?.tipo==='enlace'){
+        const enlace=urlPublicacion(a.url);
+        if(trabajo)throw new Error('Termina o cancela la operación actual antes de analizar otro enlace');
+        if(navegador?.protegido?.(enlace,''))throw new Error('Esta página está protegida y no se enviará al descargador');
+        captura=null;galeriaPrivada=null;
+        estado={url:enlace,paginaUrl:enlace,titulo:'Enlace pegado',carpeta:estado.carpeta,tieneCaptura:false,info:null,galeria:null,archivos:[],ocupado:false,error:'',mensaje:'Preparando enlace…',progreso:null};publicar();
+        return operacion(dir,'analizar');
+      }
       if(a?.tipo==='galeria')return operacion(dir,'galeria',null,{seleccionada:estado.imagenUrl});
       if(a?.tipo==='guardar-fotos')return operacion(dir,'guardar-fotos',null,{imagenes:seleccionarFotos(galeriaPrivada,a.revision,a.ids)});
       if(a?.tipo==='captura'){
@@ -67,7 +78,7 @@ async function abrirSnapGrab({dir,navegador,contexto,leerNativo}){
       throw new Error('Acción de SnapGrab no válida');
     });
   }
-  const w=ventana=new BrowserWindow({width:640,height:590,minWidth:520,minHeight:460,frame:false,transparent:true,show:false,resizable:true,title:'APOLO · SnapGrab',webPreferences:{preload:path.join(dir,'app','snapgrab-preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  const w=ventana=new BrowserWindow({width:640,height:640,minWidth:520,minHeight:460,frame:false,transparent:true,show:false,resizable:true,title:'APOLO · SnapGrab',webPreferences:{preload:path.join(dir,'app','snapgrab-preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   w.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   w.webContents.on('will-navigate',e=>e.preventDefault());
   w.on('closed',()=>{if(ventana===w){trabajo?.cancelar();trabajo=null;ventana=null;estado=null;captura=null;galeriaPrivada=null;}});

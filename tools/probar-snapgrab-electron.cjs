@@ -42,7 +42,14 @@ app.whenReady().then(async()=>{
  await m.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});await esperar(250);
  fs.writeFileSync(path.join(salida,'menu-snapgrab.png'),(await m.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());
  // El menú se destruye al ejecutar: su promesa IPC puede desaparecer con él.
- const abrirDesdeMenu=m.webContents.executeJavaScript("window.menuApolo.ejecutar({tipo:'snapgrab'})").catch(()=>{});
+ // Pegar un enlace y pulsar Enter no debe enviarlo al prompt libre de APOLO.
+ await m.webContents.executeJavaScript(`document.querySelector('#snap-url').value=${JSON.stringify(url)};document.querySelector('#snap-url').focus()`);
+ await m.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});await esperar(150);
+ fs.writeFileSync(path.join(salida,'menu-enlace.png'),(await m.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());
+ m.webContents.debugger.attach('1.3');
+ await m.webContents.debugger.sendCommand('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13,text:'\r'}).catch(()=>{});
+ if(!m.isDestroyed())await m.webContents.debugger.sendCommand('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,nativeVirtualKeyCode:13}).catch(()=>{});
+ const abrirDesdeMenu=esperar(500);
  await Promise.race([abrirDesdeMenu,esperar(500)]);
  assert.equal(BrowserWindow.getAllWindows().length,1);menu.parar();
  for(const modo of ['video','audio']){
@@ -120,6 +127,12 @@ app.whenReady().then(async()=>{
    if(tipo==='playlist')assert(e.mensaje.includes('1 pista(s) no se pudieron guardar'));
   }
   console.log('OK: Spotify canción, álbum y lista; MP3 real con búsqueda local de prueba y aviso de pista fallida');
+  await js(`document.querySelector('#enlace').value=${JSON.stringify(fotoUrl)};document.querySelector('#enlace-form').requestSubmit()`);
+  for(let i=0;i<150;i++){e=await js("window.snapgrab.accion({tipo:'estado'})");if(!e.ocupado&&e.url===fotoUrl&&e.info?.fotos)break;await esperar(100);}
+  assert.equal(e.url,fotoUrl);assert(e.info.fotos);assert.equal(e.tieneCaptura,false);assert.equal(e.galeria,null);
+  await esperar(200);assert(await js("document.querySelector('#musica').hidden"));assert(await js("document.querySelector('#galeria').hidden"));
+  await capturar('snapgrab-enlace.png');
+  console.log('OK: enlace pegado desde el menú con Enter y cambio de enlace dentro de SnapGrab');
  } finally {p.kill();}
  assert.equal(errores.length,0,errores.join('\n'));console.log('OK: ventana real, análisis, descarga MP4 y extracción MP3; capturas guardadas');clearTimeout(limite);app.exit(0);
 }).catch(e=>{console.error(e);clearTimeout(limite);app.exit(1);});

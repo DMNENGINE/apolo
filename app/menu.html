@@ -20,6 +20,7 @@
   .prompt:focus-within { border-color:var(--cian); box-shadow:0 0 0 2px rgba(53,200,240,.15) }
   textarea { flex:1; resize:none; border:0; outline:0; background:transparent; color:var(--tx); font:inherit; height:20px; max-height:72px; overflow:auto }
   .enviar { color:var(--cian); font-size:16px; cursor:pointer; opacity:.5 } .enviar.on { opacity:1 }
+  .snap-link{margin:4px 10px 6px}.snap-link label{display:block;color:var(--mut);font-size:10.5px;margin-bottom:4px}.snap-campo{display:flex;gap:5px}.snap-campo input{width:0;flex:1;background:#0b1117;border:1px solid #233b31;border-radius:8px;color:var(--tx);padding:7px;font:inherit;user-select:text;outline:none}.snap-campo input:focus{border-color:var(--cian)}.snap-campo button{border:1px solid #287d53;border-radius:8px;background:#0f1a15;color:var(--verde);padding:6px 9px;cursor:pointer}.snap-error{font-size:11px;color:#ff879a;margin-top:3px}
   .lista { overflow:auto; padding:2px 6px 8px; }
   .sec { color:var(--mut); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; padding:8px 8px 3px }
   .it { display:flex; gap:9px; align-items:center; padding:6px 8px; border-radius:8px; cursor:pointer; animation:aparece .18s both }
@@ -37,6 +38,7 @@
 <body><div class="caja">
   <div class="cab"><div class="casco" id="casco"></div><div class="tit"><b>APOLO</b><div class="chips" id="chips"></div></div></div>
   <div class="prompt"><textarea id="q" rows="1" placeholder="Pídeselo a APOLO… o busca una acción"></textarea><span class="enviar" id="env" title="Enviar a APOLO (Enter)">➤</span></div>
+  <form class="snap-link" id="snap-link"><label for="snap-url">Enlace para SnapGrab · Spotify, vídeo o foto</label><div class="snap-campo"><input id="snap-url" placeholder="Pega aquí el enlace…" aria-label="Enlace para SnapGrab" maxlength="8192" required autocomplete="off" spellcheck="false"><button type="submit">Abrir</button></div><div class="snap-error" id="snap-error" role="status"></div></form>
   <div class="lista" id="l"></div>
   <div class="pie"><span id="ayuda">↑↓ elige · Enter</span><span>Esc cierra</span></div>
 </div>
@@ -113,7 +115,9 @@ $('#l').addEventListener('click', async e => {
 async function ejecutar(accion){try{const r=await window.menuApolo.ejecutar(accion);if(r?.ok===false)$('#ayuda').textContent=r.error;}catch(e){$('#ayuda').textContent=e.message;}}
 $('#env').addEventListener('click', () => { if (texto()) ejecutar({ tipo:'prompt',texto:texto() }); });
 $('#q').addEventListener('input', () => { sel = 0; const t = $('#q'); t.style.height = '20px'; t.style.height = Math.min(72, t.scrollHeight) + 'px'; pintar(); });
+$('#snap-link').addEventListener('submit',async e=>{e.preventDefault();try{const r=await window.menuApolo.ejecutar({tipo:'snapgrab',url:$('#snap-url').value.trim()});if(r?.ok===false)$('#snap-error').textContent=r.error;}catch(e){$('#snap-error').textContent=e.message;}});
 addEventListener('keydown', e => {
+  if(e.target.closest?.('#snap-link')){if(e.key==='Escape')window.menuApolo.cerrar();return;}
   const n = visibles().length;
   if (e.key === 'Escape') window.menuApolo.cerrar();
   else if (e.key === 'ArrowDown') { sel = (sel + 1) % n; pintar(); e.preventDefault(); }

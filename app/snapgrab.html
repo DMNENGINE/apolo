@@ -10,6 +10,7 @@ header{padding:18px 20px;display:flex;gap:12px;align-items:center;border-bottom:
 .casco{width:32px;height:32px;border-radius:50%;border:1px solid #2a3a33;background:radial-gradient(circle at 50% 40%,#1d2630,#070a0e 70%);box-shadow:0 0 10px #3ddc8440;position:relative}
 .casco::before,.casco::after{content:'';position:absolute;top:12px;width:6px;height:7px;border-radius:50%;background:var(--verde);box-shadow:0 0 6px var(--verde)}.casco::before{left:7px}.casco::after{right:7px}
 .marca{color:var(--verde);letter-spacing:.12em;font-size:11px}.nombre{font-size:18px;font-weight:600}.cerrar{margin-left:auto;-webkit-app-region:no-drag}
+.enlace-form{padding:10px 20px 0;display:flex;gap:7px}.enlace-form input{min-width:0;flex:1;border:1px solid #233b31;border-radius:9px;background:#0b1117;color:inherit;padding:8px;font:inherit;outline:none}.enlace-form input:focus{border-color:var(--cian)}
 button{font:inherit;color:inherit;border:1px solid #233b31;border-radius:9px;background:#0f1a15;padding:9px 12px;cursor:pointer}button:hover{border-color:var(--verde);background:#16271e}button:focus-visible{outline:2px solid var(--cian);outline-offset:2px}button:disabled{opacity:.4;cursor:default}
 main{padding:20px;overflow:auto;flex:1}.etiqueta{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.14em}.titulo{margin:6px 0;font-size:16px;overflow-wrap:anywhere}.url{color:var(--mut);font-size:11px;overflow-wrap:anywhere;margin-bottom:14px;user-select:text}
 .chip{display:inline-block;color:#a6f0c6;background:#0f1a15;border:1px solid #1d3a2c;border-radius:9px;padding:2px 9px;font-size:11px;margin-bottom:18px}
@@ -21,6 +22,7 @@ main{padding:20px;overflow:auto;flex:1}.etiqueta{color:var(--mut);font-size:10px
 footer{display:flex;gap:8px;align-items:center;padding:12px 20px;border-top:1px solid var(--linea)}footer span{flex:1;color:var(--mut);font-size:11px}.ruta{font-size:11px;color:var(--mut);overflow-wrap:anywhere;margin-top:10px;user-select:text}
 </style></head><body><div class="caja">
 <header><div class="casco"></div><div><div class="marca">APOLO</div><div class="nombre">SnapGrab</div></div><button class="cerrar" id="cerrar" aria-label="Cerrar">✕</button></header>
+<form class="enlace-form" id="enlace-form"><input id="enlace" placeholder="Pega un enlace de Spotify, vídeo o foto…" aria-label="Enlace de SnapGrab" maxlength="8192" required autocomplete="off" spellcheck="false"><button type="submit" id="analizar-enlace">Analizar</button></form>
 <main><div class="etiqueta">Donde hiciste clic</div><h1 class="titulo" id="titulo">Identificando contenido…</h1><div class="url" id="url"></div><div class="chip" id="detalle">Preparando análisis</div>
 <p class="recomendacion" id="recomendacion" hidden></p>
 <section class="musica" id="musica" hidden><div class="etiqueta">Spotify · Audio desde YouTube</div><p id="aviso-musica"></p><p id="limite-musica"></p><ol id="pistas"></ol></section>

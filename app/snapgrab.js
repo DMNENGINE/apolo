@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s);
-let galeria=null,marcadas=new Set(),ocupado=false,pistasMostradas='';
+let galeria=null,marcadas=new Set(),ocupado=false,pistasMostradas='',enlaceActual=null;
 function actualizarSeleccion(){
   const n=marcadas.size;$('#cuenta-fotos').textContent=n?`${n} foto(s) marcada(s)`:'Ninguna marcada';
   $('#guardar-fotos').textContent=n?`Guardar ${n} foto(s)`:'Guardar selección';$('#guardar-fotos').disabled=ocupado||!n;
@@ -8,6 +8,7 @@ function actualizarSeleccion(){
   for(const c of document.querySelectorAll('#fotos input')){c.checked=marcadas.has(c.value);c.disabled=ocupado;}
 }
 function pintarGaleria(g){
+  if(!g&&galeria){galeria=null;marcadas.clear();$('#galeria').hidden=true;$('#fotos').replaceChildren();}
   if(g&&g.revision!==galeria?.revision){
     galeria=g;marcadas=new Set(g.fotos.filter(f=>f.senalada).map(f=>f.id));$('#fotos').replaceChildren();
     for(const f of g.fotos){
@@ -24,6 +25,8 @@ function pintarGaleria(g){
 }
 function pintar(e){
   ocupado=!!e.ocupado;
+  $('#analizar-enlace').disabled=ocupado;
+  if(enlaceActual!==e.url){enlaceActual=e.url;if(document.activeElement!==$('#enlace'))$('#enlace').value=e.url||'';$('#recorte').hidden=true;foto=null;zona=null;inicio=null;}
   const spotify=e.info?.plataforma==='spotify';
   const opciones=$('#opciones-descarga'),referencia=spotify?$('#foto-visible'):$('#estado');
   if(opciones.nextElementSibling!==referencia)referencia.before(opciones);
@@ -56,6 +59,7 @@ async function ejecutar(a){try{await window.snapgrab.accion(a);}catch(e){$('#est
 for(const tipo of ['cerrar','cancelar','carpeta'])$('#'+tipo).onclick=()=>ejecutar({tipo});
 $('#reintentar').onclick=()=>ejecutar({tipo:'analizar'});
 for(const b of document.querySelectorAll('[data-modo]'))b.onclick=()=>ejecutar({tipo:'descargar',modo:b.dataset.modo});
+$('#enlace-form').onsubmit=e=>{e.preventDefault();ejecutar({tipo:'enlace',url:$('#enlace').value.trim()});};
 $('#abrir-galeria').onclick=()=>ejecutar({tipo:'galeria'});
 $('#marcar-todas').onclick=()=>{marcadas=marcadas.size===galeria.fotos.length?new Set():new Set(galeria.fotos.map(f=>f.id));actualizarSeleccion();};
 $('#guardar-fotos').onclick=()=>ejecutar({tipo:'guardar-fotos',revision:galeria.revision,ids:[...marcadas]});

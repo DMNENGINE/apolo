@@ -119,12 +119,13 @@ function crearMenuApolo({ dir, datos, nucleo, handleText, panelUrl, decir, captu
     if (!a || typeof a !== 'object') return {ok:false,error:'Acción no válida'};
     if (a.tipo === 'prompt' && !String(a.texto || '').trim()) return {ok:false,error:'Escribe una petición'};
     if (!['prompt','panel','arana','accion','snapgrab'].includes(a.tipo)) return {ok:false,error:'Acción desconocida'};
-    if (a.tipo==='snapgrab' && !c.navegador && !c.hwnd) return {ok:false,error:'No se identificó la ventana del clic'};
+    if (a.tipo==='snapgrab' && a.url!==undefined)try{a={...a,url:require('./snapgrab-motor').urlPublicacion(a.url)};}catch(e){return {ok:false,error:e.message};}
+    if (a.tipo==='snapgrab' && a.url===undefined && !c.navegador && !c.hwnd) return {ok:false,error:'No se identificó la ventana del clic'};
     if (a.tipo==='panel' && (!/^[a-z0-9][a-z0-9/_.-]*$/i.test(a.ruta || '') || a.ruta.includes('..'))) return {ok:false,error:'Página no válida'};
     if (a.tipo==='accion' && !c.acciones?.some(x=>x.id===a.id)) return {ok:false,error:'Esa acción no corresponde a la selección actual'};
     cerrar();
     try {
-      if (a.tipo === 'snapgrab') return await require('./snapgrab').abrirSnapGrab({dir,navegador:nucleo()?.navegador,contexto:c});
+      if (a.tipo === 'snapgrab') return await require('./snapgrab').abrirSnapGrab({dir,navegador:nucleo()?.navegador,contexto:c,url:a.url});
       if (a.tipo === 'prompt') { contar('prompt'); return await handleText(String(a.texto).trim() + contextoTexto(c), 'isla'); }
       if (a.tipo === 'panel') { contar('panel:' + a.ruta); return await shell.openExternal(panelUrl(a.ruta)); }
       if (a.tipo === 'arana') { contar('arana:' + a.arana); return await arana(a.arana, c); }

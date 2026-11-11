@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{EventEmitter}=require('node:events');
 const {destinoArana}=require('../../main/menu-aranas');
-function montar(t,{soltar=async()=> 'Informe de prueba',capturarTexto}={}){
+function montar(t,{soltar=async()=> 'Informe de prueba',capturarTexto,abrirSnapGrab}={}){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'apolo-menu-test-'));
  t.after(()=>{if(path.dirname(dir)===os.tmpdir()&&path.basename(dir).startsWith('apolo-menu-test-'))fs.rmSync(dir,{recursive:true,force:true});});
  const handlers=new Map(),on=new Map(),ventanas=[],mensajes=[],pedidos=[];
@@ -11,7 +11,7 @@ function montar(t,{soltar=async()=> 'Informe de prueba',capturarTexto}={}){
  }
  const electron={BrowserWindow:Ventana,ipcMain:{handle:(n,f)=>handlers.set(n,f),on:(n,f)=>on.set(n,f)},screen:{screenToDipPoint:p=>p,getDisplayNearestPoint:()=>({workArea:{x:0,y:0,width:1280,height:720}})},shell:{openExternal:async()=>{}}};
  const modulo={exports:{}},n={cfg:{},aranas:{soltar:async a=>{pedidos.push(a);return soltar(a)}},navegador:{conectado:()=>true}};
- const requireFalso=id=>id==='electron'?electron:id==='./ipc-seguro'?{permitir(){}}:id.startsWith('./')?require(path.resolve(__dirname,'../../main',id)):require(id);
+ const requireFalso=id=>id==='electron'?electron:id==='./ipc-seguro'?{permitir(){}}:id==='./snapgrab'&&abrirSnapGrab?{abrirSnapGrab}:id.startsWith('./')?require(path.resolve(__dirname,'../../main',id)):require(id);
  vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../main/menu-apolo.js'),'utf8'),{module:modulo,exports:modulo.exports,require:requireFalso,process,console,setTimeout,clearTimeout});
  const menu=modulo.exports.crearMenuApolo({dir:path.resolve(__dirname,'../..'),datos:()=>dir,nucleo:()=>n,capturarTexto,handleText:async texto=>{mensajes.push(texto);return{ok:true}},panelUrl:r=>'http://localhost/#/'+r,decir:t=>mensajes.push(t),log:()=>{}});
  const abrir=c=>{menu.abrir({x:1200,y:680,app:'explorer',seleccion:[],...c});return ventanas.at(-1)};
@@ -21,6 +21,15 @@ function montar(t,{soltar=async()=> 'Informe de prueba',capturarTexto}={}){
 test('una selección múltiple nunca se sustituye por la pestaña activa',t=>{
  const{abrir,invocar,n}=montar(t);abrir({seleccion:['D:/uno.js','D:/dos.js']});const c=invocar('contexto');
  assert.equal(c.aranas.codigo.disponible,false);assert.throws(()=>destinoArana('codigo',c,n),/único archivo/);
+});
+test('el menú acepta un enlace de SnapGrab sin navegador ni ventana identificada',async t=>{
+ let pedido;const {abrir,invocar}=montar(t,{abrirSnapGrab:async a=>{pedido=a;return {ok:true};}});
+ abrir({app:'notepad',hwnd:undefined});const r=await invocar('ejecutar',{tipo:'snapgrab',url:'spotify:track:Ab123'});
+ assert.equal(r.ok,true);assert.equal(pedido.url,'https://open.spotify.com/track/Ab123');
+});
+test('un enlace inválido no cierra el menú ni ejecuta una petición a APOLO',async t=>{
+ const {abrir,invocar,mensajes}=montar(t);const w=abrir({});const r=await invocar('ejecutar',{tipo:'snapgrab',url:'javascript:alert(1)'});
+ assert.equal(r.ok,false);assert.equal(w.muerta,false);assert.equal(mensajes.length,0);
 });
 test('un archivo de código se entrega como archivo al núcleo',async t=>{
  const{dir,abrir,invocar,pedidos,mensajes}=montar(t,{soltar:async()=> 'Informe de prueba\nCOBERTURA INCOMPLETA'});const archivo=path.join(dir,'código con espacios.js');fs.writeFileSync(archivo,'const a=1');
