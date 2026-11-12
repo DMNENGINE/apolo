@@ -58,6 +58,15 @@ test('no lee el mismo post abierto en otra cuenta sin la marca de la apertura el
  let enlace;const n={conectado:()=>true,estado:()=>({navegador:'Google Chrome'}),orden:async()=>[{id:3,url:'https://www.instagram.com/p/Ab/',activa:true}]};
  const ig=crearInstagram({navegador:n,abrirExterno:async u=>{enlace=u;return {ok:true};}});await ig.abrir('https://www.instagram.com/p/Ab/');await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/perfil elegido/);assert(new URL(enlace).hash);
 });
+test('reconoce la pestaña nueva aunque Instagram quite la marca, sin reutilizar otra abierta',async()=>{
+ let tabs=[{id:1,url:'https://www.instagram.com/p/Ab/',activa:true}],instancia='chrome-elegido';
+ const n={conectado:()=>true,estado:()=>({navegador:'Chrome',instancia}),orden:async op=>op==='pestanas'?tabs:ejemplo};
+ const ig=crearInstagram({navegador:n,leerPerfil:()=>null,abrirExterno:async()=>{tabs.push({id:2,url:'https://www.instagram.com/p/Ab/',activa:true});},obtenerSesion:()=>({fetch:async()=>new Response('foto')}),miniatura:()=>''});
+ await ig.abrir('https://www.instagram.com/p/Ab/');assert((await ig.leer('https://www.instagram.com/p/Ab/').promesa).info.fotos);
+ tabs=tabs.filter(t=>t.id!==2);await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/perfil elegido/);
+ tabs.push({id:2,url:'https://www.instagram.com/p/Ab/'});instancia='otro-chrome';await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/perfil elegido/);
+});
+
 test('no usa una cuenta de otro navegador ni selecciona una pestaña duplicada al azar',async()=>{
  let enlace;const n={conectado:()=>true,estado:()=>({navegador:'Microsoft Edge'}),orden:()=>assert.fail('No debe leer Edge')};const ig=crearInstagram({navegador:n,abrirExterno:async u=>{enlace=u}});await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Chrome/);
  await ig.abrir('https://www.instagram.com/p/Ab/');n.estado=()=>({navegador:'Google Chrome'});n.orden=async()=>[{id:1,url:enlace},{id:2,url:enlace}];await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/varias pestañas/);
