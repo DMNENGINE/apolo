@@ -137,7 +137,7 @@ app.whenReady().then(async()=>{
   let sesionIg=false,chromeConectado=false,aperturasChrome=0,enlaceChrome='';
   const vistaIg=require('../main/snapgrab-instagram').crearInstagram({
    abrirExterno:async u=>{aperturasChrome++;enlaceChrome=u;return {ok:true};},
-   navegador:()=>({conectado:()=>chromeConectado,estado:()=>({navegador:'Google Chrome'}),orden:async(op)=>{
+   navegador:()=>({conectado:()=>chromeConectado,estado:()=>({navegador:'Google Chrome',version:'0.4.0'}),orden:async(op)=>{
     if(op==='pestanas')return [{id:42,url:enlaceChrome,activa:true}];
     if(op==='instagram'){
      if(!sesionIg)throw new Error('Inicia sesion en Instagram en Chrome');

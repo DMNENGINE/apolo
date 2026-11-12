@@ -106,3 +106,9 @@ La extensión 0.4.2 conserva en `storage.session` solo la marca de destino y el 
 La tarjeta muestra el estado de conexión y avisa expresamente de versiones antiguas de la extensión. El mensaje técnico del motor externo se conserva plegado, separado de la acción necesaria para leer con Chrome. Recargar la extensión en el perfil correcto y reiniciar APOLO siguen siendo necesarios para activar código nuevo; no se leen tokens ni cookies para conectar la extensión desde las pruebas.
 
 Validación: 576 pruebas generales aprobadas. Se comprueban la persistencia de la marca cuando desaparece de `?img_index=1`, el vínculo con la instancia correcta, el diagnóstico de conexión/versión y el guardado exclusivo de metadatos de destino. El ensayo Electron abre y lee en una acción con el puente simulado, vuelve a Analizar sin pasar por el motor externo y mantiene fotos/vídeo/MP3 de prueba. No se verificó la publicación real autenticada. Capturas revisadas: `repair-backups/instagram-flujo/instagram-acceso.png` e `instagram-chrome.png`.
+
+## Diagn?stico por funci?n disponible (2026-11-12)
+
+Se elimina el bloqueo basado ?nicamente en la versi?n anunciada por la extensi?n. Se intenta la orden de Instagram en la pesta?a y el perfil verificados; solo si la conexi?n rechaza esa funci?n se informa de su ausencia, sin afirmar que la extensi?n est? desactualizada. Un reintento permite recuperar la lectura sin conservar un bloqueo previo.
+
+Validaci?n: 578 pruebas aprobadas. El ensayo Electron con puente simulado anuncia 0.4.0 y permite leer y guardar los medios de prueba. Captura revisada: `repair-backups/instagram-version/instagram-chrome.png`. No se verific? la publicaci?n real con la cuenta del usuario.

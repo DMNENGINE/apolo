@@ -74,9 +74,24 @@ test('la marca recordada en Chrome sobrevive a que Instagram quite el fragmento'
  await ig.abrir('https://www.instagram.com/p/Ab/?img_index=1');assert.equal((await ig.leer('https://www.instagram.com/p/Ab/').promesa).medios.length,2);assert.equal(perfil.instancia,'perfil-correcto-123');
  ig.cerrar();assert(ig.preparado());n.orden=async op=>op==='pestanas'?[{id:9,url:'https://www.instagram.com/p/Ab/?img_index=1',activa:true}]:ejemplo;assert((await ig.leer('https://www.instagram.com/p/Ab/').promesa).info.fotos);
 });
-test('muestra el bloqueo real de conexión y versión sin confundirlo con un post eliminado',async()=>{
+test('no declara desactualizada una extensión solo por la versión anunciada',async()=>{
  const n={conectado:()=>false,estado:()=>({navegador:'Google Chrome',version:'0.4.0'})};const ig=crearInstagram({navegador:n,leerPerfil:()=>null});assert.equal(ig.estado().paso,'conexion');
- n.conectado=()=>true;assert.equal(ig.estado().paso,'version');await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Recárgala/);
+ n.conectado=()=>true;assert.equal(ig.estado().paso,'perfil');await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Abrir en Chrome/);
+});
+test('lee con una versión anunciada antigua si la función realmente está disponible',async()=>{
+ let enlace,consulta=false;const n={conectado:()=>true,estado:()=>({navegador:'Google Chrome',version:'0.4.0'}),orden:async op=>{
+  if(op==='pestanas')return [{id:1,url:enlace,activa:true}];consulta=true;return ejemplo;
+ }};
+ const ig=crearInstagram({navegador:n,abrirExterno:async u=>{enlace=u},obtenerSesion:()=>({fetch:async()=>new Response('foto')}),miniatura:()=>''});
+ await ig.abrir('https://www.instagram.com/p/Ab/');assert.equal(ig.estado().paso,'listo');const r=await ig.leer('https://www.instagram.com/p/Ab/').promesa;assert(consulta);assert(r.info.fotos);
+});
+test('informa función no disponible solo tras intentar ejecutarla y permite reintentar',async()=>{
+ let enlace,disponible=false;const n={conectado:()=>true,estado:()=>({navegador:'Google Chrome',version:'0.4.2'}),orden:async op=>{
+  if(op==='pestanas')return [{id:1,url:enlace}];if(!disponible)throw new Error('OPS[o.op] is not a function');return ejemplo;
+ }};
+ const ig=crearInstagram({navegador:n,abrirExterno:async u=>{enlace=u},obtenerSesion:()=>({fetch:async()=>new Response('foto')}),miniatura:()=>''});
+ await ig.abrir('https://www.instagram.com/p/Ab/');await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/conexión activa.*no ofrece/);
+ disponible=true;assert((await ig.leer('https://www.instagram.com/p/Ab/').promesa).info.fotos);
 });
 test('la extensión guarda solo la marca de destino, sin cookies ni datos de cuenta',async()=>{
  const vm=require('node:vm');let datos={};const contexto=vm.createContext({URL,chrome:{storage:{session:{get:async()=>datos,set:async v=>{datos={...datos,...v}}}}}});

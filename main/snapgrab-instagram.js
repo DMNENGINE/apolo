@@ -46,8 +46,6 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
     const n=puente();
     if(!n?.conectado?.())return {paso:'conexion',mensaje:'La extensión de APOLO no está conectada. Conéctala en el Chrome de la cuenta elegida.'};
     if(!esChrome(n))return {paso:'navegador',mensaje:'La conexión activa pertenece a otro navegador. Conecta APOLO desde tu Chrome.'};
-    const version=n.estado?.().version;
-    if(version&&/^0\.[0-3]\.|^0\.4\.[01]$/.test(version))return {paso:'version',mensaje:'La extensión está desactualizada. Recárgala en chrome://extensions para cargar la versión 0.4.2.'};
     if(!marcaDestino&&!vinculado(n))return {paso:'perfil',mensaje:'Pulsa el botón de tu cuenta Chrome para abrir y leer esta publicación con ese perfil.'};
     return {paso:'listo',mensaje:'Chrome conectado. Se intentará leer con la cuenta del perfil elegido.'};
   }
@@ -74,13 +72,15 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
       if(esperar){const limite=Date.now()+10000;while(Date.now()<limite&&!abort.signal.aborted){const n=puente();if(n?.conectado?.()&&esChrome(n)){const t=await pestana(n,p);if(t)break;}await new Promise(r=>setTimeout(r,500));}}
       if(abort.signal.aborted)throw new Error('Lectura cancelada');
       const n=puente();
-      if(estadoConexion().paso==='version')throw new Error(estadoConexion().mensaje);
       if(!n?.conectado?.()||!esChrome(n))throw new Error('Abre Instagram en Chrome con tu cuenta y conecta la extensión de APOLO en ese Chrome para Leer publicación');
       if(!marcaDestino&&!vinculado(n))throw new Error('Pulsa Abrir en Chrome para seleccionar la pestaña del perfil elegido antes de leer');
       const t=await pestana(n,p);if(!t)throw new Error('La extensión debe estar conectada en el perfil elegido. Pulsa Abrir en Chrome y vuelve a Leer publicación');
       let datos;
       try{datos=await n.orden('instagram',{pestana:t.id,codigo:p.codigo},30000);}catch(e){
-        if(/OPS|not a function|desconocida/i.test(e.message))throw new Error('Recarga la extensión de APOLO en chrome://extensions y vuelve a Leer publicación');
+        if(/OPS\[o\.op\].*not a function|OPERACION_NO_SOPORTADA.*instagram|operación.*desconocida/i.test(e.message)){
+          const version=n.estado?.().version;
+          throw new Error('La conexión activa de APOLO no ofrece la función de lectura de Instagram. Comprueba que corresponda al Chrome del perfil elegido.'+(version?' Versión anunciada por esa conexión: '+version+'.':''));
+        }
         throw e;
       }
       if(abort.signal.aborted)throw new Error('Lectura cancelada');
