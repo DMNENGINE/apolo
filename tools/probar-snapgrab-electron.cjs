@@ -136,7 +136,7 @@ app.whenReady().then(async()=>{
   w.close();
   let sesionIg=false,abiertaIg='';
   const vistaIg=require('../main/snapgrab-instagram').crearInstagram({
-   crearVentana:()=>({isDestroyed:()=>false,loadURL:async u=>{abiertaIg=u},show(){},focus(){},close(){},webContents:{getURL:()=>abiertaIg,setWindowOpenHandler(){},on(){}}}),
+   crearVentana:()=>({isDestroyed:()=>false,loadURL:async u=>{abiertaIg=u},show(){},focus(){},close(){},once(){},webContents:{getURL:()=>abiertaIg,setWindowOpenHandler(){},on(){}}}),
    obtenerSesion:()=>({fetch:async u=>{
     if(u.includes('/api/v1/media/'))return sesionIg?Response.json({items:[{caption:{text:'Publicación de prueba con sesión'},carousel_media:[{media_type:1,image_versions2:{candidates:[{url:'https://scontent.cdninstagram.com/foto.png',width:320,height:180}]}},{media_type:2,video_versions:[{url:'https://scontent.cdninstagram.com/video.mp4',width:320,height:180}]}]}]}):new Response('',{status:401});
     return fetch(u.endsWith('.png')?fotoUrl:url);
@@ -152,6 +152,17 @@ app.whenReady().then(async()=>{
    await js(`window.snapgrab.accion({tipo:'descargar',modo:'${modo}'})`);e=await estadoListo();assert(!e.error,e.error);assert.equal(e.archivos.length,1);assert(fs.statSync(e.archivos[0]).size>100);assert.equal(path.extname(e.archivos[0]),modo==='audio'?'.mp3':modo==='video'?'.mp4':'.png');
   }
   console.log('OK: acceso Instagram sin sesión, lectura con sesión simulada y descargas reales de foto, vídeo y audio de prueba');
+  const ventanasCierre=[];
+  const controlCierre=require('../main/snapgrab-instagram').crearInstagram({crearVentana:opciones=>{
+   const real=new BrowserWindow({...opciones,show:false});const cargar=real.loadURL.bind(real);
+   real.loadURL=()=>cargar('data:text/html,<meta charset="utf-8"><p>Ventana de prueba de cierre</p>');ventanasCierre.push(real);return real;
+  }});
+  await controlCierre.abrir('https://www.instagram.com/p/Ab/');ventanasCierre[0].close();
+  for(let i=0;i<40&&!ventanasCierre[0].isDestroyed();i++)await esperar(50);
+  assert(ventanasCierre[0].isDestroyed());controlCierre.cerrar();controlCierre.cerrar();
+  await controlCierre.abrir('https://www.instagram.com/p/Ab/');assert.equal(ventanasCierre.length,2);controlCierre.cerrar();
+  await capturar('instagram-cierre-corregido.png');
+  console.log('OK: cerrar, limpiar y reabrir ventanas Electron reales sin Object has been destroyed');
  } finally {p.kill();}
  assert.equal(errores.length,0,errores.join('\n'));console.log('OK: ventana real, análisis, descarga MP4 y extracción MP3; capturas guardadas');clearTimeout(limite);app.exit(0);
 }).catch(e=>{console.error(e);clearTimeout(limite);app.exit(1);});

@@ -41,10 +41,15 @@ function crearInstagram({crearVentana,obtenerSesion,miniatura}={}){
     const p=publicacionInstagram(url);if(!p)throw new Error('Abre un post o reel de Instagram para conectar esta función');
     if(!ventana||ventana.isDestroyed()){
       ventana=crearVentana({width:1050,height:800,title:'Instagram · APOLO',autoHideMenuBar:true,backgroundColor:'#080d11',webPreferences:{partition:'persist:apolo-snapgrab-instagram',nodeIntegration:false,contextIsolation:true,sandbox:true}});
+      const propia=ventana;
+      propia.once('closed',()=>{if(ventana===propia)ventana=null;});
       ventana.webContents.setWindowOpenHandler(()=>({action:'deny'}));
       ventana.webContents.on('will-navigate',(e,destino)=>{try{const u=new URL(destino);if(u.protocol!=='https:'||!['instagram.com','www.instagram.com'].includes(u.hostname))e.preventDefault();}catch{e.preventDefault();}});
     }
-    await ventana.loadURL(p.url);ventana.show();ventana.focus();return {ok:true};
+    const propia=ventana;
+    await propia.loadURL(p.url);
+    if(propia.isDestroyed()||ventana!==propia)throw new Error('La ventana de Instagram se cerró antes de terminar de cargar');
+    propia.show();propia.focus();return {ok:true};
   }
   function leer(url){
     const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),45000);
@@ -101,6 +106,6 @@ function crearInstagram({crearVentana,obtenerSesion,miniatura}={}){
     })().finally(()=>clearTimeout(timer));
     return {promesa,cancelar(){abort.abort();conversion?.cancelar();}};
   }
-  return {abrir,leer,descargar,cerrar(){ventana?.close();ventana=null;}};
+  return {abrir,leer,descargar,cerrar(){const anterior=ventana;ventana=null;if(anterior&&!anterior.isDestroyed())anterior.close();}};
 }
 module.exports={crearInstagram,publicacionInstagram,idMedia,mediosDePublicacion};
