@@ -1,4 +1,15 @@
 // Se serializa dentro de la pestaña: no lee cookies, campos de acceso ni tokens.
+function destinoInstagramSnapgrab(valor){
+  try{const u=new URL(valor),m=/^#apolo-snapgrab=([a-z0-9-]{8,80})$/i.exec(u.hash),p=/^\/(?:[^/]+\/)?(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)\/?$/.exec(u.pathname);
+    return u.protocol==='https:'&&['instagram.com','www.instagram.com'].includes(u.hostname)&&m&&p?{marca:m[1],codigo:p[1]}:null;
+  }catch{return null;}
+}
+async function registrarDestinoInstagram(tabId,url){
+  const destino=destinoInstagramSnapgrab(url);if(!destino)return;
+  const {destinosInstagram={}}=await chrome.storage.session.get('destinosInstagram');destinosInstagram[tabId]=destino;
+  const claves=Object.keys(destinosInstagram);for(const k of claves.slice(0,Math.max(0,claves.length-64)))delete destinosInstagram[k];
+  await chrome.storage.session.set({destinosInstagram});
+}
 async function leerInstagramEnPestana(codigo){
   if(!/^[A-Za-z0-9_-]+$/.test(codigo))throw new Error('Publicación no válida');
   const post=()=>{

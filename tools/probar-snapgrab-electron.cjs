@@ -147,11 +147,13 @@ app.whenReady().then(async()=>{
    }}),
    obtenerSesion:()=>({fetch:async u=>fetch(u.endsWith('.png')?fotoUrl:url)})
   });
-  await abrirSnapGrab({dir:raiz,url:'https://www.instagram.com/p/DQJ9PrwAcXi/',instagramVista:vistaIg});
+  await abrirSnapGrab({dir:raiz,url:'https://www.instagram.com/p/DQJ9PrwAcXi/?img_index=1',instagramVista:vistaIg});
   w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);e=await estadoListo();assert(e.error);assert(e.instagramDisponible);
-  await esperar(200);assert(await js("!document.querySelector('#instagram').hidden"));await capturar('instagram-acceso.png');
-  await js("window.snapgrab.accion({tipo:'instagram-abrir'})");await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(e.error.includes('extensi\u00f3n'));
-  assert.equal(aperturasChrome,1);assert.equal(BrowserWindow.getAllWindows().length,1);chromeConectado=true;sesionIg=true;await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(!e.error,e.error);assert(e.instagramConectado);assert(e.info.video&&e.info.fotos);
+  await esperar(200);assert(await js("!document.querySelector('#instagram').hidden"));assert(e.errorMotor);assert.equal(e.instagramEstado.paso,'conexion');await capturar('instagram-acceso.png');
+  await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(e.error.includes('extensi\u00f3n'));
+  chromeConectado=true;sesionIg=true;await js("window.snapgrab.accion({tipo:'instagram-abrir'})");e=await estadoListo();
+  assert.equal(aperturasChrome,1);assert.equal(BrowserWindow.getAllWindows().length,1);assert(!e.error,e.error);assert(e.instagramConectado);assert(e.info.video&&e.info.fotos);assert.equal(e.errorMotor,'');
+  await js("window.snapgrab.accion({tipo:'analizar'})");e=await estadoListo();assert(!e.error,e.error);assert(e.instagramConectado);
   await esperar(200);await capturar('instagram-leido.png');
   for(const modo of ['fotos','video','audio']){
    await js(`window.snapgrab.accion({tipo:'descargar',modo:'${modo}'})`);e=await estadoListo();assert(!e.error,e.error);assert.equal(e.archivos.length,1);assert(fs.statSync(e.archivos[0]).size>100);assert.equal(path.extname(e.archivos[0]),modo==='audio'?'.mp3':modo==='video'?'.mp4':'.png');

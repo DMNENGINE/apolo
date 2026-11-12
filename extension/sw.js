@@ -116,6 +116,7 @@ async function teclaReal(tabId, key, code, vk, extra = {}) {
 
 const OPS = {
   async instagram({pestana,codigo}){
+    await esperarCarga(pestana,15000);
     const t=await chrome.tabs.get(pestana),u=new URL(t.url||'');
     if(u.protocol!=='https:'||!['www.instagram.com','instagram.com'].includes(u.hostname))throw new Error('La pestaña no es de Instagram');
     return enPagina(pestana,leerInstagramEnPestana,[codigo]);
@@ -123,7 +124,10 @@ const OPS = {
   async pestanas() {
     const [act] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     const g = await grupoDelAgente();
-    return (await chrome.tabs.query({})).map(t => ({ id: t.id, titulo: t.title || '', url: t.url || t.pendingUrl || '', activa: !!act && t.id === act.id, delAgente: g != null && t.groupId === g }));
+    const tabs=await chrome.tabs.query({});
+    for(const t of tabs)await registrarDestinoInstagram(t.id,t.url||t.pendingUrl||'');
+    const {destinosInstagram={}}=await chrome.storage.session.get('destinosInstagram');
+    return tabs.map(t => ({ id: t.id, titulo: t.title || '', url: t.url || t.pendingUrl || '', activa: !!act && t.id === act.id, delAgente: g != null && t.groupId === g, destinoInstagram:destinosInstagram[t.id]||null }));
   },
   async abrir({ url, pestana }) {
     let t;
@@ -423,6 +427,8 @@ chrome.tabs.onRemoved.addListener(async tabId => {
 });
 
 // ---------- eventos ----------
+chrome.tabs.onCreated.addListener(t=>registrarDestinoInstagram(t.id,t.pendingUrl||t.url||'').catch(()=>{}));
+chrome.tabs.onUpdated.addListener((id,info,t)=>{if(info.url)registrarDestinoInstagram(id,info.url).catch(()=>{});});
 chrome.runtime.onMessage.addListener((msg, _s, responder) => {
   if (msg && msg.tipo === 'detener') leerCfg().then(c => api(c, 'detener', { method: 'POST', body: '{}' })).catch(() => { });
   if (msg && msg.tipo === 'reconectar') { ultimoEstado = ''; bucle(); responder({ ok: true }); }

@@ -32,15 +32,30 @@ async function leerLimitado(res,maximo){
   try{while(true){const {done,value}=await lector.read();if(done)break;n+=value.length;if(n>maximo)throw new Error('El archivo supera el tamaño permitido');trozos.push(Buffer.from(value));}}finally{await lector.cancel().catch(()=>{});}
   return Buffer.concat(trozos);
 }
-function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura}={}){
+function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura,leerPerfil,vincularPerfil}={}){
+  leerPerfil ||= ()=>require('./abrir-chrome').leerPerfilChrome();
+  vincularPerfil ||= id=>require('./abrir-chrome').vincularPerfilChrome(id);
   abrirExterno ||= url=>require('./abrir-chrome').abrirChrome(url);
   obtenerSesion ||= ()=>({fetch:(url,opciones)=>require('electron').net.fetch(url,{...opciones,credentials:'omit'})});
   miniatura ||= b=>{const n=require('electron').nativeImage.createFromBuffer(b);if(n.isEmpty())return '';const t=n.getSize(),escala=Math.min(1,200/t.width,140/t.height);return 'data:image/jpeg;base64,'+n.resize({width:Math.max(1,Math.round(t.width*escala)),height:Math.max(1,Math.round(t.height*escala))}).toJPEG(60).toString('base64');};
   const puente=()=>typeof navegador==='function'?navegador():navegador;
   const esChrome=n=>!n.estado?.().navegador||/chrome/i.test(n.estado().navegador);
   let marcaDestino=null;
+  const vinculado=n=>!!n?.estado?.().instancia&&n.estado().instancia===leerPerfil()?.instancia;
+  function estadoConexion(){
+    const n=puente();
+    if(!n?.conectado?.())return {paso:'conexion',mensaje:'La extensión de APOLO no está conectada. Conéctala en el Chrome de la cuenta elegida.'};
+    if(!esChrome(n))return {paso:'navegador',mensaje:'La conexión activa pertenece a otro navegador. Conecta APOLO desde tu Chrome.'};
+    const version=n.estado?.().version;
+    if(version&&/^0\.[0-3]\.|^0\.4\.[01]$/.test(version))return {paso:'version',mensaje:'La extensión está desactualizada. Recárgala en chrome://extensions para cargar la versión 0.4.2.'};
+    if(!marcaDestino&&!vinculado(n))return {paso:'perfil',mensaje:'Pulsa el botón de tu cuenta Chrome para abrir y leer esta publicación con ese perfil.'};
+    return {paso:'listo',mensaje:'Chrome conectado. Se intentará leer con la cuenta del perfil elegido.'};
+  }
   async function pestana(n,p){
-    const tabs=await n.orden('pestanas');const candidatas=tabs.filter(t=>publicacionInstagram(t.url)?.codigo===p.codigo&&(!marcaDestino||new URL(t.url).hash==='#apolo-snapgrab='+marcaDestino));
+    const tabs=await n.orden('pestanas');
+    const marcadas=tabs.filter(t=>publicacionInstagram(t.url)?.codigo===p.codigo&&marcaDestino&&(new URL(t.url).hash==='#apolo-snapgrab='+marcaDestino||t.destinoInstagram?.codigo===p.codigo&&t.destinoInstagram?.marca===marcaDestino));
+    if(marcadas.length&&n.estado?.().instancia){try{vincularPerfil(n.estado().instancia);}catch{ /* La lectura marcada sigue siendo válida aunque no se guarde el vínculo. */ }}
+    const candidatas=marcadas.length?marcadas:vinculado(n)?tabs.filter(t=>publicacionInstagram(t.url)?.codigo===p.codigo):[];
     const activas=candidatas.filter(t=>t.activa);
     if(activas.length===1)return activas[0];
     if(candidatas.length===1)return candidatas[0];
@@ -52,13 +67,16 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
     const marca=require('node:crypto').randomUUID();
     const r=await abrirExterno(p.url+'#apolo-snapgrab='+marca);marcaDestino=marca;return r;
   }
-  function leer(url){
+  function leer(url,{esperar=false}={}){
     const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),45000);
     const promesa=(async()=>{
       const p=publicacionInstagram(url);if(!p)throw new Error('Esta función necesita un post o reel de Instagram');
+      if(esperar){const limite=Date.now()+10000;while(Date.now()<limite&&!abort.signal.aborted){const n=puente();if(n?.conectado?.()&&esChrome(n)){const t=await pestana(n,p);if(t)break;}await new Promise(r=>setTimeout(r,500));}}
+      if(abort.signal.aborted)throw new Error('Lectura cancelada');
       const n=puente();
+      if(estadoConexion().paso==='version')throw new Error(estadoConexion().mensaje);
       if(!n?.conectado?.()||!esChrome(n))throw new Error('Abre Instagram en Chrome con tu cuenta y conecta la extensión de APOLO en ese Chrome para Leer publicación');
-      if(!marcaDestino)throw new Error('Pulsa Abrir en Chrome para seleccionar la pestaña del perfil elegido antes de leer');
+      if(!marcaDestino&&!vinculado(n))throw new Error('Pulsa Abrir en Chrome para seleccionar la pestaña del perfil elegido antes de leer');
       const t=await pestana(n,p);if(!t)throw new Error('La extensión debe estar conectada en el perfil elegido. Pulsa Abrir en Chrome y vuelve a Leer publicación');
       let datos;
       try{datos=await n.orden('instagram',{pestana:t.id,codigo:p.codigo},30000);}catch(e){
@@ -107,6 +125,6 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
     })().finally(()=>clearTimeout(timer));
     return {promesa,cancelar(){abort.abort();conversion?.cancelar();}};
   }
-  return {abrir,leer,descargar,cerrar(){marcaDestino=null; /* Chrome pertenece al usuario. */ }};
+  return {abrir,leer,descargar,estado:estadoConexion,preparado:()=>estadoConexion().paso==='listo',cerrar(){marcaDestino=null; /* Chrome pertenece al usuario. */ }};
 }
 module.exports={crearInstagram,publicacionInstagram,idMedia,mediosDePublicacion};

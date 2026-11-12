@@ -26,8 +26,9 @@ function pintarGaleria(g){
 function pintar(e){
   ocupado=!!e.ocupado;
   $('#instagram').hidden=!e.instagramDisponible;$('#instagram-abrir').disabled=ocupado;$('#instagram-leer').disabled=ocupado;
-  $('#instagram-abrir').textContent=e.chromeCuenta?'Chrome · '+e.chromeCuenta:'Abrir en Chrome';
-  $('#instagram-estado').textContent=e.instagramConectado?'Publicación leída desde tu Chrome.':'';
+  $('#instagram-abrir').textContent=e.chromeCuenta?'Abrir y leer · '+e.chromeCuenta:'Abrir y leer en Chrome';
+  $('#instagram-estado').textContent=e.instagramConectado?'Publicación leída desde tu Chrome.':e.instagramEstado?.mensaje||'';
+  $('#detalle-motor').hidden=!e.errorMotor;$('#error-motor').textContent=e.errorMotor||'';
   $('#analizar-enlace').disabled=ocupado;
   if(enlaceActual!==e.url){enlaceActual=e.url;if(document.activeElement!==$('#enlace'))$('#enlace').value=e.url||'';$('#recorte').hidden=true;foto=null;zona=null;inicio=null;}
   const spotify=e.info?.plataforma==='spotify';

@@ -68,3 +68,19 @@ test('la extensión devuelve solo medios y detecta una navegación durante la le
  const r=await leer('Ab');assert(!JSON.stringify(r).includes('NO_EXPORTAR'));assert.equal(opciones.credentials,'include');assert(!('Cookie' in opciones.headers));assert.equal(r.items[0].carousel_media.length,2);
  location.pathname='/p/Otro/';await assert.rejects(leer('Ab'),/ya no muestra/);
 });
+test('la marca recordada en Chrome sobrevive a que Instagram quite el fragmento',async()=>{
+ let enlace,perfil={instancia:''};const n={conectado:()=>true,estado:()=>({navegador:'Google Chrome',version:'0.4.2',instancia:'perfil-correcto-123'}),orden:async op=>op==='pestanas'?[{id:9,url:'https://www.instagram.com/p/Ab/?img_index=1',destinoInstagram:{codigo:'Ab',marca:new URL(enlace).hash.split('=')[1]}}]:ejemplo};
+ const ig=crearInstagram({navegador:n,abrirExterno:async u=>{enlace=u},leerPerfil:()=>perfil,vincularPerfil:id=>{perfil={instancia:id}},obtenerSesion:()=>({fetch:async()=>new Response('foto')}),miniatura:()=>''});
+ await ig.abrir('https://www.instagram.com/p/Ab/?img_index=1');assert.equal((await ig.leer('https://www.instagram.com/p/Ab/').promesa).medios.length,2);assert.equal(perfil.instancia,'perfil-correcto-123');
+ ig.cerrar();assert(ig.preparado());n.orden=async op=>op==='pestanas'?[{id:9,url:'https://www.instagram.com/p/Ab/?img_index=1',activa:true}]:ejemplo;assert((await ig.leer('https://www.instagram.com/p/Ab/').promesa).info.fotos);
+});
+test('muestra el bloqueo real de conexión y versión sin confundirlo con un post eliminado',async()=>{
+ const n={conectado:()=>false,estado:()=>({navegador:'Google Chrome',version:'0.4.0'})};const ig=crearInstagram({navegador:n,leerPerfil:()=>null});assert.equal(ig.estado().paso,'conexion');
+ n.conectado=()=>true;assert.equal(ig.estado().paso,'version');await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Recárgala/);
+});
+test('la extensión guarda solo la marca de destino, sin cookies ni datos de cuenta',async()=>{
+ const vm=require('node:vm');let datos={};const contexto=vm.createContext({URL,chrome:{storage:{session:{get:async()=>datos,set:async v=>{datos={...datos,...v}}}}}});
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'../../extension/instagram.js'),'utf8'),contexto);
+ await vm.runInContext("registrarDestinoInstagram(17,'https://www.instagram.com/p/Ab/?img_index=1#apolo-snapgrab=12345678-aaaa')",contexto);
+ assert.equal(datos.destinosInstagram[17].codigo,'Ab');assert.equal(datos.destinosInstagram[17].marca,'12345678-aaaa');assert.deepEqual(Object.keys(datos.destinosInstagram[17]).sort(),['codigo','marca']);
+});
