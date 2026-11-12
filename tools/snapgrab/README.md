@@ -112,3 +112,8 @@ Validación: 576 pruebas generales aprobadas. Se comprueban la persistencia de l
 Se elimina el bloqueo basado ?nicamente en la versi?n anunciada por la extensi?n. Se intenta la orden de Instagram en la pesta?a y el perfil verificados; solo si la conexi?n rechaza esa funci?n se informa de su ausencia, sin afirmar que la extensi?n est? desactualizada. Un reintento permite recuperar la lectura sin conservar un bloqueo previo.
 
 Validaci?n: 578 pruebas aprobadas. El ensayo Electron con puente simulado anuncia 0.4.0 y permite leer y guardar los medios de prueba. Captura revisada: `repair-backups/instagram-version/instagram-chrome.png`. No se verific? la publicaci?n real con la cuenta del usuario.
+## Varios perfiles conectados (2026-11-12)
+
+El puente conserva al primer navegador para las órdenes generales, pero permite órdenes dirigidas a cada instancia autenticada. SnapGrab comprueba la pestaña marcada o recién abierta en los perfiles Chrome conectados y envía la lectura a esa misma conexión; los identificadores de pestaña no se comparan entre perfiles. No se cambian permisos ni se exportan sesiones. Los resultados dirigidos deben proceder de la instancia destinataria.
+
+Validación: pruebas con dos perfiles, identificadores de pestaña repetidos, dueño en otro navegador, rechazo de resultados de otra instancia y caducidad de órdenes. El ensayo Electron utiliza conexiones simuladas y medios locales; no verifica la publicación real del usuario.

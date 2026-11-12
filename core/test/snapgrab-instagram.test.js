@@ -67,6 +67,15 @@ test('reconoce la pestaña nueva aunque Instagram quite la marca, sin reutilizar
  tabs.push({id:2,url:'https://www.instagram.com/p/Ab/'});instancia='otro-chrome';await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/perfil elegido/);
 });
 
+test('encuentra el post en el segundo Chrome aunque otro navegador controle el puente',async()=>{
+ let abierta=false,lecturas=0;
+ const incorrecto={conectado:()=>true,estado:()=>({instancia:'otro',navegador:'Chrome'}),orden:async op=>{assert.equal(op,'pestanas');return [{id:42,url:'https://www.instagram.com/p/Ab/',activa:true}];}};
+ const correcto={conectado:()=>true,estado:()=>({instancia:'elegido',navegador:'Chrome'}),orden:async op=>{if(op==='pestanas')return abierta?[{id:42,url:'https://www.instagram.com/p/Ab/',activa:true}]:[];lecturas++;return ejemplo;}};
+ const base={conectado:()=>true,estado:()=>({instancia:'edge',navegador:'Edge'}),conexiones:()=>[incorrecto.estado(),correcto.estado()],paraInstancia:id=>id==='otro'?incorrecto:correcto};
+ const ig=crearInstagram({navegador:base,leerPerfil:()=>null,abrirExterno:async()=>{abierta=true;},obtenerSesion:()=>({fetch:async()=>new Response('foto')}),miniatura:()=>''});
+ await ig.abrir('https://www.instagram.com/p/Ab/');assert((await ig.leer('https://www.instagram.com/p/Ab/').promesa).info.fotos);assert.equal(lecturas,1);
+});
+
 test('no usa una cuenta de otro navegador ni selecciona una pestaña duplicada al azar',async()=>{
  let enlace;const n={conectado:()=>true,estado:()=>({navegador:'Microsoft Edge'}),orden:()=>assert.fail('No debe leer Edge')};const ig=crearInstagram({navegador:n,abrirExterno:async u=>{enlace=u}});await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Chrome/);
  await ig.abrir('https://www.instagram.com/p/Ab/');n.estado=()=>({navegador:'Google Chrome'});n.orden=async()=>[{id:1,url:enlace},{id:2,url:enlace}];await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/varias pestañas/);

@@ -30,30 +30,60 @@ function crearNavegador({ cfg, bus, permisos, cancelarTurno }) {
   function entregar() {
     if (!esperando || !cola.length) return;
     const res = esperando; esperando = null; clearTimeout(res._t);
+    const perfil=perfiles.get(dueno);if(perfil?.res===res)perfil.res=null;
     const lote = cola.splice(0, cola.length);
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ordenes: lote }));
   }
 
   // ---------- lado de la extensión ----------
-  // un solo navegador a la vez: el primero que conecta es el "dueño" hasta que deja de preguntar; los demás esperan sin órdenes
+  // El primer navegador conserva las órdenes generales; cada perfil admite órdenes dirigidas.
   let dueno = null;
+  // Los otros perfiles conservan su canal para órdenes explícitamente dirigidas.
+  const perfiles = new Map(), dirigidas = new Map();
+  function entregarPerfil(c) {
+    if(!c.res || !c.cola.length)return;
+    const res=c.res;c.res=null;clearTimeout(res._t);
+    if(esperando===res)esperando=null;
+    res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({ocupado:c.info.instancia!==dueno,ordenes:c.cola.splice(0)}));
+  }
+  function paraInstancia(id){
+    const c=perfiles.get(id);if(!c)return null;
+    return {conectado:()=>Date.now()-c.visto<VIVO_MS,estado:()=>({...c.info}),orden:(op,args={},ms=30000)=>{
+      if(Date.now()-c.visto>=VIVO_MS)return Promise.reject(new Error('El perfil de Chrome se desconectó'));
+      const pedido=`perfil${Date.now().toString(36)}${++n}`;
+      return new Promise((ok,mal)=>{
+        const t=setTimeout(()=>{dirigidas.delete(pedido);c.cola=c.cola.filter(o=>o.id!==pedido);mal(new Error('El perfil no respondió a '+op));},ms);
+        dirigidas.set(pedido,{ok,mal,t,instancia:id});c.cola.push({id:pedido,op,args});entregarPerfil(c);
+      });
+    }};
+  }
   function esperar(req, res, datos = {}) {
     const inst = String(datos.instancia || datos.navegador || '?');
+    let c=perfiles.get(inst);if(!c){c={cola:[]};perfiles.set(inst,c);}
+    c.info={...datos};c.visto=Date.now();
     if (dueno && inst !== dueno && conectado()) {
-      const t = setTimeout(() => { try { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ordenes":[],"ocupado":true}'); } catch { } }, ESPERA_MS);
-      t.unref?.(); res.on('close', () => clearTimeout(t));
+      if(c.res){clearTimeout(c.res._t);c.res.end('{"ordenes":[],"ocupado":true}');}
+      c.res=res;
+      res._t=setTimeout(()=>{if(c.res===res){c.res=null;res.writeHead(200,{'content-type':'application/json'});res.end('{"ordenes":[],"ocupado":true}');}},ESPERA_MS);
+      res._t.unref?.();res.on('close',()=>{clearTimeout(res._t);if(c.res===res)c.res=null;});
+      entregarPerfil(c);
       return;
     }
+    if(c.res){clearTimeout(c.res._t);if(esperando===c.res)esperando=null;c.res.end('{"ordenes":[],"ocupado":true}');c.res=null;}
     dueno = inst;
     visto = Date.now(); info = { ...info, ...datos };
     if (esperando) { clearTimeout(esperando._t); try { esperando.writeHead(200, { 'content-type': 'application/json' }); esperando.end('{"ordenes":[]}'); } catch { } }
     esperando = res;
-    res._t = setTimeout(() => { if (esperando === res) { esperando = null; res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ordenes":[]}'); } visto = Date.now(); }, ESPERA_MS);
+    c.res=res;
+    res._t = setTimeout(() => { if (esperando === res) { esperando = null;c.res=null; res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ordenes":[]}'); } visto = Date.now(); }, ESPERA_MS);
     res._t.unref?.();
-    res.on('close', () => { if (esperando === res) { clearTimeout(res._t); esperando = null; } });
+    res.on('close', () => { if(c.res===res)c.res=null;if (esperando === res) { clearTimeout(res._t); esperando = null; } });
+    entregarPerfil(c);
     entregar();
   }
-  function resultado(id, r) {
+  function resultado(id, r, instancia) {
+    const d=dirigidas.get(id);
+    if(d){if(instancia!==d.instancia)return false;dirigidas.delete(id);clearTimeout(d.t);r?.ok?d.ok(r.datos):d.mal(new Error(r?.error||'El perfil no pudo ejecutar la orden'));return true;}
     visto = Date.now();
     const p = enVuelo.get(id); if (!p) return false;
     enVuelo.delete(id); clearTimeout(p.t);
@@ -235,7 +265,8 @@ function crearNavegador({ cfg, bus, permisos, cancelarTurno }) {
   };
 
   return {
-    esperar, resultado, detener,
+    esperar, resultado, detener, paraInstancia,
+    conexiones:()=>[info,...[...perfiles.values()].filter(c=>Date.now()-c.visto<VIVO_MS&&c.info.instancia!==dueno).map(c=>c.info)].filter(c=>c.instancia),
     estado: () => ({ conectado: conectado(), ...info, pendientes: enVuelo.size }),
     accion: (s, op, a) => acciones[op](s, a || {}),
     accionConEstado: async (s, op, a) => {

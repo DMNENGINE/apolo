@@ -331,7 +331,7 @@ function iniciar(opciones = {}) {
       if (p[1] === 'navegador') {                                   // extensión del navegador (long-poll)
         if (!p[2] && M === 'GET') return json(res, 200, n.navegador.estado());
         if (p[2] === 'esperar' && M === 'GET') return n.navegador.esperar(req, res, { instancia: String(req.headers['x-instancia'] || '').slice(0, 40), navegador: String(req.headers['x-navegador'] || '').slice(0, 60), version: String(req.headers['x-version'] || '').slice(0, 20) });
-        if (p[2] === 'resultado' && p[3] && M === 'POST') { let b; try { b = await leer(req, 12e6); } catch (e) { return json(res, 400, { error: e.message }); } return json(res, 200, { ok: n.navegador.resultado(p[3], b) }); }
+        if (p[2] === 'resultado' && p[3] && M === 'POST') { let b; try { b = await leer(req, 12e6); } catch (e) { return json(res, 400, { error: e.message }); } return json(res, 200, { ok: n.navegador.resultado(p[3], b, String(req.headers['x-instancia'] || '').slice(0,40)) }); }
         if (p[2] === 'detener' && M === 'POST') return json(res, 200, { ok: n.navegador.detener() });
         if (p[2] === 'reunion' && M === 'POST') { let b; try { b = await leer(req, 2e6); } catch (e) { return json(res, 400, { error: e.message }); } try { return json(res, 200, n.reuniones ? await n.reuniones.desdeExtension(b) : { ok: false }); } catch (e) { return json(res, e.status || 500, { error: e.message }); } }   // subtítulos de reuniones (core/reuniones.js)
         if (p[2] === 'nombre' && M === 'GET') return json(res, 200, { nombre: n.personalidad.nombre() });

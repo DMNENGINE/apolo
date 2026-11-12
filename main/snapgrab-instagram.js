@@ -38,9 +38,17 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
   abrirExterno ||= url=>require('./abrir-chrome').abrirChrome(url);
   obtenerSesion ||= ()=>({fetch:(url,opciones)=>require('electron').net.fetch(url,{...opciones,credentials:'omit'})});
   miniatura ||= b=>{const n=require('electron').nativeImage.createFromBuffer(b);if(n.isEmpty())return '';const t=n.getSize(),escala=Math.min(1,200/t.width,140/t.height);return 'data:image/jpeg;base64,'+n.resize({width:Math.max(1,Math.round(t.width*escala)),height:Math.max(1,Math.round(t.height*escala))}).toJPEG(60).toString('base64');};
-  const puente=()=>typeof navegador==='function'?navegador():navegador;
+  const principal=()=>typeof navegador==='function'?navegador():navegador;
+  let elegida=null;
+  const puente=()=>{
+    if(elegida?.conectado?.())return elegida;
+    const base=principal();
+    if(base?.conexiones){const chrome=base.conexiones().find(c=>/chrome/i.test(c.navegador));if(chrome)return base.paraInstancia(chrome.instancia);}
+    return base;
+  };
   const esChrome=n=>!n.estado?.().navegador||/chrome/i.test(n.estado().navegador);
   let marcaDestino=null, apertura=null;
+  const aperturas=new Map();
   const vinculado=n=>!!n?.estado?.().instancia&&n.estado().instancia===leerPerfil()?.instancia;
   function estadoConexion(){
     const n=puente();
@@ -49,14 +57,15 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
     if(!marcaDestino&&!vinculado(n))return {paso:'perfil',mensaje:'Pulsa el botón de tu cuenta Chrome para abrir y leer esta publicación con ese perfil.'};
     return {paso:'listo',mensaje:'Chrome conectado. Se intentará leer con la cuenta del perfil elegido.'};
   }
-  async function pestana(n,p){
+  async function buscarPestana(n,p){
     const tabs=await n.orden('pestanas');
     const marcadas=tabs.filter(t=>publicacionInstagram(t.url)?.codigo===p.codigo&&marcaDestino&&(new URL(t.url).hash==='#apolo-snapgrab='+marcaDestino||t.destinoInstagram?.codigo===p.codigo&&t.destinoInstagram?.marca===marcaDestino));
     if(marcadas.length&&n.estado?.().instancia){try{vincularPerfil(n.estado().instancia);}catch{ /* La lectura marcada sigue siendo válida aunque no se guarde el vínculo. */ }}
     // Una pestaña nueva tras nuestra apertura también identifica el destino si Instagram quitó la marca.
-    const nuevas=apertura&&apertura.codigo===p.codigo&&(apertura.confirmada!=null||Date.now()-apertura.fecha<45000)&&apertura.instancia===n.estado?.().instancia
-      ?tabs.filter(t=>(apertura.confirmada!=null?t.id===apertura.confirmada:!apertura.ids.has(t.id))&&publicacionInstagram(t.url)?.codigo===p.codigo):[];
-    if(nuevas.length===1)apertura.confirmada=nuevas[0].id;
+    const registro=aperturas.get(n.estado?.().instancia)||apertura;
+    const nuevas=registro&&registro.codigo===p.codigo&&(registro.confirmada!=null||Date.now()-registro.fecha<45000)&&registro.instancia===n.estado?.().instancia
+      ?tabs.filter(t=>(registro.confirmada!=null?t.id===registro.confirmada:!registro.ids.has(t.id))&&publicacionInstagram(t.url)?.codigo===p.codigo):[];
+    if(nuevas.length===1)registro.confirmada=nuevas[0].id;
     const candidatas=marcadas.length?marcadas:vinculado(n)?tabs.filter(t=>publicacionInstagram(t.url)?.codigo===p.codigo):nuevas;
     const activas=candidatas.filter(t=>t.activa);
     if(activas.length===1)return activas[0];
@@ -64,13 +73,25 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
     if(candidatas.length>1)throw new Error('Hay varias pestañas con esa publicación; activa la que quieres usar en Chrome');
     return null;
   }
+  function conexiones(){
+    const base=principal();
+    if(!base?.conexiones)return [puente()].filter(Boolean);
+    return base.conexiones().map(c=>base.paraInstancia(c.instancia)).filter(n=>n?.conectado()&&esChrome(n));
+  }
+  async function pestana(n,p){
+    const lista=conexiones();
+    const resultados=await Promise.all(lista.map(async c=>{try{const t=await buscarPestana(c,p);return t?{...t,conexion:c}:null;}catch(e){if(lista.length===1)throw e;return null;}}));
+    const encontradas=resultados.filter(Boolean);
+    if(encontradas.length>1)throw new Error('Hay varias conexiones con esa publicación; cierra la pestaña duplicada y vuelve a abrir desde APOLO');
+    if(encontradas.length){elegida=encontradas[0].conexion;return encontradas[0];}
+    return null;
+  }
   async function abrir(url){
     const p=publicacionInstagram(url);if(!p)throw new Error('Abre un post o reel de Instagram para conectar esta función');
-    apertura=null;
-    const n=puente();
-    if(n?.conectado?.()&&esChrome(n)){
-      try{const tabs=await n.orden('pestanas');apertura={codigo:p.codigo,fecha:Date.now(),instancia:n.estado?.().instancia,ids:new Set(tabs.map(t=>t.id))};}catch{ /* La marca sigue siendo la comprobación principal. */ }
-    }
+    apertura=null;aperturas.clear();elegida=null;
+    await Promise.all(conexiones().map(async n=>{
+      if(n?.conectado?.()&&esChrome(n))try{const tabs=await n.orden('pestanas');const r={codigo:p.codigo,fecha:Date.now(),instancia:n.estado?.().instancia,ids:new Set(tabs.map(t=>t.id))};aperturas.set(r.instancia,r);apertura=r;}catch{ /* La marca sigue siendo la comprobación principal. */ }
+    }));
     const marca=require('node:crypto').randomUUID();
     const r=await abrirExterno(p.url+'#apolo-snapgrab='+marca);marcaDestino=marca;return r;
   }
@@ -85,7 +106,7 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
       if(!marcaDestino&&!vinculado(n))throw new Error('Pulsa Abrir en Chrome para seleccionar la pestaña del perfil elegido antes de leer');
       const t=await pestana(n,p);if(!t)throw new Error('Chrome abrió la publicación, pero la conexión activa no permite identificar esa pestaña en el perfil elegido. Puede pertenecer a otro perfil o haberse perdido la marca de apertura; abrir el enlace no confirma la conexión de la extensión.');
       let datos;
-      try{datos=await n.orden('instagram',{pestana:t.id,codigo:p.codigo},30000);}catch(e){
+      try{datos=await (t.conexion||n).orden('instagram',{pestana:t.id,codigo:p.codigo},30000);}catch(e){
         if(/OPS\[o\.op\].*not a function|OPERACION_NO_SOPORTADA.*instagram|operación.*desconocida/i.test(e.message)){
           const version=n.estado?.().version;
           throw new Error('La conexión activa de APOLO no ofrece la función de lectura de Instagram. Comprueba que corresponda al Chrome del perfil elegido.'+(version?' Versión anunciada por esa conexión: '+version+'.':''));
@@ -134,6 +155,6 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
     })().finally(()=>clearTimeout(timer));
     return {promesa,cancelar(){abort.abort();conversion?.cancelar();}};
   }
-  return {abrir,leer,descargar,estado:estadoConexion,preparado:()=>estadoConexion().paso==='listo',cerrar(){marcaDestino=null;apertura=null; /* Chrome pertenece al usuario. */ }};
+  return {abrir,leer,descargar,estado:estadoConexion,preparado:()=>estadoConexion().paso==='listo',cerrar(){marcaDestino=null;apertura=null;aperturas.clear();elegida=null; /* Chrome pertenece al usuario. */ }};
 }
 module.exports={crearInstagram,publicacionInstagram,idMedia,mediosDePublicacion};

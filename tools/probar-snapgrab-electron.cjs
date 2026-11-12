@@ -135,16 +135,19 @@ app.whenReady().then(async()=>{
   console.log('OK: enlace pegado desde el menú con Enter y cambio de enlace dentro de SnapGrab');
   w.close();
   let sesionIg=false,chromeConectado=false,aperturasChrome=0,enlaceChrome='';
-  const vistaIg=require('../main/snapgrab-instagram').crearInstagram({
-   abrirExterno:async u=>{aperturasChrome++;enlaceChrome=u.split('#')[0];return {ok:true};},
-   navegador:()=>({conectado:()=>chromeConectado,estado:()=>({navegador:'Google Chrome',version:'0.4.0'}),orden:async(op)=>{
+  const chromeIg={conectado:()=>chromeConectado,estado:()=>({instancia:'chrome-cuenta',navegador:'Google Chrome',version:'0.4.0'}),orden:async(op)=>{
     if(op==='pestanas')return enlaceChrome?[{id:42,url:enlaceChrome,activa:true}]:[];
     if(op==='instagram'){
      if(!sesionIg)throw new Error('Inicia sesion en Instagram en Chrome');
      return {items:[{caption:{text:'Post de prueba desde Chrome'},carousel_media:[{media_type:1,image_versions2:{candidates:[{url:'https://scontent.cdninstagram.com/foto.png',width:320,height:180}]}},{media_type:2,video_versions:[{url:'https://scontent.cdninstagram.com/video.mp4',width:320,height:180}]}]}]};
     }
     return {ok:true};
-   }}),
+   }};
+  const otroChrome={conectado:()=>chromeConectado,estado:()=>({instancia:'chrome-otro',navegador:'Chrome'}),orden:async op=>{assert.equal(op,'pestanas');return [{id:42,url:'https://www.instagram.com/p/DQJ9PrwAcXi/',activa:true}];}};
+  const vistaIg=require('../main/snapgrab-instagram').crearInstagram({
+   abrirExterno:async u=>{aperturasChrome++;enlaceChrome=u.split('#')[0];return {ok:true};},
+   leerPerfil:()=>null,
+   navegador:()=>({conectado:()=>chromeConectado,estado:()=>({navegador:'Edge'}),conexiones:()=>chromeConectado?[otroChrome.estado(),chromeIg.estado()]:[],paraInstancia:id=>id==='chrome-cuenta'?chromeIg:otroChrome}),
    obtenerSesion:()=>({fetch:async u=>fetch(u.endsWith('.png')?fotoUrl:url)})
   });
   await abrirSnapGrab({dir:raiz,url:'https://www.instagram.com/p/DQJ9PrwAcXi/?img_index=1',instagramVista:vistaIg});
