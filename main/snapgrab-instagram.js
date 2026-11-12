@@ -38,8 +38,9 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
   miniatura ||= b=>{const n=require('electron').nativeImage.createFromBuffer(b);if(n.isEmpty())return '';const t=n.getSize(),escala=Math.min(1,200/t.width,140/t.height);return 'data:image/jpeg;base64,'+n.resize({width:Math.max(1,Math.round(t.width*escala)),height:Math.max(1,Math.round(t.height*escala))}).toJPEG(60).toString('base64');};
   const puente=()=>typeof navegador==='function'?navegador():navegador;
   const esChrome=n=>!n.estado?.().navegador||/chrome/i.test(n.estado().navegador);
+  let marcaDestino=null;
   async function pestana(n,p){
-    const tabs=await n.orden('pestanas');const candidatas=tabs.filter(t=>publicacionInstagram(t.url)?.codigo===p.codigo);
+    const tabs=await n.orden('pestanas');const candidatas=tabs.filter(t=>publicacionInstagram(t.url)?.codigo===p.codigo&&(!marcaDestino||new URL(t.url).hash==='#apolo-snapgrab='+marcaDestino));
     const activas=candidatas.filter(t=>t.activa);
     if(activas.length===1)return activas[0];
     if(candidatas.length===1)return candidatas[0];
@@ -48,11 +49,8 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
   }
   async function abrir(url){
     const p=publicacionInstagram(url);if(!p)throw new Error('Abre un post o reel de Instagram para conectar esta función');
-    const n=puente();
-    if(n?.conectado?.()&&esChrome(n)){
-      const t=await pestana(n,p);await n.orden('abrir',{url:p.url,pestana:t?.id??null});return {ok:true};
-    }
-    return abrirExterno(p.url);
+    const marca=require('node:crypto').randomUUID();
+    const r=await abrirExterno(p.url+'#apolo-snapgrab='+marca);marcaDestino=marca;return r;
   }
   function leer(url){
     const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),45000);
@@ -60,7 +58,8 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
       const p=publicacionInstagram(url);if(!p)throw new Error('Esta función necesita un post o reel de Instagram');
       const n=puente();
       if(!n?.conectado?.()||!esChrome(n))throw new Error('Abre Instagram en Chrome con tu cuenta y conecta la extensión de APOLO en ese Chrome para Leer publicación');
-      const t=await pestana(n,p);if(!t)throw new Error('Abre esta publicación en el Chrome conectado a APOLO, después de iniciar sesión');
+      if(!marcaDestino)throw new Error('Pulsa Abrir en Chrome para seleccionar la pestaña del perfil elegido antes de leer');
+      const t=await pestana(n,p);if(!t)throw new Error('La extensión debe estar conectada en el perfil elegido. Pulsa Abrir en Chrome y vuelve a Leer publicación');
       let datos;
       try{datos=await n.orden('instagram',{pestana:t.id,codigo:p.codigo},30000);}catch(e){
         if(/OPS|not a function|desconocida/i.test(e.message))throw new Error('Recarga la extensión de APOLO en chrome://extensions y vuelve a Leer publicación');
@@ -108,6 +107,6 @@ function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura
     })().finally(()=>clearTimeout(timer));
     return {promesa,cancelar(){abort.abort();conversion?.cancelar();}};
   }
-  return {abrir,leer,descargar,cerrar(){ /* Chrome pertenece al usuario: no se cierra desde SnapGrab. */ }};
+  return {abrir,leer,descargar,cerrar(){marcaDestino=null; /* Chrome pertenece al usuario. */ }};
 }
 module.exports={crearInstagram,publicacionInstagram,idMedia,mediosDePublicacion};

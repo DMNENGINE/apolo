@@ -3,6 +3,7 @@ const {BrowserWindow,ipcMain,shell,app,nativeImage}=require('electron');
 const fs=require('node:fs'),path=require('node:path');
 const {paginaObjetivo,iniciarTrabajo,seleccionarFotos,urlPublicacion}=require('./snapgrab-motor');
 const {crearInstagram,publicacionInstagram}=require('./snapgrab-instagram');
+const {leerPerfilChrome}=require('./abrir-chrome');
 let navegadorInstagram=null;
 let ventana=null,estado=null,trabajo=null,registrado=false,captura=null,galeriaPrivada=null,lecturaInstagram=null,instagram=crearInstagram({navegador:()=>navegadorInstagram});
 function publicar(){if(ventana&&!ventana.isDestroyed())ventana.webContents.send('snapgrab-estado',estado);}
@@ -49,7 +50,7 @@ async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url,instagram
   captura=imagen?nativeImage.createFromBuffer(Buffer.from(imagen,'base64')):null;
   if(captura?.isEmpty())captura=null;
   galeriaPrivada=null;lecturaInstagram=null;
-  estado={...meta,instagramDisponible:!!publicacionInstagram(pagina.url),hwnd:contexto.hwnd,tieneCaptura:!!captura,carpeta,ocupado:false,info:null,galeria:null,archivos:[],mensaje:pagina.url?'Preparando SnapGrab…':'Selecciona la foto que quieres guardar de esta ventana.',error:'',progreso:null};
+  estado={...meta,chromeCuenta:leerPerfilChrome()?.cuenta||'',instagramDisponible:!!publicacionInstagram(pagina.url),hwnd:contexto.hwnd,tieneCaptura:!!captura,carpeta,ocupado:false,info:null,galeria:null,archivos:[],mensaje:pagina.url?'Preparando SnapGrab…':'Selecciona la foto que quieres guardar de esta ventana.',error:'',progreso:null};
   if(!registrado){
     registrado=true;require('./ipc-seguro').permitir(path.join(dir,'app','snapgrab.html'),'snapgrab-');
     ipcMain.handle('snapgrab-accion',async(e,a)=>{
@@ -65,7 +66,7 @@ async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url,instagram
         if(trabajo)throw new Error('Termina o cancela la operación actual antes de analizar otro enlace');
         if(navegador?.protegido?.(enlace,''))throw new Error('Esta página está protegida y no se enviará al descargador');
         captura=null;galeriaPrivada=null;lecturaInstagram=null;instagram.cerrar();
-        estado={url:enlace,paginaUrl:enlace,instagramDisponible:!!publicacionInstagram(enlace),titulo:'Enlace pegado',carpeta:estado.carpeta,tieneCaptura:false,info:null,galeria:null,archivos:[],ocupado:false,error:'',mensaje:'Preparando enlace…',progreso:null};publicar();
+        estado={url:enlace,paginaUrl:enlace,chromeCuenta:leerPerfilChrome()?.cuenta||'',instagramDisponible:!!publicacionInstagram(enlace),titulo:'Enlace pegado',carpeta:estado.carpeta,tieneCaptura:false,info:null,galeria:null,archivos:[],ocupado:false,error:'',mensaje:'Preparando enlace…',progreso:null};publicar();
         return operacion(dir,'analizar');
       }
       if(a?.tipo==='galeria'){if(lecturaInstagram)return operacion(dir,'instagram');return operacion(dir,'galeria',null,{seleccionada:estado.imagenUrl});}

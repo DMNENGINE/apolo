@@ -26,6 +26,7 @@ function pintarGaleria(g){
 function pintar(e){
   ocupado=!!e.ocupado;
   $('#instagram').hidden=!e.instagramDisponible;$('#instagram-abrir').disabled=ocupado;$('#instagram-leer').disabled=ocupado;
+  $('#instagram-abrir').textContent=e.chromeCuenta?'Chrome · '+e.chromeCuenta:'Abrir en Chrome';
   $('#instagram-estado').textContent=e.instagramConectado?'Publicación leída desde tu Chrome.':'';
   $('#analizar-enlace').disabled=ocupado;
   if(enlaceActual!==e.url){enlaceActual=e.url;if(document.activeElement!==$('#enlace'))$('#enlace').value=e.url||'';$('#recorte').hidden=true;foto=null;zona=null;inicio=null;}

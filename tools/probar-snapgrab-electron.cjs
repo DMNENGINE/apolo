@@ -134,11 +134,11 @@ app.whenReady().then(async()=>{
   await capturar('snapgrab-enlace.png');
   console.log('OK: enlace pegado desde el menú con Enter y cambio de enlace dentro de SnapGrab');
   w.close();
-  let sesionIg=false,chromeConectado=false,aperturasChrome=0;
+  let sesionIg=false,chromeConectado=false,aperturasChrome=0,enlaceChrome='';
   const vistaIg=require('../main/snapgrab-instagram').crearInstagram({
-   abrirExterno:async()=>{aperturasChrome++;return {ok:true};},
+   abrirExterno:async u=>{aperturasChrome++;enlaceChrome=u;return {ok:true};},
    navegador:()=>({conectado:()=>chromeConectado,estado:()=>({navegador:'Google Chrome'}),orden:async(op)=>{
-    if(op==='pestanas')return [{id:42,url:'https://www.instagram.com/p/DQJ9PrwAcXi/',activa:true}];
+    if(op==='pestanas')return [{id:42,url:enlaceChrome,activa:true}];
     if(op==='instagram'){
      if(!sesionIg)throw new Error('Inicia sesion en Instagram en Chrome');
      return {items:[{caption:{text:'Post de prueba desde Chrome'},carousel_media:[{media_type:1,image_versions2:{candidates:[{url:'https://scontent.cdninstagram.com/foto.png',width:320,height:180}]}},{media_type:2,video_versions:[{url:'https://scontent.cdninstagram.com/video.mp4',width:320,height:180}]}]}]};

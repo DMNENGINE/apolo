@@ -7,7 +7,7 @@ function montar(fetch){let url='';const pedidos=[];
   if(op==='abrir'){url=args.url;return {ok:true};}
   if(op==='instagram'){const r=await fetch('https://www.instagram.com/info/',{credentials:'include',headers:{}});if(!r.ok)throw new Error('Inicia sesion en Chrome');return r.json();}
  }};
- return {pedidos,n,ig:crearInstagram({navegador:n,obtenerSesion:()=>({fetch}),miniatura:()=>''})};}
+ return {pedidos,n,ig:crearInstagram({abrirExterno:async u=>{url=u;return {ok:true}},navegador:n,obtenerSesion:()=>({fetch}),miniatura:()=>''})};}
 
 test('identifica el post exacto y rechaza enlaces ajenos',()=>{
  assert.equal(publicacionInstagram('https://www.instagram.com/reel/DQJ9PrwAcXi/?igsh=publico').codigo,'DQJ9PrwAcXi');assert.equal(idMedia('BA'),'64');
@@ -22,9 +22,9 @@ test('lee la publicación desde Chrome sin exportar cookies',async()=>{
  assert.equal(peticiones[0].o.credentials,'include');assert(!('Cookie' in peticiones[0].o.headers));
 });
 test('no confunde una sesión pendiente o un acceso bloqueado con un post borrado',async()=>{
- const {ig}=montar(async()=>new Response('',{status:401}));await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Abre esta publicación/);
+ const {ig}=montar(async()=>new Response('',{status:401}));await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Abrir en Chrome/);
  await ig.abrir('https://www.instagram.com/p/Ab/');await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Inicia sesion/);
- await assert.rejects(ig.leer('https://www.instagram.com/p/Otro/').promesa,/esta publicación/);
+ await assert.rejects(ig.leer('https://www.instagram.com/p/Otro/').promesa,/perfil elegido/);
 });
 test('guarda solo los medios seleccionados y detecta una respuesta HTML de bloqueo',async t=>{
  const carpeta=fs.mkdtempSync(path.join(os.tmpdir(),'ig-snapgrab-'));t.after(()=>fs.rmSync(carpeta,{recursive:true,force:true}));
@@ -40,17 +40,27 @@ test('cancelar interrumpe la petición de Instagram y no deja un archivo parcial
 });
 test('abrir fuera de Electron no exige conexión y cerrar SnapGrab no cierra Chrome',async()=>{
  const enlaces=[];let cerradas=0;const ig=crearInstagram({abrirExterno:async url=>{enlaces.push(url);return {ok:true,close:()=>cerradas++}}});
- await ig.abrir('https://www.instagram.com/reel/Ab/');ig.cerrar();ig.cerrar();assert.deepEqual(enlaces,['https://www.instagram.com/p/Ab/']);assert.equal(cerradas,0);
+ await ig.abrir('https://www.instagram.com/reel/Ab/');ig.cerrar();ig.cerrar();assert.equal(new URL(enlaces[0]).pathname,'/p/Ab/');assert(new URL(enlaces[0]).hash.startsWith('#apolo-snapgrab='));assert.equal(cerradas,0);
  await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/extensión/);
 });
 test('abre Chrome sin cambiar el perfil ni usar una consola',async()=>{
  const {abrirChrome}=require('../../main/abrir-chrome'),{EventEmitter}=require('node:events');let pedido;
- await abrirChrome('https://www.instagram.com/p/Ab/',{entorno:{PROGRAMFILES:'C:/Navegadores'},existe:()=>true,lanzar:(exe,args,opciones)=>{pedido={exe,args,opciones};const p=new EventEmitter();p.unref=()=>{};queueMicrotask(()=>p.emit('spawn'));return p;}});
+ await abrirChrome('https://www.instagram.com/p/Ab/',{perfil:null,entorno:{PROGRAMFILES:'C:/Navegadores'},existe:()=>true,lanzar:(exe,args,opciones)=>{pedido={exe,args,opciones};const p=new EventEmitter();p.unref=()=>{};queueMicrotask(()=>p.emit('spawn'));return p;}});
  assert.deepEqual(pedido.args,['https://www.instagram.com/p/Ab/']);assert.equal(pedido.opciones.shell,undefined);assert(pedido.opciones.windowsHide);
 });
+test('fija el perfil elegido con profile-directory sin crear otro perfil',async()=>{
+ const {abrirChrome}=require('../../main/abrir-chrome'),{EventEmitter}=require('node:events');let args;
+ await abrirChrome('https://www.instagram.com/p/Ab/',{perfil:'Profile 2',entorno:{PROGRAMFILES:'C:/Navegadores'},existe:()=>true,lanzar:(_exe,a)=>{args=a;const p=new EventEmitter();p.unref=()=>{};queueMicrotask(()=>p.emit('spawn'));return p;}});
+ assert.deepEqual(args,['--profile-directory=Profile 2','https://www.instagram.com/p/Ab/']);assert(!args.some(a=>a.startsWith('--user-data-dir')));
+ assert.throws(()=>abrirChrome('https://www.instagram.com/',{perfil:'../../otro'}),/Perfil/);
+});
+test('no lee el mismo post abierto en otra cuenta sin la marca de la apertura elegida',async()=>{
+ let enlace;const n={conectado:()=>true,estado:()=>({navegador:'Google Chrome'}),orden:async()=>[{id:3,url:'https://www.instagram.com/p/Ab/',activa:true}]};
+ const ig=crearInstagram({navegador:n,abrirExterno:async u=>{enlace=u;return {ok:true};}});await ig.abrir('https://www.instagram.com/p/Ab/');await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/perfil elegido/);assert(new URL(enlace).hash);
+});
 test('no usa una cuenta de otro navegador ni selecciona una pestaña duplicada al azar',async()=>{
- const n={conectado:()=>true,estado:()=>({navegador:'Microsoft Edge'}),orden:()=>assert.fail('No debe leer Edge')};const ig=crearInstagram({navegador:n});await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Chrome/);
- n.estado=()=>({navegador:'Google Chrome'});n.orden=async()=>[{id:1,url:'https://www.instagram.com/p/Ab/'},{id:2,url:'https://www.instagram.com/p/Ab/'}];await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/varias pestañas/);
+ let enlace;const n={conectado:()=>true,estado:()=>({navegador:'Microsoft Edge'}),orden:()=>assert.fail('No debe leer Edge')};const ig=crearInstagram({navegador:n,abrirExterno:async u=>{enlace=u}});await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/Chrome/);
+ await ig.abrir('https://www.instagram.com/p/Ab/');n.estado=()=>({navegador:'Google Chrome'});n.orden=async()=>[{id:1,url:enlace},{id:2,url:enlace}];await assert.rejects(ig.leer('https://www.instagram.com/p/Ab/').promesa,/varias pestañas/);
 });
 test('la extensión devuelve solo medios y detecta una navegación durante la lectura',async()=>{
  const vm=require('node:vm');const location={hostname:'www.instagram.com',pathname:'/p/Ab/',origin:'https://www.instagram.com'};let opciones;

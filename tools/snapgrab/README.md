@@ -88,3 +88,11 @@ La extensión pasa a 0.4.1 e incorpora `extension/instagram.js`. Hay que recarga
 Se valida el identificador de la publicación antes y después de consultarla, se rechazan pestañas de otros navegadores y no se escoge al azar entre cuentas con el mismo post. Las peticiones del lector son del mismo origen que la pestaña: [peticiones de red en extensiones Chrome](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests).
 
 Validación: 571 pruebas generales aprobadas. Se verificó el lanzamiento externo sin modificar el perfil, lectura por el puente, ausencia de exportación de cookies, pestaña exacta, navegador incorrecto, datos filtrados y continuidad de fotos/vídeo/MP3 con medios de prueba. El ensayo no inició sesión ni leyó la cuenta real del usuario. Captura revisada: `repair-backups/instagram-chrome/instagram-chrome.png`.
+
+## Perfil concreto de Chrome
+
+`tools/snapgrab/chrome-perfil.json` contiene la preferencia local no secreta `{ "perfil": "Profile 2", "cuenta": "alias" }`. Se excluye de Git para no distribuir la cuenta de este equipo. El lanzador añade únicamente `--profile-directory=...` y deja intactos los datos y las cookies del perfil; no crea otro `user-data-dir`. El botón muestra el alias elegido.
+
+Abrir Instagram siempre pasa por ese lanzador y nunca por otra extensión conectada que pudiera pertenecer a un perfil distinto. La pestaña abierta lleva una marca temporal en el fragmento de la URL; Leer publicación exige esa marca además del identificador del post. Una pestaña con el mismo post en otra cuenta no se considera equivalente. La extensión debe estar conectada en el perfil elegido; si la navegación elimina la marca, hay que volver a pulsar Abrir en Chrome. La marca no es una credencial y no se envía como parte de la petición HTTP a Instagram.
+
+Validación: 573 pruebas generales aprobadas. Las pruebas verifican el argumento `--profile-directory`, el rechazo de rutas de perfil inválidas y el rechazo de una pestaña equivalente sin la marca elegida. El ensayo de interfaz mantiene lectura, galería y descargas con recursos de prueba y muestra el alias del perfil. Captura revisada: `repair-backups/chrome-perfil/instagram-chrome.png`.
