@@ -134,9 +134,9 @@ app.whenReady().then(async()=>{
   await capturar('snapgrab-enlace.png');
   console.log('OK: enlace pegado desde el menú con Enter y cambio de enlace dentro de SnapGrab');
   w.close();
-  let sesionIg=false,chromeConectado=false,aperturasChrome=0,enlaceChrome='';
+  let sesionIg=false,chromeConectado=true,aperturasChrome=0,enlaceChrome='';
   const chromeIg={conectado:()=>chromeConectado,estado:()=>({instancia:'chrome-cuenta',navegador:'Google Chrome',version:'0.4.0'}),orden:async(op)=>{
-    if(op==='pestanas')return enlaceChrome?[{id:42,url:enlaceChrome,activa:true}]:[];
+    if(op==='pestanas')return enlaceChrome?[{id:42+aperturasChrome,url:enlaceChrome,activa:true}]:[];
     if(op==='instagram'){
      if(!sesionIg)throw new Error('Inicia sesion en Instagram en Chrome');
      return {items:[{caption:{text:'Post de prueba desde Chrome'},carousel_media:[{media_type:1,image_versions2:{candidates:[{url:'https://scontent.cdninstagram.com/foto.png',width:320,height:180}]}},{media_type:2,video_versions:[{url:'https://scontent.cdninstagram.com/video.mp4',width:320,height:180}]}]}]};
@@ -152,16 +152,20 @@ app.whenReady().then(async()=>{
   });
   await abrirSnapGrab({dir:raiz,url:'https://www.instagram.com/p/DQJ9PrwAcXi/?img_index=1',instagramVista:vistaIg});
   w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);e=await estadoListo();assert(e.error);assert(e.instagramDisponible);
-  await esperar(200);assert(await js("!document.querySelector('#instagram').hidden"));assert(e.errorMotor);assert.equal(e.instagramEstado.paso,'conexion');await capturar('instagram-acceso.png');
-  await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(e.error.includes('extensi\u00f3n'));
-  chromeConectado=true;sesionIg=true;await js("window.snapgrab.accion({tipo:'instagram-abrir'})");e=await estadoListo();
-  assert.equal(aperturasChrome,1);assert.equal(BrowserWindow.getAllWindows().length,1);assert(!e.error,e.error);assert(e.instagramConectado);assert(e.info.video&&e.info.fotos);assert.equal(e.errorMotor,'');
+  await esperar(200);assert(await js("!document.querySelector('#instagram').hidden"));assert.equal(e.errorMotor,'');assert(e.error.includes('Inicia sesion'));assert.equal(aperturasChrome,1);await capturar('instagram-acceso.png');
+  sesionIg=true;await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(!e.error,e.error);assert.equal(aperturasChrome,1);
+  await js("window.snapgrab.accion({tipo:'instagram-abrir'})");e=await estadoListo();
+  assert.equal(aperturasChrome,2);assert.equal(BrowserWindow.getAllWindows().length,1);assert(!e.error,e.error);assert(e.instagramConectado);assert(e.info.video&&e.info.fotos);assert.equal(e.errorMotor,'');
   await js("window.snapgrab.accion({tipo:'analizar'})");e=await estadoListo();assert(!e.error,e.error);assert(e.instagramConectado);
   await esperar(200);await capturar('instagram-leido.png');
   for(const modo of ['fotos','video','audio']){
    await js(`window.snapgrab.accion({tipo:'descargar',modo:'${modo}'})`);e=await estadoListo();assert(!e.error,e.error);assert.equal(e.archivos.length,1);assert(fs.statSync(e.archivos[0]).size>100);assert.equal(path.extname(e.archivos[0]),modo==='audio'?'.mp3':modo==='video'?'.mp4':'.png');
   }
   console.log('OK: acceso Instagram sin sesión, lectura con sesión simulada y descargas reales de foto, vídeo y audio de prueba');
+  await js("window.snapgrab.accion({tipo:'enlace',url:'https://www.instagram.com/p/DMDf2ESCloH/'})");e=await estadoListo();
+  assert.equal(aperturasChrome,3);assert(!e.error,e.error);assert.equal(e.errorMotor,'');assert(e.instagramConectado);assert.equal(e.info.titulo,'Post de prueba desde Chrome');
+  await esperar(200);await capturar('instagram-enlace.png');
+  console.log('OK: Instagram abre y lee desde Chrome al analizar por primera vez y al pegar otra publicación');
   vistaIg.cerrar();assert.equal(BrowserWindow.getAllWindows().length,1);await capturar('instagram-chrome.png');
   console.log('OK: abrir fuera de Electron, leer mediante Chrome y cerrar SnapGrab sin cerrar Chrome');
  } finally {p.kill();}

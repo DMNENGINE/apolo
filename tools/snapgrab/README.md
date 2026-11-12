@@ -117,3 +117,8 @@ Validaci?n: 578 pruebas aprobadas. El ensayo Electron con puente simulado anunci
 El puente conserva al primer navegador para las órdenes generales, pero permite órdenes dirigidas a cada instancia autenticada. SnapGrab comprueba la pestaña marcada o recién abierta en los perfiles Chrome conectados y envía la lectura a esa misma conexión; los identificadores de pestaña no se comparan entre perfiles. No se cambian permisos ni se exportan sesiones. Los resultados dirigidos deben proceder de la instancia destinataria.
 
 Validación: pruebas con dos perfiles, identificadores de pestaña repetidos, dueño en otro navegador, rechazo de resultados de otra instancia y caducidad de órdenes. El ensayo Electron utiliza conexiones simuladas y medios locales; no verifica la publicación real del usuario.
+## Instagram desde el primer análisis (2026-11-12)
+
+Analizar un enlace de Instagram usa el lector de Chrome. Si aún no hay un destino preparado, abre el perfil elegido e intenta leerlo; ya no comienza por el motor externo sin sesión. Pegar otra publicación sigue el mismo flujo. La apertura queda incluida en la operación ocupada y cancelable para impedir acciones simultáneas durante el lanzamiento. Los errores mostrados corresponden a ese intento en Chrome.
+
+Validación: 581 pruebas del núcleo y ensayo Electron con conexiones simuladas, primer análisis, reintento tras acceso, botón explícito, otra publicación y descargas locales. La publicación real autenticada permanece sin verificar.
