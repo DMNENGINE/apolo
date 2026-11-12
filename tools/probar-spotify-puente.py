@@ -15,6 +15,8 @@ import puente
 
 pedido = json.loads(sys.stdin.readline())
 try:
+    if urllib.parse.urlsplit(pedido.get('url', '')).hostname in ('www.instagram.com', 'instagram.com') and pedido.get('accion') in ('analizar', 'descargar'):
+        raise RuntimeError('Instagram no entrega datos sin sesión. Usa Abrir Instagram y Leer publicación.')
     if urllib.parse.urlsplit(pedido.get('url', '')).hostname == 'open.spotify.com':
         import spotify
         import yt_dlp

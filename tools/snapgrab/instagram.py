@@ -265,12 +265,8 @@ def analizar(url: str) -> dict:
 
     raise RuntimeError(
         f"No pude leer el post «{code}» de Instagram.\n\n"
-        "Motivos habituales:\n"
-        "  · el link no existe (revisa que lo copiaste completo)\n"
-        "  · la cuenta es privada y no la sigues → pulsa «Login IG»\n"
-        "  · la cuenta fue eliminada o desactivada\n"
-        "  · tu sesión caducó → pulsa «Login IG»\n"
-        "  · límite temporal de Instagram → espera unos minutos\n\n"
+        "Instagram no entregó sus datos al motor externo. Puede requerir sesión o limitar las solicitudes.\n\n"
+        "Si puedes verlo con tu cuenta, pulsa «Abrir Instagram» en APOLO, inicia sesión allí y vuelve a pulsar «Leer publicación».\n\n"
         f"Detalle técnico: {' | '.join(errores)}"
     )
 

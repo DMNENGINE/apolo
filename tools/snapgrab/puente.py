@@ -15,6 +15,25 @@ def emitir(datos):
 
 
 def ejecutar(pedido):
+    if pedido.get('accion') == 'convertir-audio':
+        import grab
+        carpeta = Path(pedido['carpeta']).resolve()
+        archivos = pedido.get('archivos') or []
+        if not grab.FFMPEG or not archivos:
+            raise ValueError('Se necesita ffmpeg y un vídeo descargado para extraer el audio')
+        guardados = []
+        for archivo in archivos[:20]:
+            p = Path(archivo).resolve()
+            if not p.is_relative_to(carpeta) or not p.is_file() or p.suffix.lower() not in ('.mp4', '.webm', '.mkv'):
+                raise ValueError('El vídeo no pertenece a esta descarga')
+            audio = p.with_suffix('.mp3')
+            r = subprocess.run([grab.FFMPEG, '-hide_banner', '-loglevel', 'error', '-y', '-i', str(p), '-vn', '-codec:a', 'libmp3lame', '-q:a', '2', str(audio)], capture_output=True, timeout=180)
+            if r.returncode or not audio.is_file() or not audio.stat().st_size:
+                raise ValueError('No se pudo convertir el vídeo de Instagram a MP3')
+            guardados.append(str(audio))
+            p.unlink()
+        emitir({'evento': 'resultado', 'archivos': guardados})
+        return
     if pedido.get('accion') in ('galeria', 'guardar-fotos'):
         from galeria import analizar, guardar
         if pedido['accion'] == 'galeria':

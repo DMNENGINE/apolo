@@ -25,6 +25,8 @@ function pintarGaleria(g){
 }
 function pintar(e){
   ocupado=!!e.ocupado;
+  $('#instagram').hidden=!e.instagramDisponible;$('#instagram-abrir').disabled=ocupado;$('#instagram-leer').disabled=ocupado;
+  $('#instagram-estado').textContent=e.instagramConectado?'Publicación leída con la sesión de APOLO.':'';
   $('#analizar-enlace').disabled=ocupado;
   if(enlaceActual!==e.url){enlaceActual=e.url;if(document.activeElement!==$('#enlace'))$('#enlace').value=e.url||'';$('#recorte').hidden=true;foto=null;zona=null;inicio=null;}
   const spotify=e.info?.plataforma==='spotify';
@@ -60,6 +62,8 @@ for(const tipo of ['cerrar','cancelar','carpeta'])$('#'+tipo).onclick=()=>ejecut
 $('#reintentar').onclick=()=>ejecutar({tipo:'analizar'});
 for(const b of document.querySelectorAll('[data-modo]'))b.onclick=()=>ejecutar({tipo:'descargar',modo:b.dataset.modo});
 $('#enlace-form').onsubmit=e=>{e.preventDefault();ejecutar({tipo:'enlace',url:$('#enlace').value.trim()});};
+$('#instagram-abrir').onclick=()=>ejecutar({tipo:'instagram-abrir'});
+$('#instagram-leer').onclick=()=>ejecutar({tipo:'instagram-leer'});
 $('#abrir-galeria').onclick=()=>ejecutar({tipo:'galeria'});
 $('#marcar-todas').onclick=()=>{marcadas=marcadas.size===galeria.fotos.length?new Set():new Set(galeria.fotos.map(f=>f.id));actualizarSeleccion();};
 $('#guardar-fotos').onclick=()=>ejecutar({tipo:'guardar-fotos',revision:galeria.revision,ids:[...marcadas]});

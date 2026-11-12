@@ -2,22 +2,28 @@
 const {BrowserWindow,ipcMain,shell,app,nativeImage}=require('electron');
 const fs=require('node:fs'),path=require('node:path');
 const {paginaObjetivo,iniciarTrabajo,seleccionarFotos,urlPublicacion}=require('./snapgrab-motor');
-let ventana=null,estado=null,trabajo=null,registrado=false,captura=null,galeriaPrivada=null;
+const {crearInstagram,publicacionInstagram}=require('./snapgrab-instagram');
+let ventana=null,estado=null,trabajo=null,registrado=false,captura=null,galeriaPrivada=null,lecturaInstagram=null,instagram=crearInstagram();
 function publicar(){if(ventana&&!ventana.isDestroyed())ventana.webContents.send('snapgrab-estado',estado);}
 async function operacion(dir,accion,modo,extra={}){
   if(trabajo)throw new Error('Espera a que termine la operación actual');
+  if(lecturaInstagram&&accion==='analizar')accion='instagram';
   const w=ventana;
   const carpeta=['descargar','guardar-fotos'].includes(accion)?fs.mkdtempSync(path.join(estado.carpeta,'descarga-')):estado.carpeta;
   const url=['galeria','guardar-fotos'].includes(accion)?(estado.paginaUrl||estado.url):estado.url;
-  const actual=iniciarTrabajo({dir,url,accion,modo,carpeta,...extra,evento:e=>{
+  const evento=e=>{
     if(ventana!==w)return;
     estado={...estado,progreso:e.porcentaje??null,mensaje:e.texto||'Descargando…'};publicar();
-  }});
-  const mensajes={analizar:'Analizando esta publicación…',galeria:'Buscando fotos de esta página…','guardar-fotos':'Guardando las fotos elegidas…'};
+  };
+  const actual=accion==='instagram'?instagram.leer(estado.url):lecturaInstagram&&['descargar','guardar-fotos'].includes(accion)?instagram.descargar({lectura:lecturaInstagram,carpeta,modo:accion==='guardar-fotos'?'fotos':modo,imagenes:extra.imagenes,evento,convertir:archivos=>iniciarTrabajo({dir,url,accion:'convertir-audio',carpeta,archivos,evento})}):iniciarTrabajo({dir,url,accion,modo,carpeta,...extra,evento});
+  const mensajes={analizar:'Analizando esta publicación…',instagram:'Leyendo Instagram con la sesión de APOLO…',galeria:'Buscando fotos de esta página…','guardar-fotos':'Guardando las fotos elegidas…'};
   trabajo=actual;estado={...estado,ocupado:true,progreso:null,error:'',mensaje:mensajes[accion]||'Descargando…'};publicar();
   try{
     const r=await actual.promesa;if(ventana!==w)return;
-    if(accion==='galeria'){
+    if(accion==='instagram'){
+      lecturaInstagram=r;const fotos=r.medios.filter(m=>m.tipo==='foto');galeriaPrivada={revision:require('node:crypto').randomUUID(),fotos};
+      estado={...estado,info:r.info,instagramConectado:true,galeria:{revision:galeriaPrivada.revision,fotos:fotos.map(m=>({id:m.id,titulo:m.titulo,miniatura:m.miniatura,senalada:false})),aviso:''},mensaje:'Publicación leída con tu sesión. Elige qué guardar.'};
+    }else if(accion==='galeria'){
       const fotos=(Array.isArray(r.fotos)?r.fotos:[]).slice(0,24).map((f,i)=>({...f,id:'foto-'+i,url:urlPublicacion(f.url)}));
       galeriaPrivada={revision:require('node:crypto').randomUUID(),fotos};
       estado={...estado,galeria:{revision:galeriaPrivada.revision,fotos:fotos.map(f=>({id:f.id,titulo:String(f.titulo||'Foto').slice(0,120),miniatura:/^data:image\/(jpeg|png|webp|gif|avif|bmp);base64,/.test(f.miniatura||'')?f.miniatura:'',senalada:f.url===estado.imagenUrl||f.url===estado.url&&!!estado.info?.fotos})),aviso:r.aviso||''},mensaje:fotos.length?'Marca las fotos que quieres guardar':'No se encontraron originales accesibles. Puedes guardar un recorte visible.'};
@@ -25,7 +31,7 @@ async function operacion(dir,accion,modo,extra={}){
   }catch(e){if(ventana===w)estado={...estado,error:e.message,mensaje:''};}
   finally{if(trabajo===actual)trabajo=null;if(ventana===w){estado={...estado,ocupado:false};publicar();}}
 }
-async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url}){
+async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url,instagramVista}){
   const manual=url!==undefined;
   const enlace=manual?urlPublicacion(url):null;
   if(manual&&navegador?.protegido?.(enlace,''))throw new Error('Esta página está protegida y no se enviará al descargador');
@@ -36,11 +42,12 @@ async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url}){
     ventana.close();
   }
   const carpeta=path.join(app.getPath('downloads'),'SnapGrab');fs.mkdirSync(carpeta,{recursive:true});
+  if(instagramVista)instagram=instagramVista;
   const {captura:imagen,...meta}=pagina;
   captura=imagen?nativeImage.createFromBuffer(Buffer.from(imagen,'base64')):null;
   if(captura?.isEmpty())captura=null;
-  galeriaPrivada=null;
-  estado={...meta,hwnd:contexto.hwnd,tieneCaptura:!!captura,carpeta,ocupado:false,info:null,galeria:null,archivos:[],mensaje:pagina.url?'Preparando SnapGrab…':'Selecciona la foto que quieres guardar de esta ventana.',error:'',progreso:null};
+  galeriaPrivada=null;lecturaInstagram=null;
+  estado={...meta,instagramDisponible:!!publicacionInstagram(pagina.url),hwnd:contexto.hwnd,tieneCaptura:!!captura,carpeta,ocupado:false,info:null,galeria:null,archivos:[],mensaje:pagina.url?'Preparando SnapGrab…':'Selecciona la foto que quieres guardar de esta ventana.',error:'',progreso:null};
   if(!registrado){
     registrado=true;require('./ipc-seguro').permitir(path.join(dir,'app','snapgrab.html'),'snapgrab-');
     ipcMain.handle('snapgrab-accion',async(e,a)=>{
@@ -49,15 +56,17 @@ async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url}){
       if(a?.tipo==='cerrar'){ventana.close();return;}
       if(a?.tipo==='cancelar'){trabajo?.cancelar();return;}
       if(a?.tipo==='carpeta')return shell.openPath(estado.carpeta);
+      if(a?.tipo==='instagram-abrir')return instagram.abrir(estado.url);
+      if(a?.tipo==='instagram-leer')return operacion(dir,'instagram');
       if(a?.tipo==='enlace'){
         const enlace=urlPublicacion(a.url);
         if(trabajo)throw new Error('Termina o cancela la operación actual antes de analizar otro enlace');
         if(navegador?.protegido?.(enlace,''))throw new Error('Esta página está protegida y no se enviará al descargador');
-        captura=null;galeriaPrivada=null;
-        estado={url:enlace,paginaUrl:enlace,titulo:'Enlace pegado',carpeta:estado.carpeta,tieneCaptura:false,info:null,galeria:null,archivos:[],ocupado:false,error:'',mensaje:'Preparando enlace…',progreso:null};publicar();
+        captura=null;galeriaPrivada=null;lecturaInstagram=null;instagram.cerrar();
+        estado={url:enlace,paginaUrl:enlace,instagramDisponible:!!publicacionInstagram(enlace),titulo:'Enlace pegado',carpeta:estado.carpeta,tieneCaptura:false,info:null,galeria:null,archivos:[],ocupado:false,error:'',mensaje:'Preparando enlace…',progreso:null};publicar();
         return operacion(dir,'analizar');
       }
-      if(a?.tipo==='galeria')return operacion(dir,'galeria',null,{seleccionada:estado.imagenUrl});
+      if(a?.tipo==='galeria'){if(lecturaInstagram)return operacion(dir,'instagram');return operacion(dir,'galeria',null,{seleccionada:estado.imagenUrl});}
       if(a?.tipo==='guardar-fotos')return operacion(dir,'guardar-fotos',null,{imagenes:seleccionarFotos(galeriaPrivada,a.revision,a.ids)});
       if(a?.tipo==='captura'){
         if(!captura)throw new Error('Windows no permitió capturar esta ventana');
@@ -81,7 +90,7 @@ async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url}){
   const w=ventana=new BrowserWindow({width:640,height:640,minWidth:520,minHeight:460,frame:false,transparent:true,show:false,resizable:true,title:'APOLO · SnapGrab',webPreferences:{preload:path.join(dir,'app','snapgrab-preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   w.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   w.webContents.on('will-navigate',e=>e.preventDefault());
-  w.on('closed',()=>{if(ventana===w){trabajo?.cancelar();trabajo=null;ventana=null;estado=null;captura=null;galeriaPrivada=null;}});
+  w.on('closed',()=>{if(ventana===w){trabajo?.cancelar();trabajo=null;ventana=null;estado=null;captura=null;galeriaPrivada=null;lecturaInstagram=null;instagram.cerrar();}});
   w.once('ready-to-show',()=>{if(ventana!==w||w.isDestroyed())return;w.show();if(!estado.url){publicar();return;}operacion(dir,'analizar').catch(e=>{if(ventana===w){estado={...estado,error:e.message,ocupado:false};publicar();}});});
   await w.loadFile(path.join(dir,'app','snapgrab.html'));return {ok:true};
 }

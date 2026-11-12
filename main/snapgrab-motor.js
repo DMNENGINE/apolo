@@ -39,9 +39,9 @@ async function paginaObjetivo(navegador, contexto, leerNativo) {
     throw e;
   }
 }
-function iniciarTrabajo({dir,url,accion,modo,carpeta,imagenes,seleccionada,evento=()=>{},lanzar=spawn,limiteMs}) {
+function iniciarTrabajo({dir,url,accion,modo,carpeta,imagenes,archivos,seleccionada,evento=()=>{},lanzar=spawn,limiteMs}) {
   url=urlPublicacion(url);
-  if(!['analizar','descargar','galeria','guardar-fotos'].includes(accion)||accion==='descargar'&&!MODOS.includes(modo))throw new Error('Operación de SnapGrab no válida');
+  if(!['analizar','descargar','galeria','guardar-fotos','convertir-audio'].includes(accion)||accion==='descargar'&&!MODOS.includes(modo))throw new Error('Operación de SnapGrab no válida');
   // Argumentos separados: ni URL ni nombres de archivo pasan por una consola.
   const hijo=lanzar('python',['-u',path.join(dir,'tools','snapgrab','puente.py')],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONIOENCODING:'utf-8',PYTHONDONTWRITEBYTECODE:'1'}});
   let cancelado=false,finalizado=false,buf='',resultado,error,temporizador;
@@ -66,7 +66,7 @@ function iniciarTrabajo({dir,url,accion,modo,carpeta,imagenes,seleccionada,event
       if(cancelado)return fin(new Error('Descarga cancelada'));
       if(error)return fin(error);
       if(codigo!==0||!resultado)return fin(new Error('SnapGrab no pudo completar la operación; comprueba Python y yt-dlp'));
-      if(['descargar','guardar-fotos'].includes(accion)){
+      if(['descargar','guardar-fotos','convertir-audio'].includes(accion)){
         const raiz=path.resolve(carpeta);
         if(!Array.isArray(resultado.archivos)||!resultado.archivos.length||resultado.archivos.some(f=>{
           if(typeof f!=='string')return true;const r=path.relative(raiz,path.resolve(f));return r.startsWith('..')||path.isAbsolute(r)||!fs.existsSync(f);
@@ -74,7 +74,7 @@ function iniciarTrabajo({dir,url,accion,modo,carpeta,imagenes,seleccionada,event
       }
       fin();
     });
-    hijo.stdin.end(JSON.stringify({url,accion,modo,carpeta,imagenes,seleccionada})+'\n');
+    hijo.stdin.end(JSON.stringify({url,accion,modo,carpeta,imagenes,archivos,seleccionada})+'\n');
   });
   function matar(){
     if(finalizado)return;
