@@ -93,8 +93,44 @@ function opencode({ comando = 'opencode', correr } = {}) {
   } };
 }
 
+// DeepSeek Harness: ~/.dsh/sessions/<carpeta>/<id>/session.v4.jsonl.zstd (eventos user/message con source.kind 'user' y
+// assistant/message con partes 'text'; 'reasoning' y 'tool-call' se ignoran). El archivo son MUCHOS frames zstd seguidos
+// (cada guardado añade uno) y zlib de Node solo lee el primero; Electron 33 ni trae zstd → se descomprime con Python
+// (`pip install zstandard`, read_across_frames). Las sesiones son enormes: se parten en trozos de ~35 000 caracteres
+// (clave archivo#n, siempre los mismos cortes) para que cada trozo se resuma entero y no se pierdan proyectos.
+function deepseek(home, { comando = 'python' } = {}) {
+  const raiz = path.join(home, '.dsh', 'sessions'), TROZO = 35_000, cache = new Map();
+  const descomprimir = f => new Promise((ok, mal) => execFile(comando, ['-c',
+    'import sys,zstandard;sys.stdout.buffer.write(zstandard.ZstdDecompressor().stream_reader(open(sys.argv[1],"rb"),read_across_frames=True).read())', f],
+  { windowsHide: true, timeout: 120_000, maxBuffer: 512 * 1024 * 1024, encoding: 'buffer' }, (e, out) => (e ? mal(e) : ok(out.toString('utf8')))));
+  const texto = c => (c || []).filter(p => p.type === 'text' && p.text).map(p => p.text).join('\n').trim();
+  async function trozos(s) {
+    const c = cache.get(s.clave); if (c && c.mtime === s.mtime) return c;
+    const msgs = []; let cwd = '';
+    for (const l of (await descomprimir(s.clave)).split('\n')) {
+      if (!l.startsWith('{"type":"user/message"') && !l.startsWith('{"type":"assistant/message"') && !l.startsWith('{"type":"session"')) continue;
+      let o; try { o = JSON.parse(l); } catch { continue; }
+      if (o.type === 'session') { cwd = o.cwd || cwd; continue; }
+      const d = o.data || {};
+      if (o.type === 'user/message' && d.source?.kind === 'user') { const t = texto(d.content); if (t && !esContexto(t)) msgs.push({ rol: 'USUARIO', texto: t, t: +o.time || 0 }); }
+      else if (o.type === 'assistant/message') { const t = texto(d.message?.content); if (t) msgs.push({ rol: 'ASISTENTE', texto: t, t: +o.time || 0 }); }
+    }
+    const partes = [[]]; let tam = 0;
+    for (const m of msgs) { const n = Math.min(m.texto.length, 1500); if (tam + n > TROZO && partes.at(-1).length) { partes.push([]); tam = 0; } partes.at(-1).push(m); tam += n; }
+    const r = { mtime: s.mtime, cwd, partes }; cache.set(s.clave, r); return r;
+  }
+  return { id: 'deepseek', nombre: 'DeepSeek Harness', sesiones: async ({ desde }) => {
+    const out = [];
+    for (const s of archivos(raiz, /^session\.v\d+\.jsonl\.zstd$/, desde, 3)) {
+      let r; try { r = await trozos(s); } catch { continue; }
+      r.partes.forEach((p, i) => out.push({ clave: `${s.clave}#${i}`, mtime: i < r.partes.length - 1 ? (p.at(-1)?.t || s.mtime) : s.mtime, leer: async () => ({ msgs: p, cwd: r.cwd }) }));
+    }
+    return out;
+  } };
+}
+
 function crearLectores({ home = os.homedir(), opencode: oc } = {}) {
-  return [codex(home), gemini(home), qwen(home), opencode(oc)];
+  return [codex(home), gemini(home), qwen(home), opencode(oc), deepseek(home)];
 }
 
 module.exports = { crearLectores, esContexto };
