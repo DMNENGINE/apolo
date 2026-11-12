@@ -3,7 +3,8 @@ const {BrowserWindow,ipcMain,shell,app,nativeImage}=require('electron');
 const fs=require('node:fs'),path=require('node:path');
 const {paginaObjetivo,iniciarTrabajo,seleccionarFotos,urlPublicacion}=require('./snapgrab-motor');
 const {crearInstagram,publicacionInstagram}=require('./snapgrab-instagram');
-let ventana=null,estado=null,trabajo=null,registrado=false,captura=null,galeriaPrivada=null,lecturaInstagram=null,instagram=crearInstagram();
+let navegadorInstagram=null;
+let ventana=null,estado=null,trabajo=null,registrado=false,captura=null,galeriaPrivada=null,lecturaInstagram=null,instagram=crearInstagram({navegador:()=>navegadorInstagram});
 function publicar(){if(ventana&&!ventana.isDestroyed())ventana.webContents.send('snapgrab-estado',estado);}
 async function operacion(dir,accion,modo,extra={}){
   if(trabajo)throw new Error('Espera a que termine la operación actual');
@@ -16,13 +17,13 @@ async function operacion(dir,accion,modo,extra={}){
     estado={...estado,progreso:e.porcentaje??null,mensaje:e.texto||'Descargando…'};publicar();
   };
   const actual=accion==='instagram'?instagram.leer(estado.url):lecturaInstagram&&['descargar','guardar-fotos'].includes(accion)?instagram.descargar({lectura:lecturaInstagram,carpeta,modo:accion==='guardar-fotos'?'fotos':modo,imagenes:extra.imagenes,evento,convertir:archivos=>iniciarTrabajo({dir,url,accion:'convertir-audio',carpeta,archivos,evento})}):iniciarTrabajo({dir,url,accion,modo,carpeta,...extra,evento});
-  const mensajes={analizar:'Analizando esta publicación…',instagram:'Leyendo Instagram con la sesión de APOLO…',galeria:'Buscando fotos de esta página…','guardar-fotos':'Guardando las fotos elegidas…'};
+  const mensajes={analizar:'Analizando esta publicación…',instagram:'Leyendo la publicación desde Chrome…',galeria:'Buscando fotos de esta página…','guardar-fotos':'Guardando las fotos elegidas…'};
   trabajo=actual;estado={...estado,ocupado:true,progreso:null,error:'',mensaje:mensajes[accion]||'Descargando…'};publicar();
   try{
     const r=await actual.promesa;if(ventana!==w)return;
     if(accion==='instagram'){
       lecturaInstagram=r;const fotos=r.medios.filter(m=>m.tipo==='foto');galeriaPrivada={revision:require('node:crypto').randomUUID(),fotos};
-      estado={...estado,info:r.info,instagramConectado:true,galeria:{revision:galeriaPrivada.revision,fotos:fotos.map(m=>({id:m.id,titulo:m.titulo,miniatura:m.miniatura,senalada:false})),aviso:''},mensaje:'Publicación leída con tu sesión. Elige qué guardar.'};
+      estado={...estado,info:r.info,instagramConectado:true,galeria:{revision:galeriaPrivada.revision,fotos:fotos.map(m=>({id:m.id,titulo:m.titulo,miniatura:m.miniatura,senalada:false})),aviso:''},mensaje:'Publicación leída desde tu Chrome. Elige qué guardar.'};
     }else if(accion==='galeria'){
       const fotos=(Array.isArray(r.fotos)?r.fotos:[]).slice(0,24).map((f,i)=>({...f,id:'foto-'+i,url:urlPublicacion(f.url)}));
       galeriaPrivada={revision:require('node:crypto').randomUUID(),fotos};
@@ -42,6 +43,7 @@ async function abrirSnapGrab({dir,navegador,contexto={},leerNativo,url,instagram
     ventana.close();
   }
   const carpeta=path.join(app.getPath('downloads'),'SnapGrab');fs.mkdirSync(carpeta,{recursive:true});
+  navegadorInstagram=navegador;
   if(instagramVista)instagram=instagramVista;
   const {captura:imagen,...meta}=pagina;
   captura=imagen?nativeImage.createFromBuffer(Buffer.from(imagen,'base64')):null;

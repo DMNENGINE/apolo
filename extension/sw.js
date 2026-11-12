@@ -1,6 +1,7 @@
 // Extensión del robot: conecta este navegador con el núcleo (http://127.0.0.1:47900) por long-poll.
 // El núcleo decide y pide los permisos (por sitio, acciones delicadas); aquí solo se ejecutan las órdenes.
 // Nunca se lee ni se escribe un campo de contraseña o de tarjeta.
+importScripts('instagram.js');
 const VERSION = chrome.runtime.getManifest().version;
 const NAV = (navigator.userAgentData?.brands || []).map(b => b.brand).find(b => !/not|chromium/i.test(b)) || 'Chrome';
 const dormir = ms => new Promise(r => setTimeout(r, ms));
@@ -114,6 +115,11 @@ async function teclaReal(tabId, key, code, vk, extra = {}) {
 }
 
 const OPS = {
+  async instagram({pestana,codigo}){
+    const t=await chrome.tabs.get(pestana),u=new URL(t.url||'');
+    if(u.protocol!=='https:'||!['www.instagram.com','instagram.com'].includes(u.hostname))throw new Error('La pestaña no es de Instagram');
+    return enPagina(pestana,leerInstagramEnPestana,[codigo]);
+  },
   async pestanas() {
     const [act] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     const g = await grupoDelAgente();

@@ -134,35 +134,31 @@ app.whenReady().then(async()=>{
   await capturar('snapgrab-enlace.png');
   console.log('OK: enlace pegado desde el menú con Enter y cambio de enlace dentro de SnapGrab');
   w.close();
-  let sesionIg=false,abiertaIg='';
+  let sesionIg=false,chromeConectado=false,aperturasChrome=0;
   const vistaIg=require('../main/snapgrab-instagram').crearInstagram({
-   crearVentana:()=>({isDestroyed:()=>false,loadURL:async u=>{abiertaIg=u},show(){},focus(){},close(){},once(){},webContents:{getURL:()=>abiertaIg,setWindowOpenHandler(){},on(){}}}),
-   obtenerSesion:()=>({fetch:async u=>{
-    if(u.includes('/api/v1/media/'))return sesionIg?Response.json({items:[{caption:{text:'Publicación de prueba con sesión'},carousel_media:[{media_type:1,image_versions2:{candidates:[{url:'https://scontent.cdninstagram.com/foto.png',width:320,height:180}]}},{media_type:2,video_versions:[{url:'https://scontent.cdninstagram.com/video.mp4',width:320,height:180}]}]}]}):new Response('',{status:401});
-    return fetch(u.endsWith('.png')?fotoUrl:url);
-   }})
+   abrirExterno:async()=>{aperturasChrome++;return {ok:true};},
+   navegador:()=>({conectado:()=>chromeConectado,estado:()=>({navegador:'Google Chrome'}),orden:async(op)=>{
+    if(op==='pestanas')return [{id:42,url:'https://www.instagram.com/p/DQJ9PrwAcXi/',activa:true}];
+    if(op==='instagram'){
+     if(!sesionIg)throw new Error('Inicia sesion en Instagram en Chrome');
+     return {items:[{caption:{text:'Post de prueba desde Chrome'},carousel_media:[{media_type:1,image_versions2:{candidates:[{url:'https://scontent.cdninstagram.com/foto.png',width:320,height:180}]}},{media_type:2,video_versions:[{url:'https://scontent.cdninstagram.com/video.mp4',width:320,height:180}]}]}]};
+    }
+    return {ok:true};
+   }}),
+   obtenerSesion:()=>({fetch:async u=>fetch(u.endsWith('.png')?fotoUrl:url)})
   });
   await abrirSnapGrab({dir:raiz,url:'https://www.instagram.com/p/DQJ9PrwAcXi/',instagramVista:vistaIg});
   w=BrowserWindow.getAllWindows()[0];w.webContents.setBackgroundThrottling(false);e=await estadoListo();assert(e.error);assert(e.instagramDisponible);
   await esperar(200);assert(await js("!document.querySelector('#instagram').hidden"));await capturar('instagram-acceso.png');
-  await js("window.snapgrab.accion({tipo:'instagram-abrir'})");await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(e.error.includes('Completa el inicio'));
-  sesionIg=true;await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(!e.error,e.error);assert(e.instagramConectado);assert(e.info.video&&e.info.fotos);
+  await js("window.snapgrab.accion({tipo:'instagram-abrir'})");await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(e.error.includes('extensi\u00f3n'));
+  assert.equal(aperturasChrome,1);assert.equal(BrowserWindow.getAllWindows().length,1);chromeConectado=true;sesionIg=true;await js("window.snapgrab.accion({tipo:'instagram-leer'})");e=await estadoListo();assert(!e.error,e.error);assert(e.instagramConectado);assert(e.info.video&&e.info.fotos);
   await esperar(200);await capturar('instagram-leido.png');
   for(const modo of ['fotos','video','audio']){
    await js(`window.snapgrab.accion({tipo:'descargar',modo:'${modo}'})`);e=await estadoListo();assert(!e.error,e.error);assert.equal(e.archivos.length,1);assert(fs.statSync(e.archivos[0]).size>100);assert.equal(path.extname(e.archivos[0]),modo==='audio'?'.mp3':modo==='video'?'.mp4':'.png');
   }
   console.log('OK: acceso Instagram sin sesión, lectura con sesión simulada y descargas reales de foto, vídeo y audio de prueba');
-  const ventanasCierre=[];
-  const controlCierre=require('../main/snapgrab-instagram').crearInstagram({crearVentana:opciones=>{
-   const real=new BrowserWindow({...opciones,show:false});const cargar=real.loadURL.bind(real);
-   real.loadURL=()=>cargar('data:text/html,<meta charset="utf-8"><p>Ventana de prueba de cierre</p>');ventanasCierre.push(real);return real;
-  }});
-  await controlCierre.abrir('https://www.instagram.com/p/Ab/');ventanasCierre[0].close();
-  for(let i=0;i<40&&!ventanasCierre[0].isDestroyed();i++)await esperar(50);
-  assert(ventanasCierre[0].isDestroyed());controlCierre.cerrar();controlCierre.cerrar();
-  await controlCierre.abrir('https://www.instagram.com/p/Ab/');assert.equal(ventanasCierre.length,2);controlCierre.cerrar();
-  await capturar('instagram-cierre-corregido.png');
-  console.log('OK: cerrar, limpiar y reabrir ventanas Electron reales sin Object has been destroyed');
+  vistaIg.cerrar();assert.equal(BrowserWindow.getAllWindows().length,1);await capturar('instagram-chrome.png');
+  console.log('OK: abrir fuera de Electron, leer mediante Chrome y cerrar SnapGrab sin cerrar Chrome');
  } finally {p.kill();}
  assert.equal(errores.length,0,errores.join('\n'));console.log('OK: ventana real, análisis, descarga MP4 y extracción MP3; capturas guardadas');clearTimeout(limite);app.exit(0);
 }).catch(e=>{console.error(e);clearTimeout(limite);app.exit(1);});

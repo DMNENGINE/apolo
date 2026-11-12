@@ -266,7 +266,7 @@ def analizar(url: str) -> dict:
     raise RuntimeError(
         f"No pude leer el post «{code}» de Instagram.\n\n"
         "Instagram no entregó sus datos al motor externo. Puede requerir sesión o limitar las solicitudes.\n\n"
-        "Si puedes verlo con tu cuenta, pulsa «Abrir Instagram» en APOLO, inicia sesión allí y vuelve a pulsar «Leer publicación».\n\n"
+        "Si puedes verlo con tu cuenta, pulsa «Abrir en Chrome». Conecta la extensión de APOLO en ese Chrome y vuelve a «Leer publicación».\n\n"
         f"Detalle técnico: {' | '.join(errores)}"
     )
 

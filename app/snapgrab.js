@@ -26,7 +26,7 @@ function pintarGaleria(g){
 function pintar(e){
   ocupado=!!e.ocupado;
   $('#instagram').hidden=!e.instagramDisponible;$('#instagram-abrir').disabled=ocupado;$('#instagram-leer').disabled=ocupado;
-  $('#instagram-estado').textContent=e.instagramConectado?'Publicación leída con la sesión de APOLO.':'';
+  $('#instagram-estado').textContent=e.instagramConectado?'Publicación leída desde tu Chrome.':'';
   $('#analizar-enlace').disabled=ocupado;
   if(enlaceActual!==e.url){enlaceActual=e.url;if(document.activeElement!==$('#enlace'))$('#enlace').value=e.url||'';$('#recorte').hidden=true;foto=null;zona=null;inicio=null;}
   const spotify=e.info?.plataforma==='spotify';

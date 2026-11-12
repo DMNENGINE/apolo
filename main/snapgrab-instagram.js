@@ -1,4 +1,4 @@
-// Sesión propia de Instagram: Electron conserva sus cookies; no se exportan ni se leen archivos de sesión.
+// Instagram en el Chrome del usuario: las credenciales permanecen dentro del navegador.
 const fs=require('node:fs'),path=require('node:path');
 function publicacionInstagram(valor){
   let u;try{u=new URL(valor);}catch{return null;}
@@ -32,42 +32,44 @@ async function leerLimitado(res,maximo){
   try{while(true){const {done,value}=await lector.read();if(done)break;n+=value.length;if(n>maximo)throw new Error('El archivo supera el tamaño permitido');trozos.push(Buffer.from(value));}}finally{await lector.cancel().catch(()=>{});}
   return Buffer.concat(trozos);
 }
-function crearInstagram({crearVentana,obtenerSesion,miniatura}={}){
-  crearVentana ||= opciones=>new(require('electron').BrowserWindow)(opciones);
-  obtenerSesion ||= ()=>require('electron').session.fromPartition('persist:apolo-snapgrab-instagram');
+function crearInstagram({abrirExterno,navegador=()=>null,obtenerSesion,miniatura}={}){
+  abrirExterno ||= url=>require('./abrir-chrome').abrirChrome(url);
+  obtenerSesion ||= ()=>({fetch:(url,opciones)=>require('electron').net.fetch(url,{...opciones,credentials:'omit'})});
   miniatura ||= b=>{const n=require('electron').nativeImage.createFromBuffer(b);if(n.isEmpty())return '';const t=n.getSize(),escala=Math.min(1,200/t.width,140/t.height);return 'data:image/jpeg;base64,'+n.resize({width:Math.max(1,Math.round(t.width*escala)),height:Math.max(1,Math.round(t.height*escala))}).toJPEG(60).toString('base64');};
-  let ventana=null;
+  const puente=()=>typeof navegador==='function'?navegador():navegador;
+  const esChrome=n=>!n.estado?.().navegador||/chrome/i.test(n.estado().navegador);
+  async function pestana(n,p){
+    const tabs=await n.orden('pestanas');const candidatas=tabs.filter(t=>publicacionInstagram(t.url)?.codigo===p.codigo);
+    const activas=candidatas.filter(t=>t.activa);
+    if(activas.length===1)return activas[0];
+    if(candidatas.length===1)return candidatas[0];
+    if(candidatas.length>1)throw new Error('Hay varias pestañas con esa publicación; activa la que quieres usar en Chrome');
+    return null;
+  }
   async function abrir(url){
     const p=publicacionInstagram(url);if(!p)throw new Error('Abre un post o reel de Instagram para conectar esta función');
-    if(!ventana||ventana.isDestroyed()){
-      ventana=crearVentana({width:1050,height:800,title:'Instagram · APOLO',autoHideMenuBar:true,backgroundColor:'#080d11',webPreferences:{partition:'persist:apolo-snapgrab-instagram',nodeIntegration:false,contextIsolation:true,sandbox:true}});
-      const propia=ventana;
-      propia.once('closed',()=>{if(ventana===propia)ventana=null;});
-      ventana.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-      ventana.webContents.on('will-navigate',(e,destino)=>{try{const u=new URL(destino);if(u.protocol!=='https:'||!['instagram.com','www.instagram.com'].includes(u.hostname))e.preventDefault();}catch{e.preventDefault();}});
+    const n=puente();
+    if(n?.conectado?.()&&esChrome(n)){
+      const t=await pestana(n,p);await n.orden('abrir',{url:p.url,pestana:t?.id??null});return {ok:true};
     }
-    const propia=ventana;
-    await propia.loadURL(p.url);
-    if(propia.isDestroyed()||ventana!==propia)throw new Error('La ventana de Instagram se cerró antes de terminar de cargar');
-    propia.show();propia.focus();return {ok:true};
+    return abrirExterno(p.url);
   }
   function leer(url){
     const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),45000);
     const promesa=(async()=>{
       const p=publicacionInstagram(url);if(!p)throw new Error('Esta función necesita un post o reel de Instagram');
-      if(!ventana||ventana.isDestroyed())throw new Error('Pulsa Abrir Instagram e inicia sesión en esa ventana');
-      const abierta=publicacionInstagram(ventana.webContents.getURL());
-      if(!abierta||abierta.codigo!==p.codigo)throw new Error('Inicia sesión y vuelve a pulsar Abrir Instagram para mostrar esta publicación');
-      const ses=obtenerSesion();
-      const res=await ses.fetch(`https://www.instagram.com/api/v1/media/${idMedia(p.codigo)}/info/`,{credentials:'include',headers:{'X-IG-App-ID':'936619743392459','Referer':p.url},signal:abort.signal});
-      if([401,403].includes(res.status))throw new Error('Instagram todavía no acepta esta sesión. Completa el inicio de sesión en su ventana y pulsa Leer publicación');
-      if(res.status===429)throw new Error('Instagram ha limitado las solicitudes. Espera antes de volver a intentarlo');
-      if(!res.ok)throw new Error(`Instagram no permite leer la publicación con esta cuenta (HTTP ${res.status})`);
-      let datos;try{datos=JSON.parse((await leerLimitado(res,3*1024*1024)).toString('utf8'));}catch{throw new Error('Instagram no devolvió datos de la publicación. Comprueba el inicio de sesión');}
+      const n=puente();
+      if(!n?.conectado?.()||!esChrome(n))throw new Error('Abre Instagram en Chrome con tu cuenta y conecta la extensión de APOLO en ese Chrome para Leer publicación');
+      const t=await pestana(n,p);if(!t)throw new Error('Abre esta publicación en el Chrome conectado a APOLO, después de iniciar sesión');
+      let datos;
+      try{datos=await n.orden('instagram',{pestana:t.id,codigo:p.codigo},30000);}catch(e){
+        if(/OPS|not a function|desconocida/i.test(e.message))throw new Error('Recarga la extensión de APOLO en chrome://extensions y vuelve a Leer publicación');
+        throw e;
+      }
+      if(abort.signal.aborted)throw new Error('Lectura cancelada');
       const lectura=mediosDePublicacion(datos);
-      // Solo se transportan archivos multimedia; nunca cookies ni cabeceras de autenticación.
       for(const m of lectura.medios.filter(m=>m.tipo==='foto').slice(0,12))try{
-        const r=await ses.fetch(m.vista||m.url,{credentials:'include',signal:abort.signal});
+        const r=await obtenerSesion().fetch(m.vista||m.url,{credentials:'omit',signal:abort.signal});
         if(r.ok)m.miniatura=miniatura(await leerLimitado(r,2*1024*1024));
       }catch{}
       if(abort.signal.aborted)throw new Error('Lectura cancelada');
@@ -87,7 +89,7 @@ function crearInstagram({crearVentana,obtenerSesion,miniatura}={}){
         if(abort.signal.aborted)throw new Error('Descarga cancelada');
         let parcial;
         try{
-          const r=await obtenerSesion().fetch(m.url,{credentials:'include',signal:abort.signal});
+          const r=await obtenerSesion().fetch(m.url,{credentials:'omit',signal:abort.signal});
           if(!r.ok)throw new Error('Archivo no disponible');
           const mime=r.headers.get('content-type')||'';
           if(/text\/html|application\/json/.test(mime))throw new Error('Instagram no devolvió el archivo');
@@ -106,6 +108,6 @@ function crearInstagram({crearVentana,obtenerSesion,miniatura}={}){
     })().finally(()=>clearTimeout(timer));
     return {promesa,cancelar(){abort.abort();conversion?.cancelar();}};
   }
-  return {abrir,leer,descargar,cerrar(){const anterior=ventana;ventana=null;if(anterior&&!anterior.isDestroyed())anterior.close();}};
+  return {abrir,leer,descargar,cerrar(){ /* Chrome pertenece al usuario: no se cierra desde SnapGrab. */ }};
 }
 module.exports={crearInstagram,publicacionInstagram,idMedia,mediosDePublicacion};

@@ -63,7 +63,7 @@ La propia ventana de SnapGrab incorpora arriba otro campo con **Analizar**. Camb
 
 Validación: 22 pruebas dirigidas y 562 generales aprobadas. El ensayo real pega un enlace en el menú y pulsa Enter mediante CDP; después cambia desde Spotify a una foto usando el formulario de SnapGrab y comprueba que desaparezcan los datos anteriores. Capturas revisadas: `repair-backups/snapgrab-enlace/menu-enlace.png` y `snapgrab-enlace.png`.
 
-## Instagram con sesión propia (2026-11-11)
+## Versión anterior: Instagram con sesión de Electron (sustituida por Chrome externo)
 
 Se reprodujo un enlace que no entregaba datos sin sesión: Instaloader devolvió `BadResponseException` y yt-dlp recibió una respuesta multimedia vacía. Eso no demuestra que el post se haya borrado. El mensaje anterior escondía este caso detrás de varios motivos posibles e indicaba un botón Login IG inexistente en APOLO.
 
@@ -76,3 +76,15 @@ Se pueden guardar fotos, vídeo, la selección de galería y audio MP3. Las desc
 Validación: 567 pruebas generales aprobadas. Cinco pruebas específicas verifican identidad del post, sesión separada sin exportar cookies, errores de acceso, descarga parcial y cancelación. El ensayo real de Electron simula la respuesta autenticada y obtiene fotos, vídeo y MP3 reales de recursos de prueba en localhost. No se inició sesión en la cuenta del usuario ni se descargó su publicación privada durante las pruebas. Su comprobación final requiere iniciar sesión en la nueva ventana. Capturas revisadas: `repair-backups/snapgrab-instagram/instagram-acceso.png` e `instagram-leido.png`.
 
 Corrección de cierre: cerrar primero la ventana auxiliar dejaba una referencia destruida; al cerrar SnapGrab se intentaba volver a llamar a `close()` y aparecía «Object has been destroyed». El evento `closed` ahora invalida únicamente su propia referencia, el cierre comprueba `isDestroyed()` y limpiar varias veces es seguro. Una apertura pendiente no intenta mostrar una ventana que ya se haya cerrado. Se verificaron esas tres secuencias con pruebas de regresión y el cierre/reapertura con ventanas Electron reales. Suite general: 570 aprobadas. Captura revisada: `repair-backups/instagram-cierre/instagram-cierre-corregido.png`.
+
+## Instagram en el Chrome habitual (2026-11-11)
+
+Por petición del usuario, **Abrir en Chrome** sustituye a la ventana de acceso de Electron. Si la extensión ya está conectada desde Chrome, reutiliza la pestaña coincidente o abre una nueva en ese navegador. En otro caso, lanza el Chrome instalado con la URL, sin `--user-data-dir`, perfiles de depuración ni lectura de carpetas de perfiles. Chrome decide cómo abrirla en su perfil habitual. Cerrar SnapGrab nunca cierra Chrome.
+
+**Leer publicación** requiere la extensión de APOLO conectada en ese Chrome. No basta con iniciar sesión fuera para compartirla con Electron: la orden se ejecuta dentro de la pestaña de Instagram con su propia sesión. Solo devuelve metadatos de los medios, no cookies, contraseñas ni tokens. Los archivos se descargan de sus enlaces CDN, sin enviar cookies de Electron. No se usa ya la partición de autenticación de Electron.
+
+La extensión pasa a 0.4.1 e incorpora `extension/instagram.js`. Hay que recargar la extensión desempaquetada en `chrome://extensions` para que Chrome use el nuevo código; reiniciar APOLO por sí solo no recarga el service worker de la extensión. No se añadieron permisos al manifiesto. Las lecturas públicas y los recortes siguen funcionando sin extensión; esta conexión se necesita para usar la cuenta del Chrome externo.
+
+Se valida el identificador de la publicación antes y después de consultarla, se rechazan pestañas de otros navegadores y no se escoge al azar entre cuentas con el mismo post. Las peticiones del lector son del mismo origen que la pestaña: [peticiones de red en extensiones Chrome](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests).
+
+Validación: 571 pruebas generales aprobadas. Se verificó el lanzamiento externo sin modificar el perfil, lectura por el puente, ausencia de exportación de cookies, pestaña exacta, navegador incorrecto, datos filtrados y continuidad de fotos/vídeo/MP3 con medios de prueba. El ensayo no inició sesión ni leyó la cuenta real del usuario. Captura revisada: `repair-backups/instagram-chrome/instagram-chrome.png`.
