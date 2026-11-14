@@ -122,3 +122,23 @@ test('preparar: la carpeta de recursos se cambia por la config (ruta completa) y
   guardarConfig(cfg, { skills: { dirRecursos: '' } });
   assert.equal(cfg.skills.dirRecursos, undefined);
 });
+
+test('preparar: si APOLO se reinicia a medias, reanudar() sigue la preparación sola', async () => {
+  const a = montar(PLAN, { cortarEn: 30000 });
+  fs.mkdirSync(path.join(a.dir, '_datos'), { recursive: true });
+  fs.writeFileSync(path.join(a.dir, '_datos', 'preparacion.json'), JSON.stringify({ pasos: {}, ultimo: { estado: 'preparando' } }));
+  const { crearPreparador } = require('../skills/preparar');
+  const almacen = { obtener: s => (s === 'prueba' ? { slug: 'prueba', dir: a.dir } : null), lista: () => [{ slug: 'prueba', dir: a.dir }] };
+  const DAT = fs.readFileSync(path.join(a.dir, 'preparar.json'), 'utf8');
+  assert.ok(DAT);
+  const p = crearPreparador({ cfg: a.cfg, almacen, fetch: async (url, o = {}) => {
+    if (url.endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [{ name: 'qwen3:8b' }] }) };
+    const desde = o.headers?.range ? Number(/bytes=(\d+)-/.exec(o.headers.range)[1]) : 0, c = DATOS.subarray(desde);
+    return { ok: true, status: desde ? 206 : 200, headers: { get: () => String(c.length) }, body: (async function* () { yield c; })() };
+  }, ejecutar: async cmd => (cmd === 'nvidia-smi' ? { code: 0, out: 'GPU, 16000\n' } : { code: 0, out: '' }) });
+  p.reanudar();
+  await new Promise(r => setTimeout(r, 30));
+  const t = await esperar(p);
+  assert.equal(t.estado, 'listo', t.error);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(a.dir, '_datos', 'preparacion.json'), 'utf8')).ultimo.estado, 'listo');
+});

@@ -303,6 +303,8 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
     trabajos.set(d.slug, t);
     (async () => {
       const est = leerEstado(fEstado);
+      est.ultimo = { estado: 'preparando', forzar, fecha: new Date().toISOString() };   // si APOLO se reinicia a medias, al arrancar sigue solo
+      guardarEstado(fEstado, est);
       try {
         for (const p of plan.pasos) {
           if (ctl.signal.aborted) throw new Error('cancelado');
@@ -332,7 +334,22 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
     return expandir(String(texto), ctx.vars).replace(/\{\{\s*config\.([a-z0-9_]+)\s*\}\}/gi, (m, k) => (conf[k] != null ? String(conf[k]) : m));
   }
 
-  return { diagnostico, preparar, cancelar, resolverTexto, estado: slug => trabajos.get(slug) || null };
+  // al arrancar APOLO: reanuda las preparaciones que quedaron a medias (reinicio, actualización, apagón). Lo hecho no se repite
+  // y las descargas siguen desde su .part
+  function reanudar() {
+    for (const s of almacen.lista?.() || []) {
+      let est; try { est = JSON.parse(fs.readFileSync(path.join(s.dir, '_datos', 'preparacion.json'), 'utf8')); } catch { continue; }
+      if (est.ultimo?.estado !== 'preparando' || trabajos.has(s.slug)) continue;
+      console.log(`[preparar] reanudo la preparación de ${s.slug}`);
+      preparar(s.slug, { forzar: !!est.ultimo.forzar }).catch(e => {
+        console.log(`[preparar] no pude reanudar ${s.slug}: ${e.message}`);
+        try { est.ultimo = { estado: 'error', error: e.message, fecha: new Date().toISOString() }; guardarEstado(path.join(s.dir, '_datos', 'preparacion.json'), est); } catch { }
+      });
+    }
+  }
+  if (!process.env.NODE_TEST_CONTEXT && !process.execArgv.includes('--test')) { const t = setTimeout(reanudar, 15_000); t.unref?.(); }
+
+  return { diagnostico, preparar, cancelar, resolverTexto, reanudar, estado: slug => trabajos.get(slug) || null };
 }
 
 module.exports = { crearPreparador, ejecutable, validar, leerPlan, rutaSegura, expandir, rutasBase, PROGRAMAS, HOSTS_DESCARGA, FORMATO };
