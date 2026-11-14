@@ -222,7 +222,15 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
     const f = rutaSegura(p.destino, vars), part = f + '.part';
     fs.mkdirSync(path.dirname(f), { recursive: true });
     let ya = fs.existsSync(part) ? fs.statSync(part).size : 0;
-    const r = await traer(p.url, { headers: { 'user-agent': 'APOLO-preparar', ...(ya ? { range: `bytes=${ya}-` } : {}) }, redirect: 'follow', signal: o.signal });
+    const cab = { 'user-agent': 'APOLO-preparar', ...(ya ? { range: `bytes=${ya}-` } : {}) };
+    // espejo local (cfg.skills.espejo, p. ej. otro PC de casa con tools/espejo-recursos.js): pide el archivo por su sha256 y,
+    // si no lo tiene o no responde, va al original. El sha256 se comprueba igual, así que el espejo no puede colar otro archivo
+    let r = null;
+    const espejo = String(cfg.skills?.espejo || '').replace(/\/+$/, '');
+    if (espejo && /^https?:\/\//i.test(espejo) && /^[a-f0-9]{64}$/i.test(p.sha256 || '')) {
+      try { r = await traer(`${espejo}/sha256/${p.sha256.toLowerCase()}`, { headers: cab, signal: o.signal }); if (!r.ok && r.status !== 416) r = null; else o.progreso({ fase: 'desde el espejo local' }); } catch { r = null; }
+    }
+    if (!r) r = await traer(p.url, { headers: cab, redirect: 'follow', signal: o.signal });
     if (r.status === 416) ya = 0;
     else if (!r.ok) throw new Error(`HTTP ${r.status} al descargar ${path.basename(f)}`);
     if (ya && r.status !== 206) ya = 0;                             // el servidor no reanuda: empezar de cero

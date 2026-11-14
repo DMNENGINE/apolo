@@ -39,6 +39,13 @@ function guardarConfig(cfg, cambios) {
     const pon = o => { const x = { ...(o || {}) }; if (d) x.dirRecursos = path.normalize(d); else delete x.dirRecursos; return x; };
     cfg.skills = pon(cfg.skills); disco.skills = pon(disco.skills);
   }
+  // espejo local de descargas de skills (por sha256): URL http(s) de otro equipo de casa o '' para quitarlo
+  if (cambios.skills && typeof cambios.skills.espejo === 'string') {
+    const e = cambios.skills.espejo.trim();
+    if (e && !/^https?:\/\/[^\s/]+(:\d+)?(\/[^\s]*)?$/i.test(e)) throw Object.assign(new Error('el espejo debe ser una URL http(s), p. ej. http://192.168.1.10:8099'), { status: 400 });
+    const pon = o => { const x = { ...(o || {}) }; if (e) x.espejo = e.replace(/\/+$/, ''); else delete x.espejo; return x; };
+    cfg.skills = pon(cfg.skills); disco.skills = pon(disco.skills);
+  }
   if (cambios.isla && typeof cambios.isla === 'object') {           // apariencia de la nube flotante
     const i = cfg.isla = { estilo: 'glass', fondo: '', borde: '', bordeAncho: 1, ...(cfg.isla || {}) }, c = cambios.isla;
     const hex = x => typeof x === 'string' && /^#[0-9a-fA-F]{6}$/.test(x);

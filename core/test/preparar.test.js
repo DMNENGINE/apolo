@@ -152,3 +152,23 @@ test('preparar: requisitos externos (lo instala el usuario) sin pasos: plan vál
   const d = await prep.diagnostico('prueba');
   assert.equal(d.listo, true); assert.equal(d.externos[0].nombre, 'Roblox Studio'); assert.equal(d.externos[0].url, 'https://create.roblox.com/');
 });
+
+test('preparar: con espejo local baja por sha256 del espejo; si el espejo no lo tiene, va al original', async () => {
+  const usados = [];
+  const a = montar(PLAN);
+  a.cfg.skills.espejo = 'http://192.168.1.50:8099/';
+  const { crearPreparador } = require('../skills/preparar');
+  const almacen = { obtener: s => (s === 'prueba' ? { slug: 'prueba', dir: a.dir } : null) };
+  const servir = () => ({ ok: true, status: 200, headers: { get: () => String(DATOS.length) }, body: (async function* () { yield DATOS; })() });
+  const mk = espejoTiene => crearPreparador({ cfg: a.cfg, almacen, ejecutar: async c => (c === 'nvidia-smi' ? { code: 0, out: 'G, 16000\n' } : { code: 0, out: '' }), fetch: async (url, o = {}) => {
+    if (url.endsWith('/api/tags')) return { ok: true, json: async () => ({ models: [{ name: 'qwen3:8b' }] }) };
+    usados.push(url);
+    if (url.includes('/sha256/')) return espejoTiene ? servir() : { ok: false, status: 404 };
+    return servir();
+  } });
+  let p = mk(true); await p.preparar('prueba'); let t = await esperar(p);
+  assert.equal(t.estado, 'listo', t.error); assert.ok(usados[0].startsWith('http://192.168.1.50:8099/sha256/' + SHA)); assert.ok(!usados.some(u => u.includes('huggingface')));
+  fs.rmSync(path.join(a.cfg.skills.dirRecursos, 'modelos'), { recursive: true, force: true }); fs.rmSync(path.join(a.dir, '_datos'), { recursive: true, force: true }); usados.length = 0;
+  p = mk(false); await p.preparar('prueba'); t = await esperar(p);
+  assert.equal(t.estado, 'listo', t.error); assert.ok(usados.some(u => u.includes('huggingface.co')));
+});
