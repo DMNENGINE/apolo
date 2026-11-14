@@ -208,7 +208,10 @@ const GESTOS = [                                            // [peso, nombre, se
   [1, 'corazon', 2.5, '♥'], [1, 'sorpresa', 1.6, ''], [1, 'si', 1.4, ''],
   [2, 'pensativo', 4, ''], [1, 'estornudo', 2.2, '¡ACHÍS!'], [1, 'bostezo', 2.4, ''],
 ];
-const vidaCasco = crearVidaCasco();
+const vidaCasco = crearVidaCasco(Math.random, {
+  cargar: () => JSON.parse(localStorage.getItem('robot-vida-mazo') || 'null'),
+  guardar: m => localStorage.setItem('robot-vida-mazo', JSON.stringify(m)),
+});
 const reducirMovimientoCasco = matchMedia('(prefers-reduced-motion: reduce)');
 function interrumpirVidaCasco() {
   if (vidaCasco.cancelar()) {
@@ -258,16 +261,23 @@ setInterval(() => {
   if (espectaculo?.activo) { interrumpirVidaCasco(); return; }   // enseñando las novedades: nada de gestos sueltos
   const now = Date.now(), d = new Date();
   const libre = !modoGamer && !open && !personaje && !skinCfg.usar && !arrastrando
-    && !panicoOn && casco.abierto() < .03 && lastState === 'reposo' && now - lastActivity >= 4000 && !reducirMovimientoCasco.matches;
+    && !panicoOn && casco.abierto() < .03 && (lastState === 'reposo' || lastState === 'dormido') && now - lastActivity >= 4000 && !reducirMovimientoCasco.matches;
+  const dormido = lastState === 'dormido';
   if (!libre) interrumpirVidaCasco();
   if (panicoOn || reducirMovimientoCasco.matches) return;
+  // en punto (y a la media) enseña la hora, antes que cualquier animación
+  const marcaHora = d.getHours() * 2 + (d.getMinutes() >= 30 ? 1 : 0);
+  if (libre && (d.getMinutes() === 0 || d.getMinutes() === 30) && marcaHora !== ultimaHora && !robot.ocupado()) {
+    interrumpirVidaCasco(); ultimaHora = marcaHora; hacerGesto('reloj', 6, ''); sound.play('blip'); return;
+  }
+  // vida del casco (las 100 animaciones del catálogo): despierto cada 35–75 s, dormido cada 2–4 min
   if (libre && vidaCasco.terminarSiLista(now)) {
-    proximoGesto = now + 35_000 + Math.random() * 40_000;
+    proximoGesto = now + (dormido ? 120_000 + Math.random() * 120_000 : 35_000 + Math.random() * 40_000);
     ajustarFps(); return;
   }
   if (libre && now >= proximoGesto) {
     const paso = vidaCasco.paso({ ahora: now, libre, ocupado: robot.ocupado() });
-    if (paso) hacerGesto(paso.nombre, paso.segundos, undefined, true);
+    if (paso) hacerGesto(paso.nombre, paso.segundos, dormido ? '' : undefined, true);   // dormido: cara despierta mientras dura
     return;
   }
   if (modoGamer || (lastState !== 'reposo' && lastState !== 'dormido') || open || robot.ocupado() || now - lastActivity < 4000) return;

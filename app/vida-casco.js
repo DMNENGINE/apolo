@@ -1,21 +1,39 @@
 import { ANIMACIONES_CASCO } from './animaciones-casco.js';
-// Rutinas decorativas: no usan red, voz ni herramientas y no despiertan al robot.
-const RUTINAS = [
-  [['mirar', 2.5], ['curioso', 3], ['guino', 1.4]],
-  [['pensativo', 2.8], ['concentrado', 2.5], ['ilusionado', 2]],
-  [['bostezo', 2.2], ['timido', 2], ['feliz', 1.8]],
-  [['curioso', 2.5], ['sospecha', 2.5], ['si', 1.5]],
+// Vida autónoma del casco: recorre TODO el catálogo (100 animaciones) en un mazo barajado, sin repetir ninguna
+// hasta haberlas hecho todas. Las escenas largas se intercalan como mucho cada 5–8 min. No usan red, voz ni herramientas.
+// El mazo se guarda (guardar/cargar) para que tras reiniciar APOLO siga por donde iba.
+const EXTRA_ESCENAS = [['revision', 7], ['estornudo_explosivo', 5.5], ['montaje', 7]];
+const TODAS = [
+  ...ANIMACIONES_CASCO.map(a => ({ id: a.id, segundos: a.segundos, escena: !!a.escena })),
+  ...EXTRA_ESCENAS.filter(([id]) => !ANIMACIONES_CASCO.some(a => a.id === id)).map(([id, segundos]) => ({ id, segundos, escena: true })),
 ];
+const POR_ID = new Map(TODAS.map(a => [a.id, a]));
+const CIERRE_ESCENA = ['guino', 1.4];
 
-const ESCENAS = [[['revision', 7], ['guino', 1.4]], [['estornudo_explosivo', 5.5], ['sorpresa', 1.5]], [['montaje', 7], ['timido', 1.8]], ...ANIMACIONES_CASCO.filter(a => a.escena).map(a => [[a.id, a.segundos], ['guino', 1.4]])];
-const IDS_CATALOGO = new Set(ANIMACIONES_CASCO.map(a => a.id));
-const COTIDIANAS = ANIMACIONES_CASCO.filter(a => !a.escena);
-
-export function crearVidaCasco(azar = Math.random) {
-  let pendiente = [], siguiente = 0, anterior = -1, activa = false;
-  const recientes = [];
-  const recordar = id => { if (!IDS_CATALOGO.has(id)) return; recientes.push(id); if (recientes.length > 24) recientes.shift(); };
-  let normales = 0, proximaEscena = 0, ultimaEscena = -1;
+export function crearVidaCasco(azar = Math.random, { cargar = () => null, guardar = () => { } } = {}) {
+  const barajar = () => {
+    const m = TODAS.map(a => a.id);
+    for (let i = m.length - 1; i > 0; i--) { const j = Math.floor(azar() * (i + 1)); [m[i], m[j]] = [m[j], m[i]]; }
+    return m;
+  };
+  let mazo = [];
+  try { const g = cargar(); if (Array.isArray(g)) mazo = g.filter(id => POR_ID.has(id)); } catch { }
+  if (!mazo.length) mazo = barajar();
+  let pendiente = [], siguiente = 0, activa = false, proximaEscena = 0;
+  const persistir = () => { try { guardar(mazo); } catch { } };
+  // saca la siguiente del mazo; si toca escena y aún no es su hora, coge la primera cotidiana (la escena espera su turno)
+  function sacar(ahora) {
+    if (!mazo.length) mazo = barajar();
+    let i = 0;
+    if (POR_ID.get(mazo[0]).escena && ahora < proximaEscena) {
+      i = mazo.findIndex(id => !POR_ID.get(id).escena);
+      if (i < 0) i = 0;                                      // solo quedan escenas: adelante
+    }
+    const a = POR_ID.get(mazo.splice(i, 1)[0]);
+    if (a.escena) proximaEscena = ahora + 300_000 + azar() * 180_000;
+    persistir();
+    return a;
+  }
   return {
     cancelar() {
       const estabaActiva = activa;
@@ -25,21 +43,9 @@ export function crearVidaCasco(azar = Math.random) {
     paso({ ahora, libre, ocupado }) {
       if (!libre || ocupado || ahora < siguiente) return null;
       if (!activa) {
-        // Elige entre las otras rutinas: nunca repite la última secuencia.
-        const opciones = RUTINAS.map((_, i) => i).filter(i => i !== anterior);
-        if (normales >= 3 && ahora >= proximaEscena && (azar() < .35 || normales >= 5)) {
-          const candidatas = ESCENAS.map((_, i) => i).filter(i => i !== ultimaEscena && !recientes.includes(ESCENAS[i][0][0]));
-          ultimaEscena = candidatas[Math.min(candidatas.length - 1, Math.floor(azar() * candidatas.length))];
-          pendiente = [...ESCENAS[ultimaEscena]]; recordar(pendiente[0][0]); normales = 0;
-          proximaEscena = ahora + 240_000 + azar() * 180_000;
-        } else if (normales > 0 && azar() > .45) {
-          const candidatas = COTIDIANAS.filter(a => !recientes.includes(a.id));
-          const a = candidatas[Math.min(candidatas.length - 1, Math.floor(azar() * candidatas.length))];
-          pendiente = [[a.id, a.segundos]]; recordar(a.id); normales++;
-        } else {
-          anterior = opciones[Math.min(opciones.length - 1, Math.floor(azar() * opciones.length))];
-          pendiente = [...RUTINAS[anterior]]; normales++;
-        }
+        if (!proximaEscena) proximaEscena = ahora + 120_000;   // la primera escena a los ~2 min
+        const a = sacar(ahora);
+        pendiente = a.escena ? [[a.id, a.segundos], CIERRE_ESCENA] : [[a.id, a.segundos]];
         activa = true;
       }
       const [nombre, segundos] = pendiente.shift();
@@ -50,5 +56,7 @@ export function crearVidaCasco(azar = Math.random) {
       if (activa && !pendiente.length && ahora >= siguiente) { activa = false; return true; }
       return false;
     },
+    quedan: () => mazo.length,
+    total: TODAS.length,
   };
 }
