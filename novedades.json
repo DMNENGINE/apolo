@@ -1,4 +1,31 @@
 {
+  "0.3.2": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.2",
+      "saludo": "¡Me he actualizado!",
+      "puntos": [
+        "Ahora hago mis 100 animaciones solo, una tras otra sin repetir, también cuando estoy dormido.",
+        "SnapGrab: guarda fotos, vídeos y audio de Instagram, X, Spotify y YouTube desde el menú (Ctrl + Alt + clic derecho).",
+        "Las arañas informan mejor qué leyeron y con qué pruebas.",
+        "Aprendo también de tus sesiones de DeepSeek Harness.",
+        "Si pides generar fotos, vídeos o usar una skill, lo paso al modelo con herramientas.",
+        "Dependencias actualizadas con arreglos de seguridad."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.2",
+      "saludo": "I've been updated!",
+      "puntos": [
+        "I now play my 100 animations on my own, one after another without repeats, even while asleep.",
+        "SnapGrab: save photos, videos and audio from Instagram, X, Spotify and YouTube from the menu (Ctrl + Alt + right click).",
+        "The spiders report better what they read and with which evidence.",
+        "I also learn from your DeepSeek Harness sessions.",
+        "Asking to generate photos or videos or to use a skill goes to the model with tools.",
+        "Dependencies updated with security fixes."
+      ]
+    }
+  },
   "0.3.1": {
     "es": {
       "titulo": "Lo nuevo en APOLO 0.3",

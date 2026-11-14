@@ -638,7 +638,7 @@ function empezarNovedades(info) {
   abrirUnRato(60_000); sound.play('permiso');
   robot.setFps(40); robot.gesto('sorpresa', 1.6, tr('¡NOVEDADES!'));
   if (novedadesTxt.saludo) say(novedadesTxt.saludo);
-  if (!animaciones.length) return pintarNovedades({ sinAnimar: ' ' });
+  if (!animaciones.length || info.animaciones === false) return pintarNovedades({ sinAnimar: ' ' });   // versión sin espectáculo: solo la tarjeta
   if (reducirMovimientoCasco.matches) return pintarNovedades({ sinAnimar: tr('Con «reducir movimiento» activado no hago las animaciones; puedes verlas en la galería del panel.') });
   if (!cascoVisible()) return pintarNovedades({ sinAnimar: tr('Las animaciones son del casco: vuelve al casco en Avatar para verlas.') });
   setTimeout(() => { espectaculo?.empezar(0); pintarNovedades({ i: 0 }); }, 2600);   // tras la sorpresa y el saludo

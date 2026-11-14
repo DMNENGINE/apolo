@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] - 2026-11-14
+
+### Added
+- **SnapGrab**: save photos, videos and audio from Instagram, X, Spotify and YouTube from the APOLO menu (Ctrl+Alt+right click) or by pasting a link, with a gallery to keep only the originals you pick. Instagram is read through your own Chrome profile and the extension, without copying sessions.
+- **Learning from DeepSeek Harness** sessions (`~/.dsh`), split into chunks so long projects are not lost.
+- **Light mode for your own model**: a provider marked `ligero` chats, and anything that needs hands (files, web, generating photos/videos, skills) is routed to the model with tools.
+- Dataset generators for the own model (v3–v5 identity, APOLO-MANOS tool calling).
+
+### Changed
+- **The helmet plays all 100 animations on its own**: a shuffled deck with no repeats until every one has played (it resumes after a restart), also while asleep, with long scenes every 5–8 minutes.
+- `usar_skill` insists on loading the matching skill instead of answering «I can't».
+- The spiders report real coverage and evidence; Ctrl+Alt+right click respects the target window and shows errors.
+
+### Fixed
+- Security updates for undici, nodemailer, mailparser and ip-address.
+- The Prompts page is reachable from the side menu.
+
 ## [0.3.1] - 2026-11-10
 
 ### Added
