@@ -318,7 +318,7 @@ const HERRAMIENTAS = [
   // ---------- skills (core/skills): instrucciones especializadas instaladas por el usuario ----------
   {
     nombre: 'usar_skill', riesgo: 'lectura',
-    descripcion: 'Carga las instrucciones completas (SKILL.md) de una skill de "SKILLS DISPONIBLES". Úsala ANTES de hacer una tarea que encaje con una skill, y sigue sus pasos.',
+    descripcion: 'Carga las instrucciones completas (SKILL.md) de una skill de "SKILLS DISPONIBLES". LLÁMALA SIEMPRE que la petición encaje con una skill: para generar fotos de la modelo virtual (modelo-virtual-fotos), vídeos, personajes 3D, o entrenar el modelo propio. NO respondas "no puedo" cuando existe una skill que lo hace: llama a esta herramienta con el nombre de la skill y sigue sus pasos.',
     parametros: { type: 'object', properties: { nombre: { type: 'string', description: 'nombre (slug) de la skill' } }, required: ['nombre'] },
     resumen: a => a.nombre,
     ejecutar: async (a, ctx) => {
