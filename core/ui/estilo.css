@@ -1297,6 +1297,9 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mm-btn:active { transform: translateY(1px); box-shadow: inset 0 2px 0 rgba(0,0,0,.4); }
 .mm-btn.rojo { background: #5a1420; border-color: #b8323f; color: #ffd6db; }
 .mm-btn.rojo.fuerte { background: #8a1726; border-color: #ff4d5e; font-weight: 700; }
+.mm-btn.ritual { background: #0f3a48; border-color: #5fe9ff; color: #c9fbff; text-shadow: 0 0 6px rgba(95,233,255,.7); }
+.mm-btn.ritual.on { background: #1d6478; animation: mm-ritual 1.2s ease-in-out infinite; }
+@keyframes mm-ritual { 50% { box-shadow: 0 0 14px rgba(95,233,255,.75), inset 0 -3px 0 rgba(0,0,0,.35); } }
 .mm-btn.rojo.arma { background: #ff2d4a; color: #fff; animation: mm-parpadeo .5s steps(1) infinite; }
 .mm-btn.ic { padding: 4px 9px; }
 .mm-hueco { flex: 1; }

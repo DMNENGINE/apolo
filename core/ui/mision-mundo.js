@@ -145,9 +145,9 @@ const MC_MUNDO = {
     this.cargarDatos(); clearInterval(this.tDatos); this.tDatos = setInterval(() => this.cargarDatos(), 2500);
     clearInterval(this.tLento); this.tLento = setInterval(() => this.cargarLento(), 30000); this.cargarLento();
   },
-  salir() { cancelAnimationFrame(this.raf); this.raf = 0; clearInterval(this.tDatos); clearInterval(this.tLento); this.caja = null; },
+  salir() { this.ritual = null; cancelAnimationFrame(this.raf); this.raf = 0; clearInterval(this.tDatos); clearInterval(this.tLento); this.caja = null; },
   cargar(m) {
-    Object.assign(this, mmEstructura(m)); const tema = this.tema, R = MM_R, W = this.W, H = this.H;
+    this.ritual = null; Object.assign(this, mmEstructura(m)); const tema = this.tema, R = MM_R, W = this.W, H = this.H;
     Object.assign(this.est, { luz: tema.luz, borde: tema.borde, nucleo: tema.nucleo, nucleoRGB: mmRGB(tema.nucleoColor || '#5fd8ff') });
     this.fondo = mmFondo(this);
     document.fonts?.load('700 16px Silkscreen').then(() => { if (this.m === m) this.fondo = mmFondo(this); }).catch(() => {});   // los carteles del suelo usan la fuente pixel
@@ -174,6 +174,7 @@ const MC_MUNDO = {
       </div>
       <div class="mm-barra mm-abajo"><span class="mm-dato"><span>CPU</span><i data-b="cpu"><b></b></i></span><span class="mm-dato"><span>RAM</span><i data-b="ram"><b></b></i></span>
         <span class="mm-dato" data-d="agentes">AGENTES —</span><span class="mm-hueco"></span>
+        <button class="mm-btn ritual${this.ritual ? ' on' : ''}" data-a="ritual" title="${tr('Todos los trabajadores a la Galería de los Orígenes: ritual ante los primeros modelos')}">${tr(this.ritual ? '🜁 TERMINAR' : '🜁 RITUAL')}</button>
         <button class="mm-btn rojo" data-a="estop" title="${tr('Detiene todos los agentes que están trabajando ahora')}">E-STOP</button>
         <button class="mm-btn rojo fuerte" data-a="panico" title="${tr('Pánico: corta todo (agentes, control del ratón, tareas) hasta que reanudes')}">PÁNICO</button>
         <button class="mm-btn ic" data-a="editar" title="${tr('Crear o cambiar tu mundo')}">⚙</button>
@@ -349,6 +350,7 @@ const MC_MUNDO = {
   mover(e, dt, t) {
     const R = MM_R, ahora = Date.now();
     if (ahora > e.proxParp) { e.parpHasta = ahora + 130; e.proxParp = ahora + 2500 + Math.random() * 4000; }
+    if (this.ritual && this.ritualMover?.(e, dt, t)) return;              // el ritual de la galería manda (mision-galeria.js)
     if (e.tipo === 'apolo') return this.moverApolo(e, dt, t);
     if (e.fijo) { e.x = e.fijo.x; e.y = e.fijo.y; if (e.fijo.dir) { e.dir = e.fijo.dir; e.izq = e.fijo.izq; } e.acc = e.trabajando ? (e.tipo === 'apolo' ? 'conjura' : 'trabaja') : 'quieto'; e.frame = e.acc === 'trabaja' ? Math.floor(t / 220) % 2 : Math.floor(t / 700) % 2; return; }
     const ocupado = e.trabajando && !e.agente?.esperando;
@@ -368,7 +370,7 @@ const MC_MUNDO = {
     this.andar(e, dt);
   },
   andar(e, dt) {
-    const R = MM_R, n = e.ruta[0], tx = n.x * R + R / 2, ty = n.y * R + R * .8, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), v = (e.tipo === 'plugin' ? 40 : e.tipo === 'modelo' && e.agente ? 105 : e.tipo === 'modelo' ? 44 : e.tipo === 'apolo' ? (e.prisa ? 110 : 50) : 56) * dt / 1000;   // a su tarea van con prisa; en su sala pasean
+    const R = MM_R, n = e.ruta[0], tx = n.x * R + R / 2, ty = n.y * R + R * .8, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy), v = (e.tipo === 'plugin' ? 40 : e.tipo === 'modelo' && e.agente ? 105 : e.tipo === 'modelo' ? 44 : e.tipo === 'apolo' ? (e.prisa ? 110 : 50) : 56) * dt / 1000 * (this.ritual ? 2.6 : 1);   // a su tarea van con prisa; en su sala pasean; al ritual, corriendo
     if (d <= v) { e.x = tx; e.y = ty; e.ruta.shift(); } else { e.x += dx / d * v; e.y += dy / d * v; }
     if (Math.abs(dx) > Math.abs(dy)) { e.dir = 'lado'; e.izq = dx < 0; } else if (Math.abs(dy) > .5) e.dir = dy < 0 ? 'arriba' : 'abajo';
     e.acc = 'anda'; e.paso = (e.paso || 0) + dt; e.frame = Math.floor(e.paso / 130) % 4;
@@ -421,11 +423,12 @@ const MC_MUNDO = {
     const dt = Math.min(100, t - (this.tAnt || t));
     if (dt < 28 && this.tAnt) { this.raf = requestAnimationFrame(x => this.cuadro(x)); return; }   // ~35 fps: de sobra y gasta menos
     this.tAnt = t;
-    if (!this.pausa) this.dibujar(t, dt);
+    if (!this.pausa) try { this.dibujar(t, dt); } catch (e) { if (!this.errDibujo) console.error('[mundo]', e); this.errDibujo = true; }   // un fotograma roto no congela el mapa
     this.raf = requestAnimationFrame(x => this.cuadro(x));
   },
   dibujar(t, dt) {
     const c = this.c, e = this.est, R = MM_R, ahora = Date.now(), vivos = [...this.mc.agentes.values()].filter(a => a.estado === 'trabajando');
+    this.ritualTick?.(t, dt);
     e.orbe += ((vivos.length ? Math.min(1, .5 + vivos.length * .15) : .1) - e.orbe) * Math.min(1, dt / 600);
     e.memoria *= Math.exp(-dt / 900); e.bahia = vivos.filter(a => a.padre).length;
     const conjura = vivos.find(a => a.herramienta && mmEsMcp(a.herramienta.nombre));             // alguien usa una herramienta MCP: el laboratorio se activa
@@ -461,8 +464,9 @@ const MC_MUNDO = {
       c.fillStyle = 'rgba(0,0,0,.38)'; c.beginPath(); c.ellipse(p.x, p.y, 13, 5, 0, 0, 7); c.fill();
       if (this.sel?.p === p || this.encima === p) { c.strokeStyle = this.tema.borde; c.lineWidth = 1; c.globalAlpha = alfa * (.6 + Math.sin(t / 200) * .3); c.beginPath(); c.ellipse(p.x, p.y, 18, 7, 0, 0, 7); c.stroke(); c.globalAlpha = alfa; }
       const sp = mmPJ(p.look, p.dir, p.frame, p.acc || 'quieto', ahora < p.parpHasta);
-      const E = p.tipo === 'apolo' ? 1.8 : 1.5, lev = p.look.flota ? 9 + Math.sin(t / 420) * 3 : 0, bx = Math.round(p.x - 14 * E), by = Math.round(p.y - 50 * E - lev);                       // a 1,5×: el tamaño de la referencia
-      if (p.dir === 'lado' && p.izq) { c.save(); c.translate(bx + 28 * E, by); c.scale(-1, 1); c.drawImage(sp, 0, 0, 28 * E, 54 * E); c.restore(); } else c.drawImage(sp, bx, by, 28 * E, 54 * E);
+      const E = p.tipo === 'apolo' ? 1.8 : 1.5, lev = p.look.flota ? 9 + Math.sin(t / 420) * 3 : 0, bx = Math.round(p.x - 14 * E), by0 = Math.round(p.y - 50 * E - lev);                       // a 1,5×: el tamaño de la referencia
+      const hS = 54 * E * (1 - (p.reverencia || 0) * .17), by = Math.round(by0 + 54 * E - hS - (p.salto || 0));   // ritual: reverencia (se encoge) y saltos
+      if (p.dir === 'lado' && p.izq) { c.save(); c.translate(bx + 28 * E, by); c.scale(-1, 1); c.drawImage(sp, 0, 0, 28 * E, hS); c.restore(); } else c.drawImage(sp, bx, by, 28 * E, hS);
       c.globalAlpha = 1;
       if (p.look.balon) {                                             // el balón va por delante de sus pies
         const b = p.balon || (p.balon = { x: p.x + 10, y: p.y }), fx = p.x + (p.dir === 'lado' ? (p.izq ? -12 : 12) : 6), fy = p.y + (p.dir === 'abajo' ? 6 : p.dir === 'arriba' ? -4 : 1);
@@ -485,6 +489,7 @@ const MC_MUNDO = {
     L.fillStyle = `rgba(255,236,210,${this.tema.sala})`; for (const s of this.m.salas) L.fillRect(s.x * R / 2, s.y * R / 2, s.w * R / 2, s.h * R / 2);
     const rayos = this.rayos(t);
     for (const r of rayos) luces.push({ x: r[2], y: r[3], r: 40, col: [140, 230, 255], a: .6 });
+    this.ritualLuces?.(luces, t);
     for (const l of luces) { const g = L.createRadialGradient(l.x / 2, l.y / 2, 0, l.x / 2, l.y / 2, l.r / 2); g.addColorStop(0, `rgba(${l.col[0]},${l.col[1]},${l.col[2]},${l.a})`); g.addColorStop(.45, `rgba(${l.col[0]},${l.col[1]},${l.col[2]},${l.a * .38})`); g.addColorStop(1, 'rgba(0,0,0,0)'); L.fillStyle = g; L.fillRect((l.x - l.r) / 2, (l.y - l.r) / 2, l.r, l.r); }
     if (e.panico) { L.globalCompositeOperation = 'source-over'; L.fillStyle = `rgba(255,40,60,${.12 + Math.sin(t / 300) * .06})`; L.fillRect(0, 0, lw, lh); }
     c.globalCompositeOperation = 'multiply'; c.imageSmoothingEnabled = true; c.drawImage(this.luz, 0, 0, this.W, this.H); c.imageSmoothingEnabled = false;
@@ -509,6 +514,7 @@ const MC_MUNDO = {
       if (p.tipo === 'modelo' && p.trabajando) mmCorriente(c, p.x, p.y - 40, ob.x, ob.y, mmRGB(p.look.emCol2 && p.look.especie !== 'llama' ? p.look.ropa : p.look.color || p.look.ropa || '#7ff3ff'), t, .7);
     }
     this.particulas(c, t, dt);
+    this.galeriaBrillo?.(c, t);                                          // hologramas que brillan + efectos del ritual (mision-galeria.js)
     c.globalCompositeOperation = 'source-over';
     c.drawImage(this.vin, 0, 0);
     for (const p of this.ents.values()) { this.burbuja(c, p, t); this.etiqueta(p); }
@@ -576,7 +582,7 @@ const MC_MUNDO = {
     let mejor = null, md = 20;
     for (const p of this.ents.values()) { const d = Math.hypot(p.x - x, p.y - 30 - y); if (d < md + 8) { md = d; mejor = { p }; } }
     if (mejor) return mejor;
-    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && (['orbe', 'rack', 'vaina', 'jaula', 'impresora', 'estanteria', 'portal'].includes(o.tipo) || this.est.racks?.has(`${o.x},${o.y}`)) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
+    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && (['orbe', 'rack', 'vaina', 'jaula', 'impresora', 'estanteria', 'portal', 'vitrina', 'altar-holo'].includes(o.tipo) || this.est.racks?.has(`${o.x},${o.y}`)) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
     return null;
   },
   clic(e) { const p = this.punto(e), h = this.enPunto(p.x, p.y); if (!h) return this.cerrarHolo(); this.abrirHolo(h); },
@@ -623,6 +629,7 @@ const MC_MUNDO = {
       cuerpo = fila('Ahora', usando.length ? esc(mmEtiquetaMcp(usando[0].herramienta.nombre)) : tr('en reposo')) + (usando.length ? fila('Quién', esc(String(usando[0].nombre || usando[0].id))) : '') +
         `<div class="mm-txt">${(this.mcpServ || []).map(s => `${s.conectado ? '●' : '○'} <b>${esc(s.nombre)}</b> · ${s.herramientas.length} ${tr('herramientas')}`).join('<br>') || tr('Sin servidores MCP remotos. Claude Code y otros agentes también usan MCP: sus llamadas mcp__… se conjuran aquí.')}</div>`;
     }
+    else if (this.galeriaFicha && (h.o?.tipo === 'vitrina' || h.o?.tipo === 'altar-holo')) [col, cab, cuerpo] = this.galeriaFicha(h.o);
     else if (h.o?.tipo === 'estanteria') { col = '#ff5c7a'; cab = [tr('Memoria'), tr('Biblioteca')]; cuerpo = `<div class="mm-txt">${tr('Brilla en rojo cuando APOLO lee o guarda recuerdos.')}</div><div class="mm-acc"><a class="btn mini" href="#/memoria/grafo">${tr('Ver el grafo')} ${ic('der')}</a></div>`; }
     if (!cab) return;
     this.sel = h; det.hidden = false; det.classList.remove('on', 'sale'); det.style.setProperty('--holo', col);
@@ -630,6 +637,7 @@ const MC_MUNDO = {
     void det.offsetWidth; det.classList.add('on'); this.posHolo = null; this.seguirHolo();
     det.onclick = async ev => {
       if (ev.target.closest('.mv-holo-x')) return this.cerrarHolo();
+      if (ev.target.closest('[data-ritual]')) { this.cerrarHolo(); return this.ritualAlternar?.(); }
       const sb = ev.target.closest('[data-serv]');
       if (sb?.dataset.serv === 'revisar') { sb.disabled = true; try { const r = await api('POST', '/servicios/revisar', {}); this.serv = r; this.repartirRacks(); this.abrirHolo(this.sel || h); } catch (er) { aviso(er.message, true); } return; }
       if (sb?.dataset.serv === 'editar') return this.editarServicios();
@@ -653,6 +661,7 @@ const MC_MUNDO = {
   },
   async accion(a, b) {
     if (a === 'pausa') { this.pausa = !this.pausa; b.textContent = this.pausa ? '▶' : '❚❚'; return; }
+    if (a === 'ritual') return this.ritualAlternar?.();                  // mision-galeria.js
     if (a === 'estop') {
       const vivos = [...this.mc.agentes.values()].filter(x => x.estado === 'trabajando' && !x.padre);
       if (!vivos.length) return aviso(tr('No hay agentes trabajando'));

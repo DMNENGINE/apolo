@@ -4,10 +4,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROLES = ['servidores', 'principal', 'subagentes', 'taller', 'mcp', 'modelos', 'biblioteca', 'decor'];
+// galeria: sala de vitrinas con hologramas (los modelos con los que nació el asistente); el botón RITUAL reúne ahí a todos
+const ROLES = ['servidores', 'principal', 'subagentes', 'taller', 'mcp', 'modelos', 'biblioteca', 'galeria', 'decor'];
 const SUELOS = ['piedra', 'tierra', 'madera', 'metal', 'hierba', 'alfombra', 'organico', 'roca', 'lava', 'rejilla'];
 const TEMAS = ['mazmorra', 'nave', 'oficina', 'castillo', 'bosque', 'laboratorio', 'colmena', 'infierno', 'estacion'];
-const OBJETOS = ['rack', 'antorcha', 'orbe', 'impresora', 'mesa', 'pc', 'estanteria', 'planta', 'barril', 'cofre', 'telescopio', 'cuadro', 'consola', 'tanque', 'sofa', 'caja', 'lampara', 'cables', 'portal', 'brazo', 'alambique', 'caldero', 'ornitoptero', 'tornillo', 'maniqui', 'caballete', 'engranajes', 'carro', 'codice', 'banco', 'vela', 'vaina', 'jaula', 'holo', 'brasero', 'calaveras', 'tuberias', 'tentaculos', 'yunque'];
+const OBJETOS = ['rack', 'antorcha', 'orbe', 'impresora', 'mesa', 'pc', 'estanteria', 'planta', 'barril', 'cofre', 'telescopio', 'cuadro', 'consola', 'tanque', 'sofa', 'caja', 'lampara', 'cables', 'portal', 'brazo', 'alambique', 'caldero', 'ornitoptero', 'tornillo', 'maniqui', 'caballete', 'engranajes', 'carro', 'codice', 'banco', 'vela', 'vaina', 'jaula', 'holo', 'brasero', 'calaveras', 'tuberias', 'tentaculos', 'yunque', 'vitrina', 'altar-holo'];
+// vitrina / altar-holo llevan `modelo`: el holograma <dir>/mundo/hologramas/<modelo>.png (tira de N fotogramas girando, meta en hologramas.json)
+const CON_MODELO = new Set(['vitrina', 'altar-holo']);
+const ID_HOLO = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 const BASE = {
   formato: 'mundo/1', nombre: 'Mazmorra de APOLO', tema: 'mazmorra', ancho: 37, alto: 26,
@@ -69,7 +73,8 @@ function validar(m) {
   return {
     formato: 'mundo/1', nombre: txt(m.nombre, 60, 'Mi mundo'), tema: TEMAS.includes(m.tema) ? m.tema : 'mazmorra', ...(estilo ? { estilo } : {}), ancho, alto, salas,
     pasillos: (Array.isArray(m.pasillos) ? m.pasillos : []).slice(0, 30).map(rect),
-    objetos: (Array.isArray(m.objetos) ? m.objetos : []).filter(o => OBJETOS.includes(o?.tipo)).slice(0, 120).map(o => ({ tipo: o.tipo, x: ent(o.x, 0, ancho - 1, 0), y: ent(o.y, 0, alto - 1, 0) })),
+    objetos: (Array.isArray(m.objetos) ? m.objetos : []).filter(o => OBJETOS.includes(o?.tipo)).slice(0, 120).map(o => ({ tipo: o.tipo, x: ent(o.x, 0, ancho - 1, 0), y: ent(o.y, 0, alto - 1, 0),
+      ...(CON_MODELO.has(o.tipo) && ID_HOLO.test(String(o.modelo || '')) ? { modelo: o.modelo } : {}) })),
   };
 }
 
@@ -116,6 +121,7 @@ function crearMundo({ cfg, generarJSON, modelo }) {
   }
 
   const dirPresets = path.join(__dirname, 'mundos');
+  const dirHolo = path.join(cfg.dir, 'mundo', 'hologramas');
   const dirUsuario = path.join(cfg.dir, 'mundos');                 // la galería del usuario (la skill mission-control guarda aquí)
   const de = d => { let l = []; try { l = fs.readdirSync(d).filter(x => x.endsWith('.json')); } catch { }
     return l.map(x => { try { return { id: x.slice(0, -5).replace(/[^\w-]/g, ''), mundo: validar(JSON.parse(fs.readFileSync(path.join(d, x), 'utf8'))) }; } catch { return null; } }).filter(Boolean); };
@@ -126,6 +132,11 @@ function crearMundo({ cfg, generarJSON, modelo }) {
     if (M === 'PUT' && !p[2]) { const m = validar(cuerpo.mundo); fs.writeFileSync(f, JSON.stringify(m, null, 1)); return { mundo: m, propio: true }; }
     if (M === 'DELETE' && !p[2]) { fs.rmSync(f, { force: true }); return { mundo: BASE, propio: false }; }
     if (M === 'POST' && p[2] === 'generar') return { mundo: await generar(cuerpo.descripcion, undefined, cuerpo.imagen) };
+    // hologramas de las vitrinas: GET hologramas → {id: {nombre, frames, tam}} · GET hologramas/<id> → la tira PNG
+    if (M === 'GET' && p[2] === 'hologramas' && !p[3]) { try { return JSON.parse(fs.readFileSync(path.join(dirHolo, 'hologramas.json'), 'utf8')); } catch { return {}; } }
+    if (M === 'GET' && p[2] === 'hologramas' && ID_HOLO.test(p[3] || '')) {
+      const a = path.join(dirHolo, `${p[3]}.png`); if (fs.existsSync(a)) return { __archivo: a };
+    }
     const e = new Error('no encontrado'); e.status = 404; throw e;
   }
   return { http, generar, leer };
