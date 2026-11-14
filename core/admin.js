@@ -32,6 +32,13 @@ function guardarConfig(cfg, cambios) {
   if (typeof cambios.carpeta === 'string') cfg.carpeta = disco.carpeta = cambios.carpeta.trim();
   if (typeof cambios.idioma === 'string' && /^([a-z]{2})?$/.test(cambios.idioma)) cfg.idioma = disco.idioma = cambios.idioma;
   if (typeof cambios.bienvenida === 'boolean') cfg.bienvenida = disco.bienvenida = cambios.bienvenida;
+  // carpeta de recursos de la Biblioteca DMN (programas y modelos que bajan las skills): ruta absoluta o '' = la de por defecto
+  if (cambios.skills && typeof cambios.skills.dirRecursos === 'string') {
+    const d = cambios.skills.dirRecursos.trim();
+    if (d && !path.isAbsolute(d)) throw Object.assign(new Error('la carpeta de recursos debe ser una ruta completa (p. ej. E:\\APOLO-recursos)'), { status: 400 });
+    const pon = o => { const x = { ...(o || {}) }; if (d) x.dirRecursos = path.normalize(d); else delete x.dirRecursos; return x; };
+    cfg.skills = pon(cfg.skills); disco.skills = pon(disco.skills);
+  }
   if (cambios.isla && typeof cambios.isla === 'object') {           // apariencia de la nube flotante
     const i = cfg.isla = { estilo: 'glass', fondo: '', borde: '', bordeAncho: 1, ...(cfg.isla || {}) }, c = cambios.isla;
     const hex = x => typeof x === 'string' && /^#[0-9a-fA-F]{6}$/.test(x);

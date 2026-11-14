@@ -901,6 +901,8 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .bib-barra i { display: block; height: 100%; background: var(--acento); transition: width .3s; }
 .bib-pie { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .bib-pie code { overflow-wrap: anywhere; }
+.bib-dir { display: flex; gap: 6px; width: 100%; }
+.bib-dir input { flex: 1; min-width: 0; }
 .bib-avisos { margin-bottom: 12px; color: var(--txt-3); }
 
 .mk-fuentes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0 0; font-size: 12px; }

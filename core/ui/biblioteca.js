@@ -12,7 +12,7 @@ Object.assign(I18N.dic.en, {
   'La biblioteca aún no está disponible': 'The library is not available yet', 'Todas las categorías': 'All categories', 'Sin GPU NVIDIA': 'No NVIDIA GPU',
   '¡{s} está lista para usar!': '{s} is ready to use!', 'La preparación falló: {e}': 'Setup failed: {e}', 'Preparación cancelada': 'Setup cancelled',
   'Esta skill no necesita preparación.': 'This skill needs no setup.', 'Todo listo: esta skill ya puede usarse.': 'All set: this skill can be used now.',
-  'Revisa antes de seguir': 'Check before continuing', 'Avisos': 'Warnings', 'Activa la skill para usarla': 'Enable the skill to use it',
+  'Revisa antes de seguir': 'Check before continuing', 'Cambiar carpeta': 'Change folder', 'Carpeta guardada': 'Folder saved', 'Avisos': 'Warnings', 'Activa la skill para usarla': 'Enable the skill to use it',
 });
 
 const BIB_bytes = n => (n >= 1024 ** 3 ? (n / 1024 ** 3).toFixed(1) + ' GB' : n >= 1024 ** 2 ? (n / 1024 ** 2).toFixed(0) + ' MB' : n > 0 ? (n / 1024).toFixed(0) + ' KB' : '0');
@@ -124,13 +124,19 @@ const BIB = {
             <span class="chip ${p.estado === 'hecho' ? 'ok' : activo ? 'aviso' : ''}">${activo ? `<span class="punto ok vivo"></span>${tr('Preparando…')}` : p.estado === 'hecho' ? tr('Hecho') : tr('Pendiente')}</span></div>`;
         }).join('')}</div>
       ${d.avisos?.length ? `<details class="bib-avisos"><summary>${tr('Avisos')} (${d.avisos.length})</summary><ul>${d.avisos.map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}
-      <div class="bib-pie"><small class="tenue">${d.descargaBytes ? tr('Descargará {x}', { x: BIB_bytes(d.descargaBytes) }) : tr('Nada que descargar')} · ${tr('Se guarda en')} <code>${esc(d.carpetas?.modelos || '')}</code></small>
+      <div class="bib-pie"><small class="tenue">${d.descargaBytes ? tr('Descargará {x}', { x: BIB_bytes(d.descargaBytes) }) : tr('Nada que descargar')} · ${tr('Se guarda en')}</small>
+        ${corriendo ? `<code>${esc(d.carpetas?.base || '')}</code>` : `<div class="bib-dir"><input id="bibDir" value="${esc(d.carpetas?.base || '')}" spellcheck="false"><button class="btn mini" data-bib-dir>${ic('carpeta')}${tr('Cambiar carpeta')}</button></div>`}
         ${t?.estado === 'error' ? `<div class="caja mal">${esc(tr('La preparación falló: {e}', { e: t.error || '' }))}</div>` : ''}
         ${d.listo ? `<div class="caja ok">${ic('check')}${tr('Todo listo: esta skill ya puede usarse.')}</div>`
           : corriendo ? `<button class="btn mal" data-bib-cancelar>${ic('parar')}${tr('Cancelar preparación')}</button>`
             : d.errores?.length ? '' : `<button class="btn pri" data-bib-go="${d.problemas?.length ? '1' : ''}">${ic('rayo')}${tr(d.problemas?.length ? 'Preparar igualmente' : 'Preparar todo')}</button>`}</div>`;
   },
   async clicModal(ev) {
+    if (ev.target.closest('[data-bib-dir]')) {
+      const v = $('#bibDir', this.modalCuerpo)?.value.trim() || '';
+      try { await api('PATCH', '/config', { skills: { dirRecursos: v } }); aviso(tr('Carpeta guardada')); } catch (er) { aviso(er.message, true); }
+      return this.refrescarModal();
+    }
     const go = ev.target.closest('[data-bib-go]');
     if (go) {
       go.disabled = true;

@@ -108,3 +108,17 @@ test('preparar: el escáner marca rojo un preparar.json con pasos no permitidos'
   fs.writeFileSync(path.join(d, 'preparar.json'), JSON.stringify(PLAN));
   assert.notEqual(analizarEstatico(d).nivel, 'rojo');
 });
+
+test('preparar: la carpeta de recursos se cambia por la config (ruta completa) y vuelve a la de por defecto con ""', () => {
+  const { guardarConfig } = require('../admin');
+  const dir = tmp(); fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ skills: { rutasExtra: ['x'] } }));
+  const cfg = { dir, permisos: { modo: 'preguntar' }, proveedores: {}, skills: { rutasExtra: ['x'] } };
+  const destino = path.join(os.tmpdir(), 'APOLO-recursos-prueba');
+  guardarConfig(cfg, { skills: { dirRecursos: destino } });
+  assert.equal(cfg.skills.dirRecursos, path.normalize(destino)); assert.deepEqual(cfg.skills.rutasExtra, ['x']);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8')).skills.dirRecursos, path.normalize(destino));
+  assert.equal(require('../skills/preparar').rutasBase(cfg).modelos, path.join(path.normalize(destino), 'modelos'));
+  assert.throws(() => guardarConfig(cfg, { skills: { dirRecursos: 'relativa/x' } }), /ruta completa/);
+  guardarConfig(cfg, { skills: { dirRecursos: '' } });
+  assert.equal(cfg.skills.dirRecursos, undefined);
+});

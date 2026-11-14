@@ -197,7 +197,7 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
     const t = trabajos.get(s.slug);
     return {
       slug: s.slug, tienePlan: true, errores, avisos, problemas, equipo: eq, requisitos: req, pasos, descargaBytes: faltaBytes,
-      carpetas: { apps: vars.apps, modelos: vars.modelos }, listo: !errores.length && pasos.every(p => p.estado === 'hecho'),
+      carpetas: { base: rutasBase(cfg).base, apps: vars.apps, modelos: vars.modelos }, listo: !errores.length && pasos.every(p => p.estado === 'hecho'),
       puede: !errores.length && !problemas.length, trabajo: t ? { estado: t.estado, paso: t.paso, progreso: t.progreso, error: t.error } : est.ultimo || null,
     };
   }
