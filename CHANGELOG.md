@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-11-14
+
+### Added
+- **DMN Library** (Skills → DMN Library): official skills from [DMNENGINE/apolo-skills](https://github.com/DMNENGINE/apolo-skills), signed by DMNENGINE (shown as verified without any setup) and scanned. 21 skills at launch: design, maker, office, marketing, development and creativity.
+- **Automatic setup** for skills that need models or programs (`preparar.json`, `apolo-preparar/1`): APOLO checks your GPU, RAM and disk, shows every step and download size, and with one click installs programs (closed list, via winget), clones repos, creates Python environments, downloads models (resumable, sha256-checked) and pulls Ollama models. Shared folders so models download once; choose the drive from the setup window. Free-form commands are not allowed and the scanner flags any plan that tries them.
+- **Creative Studio** (`estudio-creativo`): photos with FLUX.1 schnell and short videos with Wan 2.2 (text or image to video) on your own NVIDIA GPU.
+- APOLO knows what you did these last days with all your agents.
+- `tools/publicar-skill.js` for maintainers: private-data cleaner + scanner + signature + index before publishing a skill.
+
+### Fixed
+- Skill scripts use the real Python install (not the Microsoft Store shortcut), even right after installing it.
+- Removed local paths and LAN details from the suite-craft and video-tutorial-pc skills.
+
 ## [0.3.2] - 2026-11-14
 
 ### Added

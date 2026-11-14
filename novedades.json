@@ -1,4 +1,29 @@
 {
+  "0.3.3": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.3",
+      "saludo": "¡Llegó la Biblioteca DMN!",
+      "puntos": [
+        "Skills → Biblioteca DMN: 21 skills oficiales, firmadas y revisadas, listas para instalar.",
+        "Las que necesitan modelos o programas se preparan solas: compruebo tu equipo, te digo cuánto bajan y lo dejo todo listo.",
+        "Estudio Creativo: fotos con FLUX y vídeos con Wan 2.2 en tu propia GPU, sin nube.",
+        "Puedes elegir en qué disco se guardan los modelos.",
+        "Ahora sé lo que hiciste estos días con todos tus agentes."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.3",
+      "saludo": "The DMN Library is here!",
+      "puntos": [
+        "Skills → DMN Library: 21 official skills, signed and reviewed, ready to install.",
+        "The ones that need models or programs set themselves up: I check your computer, tell you how much they download and leave everything ready.",
+        "Creative Studio: photos with FLUX and videos with Wan 2.2 on your own GPU, no cloud.",
+        "You can choose which drive the models are stored on.",
+        "I now know what you did these days with all your agents."
+      ]
+    }
+  },
   "0.3.2": {
     "animaciones": false,
     "es": {
