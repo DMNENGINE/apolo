@@ -1,0 +1,13 @@
+{
+  "name": "apolo-puente",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DeepSeek Harness pasa por APOLO: cada mensaje, herramienta y fin de turno llega a APOLO (isla, Mission Control, memoria).",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": { "default": "./lib/index.js" },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT"
+}

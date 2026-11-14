@@ -173,7 +173,8 @@ function crearNucleo(opciones = {}) {
     const esClaude = (ev?._motor || 'claude') === 'claude';
     if (esClaude && ['UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd', 'SubagentStop'].includes(ev.hook_event_name)) espejoCC.tocar(ev.transcript_path);
     // la memoria aprende de la sesión en cuanto se queda parada (aprender-cc salta las que tienen actividad de hace < 10 min), no a las 3 de la noche;
-    // vale para Claude Code y para los motores con hooks (Gemini CLI, opencode); Codex y Qwen Code se leen en la vuelta nocturna
+    // vale para Claude Code y para los motores con hooks (Gemini CLI, opencode, Codex, DeepSeek Harness vía deepseek/apolo-puente);
+    // Qwen Code se lee en la vuelta nocturna
     if (['Stop', 'SessionEnd'].includes(ev.hook_event_name) && cfg.aprenderClaude?.activo !== false && cfg.aprenderClaude?.alMomento !== false) {
       clearTimeout(aprenderPronto);
       aprenderPronto = setTimeout(() => aprenderCC.aprender().catch(() => { }), 12 * 60_000); aprenderPronto.unref?.();

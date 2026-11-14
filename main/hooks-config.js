@@ -22,6 +22,10 @@ const CODEX_HOOKS = path.join(os.homedir(), '.codex', 'hooks.json');
 // [evento, timeout en s, ¿lleva matcher de herramienta?]  (SessionEnd: Codex permite como mucho 3 s)
 const CODEX_EVENTS = [['SessionStart', 10], ['UserPromptSubmit', 10], ['PreToolUse', 10, true], ['PermissionRequest', 120, true], ['PostToolUse', 10, true],
   ['Stop', 10], ['SubagentStart', 10], ['SubagentStop', 10], ['SessionEnd', 3]];
+const DSH_PERFIL = path.join(os.homedir(), '.dsh', 'profiles', 'desktop');
+const DSH_FUENTE = path.join(__dirname, '..', 'deepseek', 'apolo-puente');
+const DSH_INICIO = '# >>> APOLO', DSH_FIN = '# <<< APOLO';
+const DSH_BLOQUE = /\n?# >>> APOLO[\s\S]*?# <<< APOLO\n?/;
 const GEMINI_EVENTS = [['SessionStart', 10000], ['SessionEnd', 10000], ['BeforeAgent', 10000], ['AfterAgent', 10000], ['BeforeTool', 120000], ['AfterTool', 10000], ['Notification', 10000]];   // ms
 
 const tieneCLI = n => { try { require('child_process').execSync(process.platform === 'win32' ? `where ${n}` : `command -v ${n}`, { stdio: 'ignore', windowsHide: true, shell: process.platform === 'win32' ? undefined : '/bin/sh' }); return true; } catch { return false; } };
@@ -119,6 +123,34 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     marcar('codex', instalar ? 'auto' : 'quitado');
     if (!callado) mensaje({ message: tr(instalar ? 'Hooks de Codex instalados.' : 'Hooks de Codex quitados.'), detail: `${tr('Copia de seguridad:')} ${b || tr('(no había hooks.json)')}${instalar ? '\n' + tr('En Codex escribe /hooks y confía en los de APOLO (una sola vez).') : ''}` });
   }
+  // DeepSeek Harness (Cordis): plugin deepseek/apolo-puente copiado a su perfil (mensajes, herramientas y fin de turno → APOLO)
+  // + el servidor MCP de APOLO (core/mcp.js: memoria compartida, avisos, tareas) como herramientas de DeepSeek.
+  // Toca package.json (dependencia link:) y cordis.patch.yml (bloque entre marcas) con copia antes. Hay que reabrir DeepSeek.
+  function deepseek(instalar, { callado } = {}) {
+    if (!fs.existsSync(DSH_PERFIL)) throw new Error('DeepSeek Harness no tiene perfil desktop');
+    const pkgF = path.join(DSH_PERFIL, 'package.json'), patchF = path.join(DSH_PERFIL, 'cordis.patch.yml'), dst = path.join(DSH_PERFIL, 'node_modules', 'apolo-puente');
+    copia(pkgF); const b = copia(patchF);
+    const pkg = leerJSON(pkgF); pkg.dependencies = pkg.dependencies || {};
+    let patch = (leer(patchF) || '').replace(DSH_BLOQUE, '').replace(/\s+$/, '') + '\n';
+    if (instalar) {
+      for (const f of ['package.json', path.join('lib', 'index.js')]) { fs.mkdirSync(path.dirname(path.join(dst, f)), { recursive: true }); fs.copyFileSync(path.join(DSH_FUENTE, f), path.join(dst, f)); }
+      pkg.dependencies['apolo-puente'] = 'link:node_modules/apolo-puente';
+      const mcp = require('../core/rutas').fuera(path.join(__dirname, '..', 'core', 'mcp.js')).replace(/\\/g, '/');
+      patch += `${DSH_INICIO}\n# APOLO: DeepSeek pasa por APOLO (lo pone y lo quita APOLO; no edites entre estas marcas)\n- insert:\n    - id: apolo-puente\n      name: apolo-puente\n` +
+        `    - id: apolo-mcp\n      name: "@deepseek-ai/dsh-mcp-client"\n      config:\n        serverName: apolo\n        transport: stdio\n        command: node\n        args:\n          - ${JSON.stringify(mcp)}\n        env:\n          ROBOT_MCP_ORIGEN: DeepSeek\n${DSH_FIN}\n`;
+    } else { delete pkg.dependencies['apolo-puente']; try { fs.rmSync(dst, { recursive: true, force: true }); } catch { } }
+    fs.writeFileSync(pkgF, JSON.stringify(pkg, null, 2)); fs.writeFileSync(patchF, patch);
+    marcar('deepseek', instalar ? 'auto' : 'quitado');
+    if (!callado) mensaje({ message: tr(instalar ? 'DeepSeek Harness conectado a APOLO.' : 'DeepSeek Harness desconectado de APOLO.'), detail: `${tr('Copia de seguridad:')} ${b}\n${tr('Cierra y abre DeepSeek Harness para que lo cargue.')}` });
+  }
+  const deepseekInstalado = () => fs.existsSync(path.join(DSH_PERFIL, 'node_modules', 'apolo-puente', 'lib', 'index.js')) && DSH_BLOQUE.test(leer(path.join(DSH_PERFIL, 'cordis.patch.yml')) || '');
+  // al arrancar: si la app trae otra versión del plugin, se cambia sin preguntar
+  function deepseekAlDia() {
+    if (!deepseekInstalado()) return false;
+    const f = path.join('lib', 'index.js'), nuevo = leer(path.join(DSH_FUENTE, f)), actual = leer(path.join(DSH_PERFIL, 'node_modules', 'apolo-puente', f));
+    if (nuevo && actual !== nuevo) { try { fs.writeFileSync(path.join(DSH_PERFIL, 'node_modules', 'apolo-puente', f), nuevo); return true; } catch { } }
+    return false;
+  }
   // si ya está instalado y la app trae una versión nueva del plugin, se cambia sin preguntar
   function opencodeAlDia() {
     const nuevo = leer(OPENCODE_FUENTE), actual = leer(OPENCODE_PLUGIN);
@@ -134,10 +166,11 @@ function crearHooksConfig({ empaquetado, mensaje, tr, dirDatos }) {
     intentar('gemini', () => hay('gemini') && !ES_HOOK.test(JSON.stringify(leerJSON(GEMINI_SETTINGS))), () => gemini(true, { callado: true }));
     intentar('opencode', () => hay('opencode') && !fs.existsSync(OPENCODE_PLUGIN), () => opencode(true, { callado: true }));
     intentar('codex', () => hay('codex') && !ES_HOOK.test(JSON.stringify(leerJSON(CODEX_HOOKS))), () => codex(true, { callado: true }));
+    intentar('deepseek', () => fs.existsSync(DSH_PERFIL) && !deepseekInstalado(), () => deepseek(true, { callado: true }));
     return hechos;
   }
   return {
-    instalar, quitar, gemini, opencode, codex, opencodeAlDia, conectarTodo,
+    instalar, quitar, gemini, opencode, codex, deepseek, deepseekInstalado, deepseekAlDia, opencodeAlDia, conectarTodo,
     codexInstalados: () => ES_HOOK.test(JSON.stringify(leerJSON(CODEX_HOOKS))),
     opencodeInstalado: () => fs.existsSync(OPENCODE_PLUGIN),
     instalados: () => ES_HOOK.test(JSON.stringify(leerJSON(SETTINGS))),

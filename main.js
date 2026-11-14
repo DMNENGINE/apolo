@@ -121,6 +121,7 @@ ipcMain.handle('listen', (_e, modo) => voz.escuchar(modo));
 // ---------- hooks en ~/.claude y ~/.gemini (main/hooks-config.js) ----------
 const hooksCfg = crearHooksConfig({ empaquetado: () => app.isPackaged, mensaje: o => dialog.showMessageBox(o), tr: (k, v) => tr(k, v), dirDatos: () => app.getPath('userData') });
 try { if (hooksCfg.opencodeAlDia()) console.log('[opencode] plugin actualizado'); } catch { }   // plugin instalado de una versión anterior
+try { if (hooksCfg.deepseekAlDia()) console.log('[deepseek] plugin actualizado (reabre DeepSeek Harness)'); } catch { }
 // Claude Code, Gemini CLI y opencode quedan conectados solos (respeta los que el usuario quitó desde la bandeja)
 function conectarAgentes() {
   const hechos = hooksCfg.conectarTodo();
