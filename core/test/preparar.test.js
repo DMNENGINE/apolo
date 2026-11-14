@@ -142,3 +142,13 @@ test('preparar: si APOLO se reinicia a medias, reanudar() sigue la preparación 
   assert.equal(t.estado, 'listo', t.error);
   assert.equal(JSON.parse(fs.readFileSync(path.join(a.dir, '_datos', 'preparacion.json'), 'utf8')).ultimo.estado, 'listo');
 });
+
+test('preparar: requisitos externos (lo instala el usuario) sin pasos: plan válido, se enseñan y la skill queda lista', async () => {
+  const plan = { formato: 'apolo-preparar/1', requisitos: { externos: [{ nombre: 'Roblox Studio', url: 'https://create.roblox.com/', detalle: 'actívale el MCP' }] }, pasos: [] };
+  assert.deepEqual(validar(plan).errores, []);
+  assert.ok(validar({ ...plan, requisitos: { externos: [{ nombre: 'x', url: 'http://malo' }] } }).errores.length);
+  assert.ok(validar({ formato: 'apolo-preparar/1', pasos: [] }).errores.some(e => /no hay pasos/.test(e)));
+  const { prep } = montar(plan);
+  const d = await prep.diagnostico('prueba');
+  assert.equal(d.listo, true); assert.equal(d.externos[0].nombre, 'Roblox Studio'); assert.equal(d.externos[0].url, 'https://create.roblox.com/');
+});

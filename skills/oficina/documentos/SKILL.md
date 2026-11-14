@@ -25,9 +25,9 @@ La extensión de `"salida"` decide el formato.
 
 ### Word (.docx) y PDF (.pdf) — mismo formato
 ```json
-{"salida": "C:/Users/<usuario>/Documents/Presupuesto El Trueno.docx", "titulo": "Power Truck Services",
+{"salida": "C:/Users/<usuario>/Documents/Presupuesto Taller.docx", "titulo": "Mi Empresa",
  "bloques": [
-  {"h1": "Presupuesto"}, {"p": "Trabajo en el **389 El Trueno**: cambio de *turbo*."},
+  {"h1": "Presupuesto"}, {"p": "Trabajo en el **camión del cliente**: cambio de *turbo*."},
   {"lista": ["Turbo nuevo", "Juntas"]}, {"numerada": ["Desmontar", "Cambiar", "Probar"]},
   {"tabla": {"cabecera": ["Concepto", "Precio"], "filas": [["Turbo", "1.800 $"], ["Mano de obra", "600 $"]]}},
   {"imagen": "C:/ruta/logo.png", "ancho_cm": 6}, {"cita": "Garantía de 6 meses."}, {"salto": true}, {"h2": "Condiciones"}]}
@@ -60,4 +60,4 @@ La extensión de `"salida"` decide el formato.
 ## Reglas
 - **No inventes datos** en documentos serios (facturas, presupuestos, informes): usa los que dio el usuario o los que leíste; si faltan, déjalo indicado ("[precio]") y díselo.
 - **Facturas y presupuestos:** pon los totales con fórmulas en Excel, o calculados por ti en Word/PDF (revisa la suma).
-- **Si falta una librería**, el script lo dice con el comando para instalarla (`python -m pip install --user …`): pide permiso y ejecútalo.
+- **Si falta una librería**: dile al usuario que abra Skills → documentos → **Preparar** (APOLO instala todo solo). Si prefiere hacerlo a mano, el script dice el comando (`python -m pip install --user …`): pide permiso y ejecútalo.

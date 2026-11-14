@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.4] - 2026-11-14
+
+### Added
+- Skill setup can declare **external requirements** (things only you can install: Roblox Studio, ArtCraft apps, a ProtoForja account, Blender) with a link; they show on the library card and in the setup window.
+- `documentos` sets itself up: Python libraries for Word, Excel, PowerPoint and PDF in its own environment, used automatically by its scripts.
+- Blender can be detected and installed by skill setup (any installed version is found).
+
+### Changed
+- Library skills no longer contain the author's personal examples or paths (taller-hardware, documentos, suite-craft).
+
 ## [0.3.3] - 2026-11-14
 
 ### Added

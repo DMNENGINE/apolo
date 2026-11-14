@@ -1,0 +1,22 @@
+{
+  "formato": "apolo-preparar/1",
+  "requisitos": {
+    "externos": [
+      {
+        "nombre": "Cuenta de ProtoForja",
+        "url": "https://protoforja.com/",
+        "detalle": "Crea tu cuenta y en Mi cuenta → Conectar con APOLO crea una clave; APOLO te la pedirá la primera vez."
+      }
+    ]
+  },
+  "pasos": [
+    {
+      "id": "config",
+      "nombre": "Configuración",
+      "tipo": "config",
+      "valores": {
+        "preparada": true
+      }
+    }
+  ]
+}

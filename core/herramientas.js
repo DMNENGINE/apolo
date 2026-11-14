@@ -386,7 +386,15 @@ const HERRAMIENTAS = [
       const ext = path.extname(f).toLowerCase(), args = (Array.isArray(a.args) ? a.args : a.args ? [a.args] : []).map(String);
       const win = process.platform === 'win32';
       if (ext === '.py') refrescarPython();
-      const cmd = { '.py': [PYTHON.ruta || (win ? 'python' : 'python3'), [f, ...args]], '.js': [process.execPath, [f, ...args]], '.mjs': [process.execPath, [f, ...args]], '.cjs': [process.execPath, [f, ...args]],
+      // la preparación (Biblioteca DMN) puede dejar un Python propio de la skill con sus librerías: _datos/config.json → "python"
+      let pySkill = '';
+      if (ext === '.py') try {
+        const p = JSON.parse(fs.readFileSync(path.join(s.dir, '_datos', 'config.json'), 'utf8')).python;
+        const base = require('./skills/preparar').rutasBase(ctx.cfg || {}).base, r = p && path.resolve(String(p));
+        const dentroDe = d => { const x = path.relative(path.resolve(d), r); return x && !x.startsWith('..') && !path.isAbsolute(x); };
+        if (r && fs.existsSync(r) && (dentroDe(s.dir) || dentroDe(base))) pySkill = r;
+      } catch { }
+      const cmd = { '.py': [pySkill || PYTHON.ruta || (win ? 'python' : 'python3'), [f, ...args]], '.js': [process.execPath, [f, ...args]], '.mjs': [process.execPath, [f, ...args]], '.cjs': [process.execPath, [f, ...args]],
         '.ps1': [win ? 'powershell.exe' : 'pwsh', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', f, ...args]], '.sh': ['bash', [f, ...args]] }[ext];
       if (!cmd) return ok(`error: tipo de script no soportado (${ext || 'sin extensión'})`);
       // Etapa H: el nivel de sandbox (normal / restringido / aislado) lo decide core/sandbox según firma, escaneo y cfg.seguridad.sandbox

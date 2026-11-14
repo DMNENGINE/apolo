@@ -1,4 +1,25 @@
 {
+  "0.3.4": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.4",
+      "saludo": "¡Más skills que se preparan solas!",
+      "puntos": [
+        "Documentos (Word, Excel, PowerPoint, PDF) instala sus librerías sola en un entorno propio.",
+        "Al instalar una skill que necesita algo tuyo (Roblox Studio, ArtCraft, una cuenta, Blender) te digo qué es y dónde conseguirlo.",
+        "Si APOLO se reinicia mientras prepara una skill, sigue solo por donde iba."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.4",
+      "saludo": "More skills that set themselves up!",
+      "puntos": [
+        "Documents (Word, Excel, PowerPoint, PDF) installs its libraries by itself in its own environment.",
+        "When a skill needs something only you can install (Roblox Studio, ArtCraft, an account, Blender) I tell you what it is and where to get it.",
+        "If APOLO restarts while setting up a skill, it resumes on its own."
+      ]
+    }
+  },
   "0.3.3": {
     "animaciones": false,
     "es": {

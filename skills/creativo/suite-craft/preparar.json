@@ -1,0 +1,22 @@
+{
+  "formato": "apolo-preparar/1",
+  "requisitos": {
+    "externos": [
+      {
+        "nombre": "Apps de ArtCraft",
+        "url": "https://getartcraft.com/",
+        "detalle": "Instala las que quieras usar (FilmCraft, PhotoCraft, VectorCraft…); APOLO usa solo las que estén instaladas."
+      }
+    ]
+  },
+  "pasos": [
+    {
+      "id": "config",
+      "nombre": "Configuración",
+      "tipo": "config",
+      "valores": {
+        "preparada": true
+      }
+    }
+  ]
+}

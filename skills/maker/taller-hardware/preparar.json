@@ -1,0 +1,21 @@
+{
+  "formato": "apolo-preparar/1",
+  "requisitos": {
+    "discoGB": 1,
+    "externos": [
+      {
+        "nombre": "Blender",
+        "url": "https://www.blender.org/download/",
+        "detalle": "Solo para generar las cajas imprimibles (STL). APOLO lo encuentra solo cuando esté instalado."
+      }
+    ]
+  },
+  "pasos": [
+    {
+      "id": "python",
+      "nombre": "Python 3.12",
+      "tipo": "programa",
+      "programa": "python"
+    }
+  ]
+}

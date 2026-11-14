@@ -92,7 +92,8 @@ const idx = fs.existsSync(fIdx) ? JSON.parse(fs.readFileSync(fIdx, 'utf8')) : { 
 const nueva = {
   nombre: s.slug, tipo: 'skill', descripcion: s.descripcion, fuente: `DMNENGINE/apolo-skills/skills/${s.slug}`, autor: 'DMNENGINE',
   version: s.apolo.version || '1.0.0', licencia: s.licencia || 'MIT', categoria: arg('categoria', (idx.entradas.find(e => e.nombre === s.slug) || {}).categoria || 'general'),
-  etiquetas: ['oficial'], ...(plan ? { preparacion: true, requisitos } : {}), web: `https://github.com/DMNENGINE/apolo-skills/tree/main/skills/${s.slug}`,
+  etiquetas: ['oficial'], ...(plan && (plan.pasos || []).length ? { preparacion: true } : {}), ...(plan ? { requisitos } : {}),
+  ...(plan?.requisitos?.externos?.length ? { necesita: plan.requisitos.externos.map(x => x.nombre) } : {}), web: `https://github.com/DMNENGINE/apolo-skills/tree/main/skills/${s.slug}`,
 };
 idx.entradas = [...idx.entradas.filter(e => e.nombre !== s.slug), nueva].sort((a, b) => a.nombre.localeCompare(b.nombre));
 idx.actualizado = new Date().toISOString().slice(0, 10);

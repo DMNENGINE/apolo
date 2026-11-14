@@ -12,7 +12,7 @@ Object.assign(I18N.dic.en, {
   'La biblioteca aún no está disponible': 'The library is not available yet', 'Todas las categorías': 'All categories', 'Sin GPU NVIDIA': 'No NVIDIA GPU',
   '¡{s} está lista para usar!': '{s} is ready to use!', 'La preparación falló: {e}': 'Setup failed: {e}', 'Preparación cancelada': 'Setup cancelled',
   'Esta skill no necesita preparación.': 'This skill needs no setup.', 'Todo listo: esta skill ya puede usarse.': 'All set: this skill can be used now.',
-  'Revisa antes de seguir': 'Check before continuing', 'Cambiar carpeta': 'Change folder', 'Carpeta guardada': 'Folder saved', 'Avisos': 'Warnings', 'Activa la skill para usarla': 'Enable the skill to use it',
+  'Revisa antes de seguir': 'Check before continuing', 'Cambiar carpeta': 'Change folder', 'Tienes que instalarlo tú': 'You install this yourself', 'Además necesitas (esto lo instalas tú)': 'You also need (you install these yourself)', 'Carpeta guardada': 'Folder saved', 'Avisos': 'Warnings', 'Activa la skill para usarla': 'Enable the skill to use it',
 });
 
 const BIB_bytes = n => (n >= 1024 ** 3 ? (n / 1024 ** 3).toFixed(1) + ' GB' : n >= 1024 ** 2 ? (n / 1024 ** 2).toFixed(0) + ' MB' : n > 0 ? (n / 1024).toFixed(0) + ' KB' : '0');
@@ -45,7 +45,8 @@ const BIB = {
   tarjeta(e) {
     const r = e.requisitos || {}, inst = e.instalada;
     const req = [r.vramGB ? `<span class="chip" title="${tr('Necesita')}">${ic('cpu')}GPU ${r.vramGB} GB</span>` : '', r.discoGB ? `<span class="chip">${ic('disco')}${r.discoGB} GB</span>` : '',
-      e.preparacion ? `<span class="chip ok">${ic('rayo')}${tr('Se prepara sola')}</span>` : ''].join('');
+      e.preparacion ? `<span class="chip ok">${ic('rayo')}${tr('Se prepara sola')}</span>` : '',
+      ...(e.necesita || []).map(n => `<span class="chip aviso" title="${tr('Tienes que instalarlo tú')}">${ic('info')}${esc(n)}</span>`)].join('');
     return `<article class="sk-tarjeta mk-tarjeta bib-tarjeta" data-bib="${esc(e.id)}" tabindex="0">
       <div class="sk-cab"><span class="sk-ico" style="--h:${SK_tono(e.nombre)}">${esc(SK_siglas(e.nombre))}</span>
         <div class="sk-nom"><b>${esc(e.nombre)}</b><small>${esc(e.categoria || 'DMN')}${e.version ? ` · v${esc(String(e.version).replace(/^v/, ''))}` : ''}</small></div>
@@ -79,7 +80,7 @@ const BIB = {
       aviso(tr('{s} instalado (desactivado, escaneado)', { s: s.nombre || s.slug }), s.escaneo?.nivel === 'rojo');
       this.datos = null; MK.datos = null;
       if (this.c?.isConnected) await this.pintar(this.c);
-      if (e.preparacion) this.preparar(s.slug);
+      if (e.preparacion || e.necesita?.length) this.preparar(s.slug);   // también para enseñar lo que tiene que instalar el usuario
     } catch (er) { aviso(er.message, true); }
     finally { if (boton?.isConnected) { boton.disabled = false; boton.innerHTML = txt; } }
   },
@@ -123,6 +124,7 @@ const BIB = {
               ${activo ? `<div class="bib-barra"><i style="width:${pct ?? 5}%"></i></div><small class="tenue bib-linea">${esc(pg?.fase || pg?.linea || '')}${pct != null ? ` · ${pct}% · ${BIB_bytes(pg.bytes)} / ${BIB_bytes(pg.total)}` : ''}</small>` : ''}</div>
             <span class="chip ${p.estado === 'hecho' ? 'ok' : activo ? 'aviso' : ''}">${activo ? `<span class="punto ok vivo"></span>${tr('Preparando…')}` : p.estado === 'hecho' ? tr('Hecho') : tr('Pendiente')}</span></div>`;
         }).join('')}</div>
+      ${d.externos?.length ? `<div class="caja aviso bib-externos"><b>${tr('Además necesitas (esto lo instalas tú)')}</b><ul>${d.externos.map(x => `<li>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.nombre)}</a>` : `<b>${esc(x.nombre)}</b>`}${x.detalle ? ` — ${esc(x.detalle)}` : ''}</li>`).join('')}</ul></div>` : ''}
       ${d.avisos?.length ? `<details class="bib-avisos"><summary>${tr('Avisos')} (${d.avisos.length})</summary><ul>${d.avisos.map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}
       <div class="bib-pie"><small class="tenue">${d.descargaBytes ? tr('Descargará {x}', { x: BIB_bytes(d.descargaBytes) }) : tr('Nada que descargar')} · ${tr('Se guarda en')}</small>
         ${corriendo ? `<code>${esc(d.carpetas?.base || '')}</code>` : `<div class="bib-dir"><input id="bibDir" value="${esc(d.carpetas?.base || '')}" spellcheck="false"><button class="btn mini" data-bib-dir>${ic('carpeta')}${tr('Cambiar carpeta')}</button></div>`}

@@ -25,6 +25,10 @@ const PROGRAMAS = {
   ollama: { winget: 'Ollama.Ollama', cmd: 'ollama', nombre: 'Ollama', rutas: [path.join(LAD, 'Programs', 'Ollama', 'ollama.exe')] },
   node: { winget: 'OpenJS.NodeJS.LTS', cmd: 'node', nombre: 'Node.js LTS', rutas: [path.join(PF, 'nodejs', 'node.exe')] },
   '7zip': { winget: '7zip.7zip', cmd: '7z', nombre: '7-Zip', rutas: [path.join(PF, '7-Zip', '7z.exe')] },
+  // Blender: cualquier versión instalada (Program Files\Blender Foundation\Blender 4.xlender.exe), la más nueva primero
+  blender: { winget: 'BlenderFoundation.Blender', cmd: 'blender', nombre: 'Blender', rutas: () => {
+    try { const d = path.join(PF, 'Blender Foundation'); return fs.readdirSync(d).sort().reverse().map(v => path.join(d, v, 'blender.exe')); } catch { return []; }
+  } },
 };
 const HOSTS_DESCARGA = ['huggingface.co', 'cdn-lfs.huggingface.co', 'cdn-lfs-us-1.huggingface.co', 'cas-bridge.xethub.hf.co', 'github.com', 'objects.githubusercontent.com',
   'release-assets.githubusercontent.com', 'raw.githubusercontent.com', 'codeload.github.com', 'download.pytorch.org', 'files.pythonhosted.org', 'pypi.org'];
@@ -68,7 +72,17 @@ function validar(plan) {
   if (!plan || typeof plan !== 'object') return { errores: ['plan vacío'], avisos };
   if (plan.formato !== FORMATO) errores.push(`formato desconocido (se esperaba ${FORMATO})`);
   const pasos = Array.isArray(plan.pasos) ? plan.pasos : [];
-  if (!pasos.length) errores.push('no hay pasos');
+  // requisitos externos: lo que solo puede instalar el usuario (Roblox Studio, una cuenta…); se enseñan con su enlace, no se ejecutan
+  const ext = plan.requisitos?.externos;
+  if (ext !== undefined) {
+    if (!Array.isArray(ext) || ext.length > 8) errores.push('requisitos.externos debe ser una lista (máx. 8)');
+    else for (const x of ext) {
+      if (!x || typeof x.nombre !== 'string' || !x.nombre.trim() || x.nombre.length > 60) errores.push('requisito externo sin nombre válido');
+      if (x?.url !== undefined && !/^https:\/\/[^\s]+$/.test(String(x.url))) errores.push(`requisito externo "${x?.nombre}": la url debe ser https`);
+      if (x?.detalle !== undefined && String(x.detalle).length > 240) errores.push(`requisito externo "${x?.nombre}": detalle demasiado largo`);
+    }
+  }
+  if (!pasos.length && !(Array.isArray(ext) && ext.length)) errores.push('no hay pasos');
   if (pasos.length > 60) errores.push('demasiados pasos (máx. 60)');
   const ids = new Set();
   const vars = { apps: path.resolve('/A'), modelos: path.resolve('/M'), skill: path.resolve('/S'), datos: path.resolve('/S/_datos') };
@@ -124,7 +138,7 @@ async function hayComando(cmd, ejecutar = correr) { const r = await ejecutar(pro
 // ruta del programa que funciona de verdad (rutas de winget primero; python: versión real, no el atajo de la Microsoft Store) o null
 async function ejecutable(id, ejecutar = correr) {
   const pr = PROGRAMAS[id]; if (!pr) return null;
-  const cands = [...pr.rutas.filter(r => { try { return fs.existsSync(r); } catch { return false; } }), pr.cmd];
+  const cands = [...(typeof pr.rutas === 'function' ? pr.rutas() : pr.rutas).filter(r => { try { return fs.existsSync(r); } catch { return false; } }), pr.cmd];
   for (const c of cands) {
     if (pr.version) { const r = await ejecutar(c, ['--version'], { timeout: 10_000 }); if (r.code === 0 && pr.version.test((r.out + r.err).trim())) return c; continue; }
     if (c !== pr.cmd || await hayComando(c, ejecutar)) return c;
@@ -197,6 +211,7 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
     const t = trabajos.get(s.slug);
     return {
       slug: s.slug, tienePlan: true, errores, avisos, problemas, equipo: eq, requisitos: req, pasos, descargaBytes: faltaBytes,
+      externos: (Array.isArray(req.externos) ? req.externos : []).map(x => ({ nombre: String(x.nombre), ...(x.url ? { url: String(x.url) } : {}), ...(x.detalle ? { detalle: String(x.detalle) } : {}) })),
       carpetas: { base: rutasBase(cfg).base, apps: vars.apps, modelos: vars.modelos }, listo: !errores.length && pasos.every(p => p.estado === 'hecho'),
       puede: !errores.length && !problemas.length, trabajo: t ? { estado: t.estado, paso: t.paso, progreso: t.progreso, error: t.error } : est.ultimo || null,
     };

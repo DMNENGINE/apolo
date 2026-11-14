@@ -40,6 +40,7 @@ function normalizarEntrada(e, origen) {
     ...(e.oficial === true ? { oficial: true } : {}),
     ...(e.requisitos && typeof e.requisitos === 'object' ? { requisitos: Object.fromEntries(['vramGB', 'ramGB', 'discoGB', 'descargaGB'].filter(k => Number(e.requisitos[k]) > 0).map(k => [k, Number(e.requisitos[k])])) } : {}),
     ...(e.preparacion === true ? { preparacion: true } : {}),
+    ...(Array.isArray(e.necesita) && e.necesita.length ? { necesita: e.necesita.map(x => txt(x, 60)).filter(Boolean).slice(0, 6) } : {}),
   };
 }
 // índice propio: array de entradas o {formato, nombre, entradas}

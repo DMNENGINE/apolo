@@ -1,0 +1,10 @@
+{
+  "formato": "apolo-preparar/1",
+  "requisitos": { "discoGB": 1 },
+  "pasos": [
+    { "id": "python", "nombre": "Python 3.12", "tipo": "programa", "programa": "python" },
+    { "id": "librerias", "nombre": "Librerías de Word, Excel, PowerPoint y PDF", "tipo": "python", "venv": "{{datos}}/venv",
+      "paquetes": ["python-docx", "openpyxl", "python-pptx", "pypdf", "reportlab"], "bytes": 40000000 },
+    { "id": "config", "nombre": "Configuración", "tipo": "config", "valores": { "python": "{{datos}}/venv/Scripts/python.exe" } }
+  ]
+}
