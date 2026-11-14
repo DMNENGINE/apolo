@@ -1,6 +1,6 @@
 # Caso real: tutorial "Cómo instalar Lichii" (2026-11-07)
 
-Carpeta: `C:\Users\yosoy\Videos\Tutorial Lichii\` (guion `monologo.md`, `Grabaciones OBS\`, `Voz\`, `Voz_EN\`, `.fcproj` ES/EN, MP4 finales, miniaturas, textos de YouTube).
+Carpeta: `%USERPROFILE%\Videos\Tutorial Lichii\` (guion `monologo.md`, `Grabaciones OBS\`, `Voz\`, `Voz_EN\`, `.fcproj` ES/EN, MP4 finales, miniaturas, textos de YouTube).
 
 ## Estructura final (4:33)
 | Tiempo | Sección | Qué se ve |

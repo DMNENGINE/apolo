@@ -5,7 +5,7 @@ CAD 3D paramétrico: bocetos con cotas, extrusiones, vaciados, taladros, redonde
 ## Reglas de la app (verificadas 2026-11-07)
 - **Antes de cualquier pieza que no sea una caja, lee `skill_reference {"skill":"solidcraft-modeling"}`**: trae los comandos exactos, los planos de boceto, los ids y las trampas de esta versión.
 - Milímetros y grados; **Z hacia arriba**. Acepta unidades (`"16 in"`, `"30 deg"`) y expresiones con parámetros (`"w/2 - wall"`; `set_parameter`).
-- Rutas absolutas dentro de `C:\Users\yosoy` (p. ej. `C:/Users/yosoy/Desktop/pieza.sc`).
+- Rutas absolutas dentro de tu carpeta de usuario (`%USERPROFILE%`) (p. ej. `C:/Users/<usuario>/Desktop/pieza.sc`).
 - Todo va por `execute {command, params}` (o `batch`): `solid.box`, `solid.cylinder`, `sketch.create`, `sketch.rectangle.*`, `sketch.circle.center`, `sketch.dimension`, `solid.extrude`, `solid.hole`, `solid.fillet`…
 - ⚠ `solid.box` va **con la esquina en el origen** salvo que pases `center:[x,y,z]`. Calcula las coordenadas de los taladros sobre eso (la primera prueba dejó un taladro a medias en el borde).
 - Pasa **`expect: {volume_mm3, bbox}`** en `execute` con lo que calculaste: si no cuadra, la herramienta da error y dice cuánto se desvía. Úsalo siempre en piezas con medidas.
@@ -18,9 +18,9 @@ execute {"command":"solid.box","params":{"length":80,"width":50,"height":10,"cen
 execute {"command":"solid.cylinder","params":{"diameter":8,"height":20,"base":[20,0,-5],"operation":"cut"},
          "expect":{"volume_mm3":39497.3}}
 screenshot {}                                                → MÍRALA
-save   {"path":"C:/Users/yosoy/Desktop/prueba-craft/placa.sc"}
-export {"path":"C:/Users/yosoy/Desktop/prueba-craft/placa.stl"}    (impresión 3D)
-export {"path":"C:/Users/yosoy/Desktop/prueba-craft/placa.step"}   (para otro CAD / CNC)
+save   {"path":"C:/Users/<usuario>/Desktop/prueba-craft/placa.sc"}
+export {"path":"C:/Users/<usuario>/Desktop/prueba-craft/placa.stl"}    (impresión 3D)
+export {"path":"C:/Users/<usuario>/Desktop/prueba-craft/placa.step"}   (para otro CAD / CNC)
 ```
 
 ## Estándares profesionales (impresión en la Ender-3 V2 del usuario)

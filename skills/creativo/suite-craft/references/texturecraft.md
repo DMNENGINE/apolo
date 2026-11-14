@@ -3,7 +3,7 @@
 Pintura de texturas 3D sobre una malla: capas, rellenos, materiales inteligentes, bake de mapas (AO, curvatura, grosor), render y exportación PBR. Apache-2.0 (github.com/storytold/texturecraft). v0.4.0.
 
 ## Reglas de la app (verificadas 2026-11-07)
-- Rutas **relativas a la carpeta del usuario** y con barras `/`: `Desktop/proyecto/caja.tcraft`. Fuera de `C:\Users\yosoy` no lee ni escribe (copia desde D:\ antes).
+- Rutas **relativas a la carpeta del usuario** y con barras `/`: `Desktop/proyecto/caja.tcraft`. Fuera de tu carpeta de usuario (`%USERPROFILE%`) no lee ni escribe (copia desde D:\ antes).
 - `project_new {mesh, resolution}`: mallas de serie `material_ball` (por defecto), `sphere`, `cube`, `rounded_cube`, `cylinder`, `torus`, `plane`, `crate`. Una malla propia: `mesh_import` (obj/fbx/glb).
 - **Haz `bake {}` antes de usar materiales inteligentes o generadores**: sin los mapas de malla (AO, curvatura) salen planos. Usa la RTX (~1 s).
 - Los materiales de archivo entran con la herramienta **`material_load {path}`**, NO con `command_run material.load` (bloqueado en automatización con rutas).

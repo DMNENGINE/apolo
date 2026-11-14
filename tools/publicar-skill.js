@@ -27,11 +27,11 @@ const TEXTO = /\.(md|txt|json|ya?ml|toml|ini|py|js|mjs|cjs|ts|ps1|sh|bat|cmd|htm
 const privadas = (() => { try { return fs.readFileSync(path.join(os.homedir(), '.dmnengine', 'privado.txt'), 'utf8').split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith('#')); } catch { return []; } })();
 const REGLAS = [
   [/\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b/g, 'IP de tu red'],
-  [/[A-Za-z]:[\\/]+Users[\\/]+(?!Public\b|Default\b)[^\\/\s"'`]+/gi, 'ruta con tu usuario de Windows'],
+  [/[A-Za-z]:[\\/]+Users[\\/]+(?!Public\b|Default\b|<)[^\\/\s"'`]+/gi, 'ruta con tu usuario de Windows'],
   [/\/home\/(?!user\b)[a-z0-9_-]+/gi, 'ruta con un usuario de Linux'],
   [/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, 'correo'],
   [/\b(?:sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_\w{30,}|xox[abprs]-[\w-]{10,}|AIza[\w-]{30,}|hf_[A-Za-z0-9]{30,}|[MN][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27,})\b/g, 'TOKEN'],
-  [/\b(?:ssh|scp)\s+[\w.-]+@[\w.-]+/g, 'acceso ssh'],
+  [/\b(?:ssh|scp)\s+(?!usuario@|user@)[\w.-]+@[\w.-]+/g, 'acceso ssh'],
 ];
 function limpiar(dir) {
   const hallazgos = [];

@@ -60,7 +60,7 @@ Resultado de referencia: tutorial de 4:33 (gancho de gameplay de 30 s + 9 seccio
 - WebSearch (mode extended) de vídeos del mismo tema en ES y EN: palabras que repiten, qué les falta. Prepara título recomendado + 3 alternativas, descripción con enlace (Discord si el usuario reparte ahí), capítulos con los tiempos reales del montaje (empiezan en 0:00, ≥10 s cada uno), requisitos, avisos, descargo de afiliación, 3 hashtags, etiquetas y comentario fijado. Guarda `youtube_publicacion.md` y `youtube_publish_EN.md`. Cita las fuentes.
 
 ### 8. Discord (DIGITAL VOID)
-- Siempre con el bot CONTROL-COMANDER por REST desde la Pi (`ssh dmn@192.168.1.127`, token `DISCORD_BOT_TOKEN` en `~/control-commander/.env`). Plantilla: `scripts/discord_canal.py` (canal de solo lectura en una categoría copiando sus permisos + embed ES/EN con la miniatura adjunta). Pregunta el enlace del vídeo; si aún no existe, pon "Próximamente" y edita el mensaje luego.
+- Siempre con el bot CONTROL-COMANDER por REST desde la Pi (`ssh <usuario>@<pi>`, token `DISCORD_BOT_TOKEN` en el `.env` del bot). Plantilla: `scripts/discord_canal.py` (canal de solo lectura en una categoría copiando sus permisos + embed ES/EN con la miniatura adjunta). Pregunta el enlace del vídeo; si aún no existe, pon "Próximamente" y edita el mensaje luego.
 
 ## Entrega
 Carpeta del proyecto con: guion, grabaciones, voces, `.fcproj` ES/EN, MP4 final ES/EN, miniaturas ES/EN, textos de YouTube. Ábrele el MP4 final para que lo vea y dile qué revisar (pronunciación, sincronía, zonas desenfocadas).
