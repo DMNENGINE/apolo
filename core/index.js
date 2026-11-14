@@ -48,7 +48,7 @@ function crearNucleo(opciones = {}) {
       const s = sesiones.crear({ modelo, canal: 'eval', titulo: 'eval de skill' });
       try { return await agente.enviar(s, texto); } finally { sesiones.borrar(s.id); }
     } });
-  const agente = crearAgente({ herramientas, cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, sandbox: () => nucleo?.sandbox, conciencia: () => nucleo?.conciencia, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
+  const agente = crearAgente({ herramientas, cfg, proveedores, permisos, sesiones, memoria, personalidad, compactador, skills, sandbox: () => nucleo?.sandbox, conciencia: () => nucleo?.conciencia, actividad: () => nucleo?.actividad, tareas: () => tareas, subagentes: () => subagentes, control: () => control, navegador: () => navegador, consejo: () => consejo, turnoNoche: () => turno });
   // atajo: enviar y emitir los eventos también al bus global
   const enviar = (s, texto, emitir, admision) => agente.enviar(s, texto, e => { bus.emit('evento', e); emitir?.(e); }, admision);
   subagentes = crearSubagentes({ cfg, bus, sesiones, proveedores, enviar, cancelar: id => agente.cancelar(id) });
@@ -132,6 +132,8 @@ function crearNucleo(opciones = {}) {
   const avatar = require('./avatar').crearAvatar({ cfg, bus });
   const wrapped = require('./wrapped').crearWrapped({ cfg, sesiones, tareas, turno, consejo, sueno, memoria, personalidad, historialPermisos, avatar: () => avatar.svgDe('usuario') });
   Object.assign(nucleo, { grafo, sueno, linea, privacidad, wrapped, aprenderCC });
+  // cada chat de APOLO sabe lo que el usuario hizo estos días con Claude Code, Codex, DeepSeek… (core/actividad-reciente.js)
+  nucleo.actividad = require('./actividad-reciente').crearActividad({ cfg, sesionesDir: require('path').join(cfg.dir, 'sesiones'), aprenderCC });
   nucleo.extensiones.sueno = { http: async (M, p, b = {}) => {
     if (!p[2] && M === 'GET') return { config: sueno.conf(), enCurso: sueno.enCurso(), informes: sueno.informes(30) };
     if ((!p[2] || p[2] === 'ejecutar') && M === 'POST') return sueno.dormir({ motivo: 'manual' });

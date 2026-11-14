@@ -33,7 +33,7 @@ function agentesGuardados(s, cfg) {
   return require('./importador').leerAgentes(cfg).slice(0, 20).map(a => `- ${a.nombre}: ${a.descripcion || '(sin descripción)'}`).join('\n');
 }
 
-function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior = '', nombre = '', nacimiento = '') {
+function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior = '', nombre = '', nacimiento = '', actividad = '') {
   const guardados = agentesGuardados(s, cfg);
   return [
     `Eres ${nombre && nombre !== 'Robot' ? nombre : 'Robot Companion'}, un asistente personal que trabaja en el ordenador del usuario usando herramientas.`,
@@ -49,6 +49,7 @@ function sistema(s, recuerdos, personalidad, resumen, cfg, skills = '', interior
     recuerdos ? `LO QUE SABES DEL USUARIO (memoria):\n${recuerdos}` : 'Memoria: aún no sabes nada del usuario.',
     personalidad ? `\nTU ALMA, TU IDENTIDAD, TU HUMANO E INSTRUCCIONES (eres tú; las instrucciones síguelas):\n${personalidad}` : '',
     interior ? `\n${interior}` : '',
+    actividad ? `\n${actividad}` : '',
     nacimiento ? `\nESTÁS NACIENDO (esto manda sobre lo demás hasta que llames a "nacer"):\n${nacimiento}` : '',
     guardados ? `\nAGENTES GUARDADOS (úsalos con delegar + "agente"):\n${guardados}` : '',
     skills ? `\n${skills}` : '',
@@ -97,7 +98,7 @@ function conImagenes(mensajes, sinVision) {
   return out;
 }
 
-function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, personalidad, compactador, subagentes, control, navegador, skills, consejo, turnoNoche, sandbox, conciencia, herramientas = registroBase.crearRegistro() }) {
+function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, personalidad, compactador, subagentes, control, navegador, skills, consejo, turnoNoche, sandbox, conciencia, actividad: actividadMod, herramientas = registroBase.crearRegistro() }) {
   herramientas.registrar([grupos.crearCargar()]);
   const ejecuciones = crearEjecuciones({ cfg });
   herramientas.registrar([{ nombre: 'leer_resultado', riesgo: 'lectura', descripcion: 'Lee por partes un resultado completo de esta sesion usando su ejecucion e id de artefacto.',
@@ -183,6 +184,8 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
       let interior = '', nombre = ''; try { if (!s.padre && s.canal !== 'eval') interior = conciencia?.()?.describir() || ''; nombre = personalidad?.nombre?.() || ''; } catch { }   // estado, metas, pensamientos, diario
       // primera conversación (NACIMIENTO.md): solo en charlas con el usuario, no en tareas, subagentes, evals ni la conciencia
       let nacimiento = ''; try { if (!s.padre && !s.tarea && !s.soloLectura && !['eval', 'conciencia', 'subagente'].includes(s.canal)) nacimiento = personalidad?.nacimiento?.() || ''; } catch { }
+      // lo que el usuario ha hecho estos días con sus agentes y en otros canales (core/actividad-reciente.js)
+      let actividad = ''; try { if (!s.padre && !s.tarea && !s.soloLectura && !['eval', 'conciencia', 'subagente'].includes(s.canal)) actividad = actividadMod?.()?.texto({ excluir: s.id }) || ''; } catch { }
       const apagadas = new Set(cfg.herramientasOff || []);
       if (s.padre || !subagentes) apagadas.add('delegar');                // los subagentes no delegan (sin recursión)
       if (!nacimiento) apagadas.add('nacer');
@@ -241,7 +244,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
           delete s.correccionesPendientes; sesiones.guardarMeta(s);
         }
         if (paso > 0 && paso % 3 === 0 && memoria) try { recuerdos = await memoria.contexto(`${texto}\n${s.mensajes.filter(m => m.role === 'assistant').at(-1)?.content || ''}`, alcanceMemoria); } catch { }
-        const base = sistema(s, recuerdos, pers, '', cfg, sk, interior, nombre, nacimiento);
+        const base = sistema(s, recuerdos, pers, '', cfg, sk, interior, nombre, nacimiento, actividad);
         if (compactador?.hace(s, base)) {              // conversación larga: resumir lo antiguo antes de seguir
           try { const c = await compactador.compactar(s, { signal: ctl.signal }); if (c) ev('compactacion', c); }
           catch (e) { if (ctl.signal.aborted) throw e; ev('aviso', { texto: `no pude compactar la conversación: ${e.message}` }); }
@@ -252,7 +255,7 @@ function crearAgente({ cfg, proveedores, permisos, sesiones, tareas, memoria, pe
         const ligero = !!cfg.proveedores?.[String(modeloReal).split('/')[0]]?.ligero;
         // APOLO-MANOS (proveedor con "manosLigero": true): su system corto + solo sus 12 herramientas, compactas como en su entrenamiento (core/manos.js)
         const manosL = !ligero && !!cfg.proveedores?.[String(modeloReal).split('/')[0]]?.manosLigero;
-        const sys = ligero ? sistemaLigero(recuerdos, v.resumen, s) : manosL ? manos.sistemaManos() : sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento);
+        const sys = ligero ? sistemaLigero(recuerdos, v.resumen, s) : manosL ? manos.sistemaManos() : sistema(s, recuerdos, pers, v.resumen, cfg, sk, interior, nombre, nacimiento, actividad);
         let historial = conImagenes(v.mensajes, s.sinVision || (s.visionNoAdmitida?.modelo === modeloReal && s.visionNoAdmitida?.hasta > Date.now()));
         if (empujon) { historial = [...historial, { role: 'user', content: EMPUJON }]; empujon = false; }   // solo para esta llamada, no se guarda
         // ligero: los turnos con manos (otro modelo) le llegan como charla normal, sin llamadas ni resultados de herramientas
