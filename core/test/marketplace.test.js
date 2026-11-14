@@ -50,7 +50,7 @@ const RUTAS = {
 test('marketplace: anthropics/skills + índice propio, deduplicado, caché de 6 h, refrescar y fuente caída', async () => {
   const { crearMarketplace, leerIndice } = require('../skills/marketplace');
   const dir = tmp('mk-');
-  const cfg = { dir, skills: { catalogos: [IDX] } };
+  const cfg = { dir, skills: { catalogos: [IDX], bibliotecaDMN: false } };
   const f = fetchFalso({ ...RUTAS });
   const mk = crearMarketplace({ cfg, fetch: f });
   const c = await mk.catalogo();
@@ -91,13 +91,13 @@ test('marketplace: anthropics/skills + índice propio, deduplicado, caché de 6 
   assert.strictEqual(leerIndice([{ nombre: 'a', fuente: 'o/r' }], 'x').entradas.length, 1);
   // sin anthropics y sin catálogos → vacío sin red
   const f4 = fetchFalso({});
-  const c4 = await crearMarketplace({ cfg: { dir: tmp('mk-'), skills: { marketplaceAnthropic: false, catalogos: [] } }, fetch: f4 }).catalogo();
+  const c4 = await crearMarketplace({ cfg: { dir: tmp('mk-'), skills: { marketplaceAnthropic: false, catalogos: [], bibliotecaDMN: false } }, fetch: f4 }).catalogo();
   assert.strictEqual(c4.entradas.length, 0); assert.strictEqual(f4.llamadas.length, 0);
 });
 
 test('marketplace por la API del daemon: marca las instaladas', async () => {
   const dir = tmp('nucleo-mk-');
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ memoria: { embeddings: null }, skills: { rutas: [], reglasProyecto: false, catalogos: [IDX] } }));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ memoria: { embeddings: null }, skills: { rutas: [], reglasProyecto: false, catalogos: [IDX], bibliotecaDMN: false } }));
   const { crearNucleo } = require('../index');
   const n = crearNucleo({ dir, escaner: escanerVerde, embedder: null, fetchMarketplace: fetchFalso({ ...RUTAS }) });
   const raiz = tmp('src-'); skillEn(raiz, 'frontend-design');
@@ -255,4 +255,16 @@ test('exfil: permiso la primera vez que se envían datos a un dominio nuevo (tam
   cfg.seguridad = { exfil: 'off' };
   assert.strictEqual((await pedir('web', { url: 'https://bloq.test/', metodo: 'POST', cuerpo: 'x' })).ok, true);
   assert.ok(fs.existsSync(path.join(dir, 'exfil.json')));
+});
+
+test('marketplace: la Biblioteca DMN entra sola, sus entradas son oficiales y traen requisitos', async () => {
+  const { crearMarketplace, INDICE_BIBLIOTECA } = require('../skills/marketplace');
+  const indice = { formato: 'apolo-marketplace/1', nombre: 'Biblioteca DMN', entradas: [
+    { nombre: 'estudio-creativo', fuente: 'DMNENGINE/apolo-skills/skills/estudio-creativo', categoria: 'creatividad', preparacion: true, requisitos: { vramGB: 8, discoGB: 40, raro: 9 } }] };
+  const f = async url => ({ ok: url === INDICE_BIBLIOTECA, status: url === INDICE_BIBLIOTECA ? 200 : 404, text: async () => JSON.stringify(indice) });
+  const c = await crearMarketplace({ cfg: { dir: fs.mkdtempSync(path.join(os.tmpdir(), 'mk-bib-')), skills: { marketplaceAnthropic: false, catalogos: [] } }, fetch: f }).catalogo();
+  const e = c.entradas.find(x => x.origen === 'biblioteca');
+  assert.ok(e && e.oficial && e.preparacion && e.etiquetas.includes('oficial'));
+  assert.deepStrictEqual(e.requisitos, { vramGB: 8, discoGB: 40 });
+  assert.equal(e.categoria, 'creatividad');
 });

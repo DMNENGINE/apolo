@@ -4,6 +4,10 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const MAX = 20_000;
+// python real para los scripts de skills (el instalado por la preparación aunque el PATH de APOLO aún no lo vea; nunca el atajo de la Store)
+const PYTHON = { ruta: '', t: 0 };
+const refrescarPython = () => { if (Date.now() - PYTHON.t < 60_000) return; PYTHON.t = Date.now(); require('./skills/preparar').ejecutable('python').then(r => { PYTHON.ruta = r || ''; }).catch(() => { }); };
+refrescarPython();
 const recortar = s => (s.length > MAX ? s.slice(0, MAX) + `\n…[recortado, ${s.length - MAX} caracteres más]` : s);
 const ruta = (ctx, a) => require('./rutas-seguras').comprobarRuta(ctx.cwd, a);
 
@@ -327,7 +331,8 @@ const HERRAMIENTAS = [
       ctx.skills.almacen.contarUso(s.slug);
       const extra = [c.referencias.length ? `Referencias (leer_recurso_skill): ${c.referencias.join(', ')}` : '', c.scripts.length ? `Scripts (ejecutar_script_skill): ${c.scripts.join(', ')}` : '',
         c.recursos.length ? `Recursos: ${c.recursos.slice(0, 40).join(', ')}` : ''].filter(Boolean).join('\n');
-      return recortar(`SKILL "${s.slug}" (carpeta ${s.dir})\n${extra ? extra + '\n' : ''}\n${c.cuerpo.trim()}`);
+      const cuerpo = ctx.skills.preparador ? ctx.skills.preparador.resolverTexto(s.slug, c.cuerpo.trim()) : c.cuerpo.trim();   // {{apps}} {{modelos}} {{config.x}}…
+      return recortar(`SKILL "${s.slug}" (carpeta ${s.dir})\n${extra ? extra + '\n' : ''}\n${cuerpo}`);
     },
   },
   {
@@ -380,7 +385,8 @@ const HERRAMIENTAS = [
       } catch (e) { return ok(`error: ${e.message}`); }
       const ext = path.extname(f).toLowerCase(), args = (Array.isArray(a.args) ? a.args : a.args ? [a.args] : []).map(String);
       const win = process.platform === 'win32';
-      const cmd = { '.py': [win ? 'python' : 'python3', [f, ...args]], '.js': [process.execPath, [f, ...args]], '.mjs': [process.execPath, [f, ...args]], '.cjs': [process.execPath, [f, ...args]],
+      if (ext === '.py') refrescarPython();
+      const cmd = { '.py': [PYTHON.ruta || (win ? 'python' : 'python3'), [f, ...args]], '.js': [process.execPath, [f, ...args]], '.mjs': [process.execPath, [f, ...args]], '.cjs': [process.execPath, [f, ...args]],
         '.ps1': [win ? 'powershell.exe' : 'pwsh', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', f, ...args]], '.sh': ['bash', [f, ...args]] }[ext];
       if (!cmd) return ok(`error: tipo de script no soportado (${ext || 'sin extensión'})`);
       // Etapa H: el nivel de sandbox (normal / restringido / aislado) lo decide core/sandbox según firma, escaneo y cfg.seguridad.sandbox

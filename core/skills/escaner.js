@@ -195,6 +195,14 @@ function analizarEstatico(dir, o = {}) {
       if (ORDEN_OCULTA.test(m[1])) add(rel, texto.slice(0, m.index).split('\n').length, 'texto oculto: comentario HTML con órdenes', 'alta', m[1]);
     }
   }
+  // preparar.json (Biblioteca DMN): un plan inválido no se ejecuta nunca; sus avisos (sin sha256, sin versión fija) se enseñan
+  if (archivos.some(a => path.relative(raiz, a.p).replace(/\\/g, '/') === 'preparar.json')) {
+    try {
+      const { validar, leerPlan } = require('./preparar'), v = validar(leerPlan(raiz));
+      for (const e of v.errores) add('preparar.json', 0, 'preparación: paso no permitido', 'alta', e);
+      for (const e of v.avisos) add('preparar.json', 0, 'preparación: aviso', 'baja', e);
+    } catch (e) { add('preparar.json', 0, 'preparación: paso no permitido', 'alta', e.message); }
+  }
   if (dominios.size) add('.', 0, 'red: dominios mencionados', 'baja', [...dominios].slice(0, 20).join(', '));
   if (Array.isArray(o.dominios)) {
     const ok = h => o.dominios.some(d => d === '*' || d === h || (d.startsWith('*.') && (h.endsWith(d.slice(1)) || h === d.slice(2))));

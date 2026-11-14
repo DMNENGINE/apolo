@@ -10,6 +10,8 @@ const { parsearGithub } = require('./instalar');
 
 const CACHE_MS = 6 * 3600_000, MAX_TXT = 400 * 1024, MAX_ENTRADAS = 2000;
 const INDICE_APOLO = 'https://raw.githubusercontent.com/DMNENGINE/apolo/main/marketplace/indice.json';
+// Biblioteca DMN (docs/biblioteca.md): skills oficiales firmadas por DMNENGINE, con preparación automática. cfg.skills.bibliotecaDMN=false la quita
+const INDICE_BIBLIOTECA = 'https://raw.githubusercontent.com/DMNENGINE/apolo-skills/main/indice.json';
 const ETIQUETAS = [
   ['documentos', /\b(pdf|docx?|xlsx|pptx|word|excel|powerpoint|spreadsheets?|documents?|presentations?|hojas? de cálculo|documentos?)\b/i],
   ['diseño', /\b(design|diseño|art|canvas|themes?|brand(ing)?|gifs?|posters?|colou?rs?|fonts?|tipografía)\b/i],
@@ -34,6 +36,10 @@ function normalizarEntrada(e, origen) {
     ...(firma ? { firma } : {}), ...(e.version ? { version: txt(e.version, 30) } : {}), ...(e.licencia ? { licencia: txt(e.licencia, 40) } : {}),
     ...(typeof e.readme === 'string' && /^https:\/\//i.test(e.readme) ? { readme: e.readme.trim() } : {}),
     ...(typeof e.web === 'string' && /^https:\/\//i.test(e.web) ? { web: e.web.trim() } : {}),
+    ...(e.categoria ? { categoria: txt(e.categoria, 40) } : {}),
+    ...(e.oficial === true ? { oficial: true } : {}),
+    ...(e.requisitos && typeof e.requisitos === 'object' ? { requisitos: Object.fromEntries(['vramGB', 'ramGB', 'discoGB', 'descargaGB'].filter(k => Number(e.requisitos[k]) > 0).map(k => [k, Number(e.requisitos[k])])) } : {}),
+    ...(e.preparacion === true ? { preparacion: true } : {}),
   };
 }
 // índice propio: array de entradas o {formato, nombre, entradas}
@@ -75,6 +81,7 @@ function crearMarketplace({ cfg, fetch: traer = globalThis.fetch, tokenGithub } 
   function fuentes() {
     const out = [];
     if (sk().marketplaceAnthropic !== false) out.push({ id: 'anthropics', nombre: 'anthropics/skills', tipo: 'github', repo: 'anthropics/skills', ruta: 'skills', autor: 'Anthropic' });
+    if (sk().bibliotecaDMN !== false) out.push({ id: 'biblioteca', nombre: 'Biblioteca DMN', tipo: 'indice', url: sk().urlBiblioteca || INDICE_BIBLIOTECA, oficial: true });
     const cats = Array.isArray(sk().catalogos) ? sk().catalogos : [INDICE_APOLO];
     for (const c of cats) {
       const url = typeof c === 'string' ? c : c?.url;
@@ -108,6 +115,7 @@ function crearMarketplace({ cfg, fetch: traer = globalThis.fetch, tokenGithub } 
   }
   async function cargarIndice(f) {
     const r = leerIndice(await bajar(f.url, { json: true }), f.id);
+    if (f.oficial) r.entradas = r.entradas.map(e => ({ ...e, oficial: true, etiquetas: e.etiquetas.includes('oficial') ? e.etiquetas : ['oficial', ...e.etiquetas] }));
     if (r.nombre) f.nombre = r.nombre;
     return r.entradas;
   }
@@ -172,4 +180,4 @@ function crearMarketplace({ cfg, fetch: traer = globalThis.fetch, tokenGithub } 
   return { catalogo, ficha, fuentes };
 }
 
-module.exports = { crearMarketplace, leerIndice, normalizarEntrada, rawDe, INDICE_APOLO, CACHE_MS };
+module.exports = { crearMarketplace, leerIndice, normalizarEntrada, rawDe, INDICE_APOLO, INDICE_BIBLIOTECA, CACHE_MS };

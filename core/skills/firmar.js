@@ -92,7 +92,9 @@ function verificar(dir, autores = []) {
     : { estado: 'desconocida', motivo: 'firma correcta pero la clave no está en tus autores de confianza', ...base };
 }
 
-module.exports = { ARCHIVO, FORMATO, firmar, verificar, generarClaves, clavePublica, normPublica, hashes, canonico };
+// autor oficial (Biblioteca DMN y plugins oficiales): sus skills firmadas salen como 'verificada' sin configurar nada
+const AUTORES_OFICIALES = Object.freeze([{ nombre: 'DMNENGINE', clavePublica: 'fwdqHj9gcc4wD68fHBkRnGm0VwQyYFrJcYryj+8lSCI=' }]);
+module.exports = { AUTORES_OFICIALES, ARCHIVO, FORMATO, firmar, verificar, generarClaves, clavePublica, normPublica, hashes, canonico };
 
 // ---------- CLI ----------
 if (require.main === module) {

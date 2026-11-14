@@ -63,11 +63,12 @@ VISTAS.skills = {
   async pintar(v, sub) {
     this.v = v; this.abierta = null; this.det = null;
     if (sub === 'explorar') { this.modo = 'exp'; sub = null; }
+    if (sub === 'biblioteca') { this.modo = 'bib'; sub = null; }
     const r = await api('GET', '/skills');
     this.lista = SK_cache = r.skills || [];
     v.innerHTML = `<div class="pagina sk-pag">${cabecera('Skills', 'Oficios que APOLO sabe hacer. Instala desde GitHub, una carpeta o un .zip; cada skill pasa por el escáner antes de poder usarse.', `<button class="btn" id="skNuevaR1" title="${tr('Una skill para la Rabbit R1: APOLO la redacta a partir de tu idea')}">${ic('mas')}${tr('Nueva skill R1')}</button><button class="btn" id="skRecargar">${ic('recargar')}${tr('Recargar')}</button>`)}
-      <div class="pestanas sk-modo">${[['inst', 'Instaladas', 'pieza'], ['exp', 'Explorar', 'mundo']].map(([k, t, i]) => `<button data-modo="${k}" class="${this.modo === k ? 'on' : ''}">${ic(i)}${tr(t)}</button>`).join('')}</div>
-      <div id="mkExplorar" hidden></div>
+      <div class="pestanas sk-modo">${[['inst', 'Instaladas', 'pieza'], ['bib', 'Biblioteca DMN', 'chispa'], ['exp', 'Explorar', 'mundo']].map(([k, t, i]) => `<button data-modo="${k}" class="${this.modo === k ? 'on' : ''}">${ic(i)}${tr(t)}</button>`).join('')}</div>
+      <div id="mkExplorar" hidden></div><div id="bibBiblioteca" hidden></div>
       <div class="sk-inst">
       <div class="rejilla k" id="skKpis"></div>
       <div class="caja sk-instalar" id="skInstalar">
@@ -97,6 +98,8 @@ VISTAS.skills = {
     $('.sk-inst', this.v).hidden = m !== 'inst';
     const c = $('#mkExplorar', this.v); c.hidden = m !== 'exp';
     if (m === 'exp' && typeof MK !== 'undefined') MK.pintar(c);
+    const b = $('#bibBiblioteca', this.v); b.hidden = m !== 'bib';
+    if (m === 'bib' && typeof BIB !== 'undefined') BIB.pintar(b);
   },
   salir() {
     clearTimeout(this.cola); document.removeEventListener('keydown', this.tecla); this.v = null;
@@ -104,6 +107,7 @@ VISTAS.skills = {
   },
   alEvento(e) {
     if (e.tipo !== 'skills') return;
+    if (e.accion === 'preparar') { if (typeof BIB !== 'undefined') BIB.alEvento(e); return; }   // progreso de la preparación (ui/biblioteca.js)
     clearTimeout(this.cola);
     this.cola = setTimeout(() => this.recargar(), 250);
   },
@@ -128,7 +132,7 @@ VISTAS.skills = {
     v.onclick = e => {
       const mo = e.target.closest('.sk-modo [data-modo]');                // ojo: <html> también lleva data-modo (el tema)
       if (mo) { this.ponerModo(mo.dataset.modo); return; }
-      if (e.target.closest('#mkExplorar')) return;      // el marketplace tiene su propio manejador
+      if (e.target.closest('#mkExplorar') || e.target.closest('#bibBiblioteca')) return;      // el marketplace tiene su propio manejador
       const rel = e.target.closest('[data-rellenar]');
       if (rel) { inp.value = rel.dataset.rellenar; inp.oninput(); inp.focus(); return; }
       const s = e.target.closest('.sk-tarjeta [data-sw]');

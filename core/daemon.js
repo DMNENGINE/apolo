@@ -22,6 +22,7 @@
 //   GET  /v1/skills · GET /v1/skills/:slug (con contenido) · POST /v1/skills/instalar {fuente} → {skill} | {opciones}
 //   PATCH /v1/skills/:slug {activa, forzar} | {sandbox: auto|normal|restringido|aislado} · GET|PATCH /v1/sandbox {clave?, nivel} (Etapa H)
 //   · POST /v1/skills/:slug/escanear · POST /v1/skills/:slug/actualizar {aplicar} → {diff, aplicado}
+//   · GET /v1/skills/:slug/preparar (diagnóstico) · POST /v1/skills/:slug/preparar {forzar?} · POST /v1/skills/:slug/preparar/cancelar
 //   DEL  /v1/skills/:slug (no las externas)
 //   GET  /v1/skills/marketplace[?refrescar=1] → {entradas, fuentes, etiquetas, actualizado} · GET /v1/skills/marketplace/ficha?id= → {entrada, texto}
 //   taller: POST /v1/skills/crear {nombre,descripcion,instrucciones,scripts?,disparadores?,pruebas?,canales?} → {skill}
@@ -454,6 +455,10 @@ function iniciar(opciones = {}) {
         if (!p[3] && M === 'DELETE') { try { return json(res, 200, { ok: sk.borrar(s.slug) }); } catch (e) { return err(e, 403); } }
         if (p[3] === 'escanear' && M === 'POST') { try { return json(res, 200, (x => ({ ...x, escaneo: x }))(await sk.escanear(s.slug))); } catch (e) { return err(e, 500); } }
         if (p[3] === 'actualizar' && M === 'POST') { try { return json(res, 200, await sk.actualizar(s.slug, { aplicar: !!(await leer(req)).aplicar })); } catch (e) { return err(e); } }
+        // preparación automática (core/skills/preparar.js): GET diagnóstico · POST {forzar?} prepara en segundo plano · POST …/cancelar
+        if (p[3] === 'preparar' && !p[4] && M === 'GET') { try { return json(res, 200, await sk.preparador.diagnostico(s.slug)); } catch (e) { return err(e, 500); } }
+        if (p[3] === 'preparar' && !p[4] && M === 'POST') { try { return json(res, 202, await sk.preparador.preparar(s.slug, { forzar: !!(await leer(req)).forzar })); } catch (e) { return err(e); } }
+        if (p[3] === 'preparar' && p[4] === 'cancelar' && M === 'POST') return json(res, 200, { cancelado: sk.preparador.cancelar(s.slug) });
         // taller (core/skills/taller.js)
         const tl = sk.taller;
         if (p[3] === 'mejorar' && M === 'POST') { try { const b = await leer(req); return json(res, 200, await tl.mejorar(s.slug, { aplicar: !!b.aplicar, propuesta: b.propuesta })); } catch (e) { return err(e, 500); } }

@@ -880,6 +880,29 @@ body.modo-bienvenida #lado, body.modo-bienvenida #btnMenu { display: none !impor
 .mk-tags { display: flex; gap: 5px; flex-wrap: wrap; }
 .mk-fuente { font-size: 11px; color: var(--txt-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .mk-tarjeta .sk-pie { flex-wrap: nowrap; }
+/* Biblioteca DMN (ui/biblioteca.js) */
+.bib-cab { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.bib-tit { display: flex; gap: 12px; align-items: flex-start; flex: 1; }
+.bib-tit > svg { width: 28px; height: 28px; color: var(--acento); flex: none; }
+.bib-tit b { display: block; font-size: 1.05em; }
+.bib-tit small { color: var(--txt-3); }
+.bib-tarjeta .sk-pie { gap: 6px; }
+.bib-eqs, .bib-pasos { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 14px; }
+.bib-eq { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--borde); border-radius: 8px; }
+.bib-eq > span:first-child { display: flex; align-items: center; gap: 6px; min-width: 120px; color: var(--txt-3); }
+.bib-eq b { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bib-paso { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--borde); border-radius: 8px; }
+.bib-paso .ico { color: var(--txt-3); display: flex; }
+.bib-paso.hecho { opacity: .7; }
+.bib-paso.activo { border-color: var(--acento); }
+.bib-paso b { display: block; }
+.bib-paso small { display: block; color: var(--txt-3); overflow-wrap: anywhere; }
+.bib-barra { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--acento) 15%, transparent); overflow: hidden; margin: 6px 0 2px; }
+.bib-barra i { display: block; height: 100%; background: var(--acento); transition: width .3s; }
+.bib-pie { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.bib-pie code { overflow-wrap: anywhere; }
+.bib-avisos { margin-bottom: 12px; color: var(--txt-3); }
+
 .mk-fuentes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0 0; font-size: 12px; }
 .mk-fuentes a.chip { text-decoration: none; }
 .mk-nota { margin-left: auto; display: inline-flex; gap: 5px; align-items: center; }

@@ -11,6 +11,7 @@ const { crearInstalador } = require('./instalar');
 const { crearIndice } = require('./indice');
 const { crearTaller } = require('./taller');
 const { crearMarketplace } = require('./marketplace');
+const { crearPreparador } = require('./preparar');
 const { slugDe } = require('./formato');
 const rutas = require('../rutas-seguras');
 
@@ -25,6 +26,7 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
   const indice = crearIndice({ cfg, almacen, embedder, canalesActivos });
   const taller = crearTaller({ cfg, bus, almacen, instalador, generarJSON, modelo, ejecutar: ejecutarEval });
   const marketplace = crearMarketplace({ cfg, fetch: fetchMarketplace || ((...a) => globalThis.fetch(...a)), tokenGithub });
+  const preparador = crearPreparador({ cfg, bus, almacen });          // preparar.json: programas, modelos y config (docs/biblioteca.md)
   // catálogo con "instalada": misma fuente de origen (GitHub owner/repo/ruta) o mismo slug
   async function catalogo(o) {
     const c = await marketplace.catalogo(o), L = almacen.lista().filter(s => !s.externa);
@@ -84,7 +86,7 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
   }
 
   return {
-    almacen, instalador, indice, taller, marketplace, catalogo, ficha: id => marketplace.ficha(id), activa, rutaDentro, anotar, motivoPreguntar, publica,
+    almacen, instalador, indice, taller, marketplace, preparador, catalogo, ficha: id => marketplace.ficha(id), activa, rutaDentro, anotar, motivoPreguntar, publica,
     lista: () => almacen.lista().map(publica),
     obtener: slug => { const s = almacen.obtener(slug); if (!s) return null; const c = almacen.contenido(s.slug); return { ...publica(s), contenido: c?.contenido || '' }; },
     instalar: (fuente, o) => instalador.instalar(fuente, o).then(r => (r.skill ? { skill: publica(r.skill) } : r)),

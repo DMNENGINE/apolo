@@ -9,7 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { leerSkill, buscarSkills, componerSkillMd, parsearSkillMd, listarArchivos, slugDe, PRIVADOS } = require('./formato');
-const { verificar: verificarFirma } = require('./firmar');
+const { verificar: verificarFirma, AUTORES_OFICIALES } = require('./firmar');
 
 const MAX_DESCARGA = 150 * 1024 * 1024, MAX_SKILL = 50 * 1024 * 1024, MAX_ARCHIVOS = 3000;
 const ejecutar = (bin, args, o = {}) => new Promise((ok, mal) => execFile(bin, args, { windowsHide: true, timeout: 120_000, maxBuffer: 8e6, ...o }, (e, so, se) => (e ? mal(new Error(String(se || e.message).trim().slice(0, 300))) : ok(so))));
@@ -177,7 +177,7 @@ function crearInstalador({ almacen, cfg, escaner, tokenGithub }) {
     } catch (e) { r = { nivel: 'amarillo', hallazgos: [], resumen: `no se pudo escanear: ${e.message}`, explicacion: '', error: true }; }
     r.fecha = Date.now();
     // firma ed25519 (FIRMA.json): inválida = cuarentena roja, aunque el escáner la viera limpia
-    let firma; try { firma = verificarFirma(s.dir, sk().autoresConfianza); } catch (e) { firma = { estado: 'invalida', motivo: e.message }; }
+    let firma; try { firma = verificarFirma(s.dir, [...AUTORES_OFICIALES, ...(sk().autoresConfianza || [])]); } catch (e) { firma = { estado: 'invalida', motivo: e.message }; }
     firma.fecha = Date.now();
     if (firma.estado === 'invalida') {
       r.nivel = 'rojo'; r.hallazgos.unshift({ archivo: 'FIRMA.json', linea: 0, regla: 'firma inválida', gravedad: 'crítica', texto: firma.motivo });
