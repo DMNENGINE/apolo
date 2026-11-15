@@ -10,7 +10,7 @@ try {
   if (-not $py) {
     if (-not (Tiene 'winget')) { throw "Falta Python y no hay winget. Instala Python 3.12 desde https://python.org (marca 'Add to PATH') y repite." }
     Write-Host '==> Instalando Python 3.12 (winget)...' -ForegroundColor Green
-    winget install --id Python.Python.3.12 -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
+    winget install --id Python.Python.3.12 -e --silent --source winget --accept-package-agreements --accept-source-agreements | Out-Null
     $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
     if (Tiene 'python') { $py = 'python' } else { throw 'Python no quedo en el PATH: cierra sesion y vuelve a intentarlo.' }
   }

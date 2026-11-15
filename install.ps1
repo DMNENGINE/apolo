@@ -21,7 +21,13 @@ function RefrescarPath {
 function Tiene($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 function InstalarConWinget($id) {
   if (-not (Tiene 'winget.exe')) { throw "No encuentro winget. Instala 'App Installer' desde Microsoft Store y vuelve a intentarlo." }
-  winget.exe install --id $id -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
+  # --source winget: en un Windows recien instalado la fuente msstore puede fallar (0x8a15005e, certificado) y entonces
+  # winget se niega a instalar nada sin que le digas la fuente. Si falla, se ensena lo que dijo winget.
+  $salida = winget.exe install --id $id -e --silent --source winget --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+  if ($LASTEXITCODE -ne 0 -and $salida -notmatch 'already installed|ya est') {
+    $util = ($salida -split "`r?`n" | Where-Object { $_ -match '\w{3}' -and $_ -notmatch '[▀-▟]' } | Select-Object -Last 6) -join ' | '
+    Aviso "winget no pudo instalar $id (codigo $LASTEXITCODE): $util"
+  }
   RefrescarPath
 }
 

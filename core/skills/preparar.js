@@ -274,7 +274,7 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
       case 'programa': {
         const pr = PROGRAMAS[p.programa];
         if (process.platform !== 'win32') throw new Error(`instala ${pr.nombre} con el gestor de paquetes de tu sistema`);
-        await proceso('winget', ['install', '--id', pr.winget, '-e', '--silent', '--accept-package-agreements', '--accept-source-agreements'], o);
+        await proceso('winget', ['install', '--id', pr.winget, '-e', '--silent', '--source', 'winget', '--accept-package-agreements', '--accept-source-agreements'], o);
         return {};
       }
       case 'git': {
