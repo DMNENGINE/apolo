@@ -12,7 +12,7 @@ Saca <salida>_1920.png y <salida>.jpg (1280x720). MIRA el resultado: si algo se 
 import json, sys
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 
-C = json.load(open(sys.argv[1], encoding="utf-8"))
+C = json.load(open(sys.argv[1], encoding="utf-8-sig"))
 W, H = 1920, 1080
 SERIF = r"C:\Windows\Fonts\cambriab.ttf"
 EMPTY = lambda: Image.new("RGBA", (W, H), (0, 0, 0, 0))

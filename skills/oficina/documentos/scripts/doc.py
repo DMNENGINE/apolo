@@ -201,7 +201,7 @@ if __name__ == '__main__':
     if sys.argv[1] == 'leer':
         print(leer(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 60000))
     elif sys.argv[1] == 'crear':
-        S = json.load(open(sys.argv[2], encoding='utf-8'))
+        S = json.load(open(sys.argv[2], encoding='utf-8-sig'))
         S['salida'] = os.path.abspath(S['salida']); os.makedirs(os.path.dirname(S['salida']), exist_ok=True)
         ext = os.path.splitext(S['salida'])[1].lower()
         f = {'.docx': crear_docx, '.pdf': crear_pdf, '.xlsx': crear_xlsx, '.pptx': crear_pptx}.get(ext)

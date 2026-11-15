@@ -5,7 +5,7 @@ import bpy, bmesh, json, math, os, sys
 from mathutils import Vector
 
 args = sys.argv[sys.argv.index('--') + 1:]
-P = json.load(open(args[0], encoding='utf-8'))
+P = json.load(open(args[0], encoding='utf-8-sig'))
 OUT = args[1]
 os.makedirs(OUT, exist_ok=True)
 

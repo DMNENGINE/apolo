@@ -14,7 +14,7 @@ NUNCA publiques enlaces a juegos/ROMs/keys/firmware: comprueba antes cualquier e
 """
 import json, os, sys, urllib.request, uuid
 
-C = json.load(open(sys.argv[1], encoding="utf-8"))
+C = json.load(open(sys.argv[1], encoding="utf-8-sig"))
 API = "https://discord.com/api/v10"
 H = {"Authorization": f"Bot {os.environ['DISCORD_BOT_TOKEN']}", "User-Agent": "DiscordBot (control-comander, 1.0)"}
 

@@ -10,7 +10,7 @@ Si da 403: pip install --upgrade edge-tts.  Si una sección da NoAudioReceived, 
 import asyncio, json, os, subprocess, sys, time
 import edge_tts
 
-guion = json.load(open(sys.argv[1], encoding="utf-8"))
+guion = json.load(open(sys.argv[1], encoding="utf-8-sig"))
 out = sys.argv[2]
 voz = sys.argv[3] if len(sys.argv) > 3 else "es-MX-JorgeNeural"
 rate = sys.argv[4] if len(sys.argv) > 4 else "+0%"

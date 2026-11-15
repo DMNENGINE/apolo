@@ -14,7 +14,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def conf():
     c = {}
     try:
-        with open(os.path.join(RAIZ, '_datos', 'protoforja.json'), encoding='utf-8') as f: c = json.load(f)
+        with open(os.path.join(RAIZ, '_datos', 'protoforja.json'), encoding='utf-8-sig') as f: c = json.load(f)
     except Exception: pass
     url = os.environ.get('PROTOFORJA_URL') or c.get('url') or 'https://protoforja.com'
     return url.rstrip('/'), os.environ.get('PROTOFORJA_CLAVE') or c.get('clave') or ''
@@ -69,7 +69,7 @@ if __name__ == '__main__':
             ops = api('/api/opciones', 'POST', {'idea': a[1], 'perfil': perfil}).get('opciones', [])
             opcion = next((o for o in ops if o.get('nivel') == a[2].replace('ó', 'o')), ops[1] if len(ops) > 1 else None)
         else:
-            try: opcion = json.load(open(a[2], encoding='utf-8')) if os.path.isfile(a[2]) else json.loads(a[2])
+            try: opcion = json.load(open(a[2], encoding='utf-8-sig')) if os.path.isfile(a[2]) else json.loads(a[2])
             except Exception: sys.exit('El tercer argumento debe ser el JSON de la opción elegida (la línea OPCIONES_JSON de "opciones"), un archivo con él, o el nivel: economica / normal / avanzada.')
         if isinstance(opcion, list): opcion = opcion[0] if opcion else None
         p = api('/api/proyecto', 'POST', {'idea': a[1], 'opcion': opcion, 'perfil': perfil})

@@ -14,7 +14,7 @@ Imprime el mapa de secciones en la línea de tiempo y escribe los pasos timeline
 import json, re, sys
 T = 254016000000  # ticks por segundo de FilmCraft
 
-cfg = json.load(open(sys.argv[1], encoding="utf-8"))
+cfg = json.load(open(sys.argv[1], encoding="utf-8-sig"))
 END = cfg["duracion"]
 log = open(cfg["freeze_log"], encoding="utf-8", errors="ignore").read()
 st = [float(x) for x in re.findall(r"freeze_start: ([0-9.]+)", log)]
