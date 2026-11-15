@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.5] - 2026-11-14
+
+### Added
+- Optional **local download mirror** for skill setup (`skills.espejo`): another PC at home running `tools/espejo-recursos.js` serves models by sha256, so they are not downloaded twice. Files are still sha256-checked; if the mirror does not have them, APOLO uses the original URL.
+
+### Fixed
+- Mission Control: the "Create your own" fields can be typed in again (clicking a field redrew the screen and jumped to the top).
+- Installer and skill setup on a fresh Windows: winget now uses `--source winget` (the msstore source failed with 0x8a15005e and nothing got installed), and its real error is shown.
+- Skill setup warns that Windows will ask for administrator permission when installing programs, and explains what to do if it is cancelled.
+- Skill scripts read JSON with or without a BOM (files written by PowerShell 5).
+
 ## [0.3.4] - 2026-11-14
 
 ### Added

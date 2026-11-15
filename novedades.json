@@ -1,4 +1,27 @@
 {
+  "0.3.5": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.5",
+      "saludo": "¡Arreglos para que todo se instale a la primera!",
+      "puntos": [
+        "En un Windows recién instalado los programas de las skills ya se instalan bien (y si algo falla, te digo por qué).",
+        "Te aviso antes de que Windows pida permiso de administrador, y qué hacer si lo cancelas.",
+        "Mission Control: ya se puede escribir en «Crea el tuyo».",
+        "Si tienes otro PC en casa, puede guardar los modelos para no bajarlos dos veces."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.5",
+      "saludo": "Fixes so everything installs the first time!",
+      "puntos": [
+        "On a fresh Windows, skill programs now install correctly (and if something fails, I tell you why).",
+        "I warn you before Windows asks for administrator permission, and what to do if you cancel it.",
+        "Mission Control: you can type in \"Create your own\" again.",
+        "If you have another PC at home, it can keep the models so they are not downloaded twice."
+      ]
+    }
+  },
   "0.3.4": {
     "animaciones": false,
     "es": {
