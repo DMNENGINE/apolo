@@ -42,8 +42,16 @@ const BIB = {
     c.onclick = e => this.clic(e);
   },
   entradas() { return (this.datos?.entradas || []).filter(e => e.origen === 'biblioteca' || (e.catalogos || []).includes('biblioteca')).sort((a, b) => a.nombre.localeCompare(b.nombre)); },
+  // ¿hay versión nueva en la biblioteca de una skill que ya está instalada? (1.2.0 > 1.1.0)
+  hayNueva(e) {
+    if (!e.instalada || !e.version) return false;
+    const n = v => String(v || '0').replace(/^v/, '').split(/[.+-]/).slice(0, 3).map(x => parseInt(x, 10) || 0);
+    const a = n(e.versionInstalada), b = n(e.version);
+    for (let i = 0; i < 3; i++) if (b[i] !== a[i]) return b[i] > a[i];
+    return false;
+  },
   tarjeta(e) {
-    const r = e.requisitos || {}, inst = e.instalada;
+    const r = e.requisitos || {}, inst = e.instalada, nueva = this.hayNueva(e);
     const req = [r.vramGB ? `<span class="chip" title="${tr('Necesita')}">${ic('cpu')}GPU ${r.vramGB} GB</span>` : '', r.discoGB ? `<span class="chip">${ic('disco')}${r.discoGB} GB</span>` : '',
       e.preparacion ? `<span class="chip ok">${ic('rayo')}${tr('Se prepara sola')}</span>` : '',
       ...(e.necesita || []).map(n => `<span class="chip aviso" title="${tr('Tienes que instalarlo tú')}">${ic('info')}${esc(n)}</span>`)].join('');
@@ -54,6 +62,7 @@ const BIB = {
       <p class="sk-desc">${esc(e.descripcion || tr('Sin descripción.'))}</p>
       <div class="mk-tags">${req}</div>
       <div class="sk-pie"><span class="crece"></span>
+        ${nueva ? `<button class="btn mini pri" data-bib-actualizar="${esc(inst)}" title="${esc(tr('Tienes la v{a}', { a: String(e.versionInstalada || '?') }))}">${ic('recargar')}${tr('Actualizar a v{v}', { v: esc(String(e.version).replace(/^v/, '')) })}</button>` : ''}
         ${inst ? `${e.preparacion ? `<button class="btn mini" data-bib-preparar="${esc(inst)}">${ic('rayo')}${tr('Preparar')}</button>` : ''}<button class="btn mini" data-bib-abrir="${esc(inst)}">${ic('check')}${tr('Instalada')}</button>`
           : `<button class="btn mini pri" data-bib-instalar="${esc(e.id)}">${ic('mas')}${tr('Instalar')}</button>`}</div>
     </article>`;
@@ -63,12 +72,27 @@ const BIB = {
     if (cat) { this.cat = cat.dataset.bibCat; return this.pintar(this.c); }
     const ins = ev.target.closest('[data-bib-instalar]');
     if (ins) { ev.stopPropagation(); return this.instalar(this.entradas().find(e => e.id === ins.dataset.bibInstalar), ins); }
+    const ac = ev.target.closest('[data-bib-actualizar]');
+    if (ac) { ev.stopPropagation(); return this.actualizar(this.entradas().find(e => e.instalada === ac.dataset.bibActualizar), ac); }
     const pr = ev.target.closest('[data-bib-preparar]');
     if (pr) { ev.stopPropagation(); return this.preparar(pr.dataset.bibPreparar); }
     const ab = ev.target.closest('[data-bib-abrir]');
     if (ab) { ev.stopPropagation(); VISTAS.skills.ponerModo('inst'); return VISTAS.skills.abrir(ab.dataset.bibAbrir); }
     const t = ev.target.closest('.bib-tarjeta');
     if (t) MK.ficha(this.entradas().find(e => e.id === t.dataset.bib));
+  },
+  async actualizar(e, boton) {
+    if (!e) return;
+    const txt = boton?.innerHTML;
+    if (boton) { boton.disabled = true; boton.innerHTML = `<span class="punto ok vivo"></span>${tr('Actualizando…')}`; }
+    try {
+      const r = await api('POST', `/skills/${encodeURIComponent(e.instalada)}/actualizar`, { aplicar: true });
+      aviso(r.aplicado ? tr('{s} actualizada a la v{v}', { s: e.nombre, v: String(e.version).replace(/^v/, '') }) : tr('{s} ya estaba al día', { s: e.nombre }), r.escaneo?.nivel === 'rojo');
+      this.datos = null; MK.datos = null;
+      if (this.c?.isConnected) await this.pintar(this.c);
+      if (e.preparacion) this.preparar(e.instalada);          // si el plan cambió, que vea qué falta (lo ya descargado se conserva)
+    } catch (er) { aviso(er.message, true); }
+    finally { if (boton?.isConnected) { boton.disabled = false; boton.innerHTML = txt; } }
   },
   async instalar(e, boton) {
     if (!e) return;

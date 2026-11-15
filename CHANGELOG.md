@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.9] - 2026-11-15
+
+### Added
+- DMN Library: installed skills with a newer version in the library show an «Update to vX» button (keeps `_datos`; opens the setup window afterwards if the skill has a plan).
+
 ## [0.3.8] - 2026-11-15
 
 ### Fixed

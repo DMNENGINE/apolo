@@ -34,7 +34,7 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
     return { ...c, entradas: c.entradas.map(e => {
       if (e.tipo !== 'skill') return e;
       const s = L.find(x => (x.origen?.fuente && norm(x.origen.fuente) === norm(e.fuente)) || x.slug === slugDe(e.nombre));
-      return s ? { ...e, instalada: s.slug } : e;
+      return s ? { ...e, instalada: s.slug, versionInstalada: s.version || '' } : e;
     }) };
   }
 
