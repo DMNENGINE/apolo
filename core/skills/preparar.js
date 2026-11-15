@@ -274,7 +274,14 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
       case 'programa': {
         const pr = PROGRAMAS[p.programa];
         if (process.platform !== 'win32') throw new Error(`instala ${pr.nombre} con el gestor de paquetes de tu sistema`);
-        await proceso('winget', ['install', '--id', pr.winget, '-e', '--silent', '--source', 'winget', '--accept-package-agreements', '--accept-source-agreements'], o);
+        // muchos instaladores (Git, Node, 7-Zip…) son para todo el equipo: Windows enseña su aviso de permiso y hay que pulsar Sí
+        o.progreso?.({ fase: `Instalando ${pr.nombre}. Si Windows pregunta si permites cambios, pulsa «Sí».` });
+        try { await proceso('winget', ['install', '--id', pr.winget, '-e', '--silent', '--source', 'winget', '--accept-package-agreements', '--accept-source-agreements'], o); }
+        catch (e) {
+          if (/cancel|0x8a15010c|2316632332|1223/i.test(e.message)) throw new Error(`no se instaló ${pr.nombre}: se canceló el permiso de administrador de Windows. Vuelve a pulsar Preparar y, cuando Windows pregunte, pulsa «Sí»`);
+          throw e;
+        }
+        if (!(await ejecutable(p.programa, ejecutar))) throw new Error(`${pr.nombre} se instaló pero no lo encuentro todavía; cierra y abre APOLO y vuelve a pulsar Preparar`);
         return {};
       }
       case 'git': {
