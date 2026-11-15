@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.6] - 2026-11-14
+
+### Fixed
+- A skill that needs setting up (models, programs) could end up **active but never set up**, so nothing happened: only the DMN Library tab opened the setup. Now the skill page shows **«This skill needs to be set up · Set up now»** (or the progress), and the setup window opens by itself when the skill is installed from Explore, a link or a folder, or when it is enabled.
+
+### Added
+- APOLO warns when a skill is not set up yet and can set it up itself with the new `preparar_skill` tool (always asks for permission).
+
 ## [0.3.5] - 2026-11-14
 
 ### Added

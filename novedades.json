@@ -1,4 +1,25 @@
 {
+  "0.3.6": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.6",
+      "saludo": "¡Ahora te aviso si a una skill le falta prepararse!",
+      "puntos": [
+        "Si instalas una skill que necesita modelos o programas, te abro su preparación, la instales como la instales.",
+        "En la ficha de cada skill ves si está lista o le falta prepararse, con el botón «Preparar ahora».",
+        "Pídeme que prepare una skill y lo hago yo (siempre con tu permiso)."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.6",
+      "saludo": "Now I tell you when a skill still needs setting up!",
+      "puntos": [
+        "If you install a skill that needs models or programs, I open its setup, however you installed it.",
+        "Each skill's page shows whether it is ready or still needs setting up, with a «Set up now» button.",
+        "Ask me to set up a skill and I'll do it (always with your permission)."
+      ]
+    }
+  },
   "0.3.5": {
     "animaciones": false,
     "es": {
