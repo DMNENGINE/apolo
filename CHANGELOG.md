@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.7] - 2026-11-15
+
+### Fixed
+- Skill setup could hang forever while installing Python packages: pip on Windows sometimes crashes ("access violation") or freezes while checking certificates with the system store. pip now has a timeout and retries, falls back once to `--use-deprecated=legacy-certs`, and any step silent for 15 minutes is stopped with a clear message.
+
 ## [0.3.6] - 2026-11-14
 
 ### Fixed

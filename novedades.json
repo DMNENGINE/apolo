@@ -1,4 +1,21 @@
 {
+  "0.3.7": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.7",
+      "saludo": "¡Preparar skills ya no se queda colgado!",
+      "puntos": [
+        "Si una descarga de Python se queda atascada, la corto, lo reintento de otra forma y te digo qué pasó."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.7",
+      "saludo": "Setting up skills no longer gets stuck!",
+      "puntos": [
+        "If a Python download gets stuck, I stop it, retry another way and tell you what happened."
+      ]
+    }
+  },
   "0.3.6": {
     "animaciones": false,
     "es": {
