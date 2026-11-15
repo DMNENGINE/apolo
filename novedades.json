@@ -5,14 +5,18 @@
       "titulo": "Lo nuevo en APOLO 0.3.7",
       "saludo": "¡Preparar skills ya no se queda colgado!",
       "puntos": [
-        "Si una descarga de Python se queda atascada, la corto, lo reintento de otra forma y te digo qué pasó."
+        "Si la instalación de librerías de Python de una skill se queda atascada, ya no se queda colgada para siempre.",
+        "Si un paso de la preparación pasa 15 minutos sin avanzar, lo corto y te explico por qué.",
+        "Si pip falla al comprobar certificados en Windows, lo reintento solo de otra forma."
       ]
     },
     "en": {
       "titulo": "What's new in APOLO 0.3.7",
       "saludo": "Setting up skills no longer gets stuck!",
       "puntos": [
-        "If a Python download gets stuck, I stop it, retry another way and tell you what happened."
+        "If installing a skill's Python libraries gets stuck, it no longer hangs forever.",
+        "If a setup step makes no progress for 15 minutes, I stop it and tell you why.",
+        "If pip fails while checking certificates on Windows, I retry another way by myself."
       ]
     }
   },
