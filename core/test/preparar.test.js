@@ -182,3 +182,26 @@ test('preparar: estadoRapido dice si a una skill le falta prepararse sin tocar e
   fs.mkdirSync(path.join(d, '_datos')); const f = path.join(d, '_datos', 'preparacion.json');
   for (const [e, r] of [['preparando', 'preparando'], ['error', 'error'], ['cancelado', 'pendiente'], ['listo', 'lista']]) { fs.writeFileSync(f, JSON.stringify({ pasos: {}, ultimo: { estado: e } })); assert.equal(estadoRapido(d), r); }
 });
+
+test('preparar: pip colgado se corta por inactividad y se reintenta con legacy-certs', async () => {
+  const { EventEmitter } = require('events');
+  const plan = { formato: 'apolo-preparar/1', pasos: [{ id: 'libs', tipo: 'python', venv: '{{datos}}/venv', paquetes: ['python-docx'] }] };
+  const a = montar(plan);
+  const py = path.join(a.dir, '_datos', 'venv', process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python');
+  fs.mkdirSync(path.dirname(py), { recursive: true }); fs.writeFileSync(py, '');
+  const llamadas = [];
+  const lanzar = (cmd, args) => {
+    llamadas.push(args.join(' '));
+    const c = new EventEmitter(); c.stdout = new EventEmitter(); c.stderr = new EventEmitter();
+    const legacy = args.includes('--use-deprecated=legacy-certs');
+    c.kill = () => setImmediate(() => c.emit('close', null));
+    if (legacy) setImmediate(() => { c.stdout.emit('data', 'Successfully installed python-docx\n'); c.emit('close', 0); });
+    return c;                                                           // el primero no dice nada nunca: colgado
+  };
+  const { crearPreparador } = require('../skills/preparar');
+  const p = crearPreparador({ cfg: a.cfg, almacen: { obtener: s => (s === 'prueba' ? { slug: 'prueba', dir: a.dir } : null) }, lanzar, inactivoPipMs: 150,
+    ejecutar: async c => (c === 'nvidia-smi' ? { code: 0, out: 'G, 16000\n' } : { code: 0, out: '' }) });
+  await p.preparar('prueba'); const t = await esperar(p);
+  assert.equal(t.estado, 'listo', t.error);
+  assert.equal(llamadas.length, 2); assert.ok(llamadas[0].includes('--timeout 60')); assert.ok(llamadas[1].includes('--use-deprecated=legacy-certs'));
+});

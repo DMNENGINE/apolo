@@ -147,7 +147,7 @@ async function ejecutable(id, ejecutar = correr) {
 }
 
 // ---------- motor ----------
-function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThis.fetch(...a), ejecutar = correr, lanzar = spawn, ollamaUrl } = {}) {
+function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThis.fetch(...a), ejecutar = correr, lanzar = spawn, ollamaUrl, inactivoPipMs = 15 * 60_000 } = {}) {
   const trabajos = new Map();                                     // slug → { estado, paso, progreso, cancelar }
   const urlOllama = () => (ollamaUrl || cfg.proveedores?.ollama?.baseUrl || 'http://127.0.0.1:11434').replace(/\/v1\/?$/, '').replace(/\/$/, '');
   const avisar = (slug, datos) => bus?.emit?.('evento', { tipo: 'skills', accion: 'preparar', slug, ...datos });
@@ -264,8 +264,16 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
       c.stdout?.on('data', linea); c.stderr?.on('data', linea);
       const abortar = () => { try { c.kill(); } catch { } };
       o.signal?.addEventListener('abort', abortar, { once: true });
-      c.on('error', ko);
-      c.on('close', code => { o.signal?.removeEventListener('abort', abortar); code === 0 ? ok() : ko(new Error(`${path.basename(cmd)} terminó con código ${code}: ${cola.slice(-3).join(' | ').slice(0, 300)}`)); });
+      // vigilante: un proceso que no dice nada en `inactivoMs` (pip colgado, instalador esperando) se corta y se explica
+      let colgado = false, t = null;
+      const rearmar = () => { clearTimeout(t); if (o.inactivoMs) { t = setTimeout(() => { colgado = true; abortar(); }, o.inactivoMs); t.unref?.(); } };
+      rearmar(); c.stdout?.on('data', rearmar); c.stderr?.on('data', rearmar);
+      c.on('error', e => { clearTimeout(t); ko(e); });
+      c.on('close', code => {
+        clearTimeout(t); o.signal?.removeEventListener('abort', abortar);
+        if (colgado) return ko(Object.assign(new Error(`${path.basename(cmd)} se quedó ${Math.round(o.inactivoMs / 60000)} min sin responder y lo corté (${cola.slice(-2).join(' | ').slice(0, 200)})`), { colgado: true }));
+        code === 0 ? ok() : ko(new Error(`${path.basename(cmd)} terminó con código ${code}: ${cola.slice(-3).join(' | ').slice(0, 300)}`));
+      });
     });
   }
   const pythonDe = venv => path.join(venv, process.platform === 'win32' ? 'Scripts\\python.exe' : 'bin/python');
@@ -293,9 +301,16 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
       case 'python': {
         const venv = rutaSegura(p.venv, vars);
         if (!fs.existsSync(pythonDe(venv))) await proceso(await ejecutable('python', ejecutar) || (process.platform === 'win32' ? 'python' : 'python3'), ['-m', 'venv', venv], o);
-        const py = pythonDe(venv), base = ['-m', 'pip', 'install', '--no-input', ...(p.indice ? [p.soloIndice ? '--index-url' : '--extra-index-url', p.indice] : [])];
-        if ((p.paquetes || []).length) await proceso(py, [...base, ...p.paquetes], o);
-        if (p.requisitos) await proceso(py, [...base, '-r', rutaSegura(p.requisitos, vars, { soloEscribibles: false })], o);
+        const py = pythonDe(venv), base = ['-m', 'pip', 'install', '--no-input', '--timeout', '60', '--retries', '3', ...(p.indice ? [p.soloIndice ? '--index-url' : '--extra-index-url', p.indice] : [])];
+        // pip en Windows valida certificados con el almacén del sistema (truststore) y a veces revienta ("access violation") o se cuelga:
+        // si falla, un reintento con los certificados de siempre. Si no dice nada en 15 min, se corta (lo grande, torch, sí va escribiendo)
+        const pip = async extra => {
+          const oo = { ...o, inactivoMs: inactivoPipMs };
+          try { await proceso(py, [...base, ...extra], oo); }
+          catch (e) { if (o.signal?.aborted) throw e; o.progreso?.({ fase: 'pip falló; reintento con otro método de certificados' }); await proceso(py, [...base, '--use-deprecated=legacy-certs', ...extra], oo); }
+        };
+        if ((p.paquetes || []).length) await pip(p.paquetes);
+        if (p.requisitos) await pip(['-r', rutaSegura(p.requisitos, vars, { soloEscribibles: false })]);
         return { huella: huella(p) };
       }
       case 'descarga': return descargar(p, vars, o);
