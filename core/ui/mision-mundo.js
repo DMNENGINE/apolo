@@ -733,7 +733,8 @@ const MC_MUNDO = {
     const zona = $c('#mmgSubir'); if (zona) { zona.ondragover = e => { e.preventDefault(); zona.classList.add('encima'); }; zona.ondragleave = () => zona.classList.remove('encima');
       zona.ondrop = e => { e.preventDefault(); zona.classList.remove('encima'); const fl = e.dataTransfer.files[0]; if (fl) leerImagen(fl).catch(er => estado(esc(er.message), true)); }; }
     this.caja.onclick = async e => {
-      const t = e.target.closest('[data-g],[data-usar],[data-dado],[data-modo],mark[data-k]'); if (!t) return;
+      // solo dentro de esta caja: un ancestro de fuera con data-modo (la página) repintaba todo al tocar un campo
+      const t = e.target.closest('[data-g],[data-usar],[data-dado],button[data-modo],mark[data-k]'); if (!t || !this.caja?.contains(t)) return;
       if (t.dataset.k) { const inp = $c(`[data-b="${t.dataset.k}"]`); inp?.focus(); inp?.select(); return; }
       if (t.dataset.modo) { this.modoCrear = t.dataset.modo; return this.elegir(); }
       if (t.dataset.dado) { const k = t.dataset.dado, pq = MM_PAQUETES[Math.floor(Math.random() * MM_PAQUETES.length)]; this.bloques[k] = pq[k]; $c(`[data-b="${k}"]`).value = pq[k]; return pintarPrompt(); }
