@@ -206,3 +206,23 @@ test('el daemon sirve /v1/avatar y /avatar.js; el móvil solo puede leer', async
   assert.ok(!MV.alcance('PUT', ['v1', 'avatar', 'usuario']) && !MV.alcance('POST', ['v1', 'avatar', 'generar-ia']));
   assert.ok(MV.estaticoMovil('avatar.js'));
 });
+
+test('personajes 3D del usuario en <datos>/personajes (sobreviven a las actualizaciones): salen en la lista y la isla recibe su file://', async () => {
+  const { av, dir } = entorno();
+  const dp = path.join(dir, 'personajes');
+  fs.mkdirSync(dp, { recursive: true });
+  fs.writeFileSync(path.join(dp, 'mio-3d.glb'), 'glb');
+  fs.writeFileSync(path.join(dp, 'mio-3d.json'), JSON.stringify({ nombre: 'Mío', descripcion: 'de prueba' }));
+  fs.writeFileSync(path.join(dp, 'sin-glb.json'), '{}');                          // sin .glb: no sale
+  const g = await av.http('GET', ['v1', 'avatar']);
+  const p = g.personajes3d.find(x => x.id === 'mio-3d');
+  assert.ok(p && p.nombre === 'Mío' && !('url' in p), 'en la lista del panel, sin la ruta');
+  assert.ok(!g.personajes3d.some(x => x.id === 'sin-glb'));
+  assert.strictEqual(av.paraIsla().personaje3dUrl, null);
+  await av.http('PATCH', ['v1', 'avatar'], { personaje3d: 'mio-3d' });
+  const isla = av.paraIsla();
+  assert.strictEqual(isla.personaje3d, 'mio-3d');
+  assert.match(isla.personaje3dUrl, /^file:\/\/\/.*\/personajes\/mio-3d\.glb$/);
+  await av.http('PATCH', ['v1', 'avatar'], { personaje3d: 'blueguy' });
+  assert.strictEqual(av.paraIsla().personaje3dUrl, null, 'los de app/ siguen con ruta relativa');
+});

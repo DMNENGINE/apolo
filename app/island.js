@@ -111,7 +111,8 @@ for (const k of Object.keys(casco)) {
     return (personaje || casco)[k](...a);
   };
 }
-function ponerPersonaje(id) {
+// url: GLB fuera de app/ (personajes del usuario en <datos>/personajes, que sobreviven a las actualizaciones)
+function ponerPersonaje(id, url) {
   if ((id || '') === personajeId) return;
   if (personaje) { try { personaje.destruir(); } catch { } personaje = null; }
   if (cv3) { cv3.remove(); cv3 = null; }
@@ -120,7 +121,7 @@ function ponerPersonaje(id) {
     cv3 = document.createElement('canvas'); cv3.style.cssText = 'position:absolute;inset:0';
     rwrap.insertBefore(cv3, badge); aplicarTamano();
     try {
-      personaje = createPersonaje(cv3, `personajes/${personajeId}.glb`);
+      personaje = createPersonaje(cv3, url || `personajes/${personajeId}.glb`);
       personaje.setState(lastState || 'reposo');
     } catch (e) {                                       // sin WebGL o GLB roto: se queda el casco
       console.warn('[isla] personaje 3D no disponible:', e);
@@ -149,7 +150,7 @@ function pintarSkin(st) {
 if (bridge.onAvatar) bridge.onAvatar(a => {
   const p3d = a && /^[a-z0-9-]{2,32}$/.test(a.personaje3d || '') ? a.personaje3d : '';
   aplicarTamano(a && a.tamano);
-  ponerPersonaje(p3d);
+  ponerPersonaje(p3d, p3d && /^file:\/\/\//.test(a.personaje3dUrl || '') ? a.personaje3dUrl : '');
   // el personaje 3D tiene prioridad sobre el avatar 2D
   skinCfg = { usar: !p3d && !!(a && a.usar && a.receta && window.AvatarSVG), receta: a && a.receta, imagen: a && a.imagen };
   skin.hidden = !skinCfg.usar; cv.style.visibility = skinCfg.usar || personaje ? 'hidden' : '';

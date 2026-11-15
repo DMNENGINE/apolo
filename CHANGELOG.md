@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.11] - 2026-11-15
+
+### Added
+- 3D island characters are also read from the user data folder (`<data>/personajes/<id>.glb` + `<id>.json`), which updates never touch (the updater replaces the whole app folder). The island loads them by `file://` URL (`paraIsla().personaje3dUrl`); the panel list doesn't expose the path.
+
 ## [0.3.10] - 2026-11-15
 
 ### Fixed

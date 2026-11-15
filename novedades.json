@@ -1,4 +1,25 @@
 {
+  "0.3.11": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.11",
+      "saludo": "¡Personajes 3D que no se borran al actualizar!",
+      "puntos": [
+        "Los personajes 3D para la isla ahora pueden vivir en tu carpeta de datos de APOLO (robot-companion/nucleo/personajes).",
+        "Las actualizaciones de APOLO ya no se los llevan: instalas un personaje una vez y se queda.",
+        "Elígelo en el Panel → Avatar → «Cara en la isla»."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.11",
+      "saludo": "3D characters that survive updates!",
+      "puntos": [
+        "3D island characters can now live in your APOLO data folder (robot-companion/nucleo/personajes).",
+        "APOLO updates no longer wipe them: install a character once and it stays.",
+        "Pick it in Panel → Avatar → «Face on the island»."
+      ]
+    }
+  },
   "0.3.10": {
     "animaciones": false,
     "es": {

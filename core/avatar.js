@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { pathToFileURL } = require('url');
 const A = require('./ui/avatar');
 const { pedir } = require('./proveedores/http');
 
@@ -65,23 +66,29 @@ const PERSONAJES_3D = {
 };
 
 // + los que instala Projects/foto-a-modelo (foto_a_modelo.py --isla --instalar): app/personajes/<id>.glb + <id>.json {nombre, descripcion}
+// + los del usuario en <datos>/personajes (instaladores de personajes): las actualizaciones borran la carpeta de la app,
+//   la de datos no. Esos llevan `url` (file://) porque la isla no los encuentra relativos a app/.
 const DIR_PERSONAJES = path.join(__dirname, '..', 'app', 'personajes');
-function personajes3d() {
+function personajes3d(dirUsuario) {
   const todos = { ...PERSONAJES_3D };
-  try {
-    for (const f of fs.readdirSync(DIR_PERSONAJES)) {
-      const m = /^([a-z0-9-]{2,32})\.json$/.exec(f);
-      if (!m || todos[m[1]] || !fs.existsSync(path.join(DIR_PERSONAJES, m[1] + '.glb'))) continue;
-      try {
-        const j = JSON.parse(fs.readFileSync(path.join(DIR_PERSONAJES, f), 'utf8'));
-        todos[m[1]] = { nombre: String(j.nombre || m[1]).slice(0, 24), descripcion: String(j.descripcion || '').slice(0, 200) };
-      } catch { }
-    }
-  } catch { }
+  for (const [dir, propio] of [[DIR_PERSONAJES, false], [dirUsuario, true]]) {
+    if (!dir) continue;
+    try {
+      for (const f of fs.readdirSync(dir)) {
+        const m = /^([a-z0-9-]{2,32})\.json$/.exec(f);
+        if (!m || todos[m[1]] || !fs.existsSync(path.join(dir, m[1] + '.glb'))) continue;
+        try {
+          const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+          todos[m[1]] = { nombre: String(j.nombre || m[1]).slice(0, 24), descripcion: String(j.descripcion || '').slice(0, 200),
+            ...(propio ? { url: pathToFileURL(path.join(dir, m[1] + '.glb')).href } : {}) };
+        } catch { }
+      }
+    } catch { }
+  }
   return todos;
 }
-
 function crearAvatar({ cfg, bus, fetchImpl } = {}) {
+  const p3d = () => personajes3d(path.join(cfg.dir, 'personajes'));
   const dir = path.join(cfg.dir, 'avatar'), dirIA = path.join(dir, 'ia'), dirCache = path.join(dir, 'cache'), f = path.join(dir, 'avatar.json');
   const vacio = () => ({ usuario: null, apolo: null, usarEnIsla: false, enOverlay: false, historial: [], ia: [] });
   function leer() {
@@ -118,7 +125,7 @@ function crearAvatar({ cfg, bus, fetchImpl } = {}) {
       d.tamano = t;
     }
     if (b.personaje3d !== undefined) {
-      if (b.personaje3d && !personajes3d()[b.personaje3d]) throw err('personaje 3D desconocido');
+      if (b.personaje3d && !p3d()[b.personaje3d]) throw err('personaje 3D desconocido');
       d.personaje3d = b.personaje3d || null;
     }
     guardar(d); avisar('ajustes');
@@ -141,8 +148,8 @@ function crearAvatar({ cfg, bus, fetchImpl } = {}) {
   const conImagen = r => ({ receta: r, imagen: r?.tipo === 'ia' ? imagenIA(r.ia.id) : null });
   // personaje 3D (app/personajes/<id>.glb) en lugar del casco: tiene prioridad sobre el avatar 2D en la isla
   const paraIsla = () => {
-    const d = leer(), r = caraCompanero(d), p3d = personajes3d()[d.personaje3d] ? d.personaje3d : null;
-    return { ...(r ? { usar: true, ...conImagen(r) } : { usar: false, receta: A.PRESETS[0], imagen: null }), personaje3d: p3d, tamano: d.tamano || 100 };
+    const d = leer(), r = caraCompanero(d), todos = p3d(), id3d = todos[d.personaje3d] ? d.personaje3d : null;
+    return { ...(r ? { usar: true, ...conImagen(r) } : { usar: false, receta: A.PRESETS[0], imagen: null }), personaje3d: id3d, personaje3dUrl: (id3d && todos[id3d].url) || null, tamano: d.tamano || 100 };
   };
   const paraOverlay = () => { const d = leer(), r = caraCompanero(d); return d.enOverlay && r ? conImagen(r) : null; };
 
@@ -226,7 +233,7 @@ function crearAvatar({ cfg, bus, fetchImpl } = {}) {
   // ---------- API ----------
   async function http(M, p, b = {}, q = {}) {
     const sub = p[2];
-    if (!sub && M === 'GET') { const d = leer(); return { usuario: d.usuario, apolo: d.apolo, usarEnIsla: d.usarEnIsla, enOverlay: d.enOverlay, personaje3d: d.personaje3d || null, tamano: d.tamano || 100, personajes3d: Object.entries(personajes3d()).map(([id, x]) => ({ id, ...x })), historial: d.historial.slice(0, 20), ia: d.ia, motores: motores() }; }
+    if (!sub && M === 'GET') { const d = leer(); return { usuario: d.usuario, apolo: d.apolo, usarEnIsla: d.usarEnIsla, enOverlay: d.enOverlay, personaje3d: d.personaje3d || null, tamano: d.tamano || 100, personajes3d: Object.entries(p3d()).map(([id, { url, ...x }]) => ({ id, ...x })), historial: d.historial.slice(0, 20), ia: d.ia, motores: motores() }; }
     if (!sub && M === 'PATCH') return ajustes(b);
     if (sub === 'svg' && !p[3] && M === 'GET') {
       const quien = q.quien === 'apolo' ? 'apolo' : 'usuario', estado = A.ESTADOS.includes(q.estado) ? q.estado : 'reposo';
