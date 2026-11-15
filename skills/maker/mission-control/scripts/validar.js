@@ -5,14 +5,16 @@
 const fs = require('fs');
 
 const TEMAS = ['mazmorra', 'nave', 'oficina', 'castillo', 'bosque', 'laboratorio', 'colmena', 'infierno', 'estacion'];
-const SUELOS = ['piedra', 'tierra', 'madera', 'metal', 'hierba', 'alfombra', 'organico', 'roca', 'lava', 'rejilla'];
+const SUELOS = ['piedra', 'tierra', 'madera', 'metal', 'hierba', 'alfombra', 'organico', 'roca', 'lava', 'rejilla', 'agua'];
 const ROLES = ['servidores', 'principal', 'subagentes', 'taller', 'mcp', 'modelos', 'biblioteca', 'decor'];
 // tipo: [ancho, alto, bloquea, de pared]
 const OBJ = { rack: [2, 2, 1], antorcha: [1, 1, 0, 1], orbe: [2, 2, 1], impresora: [3, 3, 1], mesa: [2, 1, 1], pc: [2, 2, 1], estanteria: [2, 2, 1], planta: [1, 1, 1],
   barril: [1, 1, 1], cofre: [1, 1, 1], telescopio: [1, 2, 1], cuadro: [2, 1, 0, 1], consola: [2, 1, 1], tanque: [1, 2, 1], sofa: [2, 1, 1], caja: [1, 1, 1], lampara: [1, 1, 0, 1], cables: [2, 1, 0],
   portal: [3, 3, 1], brazo: [1, 2, 1], alambique: [2, 1, 1], caldero: [1, 1, 1], ornitoptero: [3, 2, 1], tornillo: [2, 2, 1], maniqui: [1, 2, 1], caballete: [1, 2, 1], engranajes: [2, 2, 1],
   carro: [2, 2, 1], codice: [2, 1, 0, 1], banco: [2, 1, 1], vela: [1, 1, 1], vaina: [1, 2, 1], jaula: [2, 2, 1], holo: [1, 1, 1], brasero: [1, 1, 1], calaveras: [1, 1, 1],
-  tuberias: [2, 1, 0, 1], tentaculos: [1, 1, 0], yunque: [2, 1, 1] };
+  tuberias: [2, 1, 0, 1], tentaculos: [1, 1, 0], yunque: [2, 1, 1],
+  cascada: [2, 3, 1], arbol: [2, 2, 1], farol: [1, 1, 0, 1], bandera: [1, 2, 0, 1], nenufar: [1, 1, 0], animal: [1, 1, 0] };
+const ESPECIES = ['gato', 'perro', 'pajaro', 'conejo', 'lemur', 'bisonte', 'pez', 'tortuga'];
 const SERVIDOR = ['rack', 'vaina', 'jaula'];
 const ESTILO = { muro: ['ladrillo', 'panel', 'azulejo', 'yeso', 'tronco', 'organico', 'roca'], luz: ['antorcha', 'neon', 'lampara', 'lava', 'bio'], nucleo: ['orbe', 'cerebro', 'cerebro-fuego'],
   pueblo: ['humanos', 'aliens', 'demonios', 'cientificos'], particulas: ['brasas', 'esporas', 'chispas', 'ninguna'], deco: ['mazmorra', 'nave', 'oficina', 'colmena', 'infierno'] };
@@ -50,11 +52,16 @@ function validar(m) {
   for (const s of salas) poner(s, s.suelo, s.rol === 'decor' && !s.nombre ? (sala[s.y * W + s.x] || s.id) : s.id);
   const pared = (x, y) => en(x, y) && !g[y * W + x] && [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].some(([dx, dy]) => en(x + dx, y + dy) && g[(y + dy) * W + x + dx]);
   const bloq = new Uint8Array(W * H), ocup = new Map();
-  for (const s of salas) if (s.suelo === 'lava') for (let y = s.y; y < s.y + s.h; y++) for (let x = s.x; x < s.x + s.w; x++) if (en(x, y)) bloq[y * W + x] = 1;
+  for (let i = 0; i < W * H; i++) if (g[i] && (suelo[i] === 'lava' || suelo[i] === 'agua')) bloq[i] = 1;   // lava y agua no se pisan (un puente = sala decor de madera encima)
   const nObj = {};
   for (const o of obs) {
     const d = OBJ[o.tipo]; if (!d) { E(`objeto "${o.tipo}" no existe`); continue; }
     nObj[o.tipo] = (nObj[o.tipo] || 0) + 1;
+    if (o.color !== undefined && !/^#[0-9a-f]{6}$/i.test(o.color)) E(`${o.tipo} en (${o.x},${o.y}): color debe ser #rrggbb`);
+    if (o.tipo === 'animal' && !ESPECIES.includes(o.especie)) E(`animal en (${o.x},${o.y}): especie "${o.especie}" no existe (${ESPECIES.join(', ')})`);
+    const sueloO = suelo[o.y * W + o.x];
+    if ((o.tipo === 'nenufar' || o.especie === 'pez') && sueloO !== 'agua') A(`${o.tipo}${o.especie ? ' ' + o.especie : ''} en (${o.x},${o.y}) debería ir sobre agua`);
+    if (o.tipo === 'animal' && o.especie !== 'pez' && o.especie !== 'pajaro' && sueloO === 'agua') A(`animal ${o.especie} en (${o.x},${o.y}) está en el agua (nadará a la orilla)`);
     const [w, h, b, mural] = d, celdas = [];
     for (let y = o.y; y < o.y + h; y++) for (let x = o.x; x < o.x + w; x++) celdas.push([x, y]);
     if (mural) { if (!celdas.every(([x, y]) => pared(x, y)) || !celdas.some(([x, y]) => en(x, y + 1) && g[(y + 1) * W + x])) A(`${o.tipo} en (${o.x},${o.y}) no está en una fila de pared justo encima de suelo`); continue; }

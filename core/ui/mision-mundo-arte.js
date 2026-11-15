@@ -19,6 +19,7 @@ const MM_SUELOC = {
   piedra: [[92, 98, 108], [70, 76, 86], [38, 42, 48]], tierra: [[126, 92, 58], [98, 70, 44], [62, 44, 28]], madera: [[134, 92, 56], [104, 70, 40], [58, 38, 20]],
   metal: [[70, 80, 94], [52, 60, 72], [30, 35, 43]], organico: [[96, 56, 116], [70, 38, 88], [36, 18, 48]], roca: [[62, 50, 48], [42, 34, 33], [20, 15, 15]],
   lava: [[255, 150, 40], [220, 70, 20], [70, 20, 12]], rejilla: [[52, 64, 82], [36, 44, 58], [14, 18, 26]], hierba: [[78, 138, 66], [54, 106, 48], [34, 70, 30]], alfombra: [[128, 44, 58], [100, 32, 44], [196, 150, 70]],
+  agua: [[64, 150, 196], [36, 104, 156], [20, 62, 104]],
 };
 
 // ---------- utilidades ----------
@@ -103,6 +104,10 @@ function mmFondo(w) {
         } else if (tipo === 'lava') {                                 // lava con costra
           const n = mmFbm(gx / 10, gy / 10, 38), c2 = mmRuido(gx / 6, gy / 6, 39);
           col = mmMix(S[1], S[0], n); if (c2 > .66) col = mmMix(S[2], [40, 18, 14], (c2 - .66) * 2.5); else if (c2 < .2) col = [255, 220, 120];
+        } else if (tipo === 'agua') {                                 // agua: fondo con profundidad; las ondas se animan encima (mision-mundo-vivo.js)
+          const n = mmFbm(gx / 18, gy / 18, 41), orilla = (G(tx, ty - 1) !== 1 || w.suelo[(ty - 1) * A + tx] !== 'agua') && py < 5;
+          col = mmMix(S[2], S[1], n * .9); if (mmRuido(gx / 9, gy / 4, 42) > .74) col = mmMix(col, S[0], .35);
+          if (orilla) col = mmMix(col, [10, 30, 50], .5 - py * .08);
         } else if (tipo === 'rejilla') {                              // rejilla metálica sobre el vacío
           const lx = gx % 8, ly = gy % 8; col = (lx < 2 || ly < 2) ? mmMul(S[0], .95 + mmF(gx >> 3, gy >> 3, 40) * .1) : S[2];
           if ((lx === 0 || ly === 0)) col = mmMul(S[0], 1.18); if (gx % 32 === 31 || gy % 32 === 31) col = [20, 26, 36];
@@ -384,8 +389,8 @@ mmObj('cables', 2, 1, 0, 0, c => {
 
 const MM_CACHE_OBJ = new Map();
 function mmSpriteObjeto(o) {
-  const d = MM_OBJ[o.tipo]; if (!d) return null; const v = mmH(o.x, o.y, 60) % 997, k = `${o.tipo}|${v % 6}`;
-  if (!MM_CACHE_OBJ.has(k)) { const cv = mmLienzo(d.w * MM_R, d.h * MM_R + d.alto); d.fijo(cv.getContext('2d'), v); MM_CACHE_OBJ.set(k, mmContorno(cv)); }
+  const d = MM_OBJ[o.tipo]; if (!d) return null; const v = mmH(o.x, o.y, 60) % 997, k = `${o.tipo}|${v % 6}|${o.color || ''}|${o.especie || ''}`;
+  if (!MM_CACHE_OBJ.has(k)) { const cv = mmLienzo(d.w * MM_R, d.h * MM_R + d.alto); d.fijo(cv.getContext('2d'), v, o); MM_CACHE_OBJ.set(k, d.sinContorno ? cv : mmContorno(cv)); }
   return MM_CACHE_OBJ.get(k);
 }
 function mmLlama(c, x, y, t, k = 1) {                      // llama de 4 capas que baila

@@ -84,10 +84,11 @@ function mmEstructura(m) {
   }
   const bloq = new Uint8Array(A * m.alto), lavaLuz = [];
   for (const o of m.objetos) { const d = MM_OBJ[o.tipo]; if (d?.bloq) for (let y = o.y; y < o.y + d.h; y++) for (let x = o.x; x < o.x + d.w; x++) if (en(x, y)) bloq[y * A + x] = 1; }
+  const agua = []; for (let i = 0; i < g.length; i++) if (g[i] === 1 && suelo[i] === 'agua') { bloq[i] = 1; agua.push(i); }   // el agua no se pisa; lo que cae flota (mision-fisica.js)
   for (let i = 0; i < g.length; i++) if (g[i] === 1 && suelo[i] === 'lava') { bloq[i] = 1; const x = i % A, y = Math.floor(i / A); if ((x + y * 2) % 3 === 0) lavaLuz.push({ x: x * R + R / 2, y: y * R + R / 2, f: Math.random() * 6 }); }
   const porRol = Object.fromEntries(m.salas.map(s => [s.rol, s]));
   const orbe = m.objetos.find(o => o.tipo === 'orbe') || (() => { const s = porRol.principal; return { x: s.x + (s.w >> 1) - 1, y: s.y + (s.h >> 1) - 1 }; })();
-  return { m, tema, g, suelo, sala, bloq, lavaLuz, porRol, orbe, W: A * R, H: m.alto * R };
+  return { m, tema, g, suelo, sala, bloq, lavaLuz, agua, porRol, orbe, W: A * R, H: m.alto * R };
 }
 // carátula de un mundo: fondo, objetos y su luz, en una imagen fija
 function mmCaratula(m, cv) {
@@ -156,7 +157,7 @@ const MC_MUNDO = {
     this.luz = mmLienzo(W >> 1, H >> 1); this.lc = this.luz.getContext('2d');
     this.vin = mmLienzo(W, H); const vc = this.vin.getContext('2d'), gv = vc.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.hypot(W, H) * .58);
     gv.addColorStop(0, 'rgba(0,0,0,0)'); gv.addColorStop(1, 'rgba(0,0,0,.38)'); vc.fillStyle = gv; vc.fillRect(0, 0, W, H);
-    this.dom(); this.ents.clear(); this.parts = []; this.poblar(); this.repartirRacks();
+    this.dom(); this.ents.clear(); this.parts = []; this.poblar(); this.repartirRacks(); this.fisicaIniciar?.();   // todo se mueve (mision-fisica.js)
     if (!this.raf) this.raf = requestAnimationFrame(t => this.cuadro(t));
   },
   dom() {
@@ -177,13 +178,18 @@ const MC_MUNDO = {
         <button class="mm-btn ritual${this.ritual ? ' on' : ''}" data-a="ritual" title="${tr('Todos los trabajadores a la Galería de los Orígenes: ritual ante los primeros modelos')}">${tr(this.ritual ? '🜁 TERMINAR' : '🜁 RITUAL')}</button>
         <button class="mm-btn rojo" data-a="estop" title="${tr('Detiene todos los agentes que están trabajando ahora')}">E-STOP</button>
         <button class="mm-btn rojo fuerte" data-a="panico" title="${tr('Pánico: corta todo (agentes, control del ratón, tareas) hasta que reanudes')}">PÁNICO</button>
+        <button class="mm-btn ic" data-a="ordenar" title="${tr('Ordenar: cada cosa vuelve a su sitio (arrastra y lanza objetos y personajes con el ratón)')}">⟲</button>
         <button class="mm-btn ic" data-a="editar" title="${tr('Crear o cambiar tu mundo')}">⚙</button>
         <button class="mm-btn ic" data-a="pausa" title="${tr('Pausar la animación')}">${this.pausa ? '▶' : '❚❚'}</button></div>
     </div>`;
     this.cv = $('canvas', this.caja); this.c = this.cv.getContext('2d'); this.c.imageSmoothingEnabled = false;
     this.capaNombres = $('.mm-nombres', this.caja);
     this.cv.onclick = e => this.clic(e);
-    this.cv.onmousemove = e => { const p = this.punto(e); const h = this.enPunto(p.x, p.y); this.cv.style.cursor = h ? 'pointer' : 'default'; this.encima = h?.p || null; };
+    this.cv.style.touchAction = 'none';
+    this.cv.onpointerdown = e => { if (this.fisicaAbajo?.(e)) e.preventDefault(); };
+    this.cv.onpointermove = e => this.fisicaMover?.(e);
+    this.cv.onpointerup = this.cv.onpointercancel = () => { if (this.fisicaArriba?.()) this.sinClic = true; };
+    this.cv.onmousemove = e => { if (this.agarre) return; const p = this.punto(e); const h = this.enPunto(p.x, p.y); this.cv.style.cursor = h ? 'pointer' : 'default'; this.encima = h?.p || null; };
     this.cv.onmouseleave = () => { this.encima = null; };
     $('.mm-pest', this.caja).onclick = e => { const b = e.target.closest('[data-p]'); if (!b) return; this.pestana = b.dataset.p; $$('.mm-pest button', this.caja).forEach(x => x.classList.toggle('on', x === b)); this.pintarTicker(); };
     $('.mm-abajo', this.caja).onclick = e => { const b = e.target.closest('[data-a]'); if (b) this.accion(b.dataset.a, b); };
@@ -351,6 +357,7 @@ const MC_MUNDO = {
     const R = MM_R, ahora = Date.now();
     if (ahora > e.proxParp) { e.parpHasta = ahora + 130; e.proxParp = ahora + 2500 + Math.random() * 4000; }
     if (this.ritual && this.ritualMover?.(e, dt, t)) return;              // el ritual de la galería manda (mision-galeria.js)
+    if (this.fisicaPersonaje?.(e, dt, t)) return;                       // agarrado con el ratón o volando (mision-fisica.js)
     if (e.tipo === 'apolo') return this.moverApolo(e, dt, t);
     if (e.fijo) { e.x = e.fijo.x; e.y = e.fijo.y; if (e.fijo.dir) { e.dir = e.fijo.dir; e.izq = e.fijo.izq; } e.acc = e.trabajando ? (e.tipo === 'apolo' ? 'conjura' : 'trabaja') : 'quieto'; e.frame = e.acc === 'trabaja' ? Math.floor(t / 220) % 2 : Math.floor(t / 700) % 2; return; }
     const ocupado = e.trabajando && !e.agente?.esperando;
@@ -438,7 +445,8 @@ const MC_MUNDO = {
 
     const enUso = new Set(vivos.map(a => mmProveedor(a.modelo)));
     for (const x of this.ents.values()) { x.trabajando = x.agente ? x.agente.estado === 'trabajando' : x.tipo === 'apolo' ? vivos.length > 0 : x.tipo === 'modelo' ? enUso.has(x.modelo.id) || (x.modelo.puente && false) : false; this.mover(x, dt, t); }
-    c.globalCompositeOperation = 'source-over'; c.drawImage(this.fondo, 0, 0);
+    this.fisicaPaso?.(dt, t);
+    c.globalCompositeOperation = 'source-over'; c.drawImage(this.fondo, 0, 0); this.aguaDibujar?.(c, t);
     const luces = [], borde = this.tema.borde, carteles = [], s = this.porRol;
     for (const g of (e.racks || new Map()).values()) { const n = g.items.filter(x => x.ok).length, mal = n < g.items.length;
       const dR = MM_OBJ[g.rack.tipo]; carteles.push(mmCartel(c, (g.rack.x + dR.w / 2) * R, (g.rack.y + dR.h) * R + 2, `${g.grupo.nombre.toUpperCase().split(" ")[0].slice(0, 9)} ${n}/${g.items.length}`, { borde: mal ? '#ff3b5c' : '#3dff8a', max: 60, brillo: mal ? .5 + Math.sin(t / 200) * .5 : 0 })); }
@@ -451,22 +459,24 @@ const MC_MUNDO = {
       carteles.push(mmCartel(c, (s.mcp.x + s.mcp.w / 2) * R, (s.mcp.y + s.mcp.h - 1) * R + 6, vivo ? '✦ ' + this.ultConjuro.txt.toUpperCase() : (s.mcp.nombre || 'LABORATORIO MCP').toUpperCase(), { borde: vivo ? '#c85aff' : borde, max: s.mcp.w * R, brillo: vivo ? .6 + Math.sin(t / 160) * .4 : 0 })); }
     // objetos de pared primero; luego lo que está en el suelo y los personajes, ordenados por su base
     const cosas = [];
-    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (!d) continue; const X = o.x * R, Y = o.y * R - d.alto; cosas.push({ o, d, X, Y, base: d.bloq ? (o.y + d.h) * R - 2 : -1 }); if (d.luz) luces.push(...d.luz(o, X, Y, t, e)); }
+    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (!d) continue; const f = o.f || MF_CERO, X = o.x * R + f.dx, Y = o.y * R - d.alto + f.dy - f.z; cosas.push({ o, d, X, Y, base: d.bloq || f.libre ? (o.y + d.h) * R - 2 + f.dy : -1 }); if (d.luz && !f.hundido) luces.push(...d.luz(o, X, Y, t, e)); }
     for (const p of this.ents.values()) cosas.push({ p, base: p.y });
     for (const l of this.lavaLuz || []) luces.push({ x: l.x, y: l.y, r: 70, col: [255, 110, 40], a: .32 + Math.sin(t / 400 + l.f) * .08 });
     for (const k of carteles) luces.push({ x: k.x + k.w / 2, y: k.y + k.h / 2, r: Math.max(60, k.w * .7), col: [200, 230, 225], a: .22 });
     for (const sa of this.m.salas) if (sa.nombre && sa.rol !== 'mcp') luces.push({ x: (sa.x + sa.w / 2) * R, y: sa.y * R + 18, r: 80, col: [200, 230, 225], a: .18 });
     cosas.sort((a, b) => a.base - b.base);
     for (const k of cosas) {
-      if (k.o) { c.drawImage(mmSpriteObjeto(k.o), k.X, k.Y); k.d.vivo?.(c, k.X, k.Y, t, e, k.o); continue; }
+      if (k.o) { this.fisicaDibujar(c, k, t, e); continue; }
       const p = k.p, alfa = p.sale ? Math.max(0, 1 - (ahora - p.sale) / 1500) : Math.min(1, (ahora - p.nace) / 500);
       c.globalAlpha = alfa;
       c.fillStyle = 'rgba(0,0,0,.38)'; c.beginPath(); c.ellipse(p.x, p.y, 13, 5, 0, 0, 7); c.fill();
       if (this.sel?.p === p || this.encima === p) { c.strokeStyle = this.tema.borde; c.lineWidth = 1; c.globalAlpha = alfa * (.6 + Math.sin(t / 200) * .3); c.beginPath(); c.ellipse(p.x, p.y, 18, 7, 0, 0, 7); c.stroke(); c.globalAlpha = alfa; }
       const sp = mmPJ(p.look, p.dir, p.frame, p.acc || 'quieto', ahora < p.parpHasta);
       const E = p.tipo === 'apolo' ? 1.8 : 1.5, lev = p.look.flota ? 9 + Math.sin(t / 420) * 3 : 0, bx = Math.round(p.x - 14 * E), by0 = Math.round(p.y - 50 * E - lev);                       // a 1,5×: el tamaño de la referencia
-      const hS = 54 * E * (1 - (p.reverencia || 0) * .17), by = Math.round(by0 + 54 * E - hS - (p.salto || 0));   // ritual: reverencia (se encoge) y saltos
+      const hS = 54 * E * (1 - (p.reverencia || 0) * .17), by = Math.round(by0 + 54 * E - hS - (p.salto || 0) - (p.z || 0));
+      if (p.colgando) { c.save(); c.translate(p.x, by + hS * .15); c.rotate(p.colgando); c.translate(-p.x, -(by + hS * .15)); }   // agarrado o volando: se balancea   // ritual: reverencia (se encoge) y saltos
       if (p.dir === 'lado' && p.izq) { c.save(); c.translate(bx + 28 * E, by); c.scale(-1, 1); c.drawImage(sp, 0, 0, 28 * E, hS); c.restore(); } else c.drawImage(sp, bx, by, 28 * E, hS);
+      if (p.colgando) c.restore();
       c.globalAlpha = 1;
       if (p.look.balon) {                                             // el balón va por delante de sus pies
         const b = p.balon || (p.balon = { x: p.x + 10, y: p.y }), fx = p.x + (p.dir === 'lado' ? (p.izq ? -12 : 12) : 6), fy = p.y + (p.dir === 'abajo' ? 6 : p.dir === 'arriba' ? -4 : 1);
@@ -498,10 +508,10 @@ const MC_MUNDO = {
     for (const l of luces) if (l.bloom) { const g = c.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.bloom); g.addColorStop(0, `rgba(${l.col[0]},${l.col[1]},${l.col[2]},.55)`); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(l.x - l.bloom, l.y - l.bloom, l.bloom * 2, l.bloom * 2); }
     for (const r of rayos) mmRayo(c, r[0], r[1], r[2], r[3], r[4], r[5], e.nucleoRGB);
     if (String(e.nucleo).startsWith('cerebro')) {                     // el cerebro chisporrotea siempre: arcos cortos alrededor
-      const ox = this.orbe.x * R + 32, oy = this.orbe.y * R + 12, n = 3 + Math.round(e.orbe * 3);
+      const ox = mfOX(this.orbe) + 32, oy = mfOY(this.orbe) + 12 - (this.orbe.f?.z || 0), n = 3 + Math.round(e.orbe * 3);
       for (let i = 0; i < n; i++) { const a = mmF(this.semilla, i, 90) * 6.28, d = 50 + mmF(i, this.semilla, 91) * 50; mmRayo(c, ox, oy, ox + Math.cos(a) * d, oy + Math.sin(a) * d * .7, this.semilla + i * 7, .5 + e.orbe * .4, e.nucleoRGB); }
     }
-    const ob = { x: this.orbe.x * R + 32, y: this.orbe.y * R + 14 }, libros = this.m.objetos.filter(o => o.tipo === 'estanteria');
+    const ob = { x: mfOX(this.orbe) + 32, y: mfOY(this.orbe) + 14 - (this.orbe.f?.z || 0) }, libros = this.m.objetos.filter(o => o.tipo === 'estanteria');
     for (const p of this.ents.values()) {
       if (p.sale) continue;
       if (p.cat) {
@@ -521,7 +531,7 @@ const MC_MUNDO = {
     if (this.sel) this.seguirHolo();
   },
   rayos(t) {
-    const o = this.orbe, R = MM_R, ox = o.x * R + 32, oy = o.y * R + 14, r = [];
+    const o = this.orbe, R = MM_R, ox = mfOX(o) + 32, oy = mfOY(o) + 14 - (o.f?.z || 0), r = [];
     if (!this.semilla || t - this.tRayo > 85) { this.semilla = (Math.random() * 1e6) | 0; this.tRayo = t; }
     let k = 0;
     for (const p of this.ents.values()) { if (!p.trabajando || p.tipo === 'apolo' || p.tipo === 'modelo' || p.sale || p.cat === 'web' || p.cat === 'memoria' || p.cat === 'mcp') continue; r.push([ox, oy, p.x, p.y - 33, this.semilla + k++ * 13, 1]); }
@@ -531,12 +541,13 @@ const MC_MUNDO = {
   particulas(c, t, dt) {
     const P = this.parts, R = MM_R, e = this.est;
     if (P.length < 480) {
+      this.vivoParticulas?.(dt);                                         // bruma de cascadas, pétalos (mision-mundo-vivo.js)
       for (const o of this.m.objetos) {
-        if (o.tipo === 'antorcha' && Math.random() < dt / 260) P.push({ x: o.x * R + 16 + (Math.random() - .5) * 4, y: o.y * R + 2, vx: (Math.random() - .5) * 8, vy: -18 - Math.random() * 14, vida: 0, max: 900 + Math.random() * 700, tam: 1, col: '255,170,70', tipo: 'brasa' });
-        else if (o.tipo === 'orbe' && Math.random() < dt / (120 - e.orbe * 80)) { const a = Math.random() * 6.28; P.push({ x: o.x * R + 32 + Math.cos(a) * 14, y: o.y * R + 14 + Math.sin(a) * 14, vx: Math.cos(a) * 10, vy: -8 - Math.random() * 10, vida: 0, max: 1200, tam: 1, col: '150,240,255', tipo: 'chispa' }); }
-        else if (o.tipo === 'caldero' && Math.random() < dt / 500) P.push({ x: o.x * R + 10 + Math.random() * 12, y: o.y * R + 10, vx: (Math.random() - .5) * 4, vy: -12, vida: 0, max: 1600, tam: 2, col: '170,255,190', tipo: 'mota' });
+        if (o.tipo === 'antorcha' && Math.random() < dt / 260) P.push({ x: mfOX(o) + 16 + (Math.random() - .5) * 4, y: mfOY(o) + 2, vx: (Math.random() - .5) * 8, vy: -18 - Math.random() * 14, vida: 0, max: 900 + Math.random() * 700, tam: 1, col: '255,170,70', tipo: 'brasa' });
+        else if (o.tipo === 'orbe' && Math.random() < dt / (120 - e.orbe * 80)) { const a = Math.random() * 6.28; P.push({ x: mfOX(o) + 32 + Math.cos(a) * 14, y: mfOY(o) + 14 + Math.sin(a) * 14, vx: Math.cos(a) * 10, vy: -8 - Math.random() * 10, vida: 0, max: 1200, tam: 1, col: '150,240,255', tipo: 'chispa' }); }
+        else if (o.tipo === 'caldero' && Math.random() < dt / 500) P.push({ x: mfOX(o) + 10 + Math.random() * 12, y: mfOY(o) + 10, vx: (Math.random() - .5) * 4, vy: -12, vida: 0, max: 1600, tam: 2, col: '170,255,190', tipo: 'mota' });
         else if (o.tipo === 'portal' && e.mcp > .3 && Math.random() < dt / 40 && this.portal) { const a = Math.random() * 6.28, v = 20 + Math.random() * 40; P.push({ x: this.portal.x, y: this.portal.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 10, vida: 0, max: 450, tam: 1, col: Math.random() < .5 ? '255,220,255' : '170,250,255', tipo: 'chispa' }); }
-        else if (o.tipo === 'impresora' && Math.random() < dt / 700) P.push({ x: o.x * R + 20 + Math.random() * 56, y: o.y * R + 50, vx: (Math.random() - .5) * 30, vy: -10, vida: 0, max: 400, tam: 1, col: '255,200,90', tipo: 'brasa' });
+        else if (o.tipo === 'impresora' && Math.random() < dt / 700) P.push({ x: mfOX(o) + 20 + Math.random() * 56, y: mfOY(o) + 50, vx: (Math.random() - .5) * 30, vy: -10, vida: 0, max: 400, tam: 1, col: '255,200,90', tipo: 'brasa' });
       }
       const amb = this.tema.particulas, cada = amb === 'esporas' ? 90 : amb === 'chispas' ? 160 : 300;
       if (amb !== 'ninguna' && Math.random() < dt / cada) { const s = this.m.salas[Math.random() * this.m.salas.length | 0];
@@ -582,10 +593,10 @@ const MC_MUNDO = {
     let mejor = null, md = 20;
     for (const p of this.ents.values()) { const d = Math.hypot(p.x - x, p.y - 30 - y); if (d < md + 8) { md = d; mejor = { p }; } }
     if (mejor) return mejor;
-    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && (['orbe', 'rack', 'vaina', 'jaula', 'impresora', 'estanteria', 'portal', 'vitrina', 'altar-holo'].includes(o.tipo) || this.est.racks?.has(`${o.x},${o.y}`)) && x >= o.x * MM_R && x < (o.x + d.w) * MM_R && y >= o.y * MM_R - d.alto && y < (o.y + d.h) * MM_R) return { o }; }
+    for (const o of this.m.objetos) { const d = MM_OBJ[o.tipo]; if (d && (['orbe', 'rack', 'vaina', 'jaula', 'impresora', 'estanteria', 'portal', 'vitrina', 'altar-holo'].includes(o.tipo) || this.est.racks?.has(`${o.x},${o.y}`)) && x >= mfOX(o) && x < mfOX(o) + d.w * MM_R && y >= mfOY(o) - d.alto && y < mfOY(o) + d.h * MM_R) return { o }; }
     return null;
   },
-  clic(e) { const p = this.punto(e), h = this.enPunto(p.x, p.y); if (!h) return this.cerrarHolo(); this.abrirHolo(h); },
+  clic(e) { if (this.sinClic) { this.sinClic = false; return; } const p = this.punto(e), h = this.enPunto(p.x, p.y); if (!h) return this.cerrarHolo(); this.abrirHolo(h); },
   abrirHolo(h) {
     const det = $('.mm-holo', this.caja), ags = [...this.mc.agentes.values()], vivos = ags.filter(a => a.estado === 'trabajando');
     let col = this.tema.borde, cab, cuerpo = '';
@@ -675,6 +686,7 @@ const MC_MUNDO = {
       return this.cargarDatos();
     }
     if (a === 'editar') return this.elegir();
+    if (a === 'ordenar') return this.fisicaOrdenar?.();
   },
   async editarServicios() {
     const actual = await api('GET', '/servicios').catch(() => ({ grupos: [] }));

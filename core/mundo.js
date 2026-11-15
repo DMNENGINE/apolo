@@ -6,9 +6,12 @@ const path = require('path');
 
 // galeria: sala de vitrinas con hologramas (los modelos con los que nació el asistente); el botón RITUAL reúne ahí a todos
 const ROLES = ['servidores', 'principal', 'subagentes', 'taller', 'mcp', 'modelos', 'biblioteca', 'galeria', 'decor'];
-const SUELOS = ['piedra', 'tierra', 'madera', 'metal', 'hierba', 'alfombra', 'organico', 'roca', 'lava', 'rejilla'];
+const SUELOS = ['piedra', 'tierra', 'madera', 'metal', 'hierba', 'alfombra', 'organico', 'roca', 'lava', 'rejilla', 'agua'];
 const TEMAS = ['mazmorra', 'nave', 'oficina', 'castillo', 'bosque', 'laboratorio', 'colmena', 'infierno', 'estacion'];
-const OBJETOS = ['rack', 'antorcha', 'orbe', 'impresora', 'mesa', 'pc', 'estanteria', 'planta', 'barril', 'cofre', 'telescopio', 'cuadro', 'consola', 'tanque', 'sofa', 'caja', 'lampara', 'cables', 'portal', 'brazo', 'alambique', 'caldero', 'ornitoptero', 'tornillo', 'maniqui', 'caballete', 'engranajes', 'carro', 'codice', 'banco', 'vela', 'vaina', 'jaula', 'holo', 'brasero', 'calaveras', 'tuberias', 'tentaculos', 'yunque', 'vitrina', 'altar-holo'];
+const OBJETOS = ['rack', 'antorcha', 'orbe', 'impresora', 'mesa', 'pc', 'estanteria', 'planta', 'barril', 'cofre', 'telescopio', 'cuadro', 'consola', 'tanque', 'sofa', 'caja', 'lampara', 'cables', 'portal', 'brazo', 'alambique', 'caldero', 'ornitoptero', 'tornillo', 'maniqui', 'caballete', 'engranajes', 'carro', 'codice', 'banco', 'vela', 'vaina', 'jaula', 'holo', 'brasero', 'calaveras', 'tuberias', 'tentaculos', 'yunque', 'vitrina', 'altar-holo', 'cascada', 'arbol', 'farol', 'bandera', 'nenufar', 'animal'];
+// entorno vivo (mision-mundo-vivo.js): `color` tiñe árbol (en flor), farol, bandera, nenúfar y animal; `especie` elige el animal
+const ESPECIES = ['gato', 'perro', 'pajaro', 'conejo', 'lemur', 'bisonte', 'pez', 'tortuga'];
+const CON_COLOR = new Set(['arbol', 'farol', 'bandera', 'nenufar', 'animal']);
 // vitrina / altar-holo llevan `modelo`: el holograma <dir>/mundo/hologramas/<modelo>.png (tira de N fotogramas girando, meta en hologramas.json)
 const CON_MODELO = new Set(['vitrina', 'altar-holo']);
 const ID_HOLO = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -74,7 +77,9 @@ function validar(m) {
     formato: 'mundo/1', nombre: txt(m.nombre, 60, 'Mi mundo'), tema: TEMAS.includes(m.tema) ? m.tema : 'mazmorra', ...(estilo ? { estilo } : {}), ancho, alto, salas,
     pasillos: (Array.isArray(m.pasillos) ? m.pasillos : []).slice(0, 30).map(rect),
     objetos: (Array.isArray(m.objetos) ? m.objetos : []).filter(o => OBJETOS.includes(o?.tipo)).slice(0, 120).map(o => ({ tipo: o.tipo, x: ent(o.x, 0, ancho - 1, 0), y: ent(o.y, 0, alto - 1, 0),
-      ...(CON_MODELO.has(o.tipo) && ID_HOLO.test(String(o.modelo || '')) ? { modelo: o.modelo } : {}) })),
+      ...(CON_MODELO.has(o.tipo) && ID_HOLO.test(String(o.modelo || '')) ? { modelo: o.modelo } : {}),
+      ...(CON_COLOR.has(o.tipo) && /^#[0-9a-f]{6}$/i.test(String(o.color || '')) ? { color: o.color } : {}),
+      ...(o.tipo === 'animal' ? { especie: ESPECIES.includes(o.especie) ? o.especie : 'gato' } : {}) })),
   };
 }
 
@@ -85,7 +90,7 @@ const ESQUEMA = {
     salas: { type: 'array', items: { type: 'object', required: ['id', 'nombre', 'rol', 'x', 'y', 'w', 'h', 'suelo'], properties: {
       id: { type: 'string' }, nombre: { type: 'string' }, rol: { type: 'string', enum: ROLES }, x: { type: 'integer' }, y: { type: 'integer' }, w: { type: 'integer' }, h: { type: 'integer' }, suelo: { type: 'string', enum: SUELOS } } } },
     pasillos: { type: 'array', items: { type: 'object', required: ['x', 'y', 'w', 'h'], properties: { x: { type: 'integer' }, y: { type: 'integer' }, w: { type: 'integer' }, h: { type: 'integer' } } } },
-    objetos: { type: 'array', items: { type: 'object', required: ['tipo', 'x', 'y'], properties: { tipo: { type: 'string', enum: OBJETOS }, x: { type: 'integer' }, y: { type: 'integer' } } } },
+    objetos: { type: 'array', items: { type: 'object', required: ['tipo', 'x', 'y'], properties: { tipo: { type: 'string', enum: OBJETOS }, x: { type: 'integer' }, y: { type: 'integer' }, color: { type: 'string' }, especie: { type: 'string', enum: ESPECIES } } } },
   },
 };
 

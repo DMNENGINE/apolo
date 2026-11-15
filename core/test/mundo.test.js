@@ -36,3 +36,17 @@ test('http: de serie, guardar el propio, volver al original y generar con el mod
   assert.strictEqual((await mundo.http('GET', ['', 'mundo'], {})).mundo.nombre, BASE.nombre);
   await assert.rejects(mundo.http('POST', ['', 'mundo', 'generar'], { descripcion: '  ' }), /describe/);
 });
+
+test('entorno vivo: suelo agua, cascada/árbol/farol/bandera/nenúfar/animal con color y especie (en lista blanca)', () => {
+  const m = validar({ ...BASE, salas: [...BASE.salas, { id: 'lago', nombre: '', rol: 'decor', x: 13, y: 17, w: 3, h: 2, suelo: 'agua' }],
+    objetos: [...BASE.objetos,
+      { tipo: 'arbol', x: 13, y: 15, color: '#f2a7c8' }, { tipo: 'farol', x: 14, y: 2, color: 'rojo' }, { tipo: 'cascada', x: 1, y: 11 },
+      { tipo: 'animal', x: 13, y: 17, especie: 'pez', color: '#ff8a3a' }, { tipo: 'animal', x: 15, y: 15, especie: 'dragon' },
+      { tipo: 'nenufar', x: 14, y: 18, especie: 'pez' }, { tipo: 'rack', x: 2, y: 3, color: '#ffffff' }] });
+  assert.strictEqual(m.salas.find(s => s.id === 'lago').suelo, 'agua');
+  const nuevos = m.objetos.slice(BASE.objetos.length);
+  assert.deepStrictEqual(nuevos, [
+    { tipo: 'arbol', x: 13, y: 15, color: '#f2a7c8' }, { tipo: 'farol', x: 14, y: 2 }, { tipo: 'cascada', x: 1, y: 11 },
+    { tipo: 'animal', x: 13, y: 17, color: '#ff8a3a', especie: 'pez' }, { tipo: 'animal', x: 15, y: 15, especie: 'gato' },
+    { tipo: 'nenufar', x: 14, y: 18 }, { tipo: 'rack', x: 2, y: 3 }], 'color solo #rrggbb y en los que lo usan; especie desconocida → gato; nada de campos sueltos');
+});

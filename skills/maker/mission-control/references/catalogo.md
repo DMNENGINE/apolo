@@ -51,8 +51,8 @@ Los modelos de IA y los bots de Discord **pasean por todo el mapa**: no necesita
 | `sala` | 0–0.5 (luz de relleno dentro de las salas) |
 
 ## Suelos (`sala.suelo`)
-piedra · tierra · madera · metal · hierba · alfombra · **organico** (carne con venas) · **roca** (basalto con grietas de lava) · **lava** (no se pisa, alumbra; úsala en franjas o charcos dentro de salas/pasillos sin cortar el paso) · **rejilla** (metálica).
-Para un foso, charco o río de lava (o cualquier suelo distinto) **dentro** de una sala: añade una sala `decor` **sin nombre** (`"nombre": ""`) con ese suelo, **dentro** de la otra y **después** de ella en la lista (la última manda). Es la única excepción a «sin solaparse». La lava no se pisa: deja siempre paso alrededor.
+piedra · tierra · madera · metal · hierba · alfombra · **organico** (carne con venas) · **roca** (basalto con grietas de lava) · **lava** (no se pisa, alumbra; úsala en franjas o charcos dentro de salas/pasillos sin cortar el paso) · **rejilla** (metálica) · **agua** (con ondas animadas; no se pisa: lo ligero que cae flota y lo pesado se hunde; ríos, estanques, fosos).
+Para un foso, charco o río de lava (o cualquier suelo distinto) **dentro** de una sala: añade una sala `decor` **sin nombre** (`"nombre": ""`) con ese suelo, **dentro** de la otra y **después** de ella en la lista (la última manda). Es la única excepción a «sin solaparse». La lava y el agua no se pisan: deja siempre paso alrededor. **Puente** sobre agua: otra sala `decor` sin nombre de `madera` encima del agua (después en la lista).
 
 ## Objetos (`tipo`, ancho × alto en casillas; B = bloquea el paso)
 | tipo | tamaño | B | qué es | dónde |
@@ -76,6 +76,14 @@ Para un foso, charco o río de lava (o cualquier suelo distinto) **dentro** de u
 | `antorcha`, `lampara` | 1×1 | – | luz de pared (el tema decide fuego/neón/bulbo) | **en la fila de pared encima de una sala o pasillo** |
 | `cuadro`, `codice`, `tuberias` | 2×1 | – | plano; bocetos de Leonardo; tuberías | **en la pared** |
 | `cables` | 2×1 | – | cables por el suelo | cualquiera |
+| `cascada` | 2×3 | B | cascada que cae del muro a un remanso, con espuma y bruma | pegada al borde de arriba de una sala; mejor con agua delante |
+| `arbol` | 2×2 | B | árbol con copa alta que se mece; con `color` florece y suelta pétalos (p. ej. `#f2a7c8` cerezo) | jardines, patios, `hierba` |
+| `farol` | 1×1 | – | farol de papel colgante que se balancea y alumbra (`color` = papel) | **en la pared**, como la antorcha |
+| `bandera` | 1×2 | – | estandarte que ondea (`color` = tela) | **en la pared** |
+| `nenufar` | 1×1 | – | nenúfar que flota (a veces con flor; `color` = flor) | **sobre agua** |
+| `animal` | 1×1 | – | animal que pasea solo; `especie`: gato, perro, pajaro, conejo, lemur, bisonte (grande), pez (solo en agua), tortuga; `color` opcional | cualquiera (el `pez`, sobre agua) |
+
+**Todo se mueve** (física): los personajes empujan lo ligero al andar; con el ratón se agarra cualquier objeto o personaje y se lanza; lo ligero flota en el agua y lo pesado se hunde; ⟲ ORDENAR lo devuelve a su sitio. Pon objetos sueltos (barriles, cajas, plantas, animales) para que haya con qué jugar.
 
 ## Equivalencias habituales (referencia → catálogo)
 | en la imagen | en el mundo |

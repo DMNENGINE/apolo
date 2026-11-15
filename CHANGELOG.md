@@ -2,7 +2,14 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [0.3.11] - 2026-11-15
+## [0.3.12] - 2026-11-15
+
+### Added
+- Mission Control world physics (`core/ui/mision-fisica.js`): every object is a body with mass, friction, bounce and wobble; characters push light objects; drag, lift and throw any object or character with the mouse; objects collide with walls and each other; lava swallows and respawns them; positions persist per world (localStorage) and the ⟲ button tidies everything up. Walking paths follow the moved objects.
+- Living environment (`core/ui/mision-mundo-vivo.js`): `agua` floor with animated ripples (light bodies float and drift, heavy ones sink, thrown characters swim back to shore) and new objects `cascada`, `arbol` (blossoms with `color`), `farol`, `bandera`, `nenufar` and `animal` (`especie`: gato, perro, pajaro, conejo, lemur, bisonte, pez, tortuga) with their own wandering AI.
+- `mundo/1` accepts `color` and `especie` on those objects (whitelisted); the mission-control skill catalog and validator know the new floor and objects.
+
+ - 2026-11-15
 
 ### Added
 - 3D island characters are also read from the user data folder (`<data>/personajes/<id>.glb` + `<id>.json`), which updates never touch (the updater replaces the whole app folder). The island loads them by `file://` URL (`paraIsla().personaje3dUrl`); the panel list doesn't expose the path.

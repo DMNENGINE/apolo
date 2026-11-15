@@ -1,4 +1,25 @@
 {
+  "0.3.12": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.12",
+      "saludo": "¡Tu Mission Control cobra vida: ahora todo se mueve!",
+      "puntos": [
+        "Física: agarra con el ratón cualquier objeto o personaje y lánzalo; rebota, choca y se tambalea. Los personajes empujan lo ligero. ⟲ lo ordena todo.",
+        "Entorno vivo: agua con ondas (lo ligero flota, lo pesado se hunde), cascadas, árboles en flor, faroles, estandartes que ondean y nenúfares.",
+        "Animales que pasean solos (gato, perro, pájaro, conejo, lémur, bisonte, pez, tortuga); el creador de mundos ya sabe usarlos."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.12",
+      "saludo": "Your Mission Control comes alive: everything moves now!",
+      "puntos": [
+        "Physics: grab any object or character with the mouse and throw it; it bounces, collides and wobbles. Characters push light things. ⟲ tidies up.",
+        "Living environment: rippling water (light things float, heavy ones sink), waterfalls, blossoming trees, lanterns, waving banners and lily pads.",
+        "Animals that roam on their own (cat, dog, bird, rabbit, lemur, bison, fish, turtle); the world creator knows how to use them."
+      ]
+    }
+  },
   "0.3.11": {
     "animaciones": false,
     "es": {

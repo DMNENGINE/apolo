@@ -218,7 +218,7 @@ Object.assign(MC_MUNDO, {
   galeriaBrillo(c, t) {
     const R = MM_R, e = this.est, vit = (this.m?.objetos || []).filter(MG_ES);
     for (const o of vit) {
-      const d = MM_OBJ[o.tipo], X = o.x * R, Y = o.y * R - d.alto, grande = o.tipo === 'altar-holo';
+      const d = MM_OBJ[o.tipo], X = mfOX(o), Y = mfOY(o) - d.alto - (o.f?.z || 0), grande = o.tipo === 'altar-holo';
       const cx = X + (grande ? 48 : 32), base = Y + (grande ? MG_AA + 60 : MG_VA + 21), h = grande ? 96 + (e.carga || 0) * 18 : 52, k = 1 + (e.ritual || 0) * .5 + (e.carga || 0);
       mgCono(c, cx, base, h * .8, h * .9, Math.min(1.4, .55 * k)); mgHolo(c, o.modelo, cx, base, h, t, Math.min(1.6, .9 * k), grande ? 3.3 : o.x * 7 + o.y, true);
       if (grande) {                                                   // anillos que orbitan al primero
@@ -233,7 +233,7 @@ Object.assign(MC_MUNDO, {
     c.restore();
     if (r.fase !== 'danza') return;
     // canto y clímax: cada vitrina manda su luz al primero
-    if (e.carga > .05) for (const o of vit) if (o.tipo === 'vitrina') mmCorriente(c, o.x * R + 32, o.y * R - MG_VA + 20, L.cx, L.top + 30, [110, 240, 255], t, .5 + e.carga);
+    if (e.carga > .05) for (const o of vit) if (o.tipo === 'vitrina') mmCorriente(c, mfOX(o) + 32, mfOY(o) - MG_VA + 20, L.cx, L.top + 30, [110, 240, 255], t, .5 + e.carga);
     if (e.carga > .2) for (const p of this.ents.values()) if (!p.sale && Math.random() < e.carga * .05) this.parts.push({ x: p.x + (Math.random() - .5) * 20, y: p.y - 10, vx: 0, vy: -30 - Math.random() * 30, vida: 0, max: 900, tam: 1, col: '140,245,255', tipo: 'chispa' });
     if (e.climax) {
       const dt = Date.now() - e.climax, k = Math.max(0, 1 - Math.max(0, dt - 3200) / 1500);
