@@ -189,7 +189,7 @@ function iniciar(opciones = {}) {
       if (p[1] === 'estudio-video') {                          // estudio de vídeo local (core/estudio-video.js): GET = ¿está instalado? · POST abrir
         if (!maestro || !local(req.socket.remoteAddress)) return json(res, 403, { error: 'Solo disponible en el PC local' });
         const ev = require('./estudio-video');
-        if (M === 'GET' && !p[2]) return json(res, 200, { disponible: ev.disponible(n.cfg) });
+        if (M === 'GET' && !p[2]) return json(res, 200, ev.estado(n.cfg));
         if (M === 'POST' && p[2] === 'abrir') { try { return json(res, 200, await ev.abrir(n.cfg)); } catch (e) { return json(res, e.status || 500, { error: e.message }); } }
         return json(res, 404, { error: 'ruta' });
       }

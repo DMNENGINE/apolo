@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.8] - 2026-11-15
+
+### Fixed
+- The «Estudio de vídeo» tab only worked on the author's PC (hard-coded paths to a private studio). It now uses the studio shipped with the estudio-creativo skill 1.1.0 (`scripts/estudio.py` + the ComfyUI Python written by its setup); `cfg.estudioVideo` still overrides it.
+- If estudio-creativo is installed but not set up (or too old), the tab shows what is missing instead of disappearing.
+
 ## [0.3.7] - 2026-11-15
 
 ### Fixed

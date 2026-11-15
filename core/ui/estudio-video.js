@@ -1,19 +1,24 @@
 // Estudio de vídeo (#/estudio-video): el servicio local del usuario en un iframe (core/estudio-video.js).
-// La pestaña solo sale en las PCs que lo tienen instalado (GET /v1/estudio-video → disponible).
+// La pestaña sale si hay estudio o si la skill estudio-creativo está instalada (GET /v1/estudio-video → visible, disponible, motivo).
 'use strict';
-let EV_disponible = false;
+let EV_disponible = false, EV_motivo = '';
 NAV_APP.push(['estudio-video', 'Estudio de vídeo', 'play', () => EV_disponible]);
 { const antes = cargarVistasPlugin;                         // se comprueba al arrancar el panel y cuando cambian los plugins
   cargarVistasPlugin = async (...a) => {
     const [cambio, r] = await Promise.all([antes(...a), api('GET', '/estudio-video').catch(() => null)]);
-    const ahora = !!r?.disponible, cambia = ahora !== EV_disponible;
-    EV_disponible = ahora;
+    const ahora = !!(r?.visible ?? r?.disponible), cambia = ahora !== EV_disponible;
+    EV_disponible = ahora; EV_motivo = r?.disponible === false ? (r.motivo || '') : '';
     return cambio || cambia;
   }; }
 VISTAS['estudio-video'] = {
   salir() { this.themeObserver?.disconnect(); this.themeObserver = null; if (this.onReady) window.removeEventListener('message', this.onReady); this.onReady = null; },
   async pintar(v) {
     this.salir();
+    if (EV_motivo) {                                          // skill instalada pero sin estudio todavía: decir qué falta
+      v.innerHTML = `<div style="padding:24px"><p class="suave" role="status"></p><a class="btn mini pri" href="#/skills/estudio-creativo">${tr('Abrir estudio-creativo')}</a></div>`;
+      v.querySelector('p').textContent = EV_motivo;
+      return;
+    }
     v.innerHTML = '<p class="suave" role="status" style="padding:24px">Abriendo el estudio…</p>';
     try {
       const r = await api('POST', '/estudio-video/abrir', {});

@@ -1,4 +1,25 @@
 {
+  "0.3.8": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.8",
+      "saludo": "¡El Estudio de vídeo ya es para todos!",
+      "puntos": [
+        "Si tienes la skill estudio-creativo preparada, sale la pestaña «Estudio de vídeo»: fotos y vídeos con tu GPU, con cola de trabajos y galería.",
+        "Si te falta prepararla o actualizarla, la pestaña te dice qué hacer en vez de no aparecer.",
+        "Actualiza estudio-creativo a la 1.1.0 desde Skills → estudio-creativo → Buscar actualización."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.8",
+      "saludo": "The Video studio is now for everyone!",
+      "puntos": [
+        "If the estudio-creativo skill is set up, the «Video studio» tab shows up: photos and videos on your GPU, with a job queue and gallery.",
+        "If the skill still needs setup or an update, the tab tells you what to do instead of staying hidden.",
+        "Update estudio-creativo to 1.1.0 from Skills → estudio-creativo → Check for update."
+      ]
+    }
+  },
   "0.3.7": {
     "animaciones": false,
     "es": {
