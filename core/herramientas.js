@@ -332,7 +332,33 @@ const HERRAMIENTAS = [
       const extra = [c.referencias.length ? `Referencias (leer_recurso_skill): ${c.referencias.join(', ')}` : '', c.scripts.length ? `Scripts (ejecutar_script_skill): ${c.scripts.join(', ')}` : '',
         c.recursos.length ? `Recursos: ${c.recursos.slice(0, 40).join(', ')}` : ''].filter(Boolean).join('\n');
       const cuerpo = ctx.skills.preparador ? ctx.skills.preparador.resolverTexto(s.slug, c.cuerpo.trim()) : c.cuerpo.trim();   // {{apps}} {{modelos}} {{config.x}}…
-      return recortar(`SKILL "${s.slug}" (carpeta ${s.dir})\n${extra ? extra + '\n' : ''}\n${cuerpo}`);
+      // Biblioteca DMN: si aún no está preparada (programas/modelos sin bajar), avisarlo ANTES de que el modelo intente usarla
+      const prep = require('./skills/preparar').estadoRapido(s.dir);
+      const aviso = prep === 'pendiente' || prep === 'error' ? `⚠ ESTA SKILL AÚN NO ESTÁ PREPARADA (le faltan programas o modelos por descargar). No ejecutes sus scripts todavía: dile al usuario que hay que prepararla (Skills → la skill → «Preparar ahora») o, si quiere, hazlo tú con preparar_skill (accion "estado" para ver qué baja y cuánto ocupa, luego "iniciar").\n\n`
+        : prep === 'preparando' ? '⚠ Esta skill se está preparando ahora mismo (descargando). Dile al usuario que espere; puedes ver el avance con preparar_skill accion "estado".\n\n' : '';
+      return recortar(`${aviso}SKILL "${s.slug}" (carpeta ${s.dir})\n${extra ? extra + '\n' : ''}\n${cuerpo}`);
+    },
+  },
+  {
+    // Biblioteca DMN: preparar una skill (programas, modelos, configuración) desde el chat. "iniciar" pide permiso siempre.
+    nombre: 'preparar_skill', riesgo: 'escritura',
+    descripcion: 'Prepara una skill que lo necesita (instala sus programas, descarga sus modelos y la configura; ver preparar.json). accion "estado": qué falta, cuánto descarga y si el equipo cumple (GPU, RAM, disco). accion "iniciar": empieza la preparación en segundo plano. Úsala cuando usar_skill diga que la skill no está preparada.',
+    parametros: { type: 'object', properties: { nombre: { type: 'string', description: 'slug de la skill' }, accion: { type: 'string', enum: ['estado', 'iniciar'] } }, required: ['nombre', 'accion'] },
+    resumen: a => `${a.accion} ${a.nombre}`,
+    ejecutar: async (a, ctx) => {
+      if (!ctx.skills?.preparador) return 'error: las skills no están disponibles aquí';
+      const s = ctx.skills.almacen.obtener(String(a.nombre || '')); if (!s) return `error: no hay ninguna skill "${a.nombre}"`;
+      const gb = n => `${(n / 2 ** 30).toFixed(1)} GB`;
+      const resumir = d => !d.tienePlan ? `La skill ${s.slug} no necesita preparación.` : [
+        `Skill ${s.slug}: ${d.listo ? 'LISTA' : 'falta preparar'}${d.trabajo?.estado ? ` · trabajo: ${d.trabajo.estado}${d.trabajo.paso ? ` (paso ${d.trabajo.paso}${d.trabajo.progreso?.total ? `, ${Math.round(d.trabajo.progreso.bytes / d.trabajo.progreso.total * 100)} %` : ''})` : ''}${d.trabajo.error ? ` — ${d.trabajo.error}` : ''}` : ''}`,
+        `Pasos: ${d.pasos.map(p => `${p.nombre} (${p.estado}${p.bytes ? `, ${gb(p.bytes)}` : ''})`).join('; ')}`,
+        d.descargaBytes ? `Descargará ${gb(d.descargaBytes)} en ${d.carpetas?.base}.` : '',
+        d.problemas?.length ? `EL EQUIPO NO CUMPLE: ${d.problemas.join('; ')}` : '',
+        d.externos?.length ? `Además el usuario tiene que instalar: ${d.externos.map(x => `${x.nombre}${x.url ? ` (${x.url})` : ''}`).join(', ')}` : '',
+        d.errores?.length ? `Plan no válido: ${d.errores.join('; ')}` : ''].filter(Boolean).join('\n');
+      if (a.accion !== 'iniciar') return resumir(await ctx.skills.preparador.diagnostico(s.slug));
+      try { const d = await ctx.skills.preparador.preparar(s.slug); return `Preparación iniciada en segundo plano (el usuario ve el progreso en Skills).\n${resumir(d)}`; }
+      catch (e) { return `error: ${e.message}`; }
     },
   },
   {

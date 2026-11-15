@@ -382,4 +382,11 @@ function crearPreparador({ cfg, bus, almacen, fetch: traer = (...a) => globalThi
   return { diagnostico, preparar, cancelar, resolverTexto, reanudar, estado: slug => trabajos.get(slug) || null };
 }
 
-module.exports = { crearPreparador, ejecutable, validar, leerPlan, rutaSegura, expandir, rutasBase, PROGRAMAS, HOSTS_DESCARGA, FORMATO };
+// estado rápido (sin tocar el equipo ni la red): undefined = no necesita preparación · 'pendiente' · 'preparando' · 'lista' · 'error'
+function estadoRapido(dir) {
+  if (!dir || !fs.existsSync(path.join(dir, 'preparar.json'))) return undefined;
+  try { const e = JSON.parse(fs.readFileSync(path.join(dir, '_datos', 'preparacion.json'), 'utf8')).ultimo?.estado; return e === 'listo' ? 'lista' : e === 'preparando' ? 'preparando' : e === 'error' ? 'error' : 'pendiente'; }
+  catch { return 'pendiente'; }
+}
+
+module.exports = { crearPreparador, estadoRapido, ejecutable, validar, leerPlan, rutaSegura, expandir, rutasBase, PROGRAMAS, HOSTS_DESCARGA, FORMATO };

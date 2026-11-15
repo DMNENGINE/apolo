@@ -40,6 +40,7 @@ function crearSkills({ cfg, bus, generarJSON, embedder = null, modelo, escaner, 
 
   // vista pública (API / panel)
   const publica = s => s && ({ slug: s.slug, nombre: s.nombre, descripcion: s.descripcion, activa: s.activa, origen: s.origen, externa: s.externa,
+    preparar: preparador.estado(s.slug)?.estado === 'preparando' ? 'preparando' : require('./preparar').estadoRapido(s.dir),   // Biblioteca DMN: ¿falta prepararla?
     version: s.version, escaneo: s.escaneo, firma: s.firma, usos: s.usos, ultimoUso: s.ultimoUso, permisos: s.permisos, archivos: s.archivos,
     disparadores: s.disparadores, modelos: s.modelos, canales: s.canales, licencia: s.licencia, autor: s.autor, sha: s.sha, fecha: s.fecha, borrador: s.borrador, evals: s.evals, mejorada: s.mejorada });
 

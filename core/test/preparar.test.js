@@ -172,3 +172,13 @@ test('preparar: con espejo local baja por sha256 del espejo; si el espejo no lo 
   p = mk(false); await p.preparar('prueba'); t = await esperar(p);
   assert.equal(t.estado, 'listo', t.error); assert.ok(usados.some(u => u.includes('huggingface.co')));
 });
+
+test('preparar: estadoRapido dice si a una skill le falta prepararse sin tocar el equipo', () => {
+  const { estadoRapido } = require('../skills/preparar');
+  const d = tmp();
+  assert.equal(estadoRapido(d), undefined);                                   // sin preparar.json: no necesita
+  fs.writeFileSync(path.join(d, 'preparar.json'), JSON.stringify(PLAN));
+  assert.equal(estadoRapido(d), 'pendiente');
+  fs.mkdirSync(path.join(d, '_datos')); const f = path.join(d, '_datos', 'preparacion.json');
+  for (const [e, r] of [['preparando', 'preparando'], ['error', 'error'], ['cancelado', 'pendiente'], ['listo', 'lista']]) { fs.writeFileSync(f, JSON.stringify({ pasos: {}, ultimo: { estado: e } })); assert.equal(estadoRapido(d), r); }
+});

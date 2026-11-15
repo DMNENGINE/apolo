@@ -107,7 +107,7 @@ VISTAS.skills = {
   },
   alEvento(e) {
     if (e.tipo !== 'skills') return;
-    if (e.accion === 'preparar') { if (typeof BIB !== 'undefined') BIB.alEvento(e); return; }   // progreso de la preparación (ui/biblioteca.js)
+    if (e.accion === 'preparar') { if (typeof BIB !== 'undefined') BIB.alEvento(e); if (!['listo', 'error', 'cancelado'].includes(e.estado)) return; }   // al terminar: refrescar el aviso de la ficha   // progreso de la preparación (ui/biblioteca.js)
     clearTimeout(this.cola);
     this.cola = setTimeout(() => this.recargar(), 250);
   },
@@ -249,6 +249,7 @@ VISTAS.skills = {
       await api('PATCH', `/skills/${encodeURIComponent(slug)}`, forzar ? { activa: activar, forzar: true } : { activa: activar });
       s.activa = activar; aviso(`${s.nombre || slug}: ${tr(activar ? 'activada' : 'desactivada')}`);
       this.repintar(); if (this.abierta === slug) this.pintarDetalle();
+      if (activar && s.preparar === 'pendiente' && typeof BIB !== 'undefined') BIB.preparar(slug);   // activa pero sin sus modelos/programas: ofrecer prepararla
     } catch (er) { boton?.setAttribute('aria-checked', String(!activar)); aviso(er.message, true); }
   },
 
@@ -270,6 +271,7 @@ VISTAS.skills = {
       const inp = $('#skFuente'); if (inp) { inp.value = ''; inp.oninput(); }
       await this.recargar();
       this.abrir(s.slug, n === 'verde' ? 'doc' : 'seg');
+      if (s.preparar === 'pendiente' && n !== 'rojo' && typeof BIB !== 'undefined') BIB.preparar(s.slug);   // Biblioteca DMN: instalada desde Explorar/enlace → preparar
     } catch (er) { aviso(er.message, true); }
     finally { if (b && b.isConnected) { b.disabled = false; b.innerHTML = txt; } }
   },
@@ -368,6 +370,7 @@ VISTAS.skills = {
         <button class="btn fantasma icono" data-acc="cerrar" title="${tr('Cerrar (Esc)')}">${ic('x')}</button></div>
       <p class="sk-det-desc">${esc(s.descripcion || '')}</p>
       ${n === 'rojo' && this.pest !== 'seg' ? `<button class="sk-alerta sk-alerta-btn" data-pest="seg">${ic('candado')}<span class="crece"><b>${tr('En cuarentena')}</b> · ${esc(s.escaneo?.resumen || tr('el escáner encontró patrones peligrosos'))}</span><span class="tenue">${tr('Ver informe')} ${ic('der')}</span></button>` : ''}
+      ${s.preparar && s.preparar !== 'lista' ? `<button class="sk-alerta sk-alerta-btn ${s.preparar === 'preparando' ? '' : 'aviso'}" data-acc="preparar">${ic('rayo')}<span class="crece"><b>${tr(s.preparar === 'preparando' ? 'Preparándose…' : s.preparar === 'error' ? 'La preparación falló' : 'Esta skill necesita prepararse')}</b> · ${tr(s.preparar === 'preparando' ? 'descargando sus programas y modelos' : 'le faltan programas o modelos; sin eso no funciona')}</span><span class="tenue">${tr(s.preparar === 'preparando' ? 'Ver progreso' : 'Preparar ahora')} ${ic('der')}</span></button>` : ''}
       <div class="sk-det-datos"><div><small>${tr('Estado')}</small><span class="flex">${sw('det', s.activa)}<b>${tr(s.activa ? 'Activa' : 'Inactiva')}</b></span></div>
         <div><small>${tr('Usos')}</small><b>${fmtK(u.total)}${u.semana != null ? ` <span class="tenue">· ${tr('{n} esta semana', { n: u.semana })}</span>` : ''}</b></div>
         <div><small>${tr('Último uso')}</small><b>${s.ultimoUso ? esc(hace(+new Date(s.ultimoUso))) : tr('nunca')}</b></div>
@@ -384,6 +387,7 @@ VISTAS.skills = {
     const b = e.target.closest('[data-acc]'); if (!b) return;
     const s = this.det, slug = encodeURIComponent(s.slug);
     if (b.dataset.acc === 'cerrar') return this.cerrar();
+    if (b.dataset.acc === 'preparar') { if (typeof BIB !== 'undefined') BIB.preparar(this.det.slug); return; }
     const txt = b.innerHTML, ocupar = t => { b.disabled = true; b.innerHTML = `<span class="punto ok vivo"></span>${t}`; }, soltar = () => { if (b.isConnected) { b.disabled = false; b.innerHTML = txt; } };
     try {
       if (b.dataset.acc === 'escanear') {
