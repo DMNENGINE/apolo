@@ -93,12 +93,16 @@ function aplicarTamano(p) {
   // isla abajo en la pantalla (v-abajo) → crece hacia arriba desde los pies; arriba → hacia abajo desde la cabeza
   // (encima de la isla no queda ventana cuando está pegada arriba)
   const haciaArriba = document.body.classList.contains('v-abajo');
+  // isla arriba: también crece hacia arriba mientras quepa en la ventana (si crece hacia abajo, los pies
+  // se meten bajo la barra de "Pídele algo"); solo lo que no quepa arriba baja
+  const r = rwrap.getBoundingClientRect(), sobra = Math.max(0, (k - 1) * r.height), subir = Math.min(sobra, Math.max(0, r.top));
   for (const el of [cv, cv3, skin]) {
     if (!el) continue;
     Object.assign(el.style, { position: 'absolute', inset: 'auto', width: `${k * 100}%`, height: `${k * 100}%`,
-      left: `${(1 - k) * 50}%`, top: haciaArriba ? 'auto' : '0', bottom: haciaArriba ? '0' : 'auto' });
+      left: `${(1 - k) * 50}%`, top: haciaArriba ? 'auto' : `${-subir}px`, bottom: haciaArriba ? '0' : 'auto' });
   }
 }
+addEventListener('resize', () => { try { aplicarTamano(); } catch { } });
 new MutationObserver(() => { try { aplicarTamano(); } catch { } }).observe(document.body, { attributes: true, attributeFilter: ['class'] });   // try: puede saltar antes de declarar `skin`
 const robot = {};
 for (const k of Object.keys(casco)) {

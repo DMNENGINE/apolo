@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.10] - 2026-11-15
+
+### Fixed
+- 3D island character (size > 100 %, island at the top of the screen): it grew downwards and the input bar covered its feet. It now grows upwards as far as the window allows, and re-applies on window resize.
+
 ## [0.3.9] - 2026-11-15
 
 ### Added
