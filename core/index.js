@@ -113,7 +113,7 @@ function crearNucleo(opciones = {}) {
   }
   const sueno = require('./sueno').crearSueno({ cfg, bus, memoria, grafo, generarJSON: generarJSONvivo, modelo: modeloCerebro, registro, tareas,
     horaBriefing: () => nucleo?.cerebro?.leer?.()?.resumenHora });
-  tareas.registrarInterna('sueno', async () => { await sueno.dormir({ motivo: 'noche' }); return ''; });   // el aviso llega a la hora del briefing
+  tareas.registrarInterna('sueno', async () => { const i = await sueno.dormir({ motivo: 'noche' }); return { registro: i.resumen.split('\n')[0] }; });   // el aviso llega a la hora del briefing
   herramientas.registrar([grafoMod.HERRAMIENTA]);
   // WhatsApp programable: reglas de respuesta, envíos de texto/foto/voz y agenda (main.js le conecta el plugin y la voz)
   const whatsappAuto = require('./whatsapp-auto').crearWhatsappAuto({ cfg, bus, tareas, generarJSON: generarJSONvivo, modelo: modeloCerebro,

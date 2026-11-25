@@ -8,7 +8,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { crearMemoria } = require('../memoria');
 const { crearGrafo } = require('../grafo');
-const { crearSueno, datosDuros } = require('../sueno');
+const { crearSueno, datosDuros, fechas } = require('../sueno');
 const { crearTareas } = require('../tareas');
 const { normalizar } = require('../vectores');
 
@@ -133,4 +133,53 @@ test('tarea interna programada a la hora de cfg.memoria.sueno, copias limitadas 
   assert.strictEqual(sueno.informes().length, 4);
   const d = datosDuros('Tiene 3 monitores. Vive en Miami con su Peterbilt 389 y usa MuJoCo');
   assert.ok(d.has('3') && d.has('miami') && d.has('peterbilt') && d.has('389') && d.has('mujoco') && !d.has('tiene') && !d.has('vive'));
+});
+
+test('fase ligera: los diarios de días distintos no se juntan; los del mismo día sí', async () => {
+  const { memoria, sueno } = entorno({ generarJSON: async () => { throw new Error('sin modelo'); }, conVectores: false });
+  const diario = (d, n) => memoria.recordar({ texto: `DMN Trader, diario ${d}: ${n} rondas de entrenamiento, estrategias en validación y sin operaciones nuevas`, tipo: 'hecho', nuevo: true });
+  diario('2026-11-22', 72); const b = diario('2026-11-25', 74);
+  diario('2026-11-25', 75);
+  const inf = await sueno.dormir();
+  const quedan = memoria.lista().map(m => m.texto);
+  assert.strictEqual(quedan.length, 2, JSON.stringify(quedan));
+  assert.ok(quedan.some(t => /11-22/.test(t)) && quedan.some(t => /11-25/.test(t)));
+  assert.strictEqual(inf.fusionados.length, 1);
+  assert.ok([inf.fusionados[0].queda.id, inf.fusionados[0].borrados[0].id].includes(b.id));
+  assert.strictEqual(fechas('el 3 de marzo de 2026'), fechas('2026-03-03'));
+  assert.strictEqual(fechas('sin fecha'), '');
+});
+
+test('fase ligera con miles de recuerdos: rápida y sin parar el proceso', async () => {
+  const { dir, memoria, sueno } = entorno({ generarJSON: async () => { throw new Error('sin modelo'); }, conVectores: false });
+  let x = 7; const azar = n => (x = (x * 48271) % 2147483647) % n;                    // siempre igual, sin repetidos de verdad
+  const l = Array.from({ length: 4000 }, (_, i) => ({ id: `r${i}`, tipo: i % 2 ? 'hecho' : 'proyecto', texto: Array.from({ length: 20 }, () => azar(1200).toString(36).padStart(3, 'z')).join(' '), creada: Date.now(), actualizada: Date.now(), usos: 0 }));
+  fs.writeFileSync(path.join(dir, 'memoria.json'), JSON.stringify(l));
+  memoria.lista();
+  let max = 0, ult = Date.now(), vueltas = 0; const reloj = setInterval(() => { max = Math.max(max, Date.now() - ult); ult = Date.now(); vueltas++; }, 5);
+  const t0 = Date.now(); await sueno.dormir(); clearInterval(reloj);
+  assert.ok(Date.now() - t0 < 30_000, `tardó ${Date.now() - t0} ms`);
+  assert.ok(vueltas > 3, `el proceso solo respiró ${vueltas} veces (máx. ${max} ms)`);
+});
+
+test('profunda: un perfil largo se condensa por lotes, un lote malo no estropea los demás y no toca el que tiene procedencia', async () => {
+  const pedidos = [];
+  const generarJSON = async ({ schema, prompt }) => {
+    if (schema.required.includes('patrones')) return { datos: { patrones: [], entidades: [], relaciones: [], aprendi: '' } };
+    const ls = [...prompt.matchAll(/^- (.+)$/gm)].map(m => m[1]); pedidos.push(ls.length);
+    return { datos: { perfil: pedidos.length === 2 ? ['Perdí todo'] : [ls.slice(0, 6).join('; '), ls.slice(6).join('; ')] } };
+  };
+  const { memoria, sueno } = entorno({ generarJSON, conVectores: false });
+  for (let i = 0; i < 36; i++) memoria.recordar({ texto: `N${i}x M${i}y`, tipo: 'perfil', nuevo: true });
+  memoria.recordar({ texto: 'De otro proyecto', tipo: 'perfil', nuevo: true }, { clase: 'agente', proyecto: os.tmpdir() });
+  const inf = await sueno.dormir();
+  assert.deepStrictEqual(pedidos, [12, 12, 12]);
+  assert.match(inf.fases.profunda, /^2 de 3 lotes condensados .rechazado/);
+  const perfil = memoria.lista().filter(m => m.tipo === 'perfil');
+  assert.strictEqual(perfil.length, 2 + 2 + 12 + 1);
+  const todo = perfil.map(m => m.texto).join(' ');
+  for (let i = 0; i < 36; i++) assert.ok(todo.includes(`N${i}x`), `falta N${i}x`);
+  assert.ok(perfil.some(m => m.procedencia && m.texto === 'De otro proyecto'));
+  sueno.deshacer(inf.id);
+  assert.strictEqual(memoria.lista().filter(m => m.tipo === 'perfil').length, 37);
 });

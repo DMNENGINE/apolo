@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Memory sleep, light phase: with thousands of memories it compared every pair synchronously (about 15 minutes with the whole process frozen). It now uses an inverted index and yields regularly (about 1 s with 4,300 memories).
+- Memory sleep: two memories that name different dates (for example daily logs) are no longer merged. Merging used to keep one and delete the other.
+- Memory sleep, deep phase: a long profile is condensed in verified batches (a few per night); asking for the whole profile in 8 lines was always rejected. Profile entries with provenance are left alone.
+- The nightly sleep task reports its summary in the task history instead of "nothing to do".
+- Service monitor: an SSH check cut short no longer marks every service of that machine as down; they keep their last known state.
+
 ## [0.3.12] - 2026-11-15
 
 ### Added

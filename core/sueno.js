@@ -8,10 +8,10 @@
 // y aviso (bus 'aviso-externo', no urgente) a la hora del briefing de la mañana.
 const fs = require('fs');
 const path = require('path');
-const { parecido, tokens, normal } = require('./memoria');
+const { tokens, normal, raiz } = require('./memoria');
 const { coseno } = require('./vectores');
 
-const DEF = { hora: '04:00', activo: false, caducarDias: 120, jaccard: 0.6, coseno: 0.92, cosenoJaccard: 0.35, maxREM: 60, maxPatrones: 5, guardar: 14 };
+const DEF = { hora: '04:00', activo: false, caducarDias: 120, jaccard: 0.6, coseno: 0.92, cosenoJaccard: 0.35, maxREM: 60, maxPatrones: 5, guardar: 14, lotePerfil: 12, lotesPerfil: 4 };
 const pad = n => String(n).padStart(2, '0');
 const fechaLocal = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const minutos = h => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(h || '')); return m ? +m[1] * 60 + +m[2] : null; };
@@ -30,6 +30,18 @@ function datosDuros(texto) {
 }
 // palabras que abren frase y no son nombres (para no exigirlas al condensar)
 const COMUNES = new Set(tokens('tiene vive prefiere usa trabaja quiere le gusta su sus es esta está son hace lleva habla escribe se llama the has likes prefers uses lives works').concat(['el', 'la', 'los', 'las', 'su', 'sus', 'es', 'le', 'se', 'un', 'una', 'en', 'de', 'tu', 'mi', 'si', 'no', 'y']));
+
+// fechas que nombra un texto. Dos recuerdos con fechas distintas (el diario del 22 y el del 25) no son el mismo aunque se parezcan.
+const MESES = 'enero febrero marzo abril mayo junio julio agosto septiembre octubre noviembre diciembre'.split(' ');
+const FECHA_LARGA = new RegExp(`\\b(\\d{1,2}) de (${MESES.join('|')})(?: del? (20\\d\\d))?`, 'g');
+function fechas(texto) {
+  const t = normal(texto), s = new Set();
+  for (const m of t.matchAll(/\b(20\d\d)-(\d{1,2})-(\d{1,2})\b/g)) s.add(`${+m[3]}/${+m[2]}/${m[1]}`);
+  for (const m of t.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(20\d\d)\b/g)) s.add(`${+m[1]}/${+m[2]}/${m[3]}`);
+  for (const m of t.matchAll(FECHA_LARGA)) s.add(`${+m[1]}/${MESES.indexOf(m[2]) + 1}/${m[3] || ''}`);
+  return [...s].sort().join(' ');
+}
+const respiro = () => new Promise(ok => setImmediate(ok));
 
 function crearSueno({ cfg, bus, memoria, grafo, generarJSON, modelo, registro, horaBriefing, tareas }) {
   const dir = path.join(cfg.dir, 'suenos');
@@ -75,26 +87,51 @@ function crearSueno({ cfg, bus, memoria, grafo, generarJSON, modelo, registro, h
     const c = conf();
     if (memoria.indexar) await memoria.indexar().catch(() => { });
     const lista = memoria.lista().filter(m => m.procedencia?.clase !== 'externa');
-    const borrados = new Set();
+    // Las raíces se calculan una sola vez y un índice (tipo + raíz → recuerdos) da los pares con palabras en común: comparar
+    // todos con todos tardaba 15 min con 4.000 recuerdos y dejaba el proceso entero parado. Cada 25 ms se cede el turno.
+    const raices = lista.map(m => new Set(tokens(m.texto).map(raiz))), dias = lista.map(m => fechas(m.texto));
+    const indice = new Map();
+    raices.forEach((r, i) => { for (const t of r) { const k = `${lista[i].tipo} ${t}`, p = indice.get(k); if (p) p.push(i); else indice.set(k, [i]); } });
+    const minimo = Math.min(c.jaccard, c.cosenoJaccard);
+    const vectores = new Map();
+    const vec = id => { if (!vectores.has(id)) vectores.set(id, memoria.vector?.(id) || null); return vectores.get(id); };
+    const borrados = new Set(), comunes = new Uint16Array(lista.length);
+    let turno = Date.now();
     for (let i = 0; i < lista.length; i++) {
+      if (Date.now() - turno > 25) { await respiro(); turno = Date.now(); }
       const a = lista[i]; if (borrados.has(a.id)) continue;
+      const tocados = [];
+      for (const t of raices[i]) {
+        const p = indice.get(`${a.tipo} ${t}`);
+        for (let k = p.length - 1; k >= 0 && p[k] > i; k--) { if (!comunes[p[k]]++) tocados.push(p[k]); }
+      }
       const grupo = [a];
-      for (let j = i + 1; j < lista.length; j++) {
-        const b = lista[j];
-        if (borrados.has(b.id) || b.tipo !== a.tipo) continue;
-        const jac = parecido(a.texto, b.texto);
-        const va = memoria.vector?.(a.id), vb = memoria.vector?.(b.id);
-        const cos = va && vb ? coseno(va, vb) : 0;
+      for (const j of tocados.sort((x, y) => x - y)) {
+        const n = comunes[j]; comunes[j] = 0;
+        const b = lista[j], jac = n / (raices[i].size + raices[j].size - n);
+        if (jac < minimo || borrados.has(b.id)) continue;
+        if (dias[i] && dias[j] && dias[i] !== dias[j]) continue;
+        const va = jac < c.jaccard ? vec(a.id) : null, vb = va ? vec(b.id) : null;
         // casi iguales por palabras, o casi iguales por significado (y algo de palabras en común para no mezclar temas)
-        if (jac >= c.jaccard || (cos >= c.coseno && jac >= c.cosenoJaccard)) { grupo.push(b); borrados.add(b.id); }
+        if (jac >= c.jaccard || (vb && jac >= c.cosenoJaccard && coseno(va, vb) >= c.coseno)) { grupo.push(b); borrados.add(b.id); }
       }
       if (grupo.length < 2) continue;
+      // mientras se cedía el turno alguien pudo borrar o reescribir alguno: solo se tocan los que siguen igual
+      const ahora = new Map(memoria.lista().map(m => [m.id, m]));
+      const vivos = grupo.map(x => { const m = ahora.get(x.id); return m && m.texto === x.texto ? m : null; }).filter(Boolean);
+      if (vivos.length < 2) continue;
       // se queda el más completo (más largo; a igualdad, el más reciente) y suma los usos de todos
-      const queda = grupo.slice().sort((x, y) => y.texto.length - x.texto.length || y.actualizada - x.actualizada)[0];
-      const resto = grupo.filter(x => x !== queda);
-      for (const x of resto) memoria.olvidar(x.id);
-      memoria.editar(queda.id, { usos: grupo.reduce((n, x) => n + (x.usos || 0), 0), fusionados: [...(queda.fusionados || []), ...resto.map(x => x.id)].slice(-20), actualizada: Math.max(...grupo.map(x => x.actualizada || 0)) });
+      const queda = vivos.slice().sort((x, y) => y.texto.length - x.texto.length || y.actualizada - x.actualizada)[0];
+      // a sin fecha puede parecerse a varios con fechas distintas: del grupo solo se juntan los de la fecha del que se queda
+      const dia = fechas(queda.texto) || vivos.map(x => fechas(x.texto)).find(Boolean) || '';
+      const resto = vivos.filter(x => x !== queda && (!fechas(x.texto) || fechas(x.texto) === dia));
+      for (const x of vivos) if (x !== queda && !resto.includes(x)) borrados.delete(x.id);
       borrados.delete(queda.id);
+      if (!resto.length) continue;
+      for (const x of resto) memoria.olvidar(x.id);
+      const juntos = [queda, ...resto];
+      memoria.editar(queda.id, { usos: juntos.reduce((n, x) => n + (x.usos || 0), 0), fusionados: [...(queda.fusionados || []), ...resto.map(x => x.id)].slice(-20), actualizada: Math.max(...juntos.map(x => x.actualizada || 0)) });
+      for (const x of resto) borrados.add(x.id);
       inf.fusionados.push({ queda: { id: queda.id, texto: queda.texto, tipo: queda.tipo }, borrados: resto.map(x => ({ id: x.id, texto: x.texto })) });
     }
     // caducar: hechos viejos que nunca se usaron (los que guardaste tú a mano o por la API no caducan)
@@ -153,30 +190,59 @@ function crearSueno({ cfg, bus, memoria, grafo, generarJSON, modelo, registro, h
 
   // ---------- fase profunda ----------
   const ESQ_PERFIL = { type: 'object', required: ['perfil'], properties: { perfil: { type: 'array', items: { type: 'string' } }, notas: { type: 'string' } } };
+  // Un perfil largo se condensa por lotes: pedirlo entero en 8 líneas siempre perdía datos y se rechazaba cada noche.
+  // Cada lote se verifica por separado y cada noche se empieza por otro sitio. Solo el perfil sin procedencia (el del usuario):
+  // condensar borraría de quién o de qué proyecto era el resto.
   async function faseProfunda(inf, signal) {
-    const perfil = memoria.lista().filter(m => m.tipo === 'perfil' && m.procedencia?.clase !== 'externa');
-    inf.perfilAntes = perfil.map(m => m.texto);
+    const c = conf(), actual = () => memoria.lista().filter(m => m.tipo === 'perfil' && m.procedencia?.clase !== 'externa');
+    inf.perfilAntes = actual().map(m => m.texto);
     inf.perfilDespues = inf.perfilAntes;
+    const perfil = actual().filter(m => !m.procedencia && !m.historico);
     if (perfil.length < 2) { inf.fases.profunda = 'nada que condensar'; return; }
-    const prompt = `PERFIL ACTUAL DEL USUARIO (va siempre en el contexto del asistente, cada línea es un recuerdo):\n${perfil.map(m => `- ${m.texto}`).join('\n')}\n\n` +
-      'Reescríbelo condensado: une lo repetido, ordena de lo más a lo menos importante, frases cortas en tercera persona (máx. 300 caracteres cada una, máx. 8 líneas). ' +
+    const lotes = [];
+    for (let i = 0; i < perfil.length; i += c.lotePerfil) lotes.push(perfil.slice(i, i + c.lotePerfil));
+    if (lotes.length > 1 && lotes.at(-1).length < 2) lotes.at(-2).push(...lotes.pop());
+    const desde = Math.floor(Date.now() / 86400_000) * c.lotesPerfil, notas = [], rechazados = [];
+    const hoy = lotes.map((_, k) => lotes[(desde + k) % lotes.length]).slice(0, c.lotesPerfil);
+    let bien = 0, errores = 0, ultimo = null;
+    for (const lote of hoy) {
+      if (signal?.aborted) break;
+      try { const r = await condensar(lote, signal); if (r.ok) bien++; else { notas.push(r.nota); if (r.rechazado) rechazados.push(...r.rechazado); } }
+      catch (e) { errores++; ultimo = e; }
+    }
+    if (errores && errores === hoy.length) throw ultimo;
+    if (errores) notas.push(`${errores} con error: ${ultimo.message}`);
+    if (rechazados.length) inf.perfilRechazado = rechazados;
+    if (bien) { inf.perfilDespues = actual().map(m => m.texto); inf.perfilCambiado = true; }
+    if (hoy.length === 1) { if (notas.length) inf.fases.profunda = notas[0]; }
+    else inf.fases.profunda = `${bien} de ${hoy.length} lotes condensados${notas.length ? ` (${notas.join(' · ')})` : ''}`;
+  }
+  async function condensar(lote, signal) {
+    const textos = lote.map(m => m.texto);
+    const prompt = `PERFIL DEL USUARIO (cada línea es un recuerdo):\n${textos.map(t => `- ${t}`).join('\n')}\n\n` +
+      `Reescríbelo condensado: une lo repetido, ordena de lo más a lo menos importante, frases cortas en tercera persona (máx. 300 caracteres cada una, como mucho ${lote.length} líneas; lo que no se pueda unir, déjalo tal cual). ` +
       'PROHIBIDO perder datos: conserva TODOS los nombres propios, números, lugares, fechas y preferencias tal cual. No inventes nada.';
     const { datos } = await generarJSON({ modelo: modelo(), system: 'Eres la fase de sueño profundo de un asistente: condensas el perfil del usuario sin perder información. Respondes en español.', prompt, schema: ESQ_PERFIL, signal });
-    const nuevo = (datos.perfil || []).map(t => String(t).trim()).filter(Boolean).map(t => t.slice(0, 600)).slice(0, 10);
-    if (!nuevo.length) { inf.fases.profunda = 'el modelo devolvió un perfil vacío: se queda el de antes'; return; }
+    const nuevo = (datos.perfil || []).map(t => String(t).trim()).filter(Boolean).map(t => t.slice(0, 600));
+    if (!nuevo.length) return { nota: 'el modelo devolvió un perfil vacío: se queda el de antes' };
+    if (nuevo.length > lote.length) return { nota: 'no salió más corto' };
     // verificación: ningún dato duro (número o nombre propio) del perfil viejo puede desaparecer
-    const viejo = new Set(); for (const t of inf.perfilAntes) for (const d of datosDuros(t)) if (!COMUNES.has(d)) viejo.add(d);
+    const viejo = new Set(); for (const t of textos) for (const d of datosDuros(t)) if (!COMUNES.has(d)) viejo.add(d);
     const textoNuevo = normal(nuevo.join(' \n '));
     const perdidos = [...viejo].filter(d => !textoNuevo.includes(normal(d)));
-    if (perdidos.length) { inf.fases.profunda = `rechazado: se perdían ${perdidos.slice(0, 6).join(', ')}`; inf.perfilRechazado = nuevo; return; }
-    if (nuevo.join('\n') === inf.perfilAntes.join('\n')) { inf.fases.profunda = 'sin cambios'; return; }
-    const usos = perfil.reduce((n, m) => n + (m.usos || 0), 0);
-    for (const m of perfil) memoria.olvidar(m.id);
+    if (perdidos.length) return { nota: `rechazado: se perdían ${perdidos.slice(0, 6).join(', ')}`, rechazado: nuevo };
+    if (nuevo.join('\n') === textos.join('\n')) return { nota: 'sin cambios' };
+    // el usuario pudo tocar su perfil mientras el modelo pensaba
+    const ahora = new Map(memoria.lista().map(m => [m.id, m.texto]));
+    if (lote.some(m => ahora.get(m.id) !== m.texto)) return { nota: 'el perfil cambió mientras tanto' };
+    // primero se guarda lo nuevo; si algo no se deja guardar, se quita y el perfil queda como estaba
     const creados = [];
-    for (const t of nuevo) { try { const r = memoria.recordar({ texto: t, tipo: 'perfil', origen: 'sueño', nuevo: true }); creados.push(r.id); } catch { } }
-    if (creados[0]) memoria.editar(creados[0], { usos });
-    inf.perfilDespues = memoria.lista().filter(m => m.tipo === 'perfil').map(m => m.texto);
-    inf.perfilCambiado = true;
+    try { for (const t of nuevo) creados.push(memoria.recordar({ texto: t, tipo: 'perfil', origen: 'sueño', nuevo: true }).id); }
+    catch (e) { for (const id of creados) memoria.olvidar(id); return { nota: `no se pudo guardar: ${e.message}` }; }
+    const usos = lote.reduce((n, m) => n + (m.usos || 0), 0);
+    for (const m of lote) memoria.olvidar(m.id);
+    memoria.editar(creados[0], { usos });
+    return { ok: true };
   }
 
   // ---------- una noche completa ----------
@@ -273,4 +339,4 @@ function crearSueno({ cfg, bus, memoria, grafo, generarJSON, modelo, registro, h
   return { dormir, deshacer, informes, leer, revisarEntregas, programar, iniciar, detener, configurar, conf, enCurso: () => !!enCurso, datosDuros };
 }
 
-module.exports = { crearSueno, datosDuros, fechaLocal };
+module.exports = { crearSueno, datosDuros, fechaLocal, fechas };

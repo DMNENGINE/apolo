@@ -19,8 +19,9 @@ test('revisa webs, systemd y pm2; avisa cuando algo cambia', async t => {
     { id: 'web', nombre: 'Web', url: 'https://ok.com' }, { id: 'rota', nombre: 'Rota', url: 'https://mal.com' },
     { id: 'bot', nombre: 'Bot', ssh: 'pi@pi', unidad: 'bot.service' }, { id: 'otro', nombre: 'Otro', ssh: 'pi@pi', unidad: 'otro.service' },
     { id: 'app', nombre: 'App', ssh: 'pi@pi', pm2: 'app' }, { id: 'vps', nombre: 'VPS', ssh: 'root@vps' }] }] }));
-  let botActivo = 'active'; const llamadas = [], avisos = [];
+  let botActivo = 'active', cortada = false; const llamadas = [], avisos = [];
   const ssh = async (d, cmd) => { llamadas.push(d); if (d === 'root@vps') return { salida: '' };
+    if (cortada) return { salida: 'APOLO-OK\n' };
     return { salida: `APOLO-OK\n${botActivo}\ninactive\nAPOLO-PM2\n${JSON.stringify([{ name: 'app', pm2_env: { status: 'online' } }])}` }; };
   const fetch = async u => ({ status: /ok/.test(u) ? 200 : 502, body: null });
   const s = crearServicios({ cfg: { dir }, ssh, fetch, log: (n, x) => avisos.push(x) });
@@ -28,6 +29,8 @@ test('revisa webs, systemd y pm2; avisa cuando algo cambia', async t => {
   assert.deepStrictEqual(Object.fromEntries(Object.entries(e).map(([k, v]) => [k, v.ok])), { web: true, rota: false, bot: true, otro: false, app: true, vps: false });
   assert.strictEqual(llamadas.filter(d => d === 'pi@pi').length, 1);            // una sola conexión para las tres cosas de la Pi
   assert.match(e.vps.detalle, /sin conexión/);
+  cortada = true; e = await s.revisar(); cortada = false;                                         // la conexión se cortó antes de decir las unidades: no es una caída
+  assert.strictEqual(e.bot.ok, true); assert.deepStrictEqual(avisos, []);
   botActivo = 'failed'; e = await s.revisar();
   assert.strictEqual(e.bot.ok, false); assert.deepStrictEqual(avisos, ['Bot se ha caído (failed)']);
   assert.deepStrictEqual((await s.http('GET', ['', 'servicios'], {})).grupos[0].servicios.length, 6);
