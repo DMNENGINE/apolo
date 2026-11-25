@@ -1,4 +1,25 @@
 {
+  "0.3.13": {
+    "animaciones": false,
+    "es": {
+      "titulo": "Lo nuevo en APOLO 0.3.13",
+      "saludo": "¡APOLO duerme mejor y recuerda mejor!",
+      "puntos": [
+        "El sueño de la memoria ya no congela APOLO: con miles de recuerdos pasa de minutos a un segundo.",
+        "Los recuerdos de fechas distintas (por ejemplo, diarios) ya no se juntan ni se pierden.",
+        "El perfil largo se resume por partes, y el monitor de servicios no da falsas caídas si se corta la conexión."
+      ]
+    },
+    "en": {
+      "titulo": "What's new in APOLO 0.3.13",
+      "saludo": "APOLO sleeps better and remembers better!",
+      "puntos": [
+        "Memory sleep no longer freezes APOLO: with thousands of memories it goes from minutes to about a second.",
+        "Memories from different dates (such as daily logs) are no longer merged or lost.",
+        "Long profiles are condensed in parts, and the service monitor no longer reports false outages when a connection is cut."
+      ]
+    }
+  },
   "0.3.12": {
     "animaciones": false,
     "es": {

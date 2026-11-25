@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.13] - 2026-11-25
 
 ### Fixed
 - Memory sleep, light phase: with thousands of memories it compared every pair synchronously (about 15 minutes with the whole process frozen). It now uses an inverted index and yields regularly (about 1 s with 4,300 memories).
